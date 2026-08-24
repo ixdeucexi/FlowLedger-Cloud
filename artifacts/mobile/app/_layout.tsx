@@ -9,7 +9,7 @@ import { useFonts } from "expo-font";
 import { Stack, useGlobalSearchParams, usePathname, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, AppState, BackHandler, Easing, Image, Platform, StyleSheet, StyleProp, View, ViewStyle } from "react-native";
+import { Alert, AppState, BackHandler, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -20,7 +20,7 @@ import { ConfirmActionModal } from "@/components/ConfirmActionModal";
 import { LegalAcceptanceGate } from "@/components/LegalAcceptanceGate";
 import { PwaInstallPrompt } from "@/components/PwaInstallPrompt";
 import { PlaidOAuthResume } from "@/components/PlaidOAuthResume";
-import { StartupPlanBrand } from "@/components/StartupPlanBrand";
+import { AppLoadingIntro } from "@/components/AppLoadingIntro";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { BiometricLockProvider, useBiometricLock } from "@/context/BiometricLockContext";
 import { BudgetProvider, useBudget } from "@/context/BudgetContext";
@@ -28,26 +28,89 @@ import { MembershipProvider } from "@/context/MembershipContext";
 import { ThemeProvider, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
-import { useReducedMotion } from "@/hooks/useReducedMotion";
+import { NetworkStatusProvider } from "@/hooks/useNetworkStatus";
 import { readLastAppRoute, rememberAppRoute } from "@/lib/navigationMemory";
 import { WEB_VIEWPORT_CONTENT } from "@/lib/webViewport";
+import {
+  configureNativeNotificationPresentation,
+  getInitialNotificationRoute,
+  restorePushNotifications,
+  subscribeToNotificationRoutes,
+  subscribeToPushTokenRotation,
+} from "@/lib/pushNotifications";
+import { notificationHouseholdAction, type NativeNotificationDestination } from "@/lib/nativeNotificationRoute";
+import { verifyCurrentHouseholdMembership } from "@/lib/households";
 
 SplashScreen.preventAutoHideAsync();
+SplashScreen.setOptions({ duration: 0, fade: false });
 
 const queryClient = new QueryClient();
-const PLAN_LOADING_MS = 220;
-const STARTUP_BRAND_FADE_MS = 1200;
-const STARTUP_BRAND_HOLD_MS = 300;
-const APP_REVEAL_MS = 700;
+const PRIVACY_REFRESH_TIMEOUT_MS = 10_000;
+const SHARED_HOUSEHOLD_PRIVACY_TTL_MS = 5 * 60 * 1000;
+
+function withStartupTimeout<T>(promise: PromiseLike<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out.`)), ms);
+    promise.then(
+      value => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      error => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
 
 function AuthObserver() {
   const { session, loading } = useAuth();
-  const { activeHousehold, loading: budgetLoading, settings } = useBudget();
+  const { activeHousehold, households, loading: budgetLoading, settings, switchHousehold } = useBudget();
   const router = useRouter();
   const segments = useSegments();
   const pathname = usePathname();
   const searchParams = useGlobalSearchParams<Record<string, string | string[]>>();
   const restoreAttemptRef = useRef<string | null>(null);
+  const notificationInitialRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    configureNativeNotificationPresentation();
+    if (loading || budgetLoading || !session) return;
+    const openRoute = async (destination: NativeNotificationDestination) => {
+      try {
+        if (destination.householdId && !await verifyCurrentHouseholdMembership(session.user.id, destination.householdId)) {
+          throw new Error("HOUSEHOLD_UNAVAILABLE");
+        }
+        const action = notificationHouseholdAction(
+          activeHousehold?.householdId ?? null,
+          households.map(household => household.householdId),
+          destination.householdId,
+        );
+        if (action === "reject") throw new Error("HOUSEHOLD_UNAVAILABLE");
+        if (action === "switch" && destination.householdId) await switchHousehold(destination.householdId);
+        router.push(destination.route as any);
+      } catch {
+        Alert.alert("Notification unavailable", "You no longer have access to the household for this notification.");
+      }
+    };
+    if (notificationInitialRef.current !== session.user.id) {
+      notificationInitialRef.current = session.user.id;
+      void getInitialNotificationRoute().then(destination => { if (destination) void openRoute(destination); });
+    }
+    const unsubscribe = subscribeToNotificationRoutes(destination => { void openRoute(destination); });
+    return unsubscribe;
+  }, [activeHousehold?.householdId, budgetLoading, households, loading, router, session?.user.id, switchHousehold]);
+
+  useEffect(() => {
+    if (Platform.OS === "web" || loading || budgetLoading || !session?.access_token || !activeHousehold?.householdId) return;
+    const reportFailure = (error: unknown) => {
+      console.warn("Native notification registration needs attention.", error);
+    };
+    void restorePushNotifications(session.access_token, session.user.id, activeHousehold.householdId).catch(reportFailure);
+    return subscribeToPushTokenRotation(session.access_token, session.user.id, activeHousehold.householdId, reportFailure);
+  }, [activeHousehold?.householdId, budgetLoading, loading, session]);
 
   const currentRoute = React.useMemo(() => {
     const query = new URLSearchParams();
@@ -91,7 +154,11 @@ function AuthObserver() {
         if (restoreAttemptRef.current === restoreKey) return;
         restoreAttemptRef.current = restoreKey;
         let cancelled = false;
-        void readLastAppRoute(session.user.id, householdId).then(destination => {
+        void withStartupTimeout(
+          readLastAppRoute(session.user.id, householdId),
+          1_500,
+          "Restore last screen",
+        ).catch(() => null).then(destination => {
           if (!cancelled) replaceRoute(destination ?? "/(tabs)");
         });
         return () => {
@@ -131,210 +198,150 @@ function AuthObserver() {
   return null;
 }
 
-function StartupScreen({
-  style,
-  brandOpacity,
-  brandEntranceStarted,
-  leaving,
-  reduceMotion,
-}: {
-  style?: StyleProp<ViewStyle>;
-  brandOpacity: Animated.Value;
-  brandEntranceStarted: boolean;
-  leaving: boolean;
-  reduceMotion: boolean;
-}) {
-  const webOverlayTransition = Platform.OS === "web" && !reduceMotion
-    ? ({
-        opacity: leaving ? 0 : 1,
-        transitionDuration: `${APP_REVEAL_MS}ms`,
-        transitionProperty: "opacity",
-        transitionTimingFunction: "ease-in-out",
-      } as ViewStyle)
-    : undefined;
-  const webBrandTransition = Platform.OS === "web"
-    ? ({
-        opacity: brandEntranceStarted || reduceMotion ? 1 : 0,
-        transitionDuration: reduceMotion ? "0ms" : `${STARTUP_BRAND_FADE_MS}ms`,
-        transitionProperty: "opacity",
-        transitionTimingFunction: "ease-in-out",
-      } as ViewStyle)
-    : { opacity: brandOpacity };
-
-  return (
-    <Animated.View style={[styles.startup, style, webOverlayTransition]}>
-      <Animated.View style={[styles.startupBrand, webBrandTransition]}>
-        <StartupPlanBrand />
-      </Animated.View>
-    </Animated.View>
-  );
-}
-
 function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSplash: () => Promise<void> }) {
   const colors = useColors();
   const { session, loading: authLoading } = useAuth();
-  const { loading: budgetLoading } = useBudget();
+  const { activeHousehold, loading: budgetLoading, refreshHouseholdsForPrivacy } = useBudget();
   const { ready: biometricLockReady, locked: biometricLocked } = useBiometricLock();
   const { ready: themeReady } = useThemeMode();
-  const reduceMotion = useReducedMotion();
   const router = useRouter();
   const pathname = usePathname();
+  const rootSegments = useSegments();
   const isDesktop = useDesktopExperience();
-  const [minimumStartupReady, setMinimumStartupReady] = useState(false);
-  const [brandEntranceStarted, setBrandEntranceStarted] = useState(false);
-  const [brandEntranceReady, setBrandEntranceReady] = useState(false);
   const [appReady, setAppReady] = useState(false);
-  const [showStartupOverlay, setShowStartupOverlay] = useState(true);
-  const [webExitStarted, setWebExitStarted] = useState(false);
   const [privacyShielded, setPrivacyShielded] = useState(Platform.OS !== "web" && AppState.currentState !== "active");
-  const brandEntranceStartedRef = useRef(false);
-  const brandEntranceOpacity = useRef(new Animated.Value(0)).current;
-  const startupOpacity = useRef(new Animated.Value(1)).current;
-  const appOpacity = useRef(new Animated.Value(0)).current;
+  const [privacyRefreshError, setPrivacyRefreshError] = useState<string | null>(null);
+  const [privacyRefreshRetry, setPrivacyRefreshRetry] = useState(0);
+  const privacyRefreshGenerationRef = useRef(0);
+  const previousAppStateRef = useRef(AppState.currentState);
+  const hasRevealedPlanRef = useRef(false);
+  const verifiedPrivacyScopeRef = useRef<string | null>(null);
+  const lastPrivacyVerificationAtRef = useRef(0);
+  const privacyScopeRef = useRef({
+    userId: session?.user.id ?? null,
+    householdId: activeHousehold?.householdId ?? null,
+    isPersonal: activeHousehold?.isPersonal ?? true,
+  });
+  const privacyRefreshRef = useRef(refreshHouseholdsForPrivacy);
+  privacyScopeRef.current = {
+    userId: session?.user.id ?? null,
+    householdId: activeHousehold?.householdId ?? null,
+    isPersonal: activeHousehold?.isPersonal ?? true,
+  };
+  privacyRefreshRef.current = refreshHouseholdsForPrivacy;
   const coreReady = fontsReady && !authLoading && biometricLockReady && themeReady;
-  const planReady = !session || !budgetLoading;
-  const initialAppReady = coreReady && planReady && minimumStartupReady && brandEntranceReady;
+  // The native splash must never wait on network data. Render the app-owned
+  // loading route as soon as fonts/auth/lock/theme are ready, then let routing
+  // and plan restoration finish behind one constant FlowLedger screen.
+  const initialAppReady = coreReady;
+  const firstRootSegment = rootSegments[0] as string | undefined;
+  const secondRootSegment = rootSegments[1] as string | undefined;
+  const onPlaceholderRoute = !firstRootSegment || firstRootSegment === "index";
+  const onPendingAuthRoute = firstRootSegment === "login"
+    || (firstRootSegment === "auth" && secondRootSegment !== "reset-password");
+  const navigationReady = appReady && (session
+    ? !onPlaceholderRoute && !onPendingAuthRoute
+    : !onPlaceholderRoute && firstRootSegment !== "auth");
+  const readyToReveal = navigationReady && (!privacyShielded || !!privacyRefreshError);
 
-  useEffect(() => {
-    if (Platform.OS === "web") return;
-    let revealTimer: ReturnType<typeof setTimeout> | null = null;
-    const subscription = AppState.addEventListener("change", state => {
-      if (revealTimer) clearTimeout(revealTimer);
-      if (state === "active") {
-        revealTimer = setTimeout(() => setPrivacyShielded(false), 120);
-      } else {
+  const verifySharedHousehold = useCallback((blocking: boolean) => {
+    const generation = ++privacyRefreshGenerationRef.current;
+    if (blocking) setPrivacyShielded(true);
+    setPrivacyRefreshError(null);
+    void withStartupTimeout(
+      privacyRefreshRef.current(),
+      PRIVACY_REFRESH_TIMEOUT_MS,
+      "Household access check",
+    ).then(() => {
+      if (generation !== privacyRefreshGenerationRef.current || AppState.currentState !== "active") return;
+      lastPrivacyVerificationAtRef.current = Date.now();
+      setPrivacyShielded(false);
+    }).catch(() => {
+      if (generation !== privacyRefreshGenerationRef.current || AppState.currentState !== "active") return;
+      if (blocking) {
         setPrivacyShielded(true);
+        setPrivacyRefreshError("Your plan could not be verified. Check your connection, then try again.");
       }
     });
+  }, []);
+
+  // Cold start still waits for the first authoritative plan load. Once a plan
+  // has been shown, later background refreshes must never cover the cached UI.
+  useEffect(() => {
+    if (Platform.OS === "web" || authLoading) return;
+    if (!session) {
+      hasRevealedPlanRef.current = false;
+      verifiedPrivacyScopeRef.current = null;
+      lastPrivacyVerificationAtRef.current = 0;
+      setPrivacyShielded(false);
+      setPrivacyRefreshError(null);
+      return;
+    }
+    if (budgetLoading) {
+      if (!hasRevealedPlanRef.current) setPrivacyShielded(true);
+      return;
+    }
+
+    const scopeKey = `${session.user.id}:${activeHousehold?.householdId ?? "personal"}`;
+    if (verifiedPrivacyScopeRef.current !== scopeKey) {
+      verifiedPrivacyScopeRef.current = scopeKey;
+      lastPrivacyVerificationAtRef.current = Date.now();
+    }
+    hasRevealedPlanRef.current = true;
+    if (AppState.currentState === "active") {
+      setPrivacyShielded(false);
+      setPrivacyRefreshError(null);
+    }
+  }, [activeHousehold?.householdId, authLoading, budgetLoading, session?.user.id]);
+
+  // Act only on real background/foreground transitions. A quick return shows
+  // the cached plan immediately; a stale shared-household session is verified
+  // before sensitive data is revealed.
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    const subscription = AppState.addEventListener("change", state => {
+      const previous = previousAppStateRef.current;
+      previousAppStateRef.current = state;
+      if (state !== "active") {
+        privacyRefreshGenerationRef.current += 1;
+        setPrivacyShielded(true);
+        setPrivacyRefreshError(null);
+        return;
+      }
+      if (previous === "active") return;
+
+      const scope = privacyScopeRef.current;
+      if (!scope.userId || !hasRevealedPlanRef.current) return;
+      if (scope.isPersonal) {
+        setPrivacyShielded(false);
+        setPrivacyRefreshError(null);
+        return;
+      }
+
+      const verificationIsFresh = Date.now() - lastPrivacyVerificationAtRef.current < SHARED_HOUSEHOLD_PRIVACY_TTL_MS;
+      if (verificationIsFresh) setPrivacyShielded(false);
+      verifySharedHousehold(!verificationIsFresh);
+    });
     return () => {
-      if (revealTimer) clearTimeout(revealTimer);
+      privacyRefreshGenerationRef.current += 1;
       subscription.remove();
     };
-  }, []);
+  }, [session?.user.id, verifySharedHousehold]);
+
+  useEffect(() => {
+    if (privacyRefreshRetry === 0 || AppState.currentState !== "active") return;
+    const scope = privacyScopeRef.current;
+    if (!scope.userId || scope.isPersonal) return;
+    verifySharedHousehold(true);
+  }, [privacyRefreshRetry, verifySharedHousehold]);
 
   useEffect(() => {
     if (initialAppReady) setAppReady(true);
   }, [initialAppReady]);
 
   useEffect(() => {
-    if (!coreReady || biometricLocked) return;
-    const t = setTimeout(() => setMinimumStartupReady(true), PLAN_LOADING_MS);
-    return () => clearTimeout(t);
-  }, [biometricLocked, coreReady]);
-
-  useEffect(() => {
-    if (!coreReady) return;
-
-    let active = true;
-    void hideSplash().then(() => {
-      if (!active) return;
-
-      if (reduceMotion) {
-        brandEntranceOpacity.stopAnimation();
-        brandEntranceOpacity.setValue(1);
-        brandEntranceStartedRef.current = true;
-        setBrandEntranceStarted(true);
-        setBrandEntranceReady(true);
-        return;
-      }
-
-      if (brandEntranceStartedRef.current) return;
-      brandEntranceStartedRef.current = true;
-      setBrandEntranceStarted(true);
-
-      if (Platform.OS === "web") {
-        return;
-      }
-
-      Animated.sequence([
-        Animated.timing(brandEntranceOpacity, {
-          toValue: 1,
-          duration: STARTUP_BRAND_FADE_MS,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.delay(STARTUP_BRAND_HOLD_MS),
-      ]).start(({ finished }) => {
-        if (active && finished) setBrandEntranceReady(true);
-      });
-    });
-
-    return () => {
-      active = false;
-    };
-  }, [brandEntranceOpacity, coreReady, hideSplash, reduceMotion]);
-
-  useEffect(() => {
-    if (
-      Platform.OS !== "web"
-      || !brandEntranceStarted
-      || brandEntranceReady
-      || reduceMotion
-    ) return;
-
-    const webEntranceTimer = setTimeout(
-      () => setBrandEntranceReady(true),
-      STARTUP_BRAND_FADE_MS + STARTUP_BRAND_HOLD_MS,
-    );
-    return () => clearTimeout(webEntranceTimer);
-  }, [brandEntranceReady, brandEntranceStarted, reduceMotion]);
-
-  useEffect(() => {
-    if (!appReady) {
-      startupOpacity.setValue(1);
-      appOpacity.setValue(0);
-      setWebExitStarted(false);
-      setShowStartupOverlay(true);
-      return;
-    }
-
-    if (reduceMotion) {
-      startupOpacity.setValue(0);
-      appOpacity.setValue(1);
-      setShowStartupOverlay(false);
-      return;
-    }
-
-    if (Platform.OS === "web") {
-      startupOpacity.setValue(1);
-      appOpacity.setValue(1);
-      setShowStartupOverlay(true);
-      let secondFrame: number | undefined;
-      const firstFrame = window.requestAnimationFrame(() => {
-        secondFrame = window.requestAnimationFrame(() => setWebExitStarted(true));
-      });
-      return () => {
-        window.cancelAnimationFrame(firstFrame);
-        if (secondFrame !== undefined) window.cancelAnimationFrame(secondFrame);
-      };
-    }
-
-    setShowStartupOverlay(true);
-    Animated.parallel([
-      Animated.timing(startupOpacity, {
-        toValue: 0,
-        duration: APP_REVEAL_MS,
-        easing: Easing.inOut(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(appOpacity, {
-        toValue: 1,
-        duration: APP_REVEAL_MS,
-        easing: Easing.inOut(Easing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start(() => setShowStartupOverlay(false));
-  }, [appReady, appOpacity, reduceMotion, startupOpacity]);
-
-  useEffect(() => {
-    if (Platform.OS !== "web" || !appReady || !webExitStarted || reduceMotion) return;
-
-    const webExitTimer = setTimeout(
-      () => setShowStartupOverlay(false),
-      APP_REVEAL_MS + 80,
-    );
-    return () => clearTimeout(webExitTimer);
-  }, [appReady, reduceMotion, webExitStarted]);
+    if (appReady) void hideSplash();
+  }, [appReady, hideSplash]);
 
   useEffect(() => {
     if (!appReady || Platform.OS === "web") return;
@@ -353,10 +360,10 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
 
   return (
     <View style={[styles.transitionRoot, { backgroundColor: colors.background }]}>
-      <Animated.View
-        accessibilityElementsHidden={biometricLocked}
-        importantForAccessibility={biometricLocked ? "no-hide-descendants" : "auto"}
-        style={[styles.transitionContent, { opacity: appOpacity }]}
+      <View
+        accessibilityElementsHidden={biometricLocked || privacyShielded || !readyToReveal}
+        importantForAccessibility={biometricLocked || privacyShielded || !readyToReveal ? "no-hide-descendants" : "auto"}
+        style={styles.transitionContent}
       >
         {appReady ? (
           <>
@@ -413,24 +420,36 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
             <LegalAcceptanceGate />
           </>
         ) : null}
-      </Animated.View>
-      {showStartupOverlay ? (
-        <StartupScreen
-          brandOpacity={brandEntranceOpacity}
-          brandEntranceStarted={brandEntranceStarted}
-          leaving={webExitStarted}
-          reduceMotion={reduceMotion}
-          style={[styles.startupOverlay, Platform.OS === "web" ? undefined : { opacity: startupOpacity }]}
-        />
+      </View>
+      {!readyToReveal ? (
+        <View style={styles.startupOverlay}>
+          <AppLoadingIntro phase="app" />
+        </View>
       ) : null}
       {coreReady ? <BiometricLockGate /> : null}
-      {privacyShielded ? (
+      {privacyShielded && readyToReveal ? (
         <View
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
+          accessibilityViewIsModal
           style={[styles.privacyShield, { backgroundColor: colors.background }]}
         >
-          <Image source={require("../assets/images/startup_f_transparent.png")} resizeMode="contain" style={styles.privacyShieldLogo} />
+          {privacyRefreshError ? (
+            <View style={styles.privacyShieldError}>
+              <Text accessibilityLiveRegion="polite" style={[styles.privacyShieldMessage, { color: colors.mutedForeground }]}>
+                {privacyRefreshError}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Try loading your plan again"
+                onPress={() => setPrivacyRefreshRetry(value => value + 1)}
+                style={({ pressed }) => [
+                  styles.privacyShieldRetry,
+                  { backgroundColor: colors.primary, opacity: pressed ? 0.82 : 1 },
+                ]}
+              >
+                <Text style={[styles.privacyShieldRetryText, { color: colors.primaryForeground }]}>Try again</Text>
+              </Pressable>
+            </View>
+          ) : null}
         </View>
       ) : null}
     </View>
@@ -475,17 +494,19 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ErrorBoundary>
         <ThemeProvider>
-          <QueryClientProvider client={queryClient}>
-            <AuthProvider>
-              <BiometricLockProvider>
-                <BudgetProvider>
-                  <MembershipProvider>
-                    <RootNavigator fontsReady={fontsReady} hideSplash={hideSplash} />
-                  </MembershipProvider>
-                </BudgetProvider>
-              </BiometricLockProvider>
-            </AuthProvider>
-          </QueryClientProvider>
+          <NetworkStatusProvider>
+            <QueryClientProvider client={queryClient}>
+              <AuthProvider>
+                <BiometricLockProvider>
+                  <BudgetProvider>
+                    <MembershipProvider>
+                      <RootNavigator fontsReady={fontsReady} hideSplash={hideSplash} />
+                    </MembershipProvider>
+                  </BudgetProvider>
+                </BiometricLockProvider>
+              </AuthProvider>
+            </QueryClientProvider>
+          </NetworkStatusProvider>
         </ThemeProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
@@ -503,24 +524,36 @@ const styles = StyleSheet.create({
   startupOverlay: {
     ...StyleSheet.absoluteFillObject,
   },
-  startup: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#050816",
-  },
-  startupBrand: {
-    alignItems: "center",
-    flexShrink: 0,
-  },
   privacyShield: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 10000,
     alignItems: "center",
     justifyContent: "center",
   },
-  privacyShieldLogo: {
-    width: 160,
-    height: 160,
+  privacyShieldError: {
+    width: "100%",
+    maxWidth: 340,
+    paddingHorizontal: 24,
+    alignItems: "center",
+  },
+  privacyShieldMessage: {
+    marginTop: 18,
+    textAlign: "center",
+    fontSize: 15,
+    lineHeight: 21,
+    fontFamily: "Inter_600SemiBold",
+  },
+  privacyShieldRetry: {
+    minWidth: 132,
+    minHeight: 48,
+    marginTop: 18,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  privacyShieldRetryText: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
   },
 });

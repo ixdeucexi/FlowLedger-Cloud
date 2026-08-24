@@ -172,7 +172,7 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}`, "X-FlowLedger-Household-Id": householdId },
-        body: JSON.stringify({ intent }),
+        body: JSON.stringify({ intent, platform: "web" }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.link_token) throw new Error(result.message || "Could not start secure bank linking.");

@@ -1065,19 +1065,34 @@ export default function FloScreen() {
       </Modal>
 
       <Modal visible={Boolean(aiConsentPrompt)} transparent animationType="fade" onRequestClose={() => setAiConsentPrompt(null)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setAiConsentPrompt(null)}>
+        <Pressable
+          style={[
+            styles.modalOverlay,
+            {
+              paddingTop: Math.max(insets.top, 16),
+              paddingBottom: Math.max(insets.bottom, 16),
+            },
+          ]}
+          onPress={() => setAiConsentPrompt(null)}
+        >
           <Pressable accessibilityViewIsModal style={[styles.aiConsentCard, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => undefined}>
-            <View style={[styles.reviewProposalIcon, { backgroundColor: colors.primary + "18" }]}><Feather name="shield" size={21} color={colors.primary} /></View>
-            <Text style={[styles.followTitle, { color: colors.foreground }]}>Use Flo with your account data?</Text>
-            <Text style={[styles.aiConsentBody, { color: colors.mutedForeground }]}>Flo sends your question and only the relevant household records needed to answer it to OpenAI. FlowLedger does not send bank passwords or full account numbers. Chats are saved only when history is on.</Text>
-            <Pressable accessibilityRole="link" onPress={() => { setAiConsentPrompt(null); router.push("/legal?doc=privacy" as never); }} style={styles.aiConsentPrivacyLink}>
-              <Text style={[styles.aiConsentPrivacyText, { color: colors.primary }]}>Read the Privacy Policy</Text>
-            </Pressable>
-            <Text style={[styles.reviewSafety, { color: colors.mutedForeground }]}>You can cancel and keep using FlowLedger without Flo.</Text>
-            <View style={styles.followActions}>
-              <Pressable accessibilityRole="button" onPress={() => setAiConsentPrompt(null)} style={[styles.followButton, { backgroundColor: colors.muted }]}><Text style={[styles.followButtonText, { color: colors.foreground }]}>Not now</Text></Pressable>
-              <Pressable accessibilityRole="button" onPress={() => void acceptAiConsent()} style={[styles.followButton, { backgroundColor: colors.primary }]}><Text style={styles.followPrimaryText}>Agree & ask Flo</Text></Pressable>
-            </View>
+            <ScrollView
+              bounces={false}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.aiConsentContent}
+            >
+              <View style={[styles.reviewProposalIcon, { backgroundColor: colors.primary + "18" }]}><Feather name="shield" size={21} color={colors.primary} /></View>
+              <Text style={[styles.followTitle, { color: colors.foreground }]}>Use Flo with your account data?</Text>
+              <Text style={[styles.aiConsentBody, { color: colors.mutedForeground }]}>Flo sends your question and only the relevant household records needed to answer it to OpenAI. FlowLedger does not send bank passwords or full account numbers. Chats are saved only when history is on.</Text>
+              <Pressable accessibilityRole="link" onPress={() => { setAiConsentPrompt(null); router.push("/legal?doc=privacy" as never); }} style={styles.aiConsentPrivacyLink}>
+                <Text style={[styles.aiConsentPrivacyText, { color: colors.primary }]}>Read the Privacy Policy</Text>
+              </Pressable>
+              <Text style={[styles.reviewSafety, { color: colors.mutedForeground }]}>You can cancel and keep using FlowLedger without Flo.</Text>
+              <View style={[styles.followActions, styles.aiConsentActions]}>
+                <Pressable accessibilityRole="button" onPress={() => setAiConsentPrompt(null)} style={[styles.followButton, styles.aiConsentButton, { backgroundColor: colors.muted }]}><Text style={[styles.followButtonText, { color: colors.foreground }]}>Not now</Text></Pressable>
+                <Pressable accessibilityRole="button" onPress={() => void acceptAiConsent()} style={[styles.followButton, styles.aiConsentButton, { backgroundColor: colors.primary }]}><Text style={styles.followPrimaryText}>Agree & ask Flo</Text></Pressable>
+              </View>
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1209,7 +1224,8 @@ const styles = StyleSheet.create({
   loadOlderButton: { alignSelf: "center", minHeight: 36, borderRadius: 999, justifyContent: "center", paddingHorizontal: 14 },
   loadOlderText: { fontSize: 11, fontFamily: "Inter_700Bold" },
   modalOverlay: { flex: 1, backgroundColor: "rgba(2,6,23,0.68)", justifyContent: "flex-end" },
-  aiConsentCard: { borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, padding: 20, gap: 12 },
+  aiConsentCard: { width: "100%", maxHeight: "100%", borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, overflow: "hidden" },
+  aiConsentContent: { padding: 20, gap: 12 },
   aiConsentBody: { fontSize: 13, lineHeight: 20, fontFamily: "Inter_400Regular", textAlign: "center" },
   aiConsentPrivacyLink: { minHeight: 44, alignSelf: "center", justifyContent: "center", paddingHorizontal: 12 },
   aiConsentPrivacyText: { fontSize: 13, fontFamily: "Inter_700Bold" },
@@ -1221,6 +1237,8 @@ const styles = StyleSheet.create({
   actualPrefix: { fontSize: 17, fontFamily: "Inter_700Bold", marginRight: 8 },
   actualInput: { flex: 1, fontSize: 18, fontFamily: "Inter_700Bold" },
   followActions: { flexDirection: "row", gap: 10, marginTop: 4 },
+  aiConsentActions: { flexWrap: "wrap" },
+  aiConsentButton: { minWidth: 140 },
   followButton: { flex: 1, minHeight: 46, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   followButtonText: { fontSize: 14, fontFamily: "Inter_700Bold" },
   followPrimaryText: { color: "#fff", fontSize: 14, fontFamily: "Inter_700Bold" },

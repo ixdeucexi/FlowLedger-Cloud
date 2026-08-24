@@ -1,6 +1,8 @@
 import type { FloReviewProposal } from "./floExperience";
 
-export const FLO_CLIENT_RESPONSE_TIMEOUT_MS = 35_000;
+// Must remain comfortably above the Edge Function's hard answer deadline so
+// a verified multi-tool answer is not canceled by the app during synthesis.
+export const FLO_CLIENT_RESPONSE_TIMEOUT_MS = 50_000;
 
 export function isFloTimeoutCode(value: unknown): boolean {
   return value === "answer_timeout" || value === "flo_timeout";

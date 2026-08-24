@@ -38,12 +38,12 @@ module.exports = async function testerPlan(req, res) {
   const email = String(payload.email || "").trim().toLowerCase();
   const tier = payload.tier === "pro" ? "pro" : payload.tier === "free" ? "free" : null;
   if (!email || !email.includes("@") || !tier) {
-    return res.status(400).json({ error: "INVALID_REQUEST", message: "Enter a tester email and choose Free or Pro." });
+    return res.status(400).json({ error: "INVALID_REQUEST", message: "Enter a FlowLedger account email and choose Founding Free or Pro." });
   }
 
   try {
     const tester = await findUserByEmail(db, email);
-    if (!tester) return res.status(404).json({ error: "TESTER_NOT_FOUND", message: "No FlowLedger account uses that email." });
+    if (!tester) return res.status(404).json({ error: "ACCOUNT_NOT_FOUND", message: "No FlowLedger account uses that email." });
 
     let { data: household, error: householdError } = await db
       .from("households")
@@ -69,7 +69,7 @@ module.exports = async function testerPlan(req, res) {
       }
     }
 
-    if (!household) return res.status(404).json({ error: "HOUSEHOLD_NOT_FOUND", message: "That tester does not have a household yet." });
+    if (!household) return res.status(404).json({ error: "HOUSEHOLD_NOT_FOUND", message: "That account does not have a household yet." });
 
     const { data: currentPlan, error: currentPlanError } = await db
       .from("household_plans")
@@ -99,6 +99,6 @@ module.exports = async function testerPlan(req, res) {
       tier,
     });
   } catch (error) {
-    return res.status(500).json({ error: "TESTER_PLAN_FAILED", message: publicError(error, "Could not update tester access.") });
+    return res.status(500).json({ error: "ACCOUNT_PLAN_FAILED", message: publicError(error, "Could not update that account's plan.") });
   }
 };

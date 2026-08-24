@@ -20,11 +20,13 @@ module.exports = async function overdueBillNotifications(req, res) {
     const today = new Date().toISOString().slice(0, 10);
     const [year, monthNumber] = today.split("-").map(Number);
     const month = monthNumber - 1;
-    const { data: subscriptions, error: subscriptionError } = await db
-      .from("push_subscriptions")
-      .select("user_id");
+    const [{ data: subscriptions, error: subscriptionError }, { data: nativeDevices, error: nativeDeviceError }] = await Promise.all([
+      db.from("push_subscriptions").select("user_id"),
+      db.from("native_push_devices").select("user_id").eq("status", "active"),
+    ]);
     if (subscriptionError) throw subscriptionError;
-    const subscribedUserIds = unique((subscriptions || []).map(row => row.user_id));
+    if (nativeDeviceError) throw nativeDeviceError;
+    const subscribedUserIds = unique([...(subscriptions || []), ...(nativeDevices || [])].map(row => row.user_id));
     if (!subscribedUserIds.length) return res.status(200).json({ ok: true, users: 0, overdue: 0, delivered: 0 });
 
     const { data: memberships, error: membershipError } = await db

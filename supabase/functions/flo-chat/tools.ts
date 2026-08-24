@@ -247,11 +247,14 @@ export function createFloTools(runtime: FloToolRuntime) {
         startDate: z.string().nullable().default(null), endDate: z.string().nullable().default(null),
         query: z.string().nullable().default(null), category: z.string().nullable().default(null),
         pending: z.boolean().nullable().default(null), reviewStatus: z.string().nullable().default(null),
-        includeDeleted: z.boolean().default(false), limit: z.number().int().min(1).max(FLO_V3_MAX_ROWS).default(100),
+        includeDeleted: z.boolean().default(false), limit: z.number().int().min(1).max(FLO_V3_MAX_ROWS).default(20),
       }),
       execute: async input => tracked(runtime, "searchTransactions", input, async () => {
         const { startDate, endDate } = dateRange(input.startDate ?? undefined, input.endDate ?? undefined);
-        const limit = boundedLimit(input.limit, 100);
+        // A compact recent sample is enough for open-ended synthesis and keeps
+        // each tool round responsive. Exact totals remain unavailable unless
+        // the bounded scan proves it saw the complete requested range.
+        const limit = boundedLimit(input.limit, 20);
         const scanLimit = FLO_V3_MAX_ROWS;
         let query = runtime.client.from("transactions")
           .select("id,date,amount,category,note,merchant_name,source,plaid_account_id,pending,review_status,review_resolution,linked_bill_id,linked_income_id,linked_plan_id,matched_occurrence_date,removed_at,deleted_at,user_edited_at,reviewed_at", { count: "exact" })

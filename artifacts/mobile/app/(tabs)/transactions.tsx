@@ -513,6 +513,9 @@ export function ActivityScreen() {
   }, [fullPaymentPrompt, queuedSurplusPrompt, surplusPrompt]);
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
+  const activityTopInset = Platform.OS === "android"
+    ? Math.max(insets.top, 28)
+    : insets.top;
   const listBottomPadding = insets.bottom + (Platform.OS === "web" ? 128 : 118);
   const activeDateRange = useMemo(
     () => resolveActivityDateRange(rangeFilter, new Date(), customStartDate, customEndDate),
@@ -2577,7 +2580,7 @@ export function ActivityScreen() {
   const renderListHeader = () => (
     <>
       <View
-        style={[styles.header, { paddingTop: insets.top + 12 + webTopPad }]}
+        style={[styles.header, { paddingTop: activityTopInset + 12 + webTopPad }]}
       >
         <View>
           <PlanViewSelector textStyle={styles.title} />

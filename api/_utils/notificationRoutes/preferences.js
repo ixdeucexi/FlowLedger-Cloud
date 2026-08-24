@@ -14,6 +14,8 @@ function body(req) {
 }
 
 module.exports = async function notificationPreferences(req, res) {
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("Vary", "Authorization");
   if (req.method !== "GET" && req.method !== "PATCH") {
     return res.status(405).json({ error: "METHOD_NOT_ALLOWED" });
   }

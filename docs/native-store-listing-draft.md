@@ -1,8 +1,8 @@
 # FlowLedger native store listing draft
 
-Last reviewed: August 15, 2026
+Last reviewed: August 24, 2026
 
-This copy is ready to paste into App Store Connect and Google Play Console after the legal entity, app records, billing choice, screenshots, and support URLs are finalized.
+This copy is ready to paste into App Store Connect and Google Play Console after the developer accounts, app records, screenshots, and support URLs are finalized. Version 1 launches as Founding Free without in-app purchases or bank connection controls.
 
 ## Shared positioning
 
@@ -37,14 +37,14 @@ Plan with confidence:
 - Review bills, income, and activity in one place
 - See a daily cash-flow Forecast
 - Organize savings accounts by purpose
-- Plan debt payments with Snowball or Avalanche ordering
+- Plan debt payments automatically in Snowball order
 - Test income, spending, savings, and debt changes in a private simulator
 - Ask Flo account-aware questions after giving explicit permission
 - Share a household plan with role-based access
 
 FlowLedger does not move money or make payments. Continue paying bills and debts through your bank or provider. Connected-account information may be delayed or incomplete, so review important amounts before acting.
 
-Some features require a FlowLedger Pro household. Bank connection management currently opens FlowLedger’s secure website; connected balances remain available in the app.
+Version 1 is Founding Free. No subscription or trial is required. Bank sync and advanced automation are planned for a later Pro release after production approval and testing are complete.
 
 Privacy Policy: https://flowledger-algo.com/legal?doc=privacy
 
@@ -76,7 +76,7 @@ See upcoming bills, income, debt payments, and projected daily closes on one cal
 
 DEBT PAYOFF PLANNING
 
-Organize active debts using Snowball or Avalanche order. See required payments, planned extras, rollovers, and an estimated payoff date. Edit a planned payment when life changes.
+Organize active debts automatically in Snowball order. See required payments, planned extras, rollovers, and an estimated payoff date. Edit a planned payment when life changes.
 
 PRIVATE WHAT-IF SIMULATOR
 
@@ -92,24 +92,24 @@ Invite household members and control access with owner, manager, editor, and vie
 
 FlowLedger is budgeting and forecasting software. It is not a bank, lender, payment processor, investment adviser, or credit-repair service. It never moves money. Continue paying bills and debts through your bank or provider, and verify important amounts before acting.
 
-Some features require a FlowLedger Pro household. Bank connection management currently opens FlowLedger’s secure website; connected balances remain visible in the app.
+Version 1 is Founding Free. No subscription or trial is required. Bank sync and advanced automation are planned for a later Pro release after production approval and testing are complete.
 
 ## App Review notes
 
 1. Use the dedicated reviewer account supplied privately in the review portal. It contains fictional household, account, bill, debt, income, transaction, savings, and Forecast data.
-2. The app can also show a fictional demo walkthrough without linking a real financial account.
+2. The supplied account is fully onboarded with fictional manual data and requires no financial-account connection.
 3. FlowLedger does not initiate bank transfers or creditor payments. “Planned payment” means a Forecast entry only.
-4. Plaid is used for optional connected-account data. Version 1 manages connect, reconnect, rename, and disconnect through an authenticated handoff to `https://flowledger-algo.com`; already connected data is visible in native.
+4. Version 1 does not expose new bank-connection controls. Users can build a complete plan with manual accounts and activity.
 5. Flo is an account-aware assistant. The first account question presents explicit OpenAI disclosure and consent. Settings → Data & privacy can withdraw that permission. Flo uses verified records, cannot move money, and requires a separate review/confirm screen for supported plan changes.
 6. The Plan Simulator is read-only and does not mutate the household plan.
-7. Pro-only areas are visibly gated. Reviewer credentials must have the entitlement needed to inspect all submitted paid features.
+7. Version 1 is Founding Free and contains no purchasable subscription or paywall.
 8. Terms, Privacy Policy, and Support are accessible without authentication.
 9. Biometric lock is device-specific and optional. A device passcode/password fallback remains available.
 10. EAS Update is disabled for version 1; native dependency and configuration changes ship only in reviewed store builds.
+11. Pro billing and production bank sync are planned for a later reviewed release and are not advertised as currently available.
 
 ## Required owner/console inputs before submission
 
-- Final mobile billing strategy and subscription language
 - Apple/Google organization and developer contact details
 - Public account-deletion URL
 - Final reviewer username/password entered only in the private review portal

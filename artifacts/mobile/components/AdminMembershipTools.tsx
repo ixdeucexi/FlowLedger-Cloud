@@ -158,14 +158,14 @@ export function AdminMembershipTools({ appearance = "theme" }: { appearance?: "t
         <View style={styles.header}>
           <Feather name="user-check" size={18} color={colors.primary} />
           <View style={styles.copy}>
-            <Text style={[styles.title, { color: colors.foreground }]}>Tester Access</Text>
+            <Text style={[styles.title, { color: colors.foreground }]}>Manage Pro by email</Text>
             <Text style={[styles.description, { color: colors.mutedForeground }]}>
-              Change a tester household&apos;s real plan.
+              Upgrade a FlowLedger account&apos;s household without a store subscription.
             </Text>
           </View>
         </View>
         <TextInput
-          accessibilityLabel="Tester email"
+          accessibilityLabel="FlowLedger account email"
           autoCapitalize="none"
           autoCorrect={false}
           keyboardType="email-address"
@@ -178,7 +178,7 @@ export function AdminMembershipTools({ appearance = "theme" }: { appearance?: "t
         <View style={styles.actions}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Grant Pro access to tester"
+            accessibilityLabel="Upgrade account to Pro"
             disabled={testerBusy || !testerEmail.trim()}
             onPress={() => void setTesterPlan("pro")}
             style={({ pressed }) => [
@@ -191,12 +191,12 @@ export function AdminMembershipTools({ appearance = "theme" }: { appearance?: "t
             ]}
           >
             <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>
-              {testerBusy ? "Saving…" : "Grant Pro"}
+              {testerBusy ? "Saving…" : "Upgrade to Pro"}
             </Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Return tester to Basic access"
+            accessibilityLabel="Return account to Founding Free access"
             disabled={testerBusy || !testerEmail.trim()}
             onPress={() => void setTesterPlan("free")}
             style={({ pressed }) => [
@@ -209,7 +209,7 @@ export function AdminMembershipTools({ appearance = "theme" }: { appearance?: "t
               },
             ]}
           >
-            <Text style={[styles.buttonText, { color: colors.foreground }]}>Return to Basic</Text>
+            <Text style={[styles.buttonText, { color: colors.foreground }]}>Return to Founding Free</Text>
           </Pressable>
         </View>
         {testerMessage ? (

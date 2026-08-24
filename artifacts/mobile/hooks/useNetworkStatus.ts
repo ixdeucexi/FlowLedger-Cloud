@@ -1,5 +1,5 @@
 import NetInfo from "@react-native-community/netinfo";
-import { useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { Platform } from "react-native";
 
 import { publishNetworkStatus, reachableNetworkState } from "@/lib/networkStatus";
@@ -15,7 +15,14 @@ function browserOnlineState() {
   return navigator.onLine;
 }
 
-export function useNetworkStatus() {
+type NetworkStatusValue = {
+  online: boolean | null;
+  reconnected: boolean;
+};
+
+const NetworkStatusContext = createContext<NetworkStatusValue | null>(null);
+
+export function NetworkStatusProvider({ children }: { children: React.ReactNode }) {
   const [online, setOnline] = useState<boolean | null>(() => Platform.OS === "web" ? browserOnlineState() : null);
   const [reconnected, setReconnected] = useState(false);
 
@@ -23,7 +30,9 @@ export function useNetworkStatus() {
     if (Platform.OS !== "web") {
       let previous: boolean | null = null;
       let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-      const unsubscribe = NetInfo.addEventListener(state => {
+      let active = true;
+      const applyState = (state: { isConnected: boolean | null; isInternetReachable: boolean | null }) => {
+        if (!active) return;
         const next = reachableNetworkState(state);
         setOnline(next);
         publishNetworkStatus(next);
@@ -36,8 +45,13 @@ export function useNetworkStatus() {
           setReconnected(false);
         }
         previous = next;
+      };
+      const unsubscribe = NetInfo.addEventListener(applyState);
+      void NetInfo.fetch().then(applyState).catch(() => {
+        // Unknown remains fail-closed. The listener can recover when NetInfo resolves.
       });
       return () => {
+        active = false;
         if (reconnectTimer) clearTimeout(reconnectTimer);
         unsubscribe();
       };
@@ -71,5 +85,12 @@ export function useNetworkStatus() {
     };
   }, []);
 
-  return { online, reconnected };
+  const value = useMemo(() => ({ online, reconnected }), [online, reconnected]);
+  return React.createElement(NetworkStatusContext.Provider, { value }, children);
+}
+
+export function useNetworkStatus(): NetworkStatusValue {
+  const value = useContext(NetworkStatusContext);
+  if (!value) throw new Error("useNetworkStatus must be used inside NetworkStatusProvider.");
+  return value;
 }

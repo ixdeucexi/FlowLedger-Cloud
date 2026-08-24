@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
-import React, { memo, useEffect, useMemo, useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { memo, useEffect, useMemo, useRef, useState } from "react";
+import { AccessibilityInfo, findNodeHandle, Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
 import { subscribeConfirmAction, type ConfirmActionOptions } from "@/lib/confirmAction";
@@ -15,6 +15,7 @@ function ConfirmActionDialog({ request, onClose, contained = false }: DialogProp
   const c = useColors();
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
+  const titleRef = useRef<Text>(null);
   const confirmText = request.confirmText ?? "Confirm";
   const destructive = useMemo(
     () => Boolean(request.destructive || /delete|remove|leave|stop|archive|discard/i.test(confirmText)),
@@ -25,6 +26,15 @@ function ConfirmActionDialog({ request, onClose, contained = false }: DialogProp
   useEffect(() => {
     setError("");
     setRunning(false);
+  }, [request]);
+
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    const timer = setTimeout(() => {
+      const node = findNodeHandle(titleRef.current);
+      if (node) AccessibilityInfo.setAccessibilityFocus(node);
+    }, 120);
+    return () => clearTimeout(timer);
   }, [request]);
 
   const close = () => {
@@ -59,15 +69,14 @@ function ConfirmActionDialog({ request, onClose, contained = false }: DialogProp
         style={StyleSheet.absoluteFillObject}
       />
       <View
-        accessibilityRole="alert"
         style={[styles.dialog, { backgroundColor: c.card, borderColor: c.border }]}
       >
         <View style={[styles.icon, { backgroundColor: actionColor + "18" }]}>
           <Feather name={destructive ? "trash-2" : "help-circle"} size={20} color={actionColor} />
         </View>
-        <Text style={[styles.title, { color: c.foreground }]}>{request.title}</Text>
+        <Text ref={titleRef} accessibilityRole="header" style={[styles.title, { color: c.foreground }]}>{request.title}</Text>
         <Text style={[styles.body, { color: c.mutedForeground }]}>{request.message}</Text>
-        {error ? <Text style={[styles.error, { color: c.destructive }]}>{error}</Text> : null}
+        {error ? <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={[styles.error, { color: c.destructive }]}>{error}</Text> : null}
         <View style={styles.actions}>
           <Pressable
             accessibilityRole="button"
@@ -127,7 +136,20 @@ interface OverlayProps {
 }
 
 export function ConfirmActionOverlay({ request, onClose }: OverlayProps) {
-  return request ? <ConfirmActionDialog request={request} onClose={onClose} contained /> : null;
+  return (
+    <Modal
+      visible={Boolean(request)}
+      transparent
+      animationType="fade"
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      navigationBarTranslucent
+      hardwareAccelerated
+      onRequestClose={onClose}
+    >
+      {request ? <ConfirmActionDialog request={request} onClose={onClose} /> : null}
+    </Modal>
+  );
 }
 
 export const ConfirmActionModal = memo(ConfirmActionModalView);

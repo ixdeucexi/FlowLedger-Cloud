@@ -18,12 +18,30 @@ Use this record for every preview, TestFlight, Play internal, and production rel
 ## Required preflight
 
 - Run native commands from `artifacts/mobile`; its `app.config.js` and `eas.json` are the only Expo/EAS configuration sources. Run `pnpm run check:mobile-config` from the repository root before Expo Doctor or EAS.
+- Run `powershell -ExecutionPolicy Bypass -File scripts/test-native-release.ps1` from the repository root. It runs the config contract, API/Edge/mobile tests, typecheck, Expo Doctor, production dependency audit, diff check, and iOS/Android/web export unless `-SkipBundles` is explicitly used.
 - Confirm the repository and live Supabase migration histories match exactly.
 - Run the full unit suite, workspace typecheck, Expo Doctor, production web/native bundle, dependency audit, and `git diff --check` against the release commit.
 - Confirm production EAS variables, public API origin, Supabase public key, OAuth providers, callback allowlist, and Flo secrets without copying their values into this record.
 - Smoke login, setup, Dashboard, Bills/Debt, Activity/Review, Forecast, Simulator, Flo, Settings, support/legal pages, export, household switching, and sign-out with fictional data.
 - Record physical iOS and Android results, including cold/warm deep links, background privacy, biometric unlock, offline recovery, and software keyboard layouts.
 - Confirm privacy, billing, Data Safety, App Privacy, Financial Features, and reviewer notes describe the shipped behavior.
+
+## Provider and build configuration
+
+- Founding Free v1 EAS public variables: `EXPO_PUBLIC_LAUNCH_MODE=free`, `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_API_ORIGIN=https://flowledger-algo.com`, `EXPO_PUBLIC_APP_ENVIRONMENT=production`, and `EXPO_PUBLIC_APPLE_AUTH_ENABLED=true`. RevenueCat public keys and production billing mode are not required until the later paid release. Add the Firebase client `google-services.json` as an EAS secret file and expose its build-time path as `GOOGLE_SERVICES_JSON`; never use the FCM service-account JSON here.
+- RevenueCat: create Apple `flowledger_pro_monthly` / `flowledger_pro_annual` and Google `flowledger_pro:monthly-autorenewing` / `flowledger_pro:annual-autorenewing`, attach all to entitlement `pro`, configure Apple/Google server credentials, set restore behavior to **Keep with original App User ID**, and configure webhook Authorization/HMAC. Set Sandbox Testing Access to **Allowed App User IDs only** and add only the separate store-reviewer UUID.
+- Supabase Edge/server secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `REVENUECAT_WEBHOOK_AUTHORIZATION`, `REVENUECAT_WEBHOOK_SIGNING_SECRET`, `REVENUECAT_ENVIRONMENT=production`, `REVENUECAT_SECRET_API_KEY`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_CLIENT_ID`, `APPLE_PRIVATE_KEY`, and a separate 32-byte `APPLE_TOKEN_ENCRYPTION_KEY`. Deploy `billing-dispatcher` only after migration `20260821222611_native_billing_plaid_push.sql` is applied and validated.
+- Store the same `CRON_SECRET` used by Vercel in Supabase Vault as `flowledger_cron_secret`; verify the ten-minute `flowledger-native-push-receipts` job and its `net` responses.
+- Plaid: register exact Android package `com.flowledger.app`, iOS bundle `com.flowledger.app`, and `https://flowledger-algo.com/plaid/oauth` in each release environment. Confirm existing `PLAID_CLIENT_ID`, environment secret, redirect, webhook, and encryption-key configuration without recording values here.
+- Native push: configure APNs and the separate FCM v1 service-account sender credential for the same bundle/package in EAS. Confirm project ID `80ec219d-8a12-43f9-b7cf-0dd6541e60f1`, verify `GOOGLE_SERVICES_JSON` resolves to the Firebase client config during the Android build, and record a signed-device registration/delivery/receipt test. Do not put the service-account credential in Expo public variables or the repository.
+- Server push environment: set `PUSH_APP_ENVIRONMENT=production` on the production API (preview/development on those deployments). Registration, status, and delivery reject cross-environment native tokens.
+
+## Fictional reviewer fixture
+
+1. Create one fresh Founding Free Auth user through an authorized private channel with `app_metadata.flowledger_reviewer_fixture=true`. Never place its password in the repository, logs, issue tracker, or this runbook.
+2. Set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `FLOWLEDGER_REVIEWER_USER_ID`, and `FLOWLEDGER_REVIEWER_FIXTURE_CONFIRM=FICTIONAL_ONLY` only in the operator shell or secret runner, then run `node scripts/seed-reviewer-fixture.mjs`.
+3. The seeder fails closed if the account already has elevated access, keeps the household on the public Founding Free plan, completes onboarding, and creates no Plaid Item or token.
+4. Use that account in the exact releasable production binary and enter its credentials only in App Store Connect/Play Console reviewer fields. A separate `flowledger_store_reviewer` account is needed only when the later paid release is submitted.
 
 ## Deployment order
 
@@ -64,8 +82,8 @@ Use this record for every preview, TestFlight, Play internal, and production rel
 1. Ask only for the deletion receipt ID, approximate request time, and account email. Never request a password, bank credential, access token, Social Security number, or full account number.
 2. Look up the receipt in `private.account_deletion_receipts` using the service role. Do not expose the stored user hash or database access to support clients.
 3. A `completed` receipt confirms application cleanup and Auth deletion. A `data_deleted` receipt means application data was removed but Auth deletion or receipt finalization must be verified and, if needed, completed by an authorized operator.
-4. If no receipt exists, confirm whether the user was blocked as the owner of a multi-member household or by a Plaid disconnect failure. The app intentionally makes no financial-data deletion in either case.
-5. For an owner block, help the customer transfer ownership or remove members, then have them restart in-app deletion. Never delete another member's shared household plan as a shortcut.
+4. If no receipt exists, confirm whether the user was blocked as the owner of a multi-member household or by an Apple, RevenueCat, or Plaid provider cleanup failure. The app intentionally makes no financial-data deletion in those cases.
+5. For an owner block, help the customer remove every other member, then have them restart in-app deletion. Ownership transfer is not currently available; never delete another member's shared household plan as a shortcut.
 6. For a Plaid failure, verify provider status and retry the same deletion path; do not clear retained ciphertext without a successful or already-removed provider response.
 7. Record the receipt ID, final status, remediation, operator, and completion time. Escalate disputed, security-sensitive, or cross-household cases immediately.
 

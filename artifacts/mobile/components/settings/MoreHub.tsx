@@ -87,7 +87,6 @@ export function MoreHub({
       {visibleSettingsGroups(isAdmin).map(group => (
         <View key={group.id} style={styles.groupBlock}>
           <Text style={[styles.groupTitle, { color: colors.foreground }]}>{group.label}</Text>
-          <Text style={[styles.groupDescription, { color: colors.mutedForeground }]}>{group.description}</Text>
           <View style={[styles.groupCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             {group.sectionIds.map((sectionId, index) => {
               const section = settingsSectionById(sectionId);
@@ -158,7 +157,7 @@ const styles = StyleSheet.create({
   quickIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center", marginBottom: 10 },
   quickLabel: { fontFamily: "Inter_700Bold", fontSize: 14 },
   quickDescription: { fontFamily: "Inter_500Medium", fontSize: 11, marginTop: 3 },
-  groupTitle: { fontSize: 20, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.35, marginBottom: 3, paddingHorizontal: 12 },
+  groupTitle: { fontSize: 20, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.35, marginBottom: 10, paddingHorizontal: 12 },
   groupDescription: { fontSize: 12, lineHeight: 17, fontFamily: "Inter_500Medium", marginBottom: 10, paddingHorizontal: 12 },
   groupCard: { borderWidth: 1, borderRadius: 22, overflow: "hidden" },
   row: { minHeight: 76, paddingHorizontal: 14, paddingVertical: 11, flexDirection: "row", alignItems: "center", gap: 12 },

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import {
@@ -198,6 +199,14 @@ describe("anchorForecastToBankBalance", () => {
     assert.deepEqual(anchored.events.map(item => item.id), [posted.id, todayPlan.id, todayUnpostedIncome.id, futureBill.id]);
     assert.equal(result.days[2].balance, 1_879.39);
     assert.ok(Math.abs(result.days[3].balance - 1_591.87) < 1e-8);
+  });
+
+  it("keeps the unanchored canonical plan as the calendar display source", () => {
+    const context = readFileSync("context/BudgetContext.tsx", "utf8");
+
+    assert.match(context, /const displayEvents = suppressDebtBillPlanDuplicates\(financialEvents\);/);
+    assert.match(context, /let balanceEvents = \[\.\.\.displayEvents\];/);
+    assert.match(context, /displayEvents\.forEach\(event => \{[\s\S]*?visibleEventsByDate\.set/);
   });
 
   it("places a newly observed paycheck on today without rewriting earlier balances", () => {

@@ -10,11 +10,13 @@ import { AppState, Platform } from "react-native";
 import { DEV_DEMO_USER_ID, disableDevDemoMode, enableDevDemoMode, isDevDemoMode } from "@/lib/demoMode";
 import { LEGAL_VERSION, legalAcceptanceMetadata } from "@/lib/legalDocuments";
 import { clearLastAppRoute } from "@/lib/navigationMemory";
-import { detachPushNotifications, restorePushNotifications } from "@/lib/pushNotifications";
+import { detachPushNotifications } from "@/lib/pushNotifications";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 import { planSimulationStoragePrefix } from "@/lib/planSimulator";
 import { supabase } from "@/lib/supabase";
 import { completeSupabaseAuthUrl, nativeAuthRedirectUri, nativePasswordResetRedirectUri } from "@/lib/authLinks";
+import { deactivateBillingIdentity } from "@/lib/nativeBilling";
+import { apiFetch } from "@/lib/api";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -118,6 +120,16 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
+function sessionsMateriallyEqual(current: Session | null, next: Session | null) {
+  if (current === next) return true;
+  if (!current || !next) return current === next;
+  return current.access_token === next.access_token
+    && current.refresh_token === next.refresh_token
+    && current.expires_at === next.expires_at
+    && current.user.id === next.user.id
+    && current.user.updated_at === next.user.updated_at;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [demoMode, setDemoMode] = useState(isDevDemoMode());
   const [session, setSession] = useState<Session | null>(null);
@@ -192,13 +204,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (Platform.OS !== "web") {
-        const initialUrl = await Linking.getInitialURL();
+        const initialUrl = await withTimeout(Linking.getInitialURL(), 3000, "Initial app link").catch(error => {
+          console.warn("Initial app link check skipped", error);
+          return null;
+        });
         if (isAuthCallbackUrl(initialUrl)) await completeSupabaseAuthUrl(initialUrl!);
       }
 
       let { data } = await withTimeout(supabase.auth.getSession(), 8000, "Session check");
       if (data.session) {
-        await applyPendingOAuthLegalAcceptance();
+        await withTimeout(applyPendingOAuthLegalAcceptance(), 8000, "Pending legal acceptance").catch(error => {
+          console.warn("Pending legal acceptance restore skipped", error);
+        });
         data = (await withTimeout(supabase.auth.getSession(), 8000, "Session refresh after legal acceptance")).data;
       }
       if (!mounted) return;
@@ -213,27 +230,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
+    const applySession = (nextSession: Session | null) => {
+      setSession(current => sessionsMateriallyEqual(current, nextSession) ? current : nextSession);
+    };
+
     const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
+      applySession(s);
       setLoading(false);
     });
 
-    const refreshSession = () => {
-      void withTimeout(supabase.auth.getSession(), 8000, "Resume session check")
+    let resumeSessionPromise: Promise<void> | null = null;
+    const refreshNativeSession = () => {
+      if (resumeSessionPromise) return resumeSessionPromise;
+      resumeSessionPromise = withTimeout(supabase.auth.getSession(), 8000, "Resume session check")
         .then(({ data }) => {
           if (!mounted) return;
-          setSession(data.session);
+          applySession(data.session);
           setLoading(false);
         })
         .catch(error => {
           console.warn("Resume auth check failed", error);
           if (!mounted) return;
           setLoading(false);
+        })
+        .finally(() => {
+          resumeSessionPromise = null;
         });
+      return resumeSessionPromise;
     };
-    const appStateSubscription = AppState.addEventListener("change", state => {
-      if (state === "active") refreshSession();
-    });
+    // Supabase Auth already owns browser visibility recovery when
+    // autoRefreshToken is enabled. Only native needs an AppState bridge.
+    const appStateSubscription = Platform.OS === "web"
+      ? null
+      : AppState.addEventListener("change", state => {
+          if (state === "active") void refreshNativeSession();
+        });
     const linkingSubscription = Platform.OS === "web" ? null : Linking.addEventListener("url", event => {
       if (!isAuthCallbackUrl(event.url)) return;
       void completeSupabaseAuthUrl(event.url)
@@ -245,27 +276,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         })
         .catch(error => console.warn("Native auth callback failed", error));
     });
-    if (Platform.OS === "web" && typeof document !== "undefined") {
-      document.addEventListener("visibilitychange", refreshSession);
-      window.addEventListener("pageshow", refreshSession);
-    }
-
     return () => {
       mounted = false;
       listener.subscription.unsubscribe();
-      appStateSubscription.remove();
+      appStateSubscription?.remove();
       linkingSubscription?.remove();
-      if (Platform.OS === "web" && typeof document !== "undefined") {
-        document.removeEventListener("visibilitychange", refreshSession);
-        window.removeEventListener("pageshow", refreshSession);
-      }
     };
   }, [demoMode]);
-
-  useEffect(() => {
-    if (demoMode || !session?.access_token || !session.user.id) return;
-    void restorePushNotifications(session.access_token, session.user.id).catch(() => undefined);
-  }, [demoMode, session?.access_token, session?.user.id]);
 
   const signIn = async (email: string, password: string): Promise<string | null> => {
     if (demoMode) {
@@ -403,6 +420,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         nonce,
       });
       if (error) throw error;
+      if (!credential.authorizationCode || !data.session?.access_token) throw new Error("Apple sign-in returned without a revocable authorization.");
+      const retention = await apiFetch("/api/account/apple-authorization", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${data.session.access_token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ authorizationCode: credential.authorizationCode }),
+      });
+      if (!retention.ok) {
+        await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+        throw new Error("Apple sign-in could not be completed securely. Try again.");
+      }
       const givenName = credential.fullName?.givenName?.trim() || null;
       const familyName = credential.fullName?.familyName?.trim() || null;
       const fullName = [givenName, familyName].filter(Boolean).join(" ");
@@ -428,8 +455,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    deactivateBillingIdentity();
     if (session?.access_token) {
-      await detachPushNotifications(session.access_token).catch(() => undefined);
+      await detachPushNotifications(session.access_token).catch(error => {
+        console.warn("Server notification detach failed; native registration was invalidated locally.", error);
+      });
     }
     const signedOutUserId = session?.user.id;
     setSession(null);

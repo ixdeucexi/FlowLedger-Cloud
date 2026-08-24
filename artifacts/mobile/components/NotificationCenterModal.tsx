@@ -1,12 +1,13 @@
 import { Feather } from "@expo/vector-icons";
-import React, { useEffect } from "react";
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import React, { useEffect, useRef } from "react";
+import { AccessibilityInfo, findNodeHandle, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import type { InAppNotification, InAppNotificationTone } from "@/lib/notificationCenter";
+import { AccessibleIconButton } from "@/components/AccessiblePressable";
 
 type Props = {
   visible: boolean;
@@ -41,6 +42,7 @@ export function NotificationCenterModal({ visible, notifications, readIds, onOpe
   const compact = width < 700;
   const reduceMotion = useReducedMotion();
   const read = new Set(readIds);
+  const titleRef = useRef<Text>(null);
   const unread = notifications.filter(item => !read.has(item.id)).length;
   useBackDismiss(visible, onClose);
 
@@ -53,14 +55,24 @@ export function NotificationCenterModal({ visible, notifications, readIds, onOpe
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose, visible]);
 
+  useEffect(() => {
+    if (!visible || Platform.OS === "web") return;
+    const timer = setTimeout(() => {
+      const node = findNodeHandle(titleRef.current);
+      if (node) AccessibilityInfo.setAccessibilityFocus(node);
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [visible]);
+
   const toneColor = (tone: InAppNotificationTone) => tone === "risk" ? c.destructive : tone === "watch" ? c.warning : tone === "safe" ? c.success : c.primary;
 
   return (
     <Modal visible={visible} transparent animationType={reduceMotion ? "none" : compact ? "slide" : "fade"} onRequestClose={onClose}>
-      <Pressable style={[styles.backdrop, compact && styles.backdropCompact]} onPress={onClose}>
-        <Pressable
+      <View style={[styles.backdrop, compact && styles.backdropCompact]}>
+        <Pressable accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={StyleSheet.absoluteFillObject} onPress={onClose} />
+        <View
+          accessibilityLabel="Notifications dialog"
           accessibilityViewIsModal
-          onPress={event => event.stopPropagation()}
           style={[
             styles.dialog,
             compact && styles.dialogCompact,
@@ -69,7 +81,7 @@ export function NotificationCenterModal({ visible, notifications, readIds, onOpe
         >
           <View style={[styles.header, { borderBottomColor: c.border }]}>
             <View style={styles.headerCopy}>
-              <Text accessibilityRole="header" style={[styles.title, { color: c.foreground }]}>Notifications</Text>
+              <Text ref={titleRef} accessibilityRole="header" style={[styles.title, { color: c.foreground }]}>Notifications</Text>
               <Text style={[styles.subtitle, { color: c.mutedForeground }]}>{unread ? `${unread} unread for this household` : "You’re all caught up"}</Text>
             </View>
             {unread ? (
@@ -77,9 +89,7 @@ export function NotificationCenterModal({ visible, notifications, readIds, onOpe
                 <Text style={[styles.markAllText, { color: c.primary }]}>Mark all read</Text>
               </Pressable>
             ) : null}
-            <Pressable accessibilityRole="button" accessibilityLabel="Close notifications" onPress={onClose} style={styles.closeButton}>
-              <Feather name="x" size={22} color={c.mutedForeground} />
-            </Pressable>
+            <AccessibleIconButton accessibilityLabel="Close notifications" icon="x" size={22} color={c.mutedForeground} onPress={onClose} style={styles.closeButton} />
           </View>
           <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
             {notifications.map(notification => {
@@ -106,9 +116,7 @@ export function NotificationCenterModal({ visible, notifications, readIds, onOpe
                     </View>
                     <Feather name="chevron-right" size={17} color={c.mutedForeground} />
                   </Pressable>
-                  <Pressable accessibilityRole="button" accessibilityLabel={`Dismiss ${notification.title}`} onPress={() => onDismiss(notification.id)} style={styles.dismissButton}>
-                    <Feather name="x" size={16} color={c.mutedForeground} />
-                  </Pressable>
+                  <AccessibleIconButton accessibilityLabel={`Dismiss ${notification.title}`} icon="x" size={16} color={c.mutedForeground} onPress={() => onDismiss(notification.id)} style={styles.dismissButton} />
                 </View>
               );
             })}
@@ -120,8 +128,8 @@ export function NotificationCenterModal({ visible, notifications, readIds, onOpe
               </View>
             ) : null}
           </ScrollView>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -135,9 +143,9 @@ const styles = StyleSheet.create({
   headerCopy: { flex: 1, minWidth: 0 },
   title: { fontFamily: "Inter_800ExtraBold", fontSize: 21, letterSpacing: -0.3 },
   subtitle: { fontFamily: "Inter_500Medium", fontSize: 12, marginTop: 3 },
-  markAllButton: { minHeight: 40, justifyContent: "center", paddingHorizontal: 7 },
+  markAllButton: { minHeight: 44, justifyContent: "center", paddingHorizontal: 7 },
   markAllText: { fontFamily: "Inter_700Bold", fontSize: 12 },
-  closeButton: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
+  closeButton: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
   list: { padding: 12, gap: 9 },
   item: { borderWidth: 1, borderRadius: 16, overflow: "hidden" },
   itemMain: { minHeight: 96, padding: 13, flexDirection: "row", alignItems: "flex-start", gap: 11 },
@@ -148,7 +156,7 @@ const styles = StyleSheet.create({
   unreadDot: { width: 8, height: 8, borderRadius: 4 },
   itemBody: { fontFamily: "Inter_500Medium", fontSize: 12, lineHeight: 18, marginTop: 3 },
   itemTime: { fontFamily: "Inter_700Bold", fontSize: 10, marginTop: 7 },
-  dismissButton: { position: "absolute", right: 3, bottom: 3, width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  dismissButton: { position: "absolute", right: 3, bottom: 3, width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
   empty: { alignItems: "center", paddingHorizontal: 26, paddingVertical: 64 },
   emptyIcon: { width: 56, height: 56, borderRadius: 18, alignItems: "center", justifyContent: "center", marginBottom: 15 },
   emptyTitle: { fontFamily: "Inter_800ExtraBold", fontSize: 18 },

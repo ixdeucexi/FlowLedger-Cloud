@@ -5,6 +5,13 @@ const { authorizeProHousehold, requestedHouseholdId } = require("../_utils/plaid
 
 function parsed(req) { if (!req.body) return {}; if (typeof req.body === "string") { try { return JSON.parse(req.body); } catch { return {}; } } return req.body; }
 
+function plaidRemovalAlreadyComplete(error) {
+  const code = error && typeof error === "object"
+    ? String(error.response?.data?.error_code || error.error_code || "")
+    : "";
+  return code === "ITEM_NOT_FOUND" || code === "INVALID_ACCESS_TOKEN";
+}
+
 function createDisconnectHandler(dependencies = {}) {
   const authenticate = dependencies.authenticatedUser || authenticatedUser;
   const database = dependencies.serviceSupabase || serviceSupabase;
@@ -31,7 +38,11 @@ function createDisconnectHandler(dependencies = {}) {
         .maybeSingle();
       if (error) throw error;
       if (!item) return res.status(404).json({ error: "PLAID_ITEM_NOT_FOUND" });
-      try { await plaidClient().itemRemove({ access_token: decrypt(item.encrypted_access_token || item.access_token_ciphertext) }); } catch { /* preserve local disconnect if Plaid already removed it */ }
+      try {
+        await plaidClient().itemRemove({ access_token: decrypt(item.encrypted_access_token || item.access_token_ciphertext) });
+      } catch (removeError) {
+        if (!plaidRemovalAlreadyComplete(removeError)) throw removeError;
+      }
       // Keep historical rows for audit/reconciliation. `removed` is the status
       // allowed by the Plaid migration and prevents future syncs.
       const { error: updateError } = await client
@@ -50,3 +61,4 @@ function createDisconnectHandler(dependencies = {}) {
 
 module.exports = createDisconnectHandler();
 module.exports.createDisconnectHandler = createDisconnectHandler;
+module.exports.plaidRemovalAlreadyComplete = plaidRemovalAlreadyComplete;

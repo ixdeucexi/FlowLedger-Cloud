@@ -2,6 +2,7 @@ const routes = Object.freeze({
   config: require("./_utils/notificationRoutes/config"),
   "overdue-bills": require("./_utils/notificationRoutes/overdue-bills"),
   preferences: require("./_utils/notificationRoutes/preferences"),
+  receipts: require("./_utils/notificationRoutes/receipts"),
   subscription: require("./_utils/notificationRoutes/subscription"),
   test: require("./_utils/notificationRoutes/test"),
 });

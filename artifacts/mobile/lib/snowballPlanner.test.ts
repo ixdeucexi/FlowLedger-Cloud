@@ -101,8 +101,8 @@ test("planner keeps one parent source outflow when a required payment rolls over
   const partialById = new Map(partialRows.map(row => [row.id, row]));
 
   assert.equal(partialById.get("camera")?.forecastPayment, 53);
-  assert.equal(partialById.get("camera")?.plannedToDebt, 0);
-  assert.equal(partialById.get("concert")?.rolloverReceived, 53);
+  assert.equal(partialById.get("camera")?.plannedToDebt, 42.81);
+  assert.equal(partialById.get("concert")?.rolloverReceived, 10.19);
 });
 
 test("planner rows distinguish settled, partial, and genuinely unscheduled debt amounts", () => {

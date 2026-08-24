@@ -220,3 +220,18 @@ export function isValidExtraPaymentPlan(plan: ExtraPaymentPlanLike): boolean {
   return Math.abs(allocationTotal - amount) < 0.01;
 }
 import type { DatedDebtAllocation, DatedSnowballMonthPlanResult, SnowballDebtInput } from "./snowball";
+
+/** Stable cache input for every dated allocation that changes Forecast cash or chips. */
+export function datedDebtPlanCacheSignature(plan: DatedSnowballMonthPlanResult | null): string {
+  if (!plan) return "none";
+  return plan.allocations
+    .map(allocation => [
+      allocation.id,
+      allocation.date,
+      allocation.sourceBillId ?? "",
+      allocation.targetBillId,
+      allocation.kind,
+      cents(allocation.amount).toFixed(2),
+    ].join(":"))
+    .join("|");
+}

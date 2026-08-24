@@ -4,7 +4,7 @@ Last audited: August 21, 2026
 
 Maintenance rule: Update this checklist automatically whenever related work is completed or verified. Check an item only when evidence confirms it is done, keep incomplete or unverified work unchecked, and update the audit date with each material checklist change. This maintenance is part of the related task and does not require a separate request from the owner.
 
-Current verified progress: **111 of 249 items complete**. The remaining production gate is a temporary Supabase staging branch for the prepared security migrations and authenticated regression tests. Native-store enrollment, signing, physical-device testing, store declarations, native push delivery, billing policy, and crash reporting still require owner accounts, external configuration, or product decisions.
+Current verified progress: **142 of 253 items complete**. Public version 1 is now intentionally **Founding Free**: no purchase controls, no paywall, and no new bank-link control are exposed. The repository preserves future billing and Plaid implementations for a later reviewed Pro release. Release still requires applying and testing the prepared migrations/functions on a temporary Supabase branch, EAS/store console setup, signing, sacrificial-account testing, accessibility/device testing, screenshots, declarations, and final reviewer credentials.
 
 ## Goal
 
@@ -90,6 +90,7 @@ Official reference: [Expo iOS submission requirements](https://docs.expo.dev/sub
 - [ ] Enable/configure the Apple provider in Supabase and the Apple Developer account, then set `EXPO_PUBLIC_APPLE_AUTH_ENABLED=true` in EAS
 - [ ] Test login cancellation, expired links, duplicate callbacks, background return, sign-out, and account switching
 - [ ] Provide a dedicated App Review account with realistic fictional data
+- [x] Provide a service-only, idempotent fictional reviewer fixture seeder with stable identifiers, no Plaid tokens, and no repository credentials
 
 Current code evidence: `artifacts/mobile/context/AuthContext.tsx`
 
@@ -160,7 +161,7 @@ Official references:
 - [x] Delete Flo conversations and household memory in scope
 - [x] Remove push-notification subscriptions
 - [x] Revoke/disconnect Plaid Items and remove retained Plaid access tokens
-- [x] Clear simulations, preferences, exports, and device-local storage
+- [x] Clear simulations, preferences, app-owned temporary export files, and device-local storage; copies the user already saved or shared outside FlowLedger remain under the user's control
 - [x] Delete the Supabase Auth user only after application cleanup succeeds
 - [x] Make retries idempotent and create an auditable deletion receipt
 - [x] Add a public unauthenticated account-deletion request page on `flowledger-algo.com`
@@ -173,7 +174,7 @@ Official references:
 - [Apple account-deletion requirement](https://developer.apple.com/app-store/review/guidelines/#data-collection-and-storage)
 - [Google account-deletion requirement](https://support.google.com/googleplay/android-developer/answer/13327111?hl=en)
 
-Current implementation evidence: `artifacts/mobile/app/delete-account.tsx`, `api/account/delete.js`, `api/_utils/accountDeletion.js`, `supabase/migrations/20260821123517_account_deletion_and_flo_rpc_hardening.sql`, and `docs/native-release-runbook.md`. End-to-end persona/device testing remains separately unchecked below.
+Current implementation evidence: `artifacts/mobile/app/delete-account.tsx`, the `/api/account/delete` rewrite through `api/feedback.js`, `api/_utils/accountDeletion.js`, `api/_utils/appleProvider.js`, `supabase/migrations/20260821123517_account_deletion_and_flo_rpc_hardening.sql`, and `docs/native-release-runbook.md`. End-to-end persona/device testing remains separately unchecked below.
 
 ## 6. Privacy, financial, and AI disclosures
 
@@ -204,59 +205,61 @@ Official references:
 
 ## 7. Pro billing and entitlements
 
-### BLOCKER — owner decision before submission
+### DEFERRED — later Pro release
 
-- [ ] Decide whether version 1 will sell FlowLedger Pro inside the mobile app
-- [ ] Decide whether version 1 will be a free companion app for existing web customers with no mobile purchase calls to action
+- [x] Version 1 launches as Founding Free with purchase controls and native billing initialization disabled
 - [ ] If selling Pro in-app, configure Apple auto-renewable subscriptions
 - [ ] If selling Pro in-app, configure Google Play subscriptions
-- [ ] Implement purchase, restore, cancellation-status, grace-period, refund, and expiration handling
-- [ ] Verify receipts server-side
-- [ ] Synchronize store entitlements to household membership without trusting the client
-- [ ] Make Pro access work across web, iOS, and Android without duplicate entitlement grants
-- [ ] Add Manage Subscription links to the correct platform subscription settings
-- [ ] Add subscription terms, renewal period, price, trial details, and cancellation instructions
+- [x] Implement purchase, restore, cancellation-status, grace-period, refund, and expiration handling
+- [x] Verify store lifecycle server-side through an authenticated, HMAC-verified and replay-safe RevenueCat webhook
+- [x] Synchronize store entitlements to the confirmed active household without trusting the client
+- [x] Make server-authoritative Pro access available across web, iOS, and Android without duplicate entitlement grants
+- [x] Add Manage Subscription links to the correct platform subscription settings
+- [x] Add subscription terms, renewal period, price, no-trial disclosure, and cancellation instructions
+- [x] Bind purchases and restores to the authenticated Supabase UUID and reject another purchaser/household, while preserving admin and grandfathered Pro
+- [ ] Configure RevenueCat to keep restores with the original App User ID and add its products, entitlement, public keys, store credentials, and webhook secrets
+- [ ] Exercise purchase, replay, wrong-account restore, cancellation, grace, expiry, refund, and renewal in store sandboxes on signed devices
 - [ ] Give App Review access to every paid feature
-- [ ] Remove or hide unfinished upgrade controls if billing is deferred
 
-Current code states that paid upgrades are coming soon and does not include native billing.
+Current implementation evidence: `artifacts/mobile/components/MembershipPanel.tsx`, `artifacts/mobile/lib/nativeBilling.native.ts`, `supabase/functions/billing-dispatcher`, `supabase/migrations/20260821222611_native_billing_plaid_push.sql`, and `docs/native-subscription-and-provider-setup.md`.
 
 Official reference: [Apple In-App Purchase guideline](https://developer.apple.com/app-store/review/guidelines/#in-app-purchase)
 
 ## 8. Native Plaid support
 
-### Native parity
+### DEFERRED — later Pro release
 
-- [ ] Decide whether native bank linking is required for version 1
-- [ ] Replace the current native “available in the web app” placeholder if native parity is required
-- [ ] Integrate Plaid Link for Expo/React Native or Plaid Hosted Link in a secure browser session
+- [x] Version 1 clearly labels bank sync as planned and keeps manual accounts/activity available
+- [x] Replace the native “available in the web app” placeholder
+- [x] Integrate official native Plaid Link while retaining Hosted Link on web
 - [ ] Configure iOS and Android redirect URIs in Plaid
-- [ ] Resume OAuth after bank-app/browser return
-- [ ] Preserve active household and intended connection type through the return
+- [x] Implement native OAuth return handling through the Plaid SDK and app/universal-link configuration
+- [x] Preserve the authenticated active household and intended connection type in the server-created Link token flow
 - [ ] Test checking, savings, credit-card, reconnect, update mode, institution OAuth, cancellation, and failure
-- [ ] Keep credit-card purchase imports excluded from cash Forecast as currently designed
+- [x] Keep credit-card purchase imports excluded from cash Forecast as currently designed
 - [ ] Test linked-on-web accounts inside the native app
-- [x] Add a safe native handoff to the secure web bank-connection settings for connect, reconnect, rename, and disconnect
+- [x] Support native connect, reconnect/update, refresh, savings rename, and disconnect with owner/editor Pro authorization
 
-Current code evidence: `artifacts/mobile/components/PlaidLinkButton.tsx`
+Current code evidence: `artifacts/mobile/components/PlaidLinkButton.tsx`, `api/plaid/create-link-token.js`, and `api/_utils/plaidLink.test.js`. Plaid dashboard identifiers and signed-device OAuth testing remain unchecked.
 
 ## 9. Native notifications
 
 ### Native parity
 
-- [ ] Install and configure `expo-notifications`
+- [x] Install and configure SDK 54-compatible `expo-notifications`
 - [ ] Configure Apple Push Notification service credentials
 - [ ] Configure Firebase Cloud Messaging for Android
-- [ ] Add notification permission copy and request permission only after user intent
-- [ ] Store native device tokens separately from Web Push subscriptions
-- [ ] Scope tokens by user, household, device, platform, and environment
-- [ ] Remove or disable tokens on sign-out and account deletion
-- [ ] Route notification taps to the correct bill, debt, review item, feedback item, or Forecast date
-- [ ] Avoid placing confidential financial amounts in lock-screen notification text by default
-- [ ] Support per-notification-type preferences
+- [x] Add notification permission copy and request permission only after user intent
+- [x] Store native Expo device tokens separately from Web Push subscriptions in a service-only RLS table
+- [x] Scope tokens by user, household, installation, platform, and environment
+- [x] Detach tokens on sign-out and remove them during account deletion
+- [x] Route cold, warm, and killed notification taps only to allowlisted app destinations
+- [x] Keep lock-screen titles and bodies generic without merchant, bill/account name, amount, balance, or Flo content
+- [x] Support per-notification-type preferences across web and native delivery
+- [x] Process Expo tickets/receipts, invalidate DeviceNotRegistered tokens, and retain transient failures for retry
 - [ ] Test token rotation, reinstall, multiple devices, household switching, revoked permission, and expired tokens
 
-Current implementation is browser Service Worker/Web Push only: `artifacts/mobile/lib/pushNotifications.ts`.
+Current implementation evidence: `artifacts/mobile/lib/pushNotifications.native.ts`, `artifacts/mobile/app/_layout.tsx`, `api/_utils/push.js`, and `supabase/migrations/20260821222611_native_billing_plaid_push.sql`. APNs/FCM/EAS credentials and physical delivery tests remain unchecked.
 
 ## 10. Native biometric lock and secure storage
 
@@ -283,7 +286,7 @@ Current implementation uses browser passkeys on the PWA and native device authen
 
 - [x] Add native connectivity detection using `@react-native-community/netinfo`
 - [x] Keep native connectivity unknown until NetInfo reports instead of assuming the device is online
-- [ ] Define which data is safe to show from a last-known cache
+- [x] Define which data is safe to show from a last-known cache
 - [ ] Show the exact data/sync timestamp when displaying cached financial information
 - [x] Block or clearly queue mutations while offline
 - [x] Never display an unconfirmed offline mutation as saved
@@ -306,7 +309,7 @@ Current native network-status hook uses NetInfo and exposes offline/reconnected 
 - [ ] Verify splash behavior on light/dark system settings and slower devices
 - [ ] Capture App Store screenshots using fictional data only
 - [ ] Capture Play Store phone screenshots using fictional data only
-- [ ] Create required feature graphic and promotional artwork
+- [x] Create and deterministically verify the Google Play 1024×500 feature graphic from fictional brand-only assets
 - [x] Draft app name, subtitle/short description, long description, keywords, Finance category positioning, and version 1 release notes
 - [ ] Add public support email, support URL, privacy URL, deletion URL, and marketing URL
 - [ ] Ensure screenshots represent the current app and identify Pro-only features accurately
@@ -323,6 +326,7 @@ Current native network-status hook uses NetInfo and exposes offline/reconnected 
 - [ ] Test edge-to-edge layouts on Android 16/API 36
 - [ ] Test display scaling, large text, screen reader, keyboard navigation where applicable, and 200% web zoom
 - [ ] Verify all tap targets are at least 44×44 points where required
+- [x] Add a shared 44×44 accessible press/icon primitive plus static modal focus and live-error contracts for critical destructive/notification flows
 - [ ] Test notches, Dynamic Island, status bars, bottom gesture areas, and landscape rejection/orientation behavior
 - [ ] Test every modal with the software keyboard open
 - [ ] Test app background/foreground and process termination on every money-editing flow
@@ -385,22 +389,22 @@ Official references:
 
 ### Phase 1 — installable internal beta
 
-- [ ] Finish native identity, deep links, OAuth, API origin, and EAS configuration
+- [x] Finish in-repository native identity, deep links, OAuth, API origin, and EAS configuration
 - [ ] Produce signed iOS and Android preview builds
 - [ ] Test login, setup, dashboard, bills/debt, Forecast, simulator, Flo, editing, import/export, and logout on physical devices
 
 ### Phase 2 — store-compliant version 1
 
-- [ ] Finish account deletion and privacy controls
+- [ ] Complete signed-device account-deletion and provider-erasure testing with sacrificial Apple, Google, email, Plaid, and billing accounts
 - [ ] Complete organization/store verification and declarations
-- [ ] Decide Pro billing strategy
-- [ ] Finish native Plaid if bank connection is promised in version 1; otherwise hide the unavailable control and document web-only connection clearly
+- [x] Implement the selected native Pro billing strategy; external store/provider configuration remains required
+- [x] Implement native Plaid connection management; external Plaid dashboard configuration and device tests remain required
 - [ ] Finish native authentication, secure storage, offline detection, crash monitoring, and review account
 - [ ] Complete store assets, closed testing, and review notes
 
 ### Phase 3 — full native parity and growth
 
-- [ ] Native push notifications
+- [x] Native push notification registration, delivery, receipt handling, preferences, and tap routing are implemented; provider credentials/device tests remain required
 - [x] Native biometric lock
 - [ ] Improved offline/read-only cache
 - [ ] EAS Update with controlled release channels

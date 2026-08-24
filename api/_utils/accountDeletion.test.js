@@ -5,8 +5,11 @@ const test = require("node:test");
 
 const {
   createAccountDeletionHandler,
+  disconnectPlaidItems,
+  deleteRevenueCatCustomer,
   hasRecentVerifiedLogin,
   isAlreadyRemovedPlaidItem,
+  userUsesApple,
 } = require("./accountDeletion");
 
 function token(iat, sessionId = "00000000-0000-4000-8000-000000000001") {
@@ -45,6 +48,47 @@ test("Plaid already-removed errors remain retry-safe", () => {
   assert.equal(isAlreadyRemovedPlaidItem({ error_code: "INSTITUTION_DOWN" }), false);
 });
 
+test("billing processor deletion is retry-safe only for success or an absent customer", async () => {
+  const calls = [];
+  await deleteRevenueCatCustomer("user-a", { revenueCatSecretApiKey: "secret", fetch: async (url, init) => { calls.push({ url, init }); return { ok: false, status: 404 }; } });
+  assert.match(calls[0].url, /subscribers\/user-a$/);
+  assert.equal(calls[0].init.method, "DELETE");
+  await assert.rejects(() => deleteRevenueCatCustomer("user-a", { revenueCatSecretApiKey: "secret", fetch: async () => ({ ok: false, status: 503 }) }), /REVENUECAT_CUSTOMER_DELETION_FAILED/);
+});
+
+test("Apple provider deletion is detected from the authenticated identity", () => {
+  assert.equal(userUsesApple({ app_metadata: { providers: ["google", "apple"] } }), true);
+  assert.equal(userUsesApple({ app_metadata: { provider: "google" } }), false);
+});
+
+test("deletion revokes Plaid items owned by the user or their single-member household", async () => {
+  const removed = [];
+  const updated = [];
+  let plaidSelectCount = 0;
+  const client = {
+    from(table) {
+      if (table === "households") return { select: () => ({ eq: async () => ({ data: [{ id: "house-a" }], error: null }) }) };
+      assert.equal(table, "plaid_items");
+      return {
+        select: () => {
+          plaidSelectCount += 1;
+          return plaidSelectCount === 1
+            ? { eq: async () => ({ data: [{ id: "item-user", encrypted_access_token: "user-token" }], error: null }) }
+            : { in: async () => ({ data: [{ id: "item-household", encrypted_access_token: "house-token" }], error: null }) };
+        },
+        update: () => ({ eq: async (_column, id) => { updated.push(id); return { error: null }; } }),
+      };
+    },
+  };
+  const count = await disconnectPlaidItems(client, "user-a", {
+    decryptAccessToken: value => value,
+    plaid: () => ({ itemRemove: async ({ access_token }) => removed.push(access_token) }),
+  });
+  assert.equal(count, 2);
+  assert.deepEqual(removed.sort(), ["house-token", "user-token"]);
+  assert.deepEqual(updated.sort(), ["item-household", "item-user"]);
+});
+
 test("deletion refuses a stale session before any database mutation", async () => {
   let databaseCalls = 0;
   const handler = createAccountDeletionHandler({
@@ -73,6 +117,8 @@ test("deletion blocks shared-household owners before Plaid or cleanup", async ()
     authenticatedUser: async () => ({ user: { id: "user-a" } }),
     serviceSupabase: () => client,
     nowSeconds: () => 1_100,
+    revenueCatSecretApiKey: "secret",
+    fetch: async () => ({ ok: false, status: 404 }),
   });
   const res = response();
   await handler({ method: "POST", body: { confirmation: "DELETE" }, headers: { authorization: `Bearer ${token(1_000)}` } }, res);
@@ -94,6 +140,8 @@ test("a refreshed token cannot make an old Auth session recent", async () => {
     authenticatedUser: async () => ({ user: { id: "user-a" } }),
     serviceSupabase: () => client,
     nowSeconds: () => 1_100,
+    revenueCatSecretApiKey: "secret",
+    fetch: async () => ({ ok: false, status: 404 }),
   });
   const res = response();
   await handler({ method: "POST", body: { confirmation: "DELETE" }, headers: { authorization: `Bearer ${token(1_099)}` } }, res);
@@ -117,10 +165,8 @@ test("deletion prepares application cleanup before deleting Auth and finalizes i
       return { data: { receiptId: "receipt-a", status: "completed" }, error: null };
     },
     from: table => {
-      assert.equal(table, "plaid_items");
-      return {
-        select: () => ({ eq: async () => ({ data: [], error: null }) }),
-      };
+      assert.ok(["households", "plaid_items"].includes(table));
+      return { select: () => ({ eq: async () => ({ data: [], error: null }) }) };
     },
     auth: {
       admin: {
@@ -135,6 +181,8 @@ test("deletion prepares application cleanup before deleting Auth and finalizes i
     authenticatedUser: async () => ({ user: { id: "user-a" } }),
     serviceSupabase: () => client,
     nowSeconds: () => 1_100,
+    revenueCatSecretApiKey: "secret",
+    fetch: async () => ({ ok: false, status: 404 }),
   });
   const res = response();
   await handler({ method: "POST", body: { confirmation: "DELETE" }, headers: { authorization: `Bearer ${token(1_000)}` } }, res);

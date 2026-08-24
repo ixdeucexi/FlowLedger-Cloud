@@ -525,7 +525,37 @@ export function verifiedFallbackFromTools(
   payloads: FloToolEnvelope[],
 ): FloVerifiedFallback | null {
   if (!payloads.length || toolNames.length !== payloads.length) return null;
-  const individual = payloads.map((payload, index) => verifiedFallbackForTool(question, toolNames[index], payload));
+  const normalized = question.toLowerCase();
+  const deterministicIntentForTool = (toolName: string): FloDeterministicIntent | null => {
+    if (toolName === "getAccountOverview") return "account_overview";
+    if (toolName === "getBillsAndDebt") return /\b(?:debt|owe|snowball|avalanche)\b/.test(normalized) ? "debt_overview" : "bill_overview";
+    if (toolName === "getIncomeSchedule") return "income_overview";
+    if (toolName === "searchTransactions") return "activity_overview";
+    if (toolName === "getBudgetsAndGoals") return "budget_goal_overview";
+    if (toolName === "getDebtPlanHistory") return "debt_plan_history";
+    if (toolName === "getConnectionHealth") return "connection_health";
+    return null;
+  };
+  const individual = payloads.map((payload, index) => {
+    const toolName = toolNames[index];
+    const intent = deterministicIntentForTool(toolName);
+    const direct = intent
+      ? deterministicAnswerFromTools(intent, [toolName as FloDeterministicToolName], [payload])
+      : null;
+    if (direct && validateGroundedAnswer(direct.answer, direct.sources, [payload]).valid) {
+      return {
+        answer: direct.answer.answer,
+        sources: direct.sources,
+        dataAsOf: direct.dataAsOf,
+        coverage: direct.coverage,
+        partial: true as const,
+        caveat: direct.answer.caveat
+          ?? "Flo verified these records, then used a concise account summary because the full explanation could not be safely completed.",
+        followups: direct.answer.followups,
+      };
+    }
+    return verifiedFallbackForTool(question, toolName, payload);
+  });
   const primary = individual[individual.length - 1];
   const combinedAnswer = Array.from(new Set(individual.map(item => item.answer))).join(" ");
   const sources = Array.from(new Map(individual.flatMap(item => item.sources).map(source => [source.id, source])).values()).slice(0, 40);

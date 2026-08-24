@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from "react-native-svg";
 
 import { AddBillModal } from "@/components/AddBillModal";
+import { AppLoadingIntro } from "@/components/AppLoadingIntro";
 import { AppText } from "@/components/AppText";
 import { DashboardCustomizer } from "@/components/DashboardCustomizer";
 import { DashboardUtilityWidgets } from "@/components/DashboardUtilityWidgets";
@@ -192,16 +193,7 @@ export default function DashboardScreen() {
 
   return (
     <React.Suspense
-      fallback={
-        <View style={styles.desktopLoadingScreen}>
-          <Image
-            source={FLOWLEDGER_LOGO}
-            style={styles.desktopLoadingLogo}
-            resizeMode="cover"
-          />
-          <Text style={styles.desktopLoadingText}>Loading Plan...</Text>
-        </View>
-      }
+      fallback={<AppLoadingIntro phase="workspace" accessibilityLabel="FlowLedger is opening your dashboard" />}
     >
       <DesktopDashboard />
     </React.Suspense>
@@ -212,6 +204,11 @@ function MobileDashboardScreen() {
   const c = useColors();
   const { openNotifications, unreadNotificationCount } = useAppDiscovery();
   const dashboardTheme = DASHBOARD_THEMES[c.mode];
+  const heroSurface = Platform.OS === "web"
+    ? dashboardTheme.hero
+    : c.isDark
+      ? "#050816"
+      : "#ffffff";
   const [isFocused, setIsFocused] = useState(true);
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -1125,7 +1122,7 @@ function MobileDashboardScreen() {
               styles.referenceCommandHeroFlipFace,
               {
                 minHeight: flipped ? heroBackCardHeight : heroFrontCardHeight,
-                backgroundColor: dashboardTheme.hero,
+                backgroundColor: heroSurface,
                 borderColor: dashboardTheme.heroBorder,
                 shadowColor: dashboardTheme.heroShadow,
                 shadowOpacity: dashboardTheme.heroShadowOpacity,
@@ -1216,7 +1213,7 @@ function MobileDashboardScreen() {
               styles.referenceCommandHeroFlipFace,
               styles.referenceCommandHeroBackFace,
               {
-                backgroundColor: dashboardTheme.hero,
+                backgroundColor: heroSurface,
                 borderColor: dashboardTheme.heroBorder,
                 shadowColor: dashboardTheme.heroShadow,
                 shadowOpacity: dashboardTheme.heroShadowOpacity,
@@ -1939,23 +1936,6 @@ function ZeroBudgetStat({ label, value, color }: { label: string; value: number;
 }
 
 const styles = StyleSheet.create({
-  desktopLoadingScreen: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 14,
-    backgroundColor: "#050816",
-  },
-  desktopLoadingLogo: {
-    width: 54,
-    height: 54,
-    borderRadius: 16,
-  },
-  desktopLoadingText: {
-    color: "#94a3b8",
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-  },
   screen:  { flex: 1 },
   dashboardStage: { backgroundColor: "#030712" },
   content: { paddingHorizontal: 16, position: "relative" },

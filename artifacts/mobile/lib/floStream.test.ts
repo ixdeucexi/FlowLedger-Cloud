@@ -41,7 +41,7 @@ test("preserves typed cleanup failure after a completed answer", () => {
 });
 
 test("Flo has a bounded client response window and recognizes timeout failures", () => {
-  assert.equal(FLO_CLIENT_RESPONSE_TIMEOUT_MS, 35_000);
+  assert.equal(FLO_CLIENT_RESPONSE_TIMEOUT_MS, 50_000);
   assert.equal(isFloTimeoutCode("answer_timeout"), true);
   assert.equal(isFloTimeoutCode("flo_timeout"), true);
   assert.equal(isFloTimeoutCode("answer_failed"), false);

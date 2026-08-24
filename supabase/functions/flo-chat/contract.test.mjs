@@ -269,6 +269,31 @@ test("a completed account tool provides a verified recovery answer", () => {
   assert.equal(result.sources.some(source => source.route === "/snowball-plan"), true);
 });
 
+test("multi-tool recovery summarizes verified income and activity instead of generic failure copy", () => {
+  const incomeSource = { id: "getIncomeSchedule:income-a", type: "income", label: "Payday", recordId: "income-a", asOf: "2026-08-23T12:00:00.000Z", freshness: "current", route: "/(tabs)/bills" };
+  const activitySource = { id: "searchTransactions:tx-a", type: "transaction", label: "Groceries", recordId: "tx-a", asOf: null, freshness: "unknown", route: "/(tabs)/transactions" };
+  const activitySummary = { ...activitySource, id: "searchTransactions:summary", label: "Transaction totals", recordId: "summary" };
+  const result = verifiedFallbackFromTools(
+    "Why does my spending feel high even though income is up?",
+    ["getIncomeSchedule", "searchTransactions"],
+    [
+      {
+        status: "ok", dataAsOf: incomeSource.asOf, coverage: { complete: true, returned: 1, limit: 100 }, evidence: [incomeSource],
+        records: [{ id: "income-a", name: "Payday", amount: 1200, next_payment_date: "2026-08-28" }],
+      },
+      {
+        status: "partial", dataAsOf: null, coverage: { complete: false, returned: 1, limit: 20, reason: "transaction_source_freshness_unknown" }, evidence: [activitySource, activitySummary],
+        records: [{ id: "tx-a", merchant_name: "Groceries", amount: -42.5, date: "2026-08-22" }, { id: "summary", outflows: 42.5, transactionCount: 1 }],
+        summary: { id: "summary", outflows: 42.5, transactionCount: 1 },
+      },
+    ],
+  );
+  assert.ok(result);
+  assert.match(result.answer, /Payday: \$1,200\.00 on 2026-08-28/);
+  assert.match(result.answer, /1 cash transaction and \$42\.50 in outflows/);
+  assert.doesNotMatch(result.answer, /full explanation did not finish/i);
+});
+
 test("multi-tool recovery preserves every verified source without synthesizing new facts", () => {
   const secondSource = { id: "bill:b", type: "bill", label: "Rent", recordId: "b", asOf: "2026-08-13T12:00:00.000Z", freshness: "current" };
   const result = verifiedFallbackFromTools(
@@ -281,8 +306,9 @@ test("multi-tool recovery preserves every verified source without synthesizing n
   assert.equal(result.sources.some(source => source.id === "bill:b"), true);
   assert.equal(result.coverage.tools, 2);
   assert.equal(result.partial, true);
-  assert.match(result.answer, /I found 1 active account: Checking: \$42\.81/);
-  assert.match(result.answer, /I checked your bills and debt records/);
+  assert.match(result.answer, /verified active account balances are Checking: \$42\.81/);
+  assert.match(result.answer, /verified configured bills include Rent: \$100\.00/);
+  assert.doesNotMatch(result.answer, /full explanation did not finish/i);
 });
 
 test("account recovery returns verified balances without waiting for model prose", () => {
@@ -351,9 +377,10 @@ test("v3 endpoint enforces privacy, legacy rejection, and server-owned persisten
   assert.ok(source.indexOf("existingRowsError") < source.indexOf('title: "Ephemeral Flo chat"'));
   assert.match(source, /failAfterConversation\(jsonError\("message_persistence_failed"/);
   assert.match(source, /publicFailureCode\(error\)/);
-  assert.match(source, /const answerTimeoutMs = 18_000/);
-  assert.match(source, /const hardAnswerDeadlineMs = 20_000/);
-  assert.match(source, /timeout: \{ totalMs: answerTimeoutMs, stepMs: 12_000, toolMs: 5_000 \}/);
+  assert.match(source, /const answerTimeoutMs = 28_000/);
+  assert.match(source, /const hardAnswerDeadlineMs = 30_000/);
+  assert.match(source, /reasoningEffort: "low"/);
+  assert.match(source, /timeout: \{ totalMs: answerTimeoutMs, stepMs: 15_000, toolMs: 5_000 \}/);
   assert.match(source, /const result = await withinHardDeadline\(agent\.generate/);
   assert.doesNotMatch(source, /postToolSynthesisDeadlineMs|synthesisAbort|verified_tool_ready/);
   assert.match(source, /deterministicFloRoute\(message, now\.slice\(0, 10\)\)/);

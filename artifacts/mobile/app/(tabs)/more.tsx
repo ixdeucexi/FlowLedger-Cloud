@@ -39,6 +39,7 @@ import { IncomeModal } from "@/components/IncomeModal";
 import { HouseholdMemberActionsModal } from "@/components/HouseholdMemberActionsModal";
 import { LegalDocumentModal } from "@/components/LegalDocumentModal";
 import { MembershipPanel } from "@/components/MembershipPanel";
+import { FOUNDING_FREE_LAUNCH, FOUNDING_FREE_NAME, hasAdminProAccess } from "@/lib/launchMode";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { PayRaiseCelebrationModal } from "@/components/PayRaiseCelebrationModal";
 import { MoreHub } from "@/components/settings/MoreHub";
@@ -403,11 +404,13 @@ export default function MoreScreen({
   const { signOut, user } = useAuth();
   const { newFeedbackCount, refreshFeedbackCount } = useFeedbackBadge();
   const {
+    actualPlan,
     effectiveTier,
     isAdmin: feedbackAdmin,
     loading: membershipLoading,
     previewTier,
   } = useMembership();
+  const adminProAccess = hasAdminProAccess(actualPlan);
   const {
     bills,
     transactions,
@@ -1468,7 +1471,11 @@ export default function MoreScreen({
   );
   const membershipStatusLabel = membershipLoading
     ? "Loading"
-    : `${effectiveTier === "pro" ? "Pro" : "Basic"}${previewTier ? " preview" : ""}`;
+    : adminProAccess
+      ? "Pro · Admin"
+      : FOUNDING_FREE_LAUNCH
+      ? FOUNDING_FREE_NAME
+      : `${effectiveTier === "pro" ? "Pro" : "Basic"}${previewTier ? " preview" : ""}`;
   const hubStatuses = useMemo<
     Partial<Record<SettingsDestinationId, SettingsStatus>>
   >(
@@ -1977,8 +1984,12 @@ export default function MoreScreen({
         URL.revokeObjectURL(url);
       } else {
         const fileUri = `${FileSystem.cacheDirectory}${filename}`;
-        await FileSystem.writeAsStringAsync(fileUri, csv);
-        if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(fileUri);
+        try {
+          await FileSystem.writeAsStringAsync(fileUri, csv);
+          if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(fileUri);
+        } finally {
+          await FileSystem.deleteAsync(fileUri, { idempotent: true }).catch(() => undefined);
+        }
       }
 
       setBackupExported(true);
@@ -2480,7 +2491,15 @@ export default function MoreScreen({
               ]}
             >
               <PlanFeatureGate feature="plaid_sync" compact>
-                <PlaidLinkButton colors={c} onConnected={refreshBankData} />
+                {FOUNDING_FREE_LAUNCH && !adminProAccess ? (
+                  <View style={[styles.infoCard, { backgroundColor: c.card, borderColor: c.border }]}>
+                    <Feather name="clock" size={22} color={c.primary} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.infoCardTitle, { color: c.foreground }]}>Bank sync is planned for Pro</Text>
+                      <Text style={[styles.infoCardText, { color: c.mutedForeground }]}>Use manual accounts and activity for now. We’ll open secure bank connections after production approval and testing are complete.</Text>
+                    </View>
+                  </View>
+                ) : <PlaidLinkButton colors={c} onConnected={refreshBankData} />}
               </PlanFeatureGate>
               <Pressable
                 onPress={handleStatementImport}
@@ -5908,6 +5927,17 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     paddingHorizontal: 16,
   },
+  infoCard: {
+    minHeight: 88,
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  infoCardTitle: { fontSize: 16, fontFamily: "Inter_700Bold" },
+  infoCardText: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_500Medium", marginTop: 4 },
   settingsSectionIcon: {
     width: 44,
     height: 44,

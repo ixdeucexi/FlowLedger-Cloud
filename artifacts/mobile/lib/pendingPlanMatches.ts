@@ -28,6 +28,7 @@ export interface PendingTransactionIdentity {
 export interface PostedTransactionIdentity {
   id: string;
   plaid_transaction_id?: string;
+  review_status?: string;
 }
 
 export interface DebtSourceIdentity {
@@ -57,10 +58,16 @@ export function debtSourceCommitmentsFromPendingMatches(
   postedTransactions: PostedTransactionIdentity[],
 ): DebtSourceCommitment[] {
   const livePendingIds = new Set(pendingTransactions.map(transaction => transaction.plaid_transaction_id));
-  const postedIds = new Set(postedTransactions.flatMap(transaction => [
-    transaction.id,
-    ...(transaction.plaid_transaction_id ? [transaction.plaid_transaction_id] : []),
-  ]));
+  const postedIds = new Set(postedTransactions
+    // A posted pending match protects the dated obligation only while the
+    // replacement charge is waiting for review. Once the transaction is
+    // resolved, its review allocation is authoritative; retaining the old
+    // commitment would suppress the remaining partial balance a second time.
+    .filter(transaction => transaction.review_status === undefined || transaction.review_status === "needs_review")
+    .flatMap(transaction => [
+      transaction.id,
+      ...(transaction.plaid_transaction_id ? [transaction.plaid_transaction_id] : []),
+    ]));
   const candidates = matches.flatMap<DebtSourceCommitment>(match => {
     if (match.target_type !== "bill") return [];
     if (match.status === "active" && livePendingIds.has(match.pending_plaid_transaction_id)) {

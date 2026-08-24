@@ -51,6 +51,25 @@ test("debt source commitments distinguish live pending, vanished, and posted rev
   }]);
 });
 
+test("a reviewed posted replacement stops suppressing the remaining debt obligation", () => {
+  const ready = match({ status: "ready_review", posted_transaction_id: "posted-1" });
+
+  assert.deepEqual(
+    debtSourceCommitmentsFromPendingMatches([ready], [], [{ id: "posted-1", review_status: "matched" }]),
+    [],
+  );
+  assert.deepEqual(
+    debtSourceCommitmentsFromPendingMatches([ready], [], [{ id: "posted-1", review_status: "categorized" }]),
+    [],
+  );
+  assert.deepEqual(
+    debtSourceCommitmentsFromPendingMatches([ready], [], [{ id: "posted-1", review_status: "needs_review" }]),
+    [{
+      sourceBillId: "bill-1", sourceBillName: "Electric", date: "2026-07-29", amount: 0, state: "posted",
+    }],
+  );
+});
+
 test("same-occurrence pending matches aggregate and a posted replacement wins deterministically", () => {
   const pending = [{ plaid_transaction_id: "pending-1" }, { plaid_transaction_id: "pending-2" }];
   const first = match({ id: "first", pending_amount: 20 });

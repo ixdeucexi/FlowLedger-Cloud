@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AccountModal } from "@/components/AccountModal";
 import { AddBillModal } from "@/components/AddBillModal";
+import { AppLoadingIntro } from "@/components/AppLoadingIntro";
 import { FloLogo } from "@/components/FloLogo";
 import { GoalModal } from "@/components/GoalModal";
 import { IncomeModal } from "@/components/IncomeModal";
@@ -584,13 +585,7 @@ function SetupWizard() {
   };
 
   if (!loadedPreferences) {
-    return (
-      <View style={styles.loadingScreen} accessibilityRole="progressbar" accessibilityLabel="Loading setup">
-        <FloLogo size={88} />
-        <ActivityIndicator color="#a78bfa" size="large" />
-        <Text style={styles.loadingText}>Preparing your setup…</Text>
-      </View>
-    );
+    return <AppLoadingIntro phase="setup" accessibilityLabel="FlowLedger is preparing your setup" />;
   }
 
   return (
@@ -825,8 +820,6 @@ export default function SetupScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#050711" },
-  loadingScreen: { flex: 1, backgroundColor: "#050711", alignItems: "center", justifyContent: "center", gap: 16 },
-  loadingText: { color: "#cbd5e1", fontSize: 15, fontFamily: "Inter_700Bold" },
   topBar: { position: "absolute", top: 0, left: 0, right: 0, zIndex: 30, backgroundColor: "rgba(5,7,17,0.97)", borderBottomWidth: 1, borderBottomColor: "rgba(148,163,184,0.14)", paddingHorizontal: 18, paddingBottom: 10 },
   topBarInner: { width: "100%", maxWidth: 1120, alignSelf: "center", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 14 },
   topIdentity: { flexDirection: "row", alignItems: "center", gap: 10 },

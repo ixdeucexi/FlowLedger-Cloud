@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as FileSystem from "expo-file-system/legacy";
 import { Platform } from "react-native";
 
 import { apiFetch } from "@/lib/api";
@@ -19,7 +20,16 @@ export type AccountDeletionReceipt = {
   membershipsRemoved?: number;
 };
 
+export async function purgeFlowLedgerCacheExports(): Promise<void> {
+  if (Platform.OS === "web" || !FileSystem.cacheDirectory) return;
+  const names = await FileSystem.readDirectoryAsync(FileSystem.cacheDirectory).catch(() => [] as string[]);
+  await Promise.all(names
+    .filter(name => /^flowledger-backup-.*\.csv$/i.test(name))
+    .map(name => FileSystem.deleteAsync(`${FileSystem.cacheDirectory}${name}`, { idempotent: true }).catch(() => undefined)));
+}
+
 export async function clearDeletedAccountStorage(userId: string): Promise<void> {
+  await purgeFlowLedgerCacheExports();
   await authStorage.removeItem(supabaseAuthStorageKey).catch(() => undefined);
   const keys = await AsyncStorage.getAllKeys().catch(() => [] as string[]);
   const remove = keys.filter(key => accountDeletionStorageKeyShouldBeRemoved(key, userId));
@@ -43,11 +53,13 @@ export async function deleteFlowLedgerAccount(accessToken: string): Promise<Acco
   const payload = await response.json().catch(() => ({})) as {
     receipt?: AccountDeletionReceipt;
     receiptId?: string;
+    error?: string;
     message?: string;
   };
   if (!response.ok) {
     const error = new Error(payload.message || "Your account was not deleted. Please try again.");
-    (error as Error & { receiptId?: string }).receiptId = payload.receiptId;
+    (error as Error & { receiptId?: string; code?: string }).receiptId = payload.receiptId;
+    (error as Error & { receiptId?: string; code?: string }).code = payload.error;
     throw error;
   }
   if (!payload.receipt?.receiptId) throw new Error("The deletion receipt was missing. Contact support before retrying.");

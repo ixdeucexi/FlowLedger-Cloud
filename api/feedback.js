@@ -5,6 +5,7 @@ const {
   normalizeFeedbackManagementInput,
 } = require("./_utils/feedback");
 const { createAccountDeletionHandler } = require("./_utils/accountDeletion");
+const { storeAppleAuthorization } = require("./_utils/appleProvider");
 const { sendPushToUser } = require("./_utils/push");
 const { authenticatedUser, publicError, safeError, serviceSupabase } = require("./_utils/supabase");
 
@@ -129,6 +130,7 @@ async function manageFeedback(db, auth, body, res) {
 
 module.exports = async function feedback(req, res) {
   if (req.query?.accountAction === "delete") return accountDeletion(req, res);
+  if (req.query?.accountAction === "apple-authorization") return storeAppleAuthorization(req, res);
   if (req.method !== "POST") return res.status(405).json({ error: "METHOD_NOT_ALLOWED" });
   const auth = await authenticatedUser(req);
   if (!auth.user) return res.status(401).json({ error: auth.error, message: "Please sign in again." });

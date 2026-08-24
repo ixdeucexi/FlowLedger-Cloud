@@ -3,6 +3,7 @@ import { BlurView } from "expo-blur";
 import { Tabs, useRouter, useSegments } from "expo-router";
 import React from "react";
 import {
+  ActivityIndicator,
   Image,
   Platform,
   Pressable,
@@ -20,6 +21,7 @@ import { useBudget } from "@/context/BudgetContext";
 import { SaveStatusBanner } from "@/components/SaveStatusBanner";
 import { ConnectivityBanner } from "@/components/ConnectivityBanner";
 import { DecisionDueModal } from "@/components/DecisionDueModal";
+import { AppLoadingIntro } from "@/components/AppLoadingIntro";
 import { FloLogo } from "@/components/FloLogo";
 import { FloLauncher } from "@/components/FloLauncher";
 import { PlanPreviewBanner } from "@/components/PlanPreviewBanner";
@@ -49,7 +51,7 @@ import {
   pendingOccurrenceKeySet,
   unmatchedPendingTransactions,
 } from "@/lib/pendingPlanMatches";
-import { tabBarDisplayLabel, tabBarLabelSize } from "@/lib/mobileLayout";
+import { nativeTabBarMetrics, tabBarDisplayLabel, tabBarLabelSize } from "@/lib/mobileLayout";
 import {
   appNotificationCount,
   clearAppBadge,
@@ -121,16 +123,11 @@ const DEMO_TOUR_STEPS = [
   },
 ] as const;
 
-function BudgetLoadErrorScreen({
-  message,
-  onRetry,
-}: {
-  message: string;
-  onRetry: () => void;
-}) {
+function BudgetLoadDelayScreen({ onRetry }: { onRetry: () => void }) {
   const colors = useColors();
   return (
     <View
+      accessibilityLiveRegion="polite"
       style={[styles.loadingScreen, { backgroundColor: colors.background }]}
     >
       <Image
@@ -139,58 +136,29 @@ function BudgetLoadErrorScreen({
         resizeMode="contain"
       />
       <Text style={[styles.loadErrorTitle, { color: colors.foreground }]}>
-        Couldn’t load your plan
+        Welcome back
       </Text>
       <Text style={[styles.loadErrorBody, { color: colors.mutedForeground }]}>
-        {message}
+        We’re getting your plan ready. It’s taking a little longer than usual.
       </Text>
+      <ActivityIndicator
+        accessibilityLabel="Getting your plan ready"
+        color={colors.primary}
+        size="small"
+        style={styles.loadDelaySpinner}
+      />
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Keep loading your plan"
         onPress={onRetry}
         style={[styles.loadRetryButton, { backgroundColor: colors.primary }]}
       >
         <Text
           style={[styles.loadRetryText, { color: colors.primaryForeground }]}
         >
-          Try again
+          Keep loading
         </Text>
       </Pressable>
-    </View>
-  );
-}
-
-function PlanRestoreOverlay({ isDesktop }: { isDesktop: boolean }) {
-  const colors = useColors();
-  return (
-    <View
-      accessibilityRole="progressbar"
-      accessibilityLabel="Restoring this household"
-      style={[
-        styles.planRestoreOverlay,
-        { backgroundColor: colors.background },
-        !isDesktop && styles.planRestoreOverlayMobile,
-      ]}
-    >
-      <View style={styles.planRestoreHeader}>
-        <View style={[styles.skeletonTitle, { backgroundColor: colors.muted }]} />
-        <View style={[styles.skeletonAction, { backgroundColor: colors.muted }]} />
-      </View>
-      <Text style={[styles.planRestoreLabel, { color: colors.mutedForeground }]}>Restoring this household…</Text>
-      <View style={[styles.skeletonGrid, !isDesktop && styles.skeletonGridMobile]}>
-        {[0, 1, 2, 3].map(item => (
-          <View
-            key={item}
-            style={[
-              styles.skeletonCard,
-              { backgroundColor: colors.card, borderColor: colors.border },
-              !isDesktop && styles.skeletonCardMobile,
-            ]}
-          >
-            <View style={[styles.skeletonLineShort, { backgroundColor: colors.muted }]} />
-            <View style={[styles.skeletonLine, { backgroundColor: colors.muted }]} />
-          </View>
-        ))}
-      </View>
-      <View style={[styles.skeletonPanel, { backgroundColor: colors.card, borderColor: colors.border }]} />
     </View>
   );
 }
@@ -561,6 +529,7 @@ function GuidedTour() {
 
 function TabContent() {
   const { width: viewportWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const colors = useColors();
   const router = useRouter();
   const {
@@ -582,6 +551,7 @@ function TabContent() {
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
   const isDesktop = useDesktopExperience();
+  const nativeTabMetrics = nativeTabBarMetrics(insets.bottom);
   const isIosWeb =
     isWeb &&
     typeof navigator !== "undefined" &&
@@ -658,7 +628,7 @@ function TabContent() {
         <AppDiscoveryProvider>
         <ResponsiveDesktopChrome enabled={isDesktop}>
           {loadError ? (
-            <BudgetLoadErrorScreen message={loadError} onRetry={retryBudgetLoad} />
+            <BudgetLoadDelayScreen onRetry={retryBudgetLoad} />
           ) : (
           <View style={styles.tabsFrame}>
           <Tabs
@@ -733,10 +703,10 @@ function TabContent() {
                       paddingTop: isIosWeb ? 6 : 8,
                       paddingBottom: isIosWeb ? 12 : 10,
                     }
-                  : {
-                      height: 86,
+                   : {
+                      height: nativeTabMetrics.height,
                       paddingTop: 6,
-                      paddingBottom: 14,
+                      paddingBottom: nativeTabMetrics.paddingBottom,
                     }),
               },
               tabBarBackground: () =>
@@ -846,7 +816,6 @@ function TabContent() {
               options={{ href: null, tabBarStyle: { display: "none" } }}
             />
           </Tabs>
-          {loading ? <PlanRestoreOverlay isDesktop={isDesktop} /> : null}
           {!loading ? <FloLauncher desktop={isDesktop} /> : null}
           </View>
           )}
@@ -873,18 +842,7 @@ function ResponsiveDesktopChrome({
 
   return (
     <React.Suspense
-      fallback={
-        <View style={styles.loadingScreen}>
-          <Image
-            source={require("../../assets/images/startup_f_transparent.png")}
-            style={styles.loadingLogo}
-            resizeMode="contain"
-          />
-          <Text style={styles.desktopLoadingText}>
-            Opening desktop workspace...
-          </Text>
-        </View>
-      }
+      fallback={<AppLoadingIntro phase="workspace" accessibilityLabel="FlowLedger is opening your workspace" />}
     >
       <DesktopChrome>{children}</DesktopChrome>
     </React.Suspense>
@@ -942,50 +900,6 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 18,
   },
-  planRestoreOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 60,
-    padding: 28,
-  },
-  planRestoreOverlayMobile: {
-    bottom: 86,
-    paddingHorizontal: 18,
-    paddingTop: 24,
-  },
-  planRestoreHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  planRestoreLabel: {
-    marginTop: 12,
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-  },
-  skeletonTitle: { width: 190, height: 28, borderRadius: 9, opacity: 0.7 },
-  skeletonAction: { width: 112, height: 42, borderRadius: 14, opacity: 0.55 },
-  skeletonGrid: { flexDirection: "row", gap: 14, marginTop: 24 },
-  skeletonGridMobile: { flexWrap: "wrap", gap: 10, marginTop: 18 },
-  skeletonCard: {
-    flex: 1,
-    minHeight: 132,
-    borderRadius: 18,
-    borderWidth: 1,
-    padding: 18,
-    justifyContent: "center",
-    gap: 14,
-  },
-  skeletonCardMobile: { flexBasis: "46%", minHeight: 112, padding: 14 },
-  skeletonLineShort: { width: "44%", height: 12, borderRadius: 6, opacity: 0.6 },
-  skeletonLine: { width: "72%", height: 22, borderRadius: 7, opacity: 0.7 },
-  skeletonPanel: {
-    flex: 1,
-    minHeight: 220,
-    marginTop: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    opacity: 0.72,
-  },
   loadingScreen: {
     flex: 1,
     alignItems: "center",
@@ -1002,11 +916,6 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
   },
-  desktopLoadingText: {
-    color: "#94a3b8",
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-  },
   loadErrorTitle: {
     fontSize: 24,
     fontWeight: "900",
@@ -1019,13 +928,16 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 8,
   },
+  loadDelaySpinner: {
+    marginTop: 18,
+  },
   loadRetryButton: {
     minWidth: 160,
     minHeight: 48,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 18,
+    marginTop: 14,
     paddingHorizontal: 22,
   },
   loadRetryText: {

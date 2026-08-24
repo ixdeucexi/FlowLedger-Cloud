@@ -22,6 +22,7 @@ import { SNOWBALL_PLAN_SOURCE, upsertSnowballPlanById } from "@/lib/debtPaymentP
 import {
   advanceDebtProjectionWithCommitments,
   applyDebtSourceCommitments,
+  datedDebtPlanCacheSignature,
   configuredDebtMonthObligation,
   effectiveDebtOccurrenceAmount,
   isValidExtraPaymentPlan,
@@ -32,7 +33,7 @@ import {
 } from "@/lib/debtPlanDomain";
 import { anchorForecastToBankBalance, forecastBalances, suppressDebtBillPlanDuplicates, type FinancialEvent } from "@/lib/forecast";
 import { diagnosticErrorCode } from "@/lib/diagnosticPolicy";
-import { assertFinancialMutationOnline } from "@/lib/networkStatus";
+import { assertFinancialMutationOnline, knownNetworkStatus } from "@/lib/networkStatus";
 import { decisionDbPayload } from "@/lib/decisionPersistence";
 import { recordDiagnostic } from "@/lib/diagnostics";
 import { isDevDemoMode } from "@/lib/demoMode";
@@ -51,6 +52,7 @@ import {
   readStoredActiveHouseholdId,
   saveActiveHouseholdId,
   updateHouseholdMemberRole as updateHouseholdMemberRoleRecord,
+  verifyCurrentHouseholdMembership,
   writeStoredActiveHouseholdId,
   type HouseholdActivity,
   type HouseholdInviteRole,
@@ -71,7 +73,7 @@ import { normalizeBillImportance, type BillImportance } from "@/lib/billImportan
 import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
 import { buildTransactionLedger, remainingPlannedAmount, selectFlowLedgerTransactions } from "@/lib/ledgerEngine";
 import { debtSourceCommitmentsForDebts, type PendingPlanMatch } from "@/lib/pendingPlanMatches";
-import { chooseRestoredHousehold, shouldRefreshPlanOnResume } from "@/lib/resumePolicy";
+import { chooseRestoredHousehold, PWA_RESUME_STALE_MS, shouldRefreshPlanOnResume } from "@/lib/resumePolicy";
 import {
   buildCanonicalPlanSimulationBaseline,
   type PlanSimulationBaseline,
@@ -424,6 +426,7 @@ interface BudgetContextType {
   retryLastSave: () => Promise<void>;
   clearSaveError: () => void;
   refreshHouseholds: () => Promise<void>;
+  refreshHouseholdsForPrivacy: () => Promise<void>;
   refreshHouseholdActivity: () => Promise<void>;
   switchHousehold: (householdId: string) => Promise<void>;
   createHouseholdInvite: (role?: HouseholdInviteRole) => Promise<string>;
@@ -1031,6 +1034,7 @@ const BudgetContext = createContext<BudgetContextType | undefined>(undefined);
 export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const userId = user?.id ?? null;
   const demoMode = isDevDemoMode();
 
   const [bills,         setBills]         = useState<Bill[]>([]);
@@ -1083,6 +1087,30 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { accountsRef.current = accounts; }, [accounts]);
   useEffect(() => { connectedBankAccountsRef.current = connectedBankAccounts; }, [connectedBankAccounts]);
   useEffect(() => { transactionAccountIdentitiesRef.current = transactionAccountIdentities; }, [transactionAccountIdentities]);
+
+  const clearScopedFinancialData = useCallback(() => {
+    setBills([]);
+    setOverrides([]);
+    overridesRef.current = [];
+    setBillDateMoves([]);
+    billDateMovesRef.current = [];
+    setTransactions([]);
+    setDeletedTransactions([]);
+    setPendingBankTransactions([]);
+    setPendingPlanMatches([]);
+    setIncomes([]);
+    setGoals([]);
+    setExtraPayments([]);
+    setCategories([]);
+    setAccounts([]);
+    accountsRef.current = [];
+    setConnectedBankAccounts([]);
+    connectedBankAccountsRef.current = [];
+    setTransactionAccountIdentities([]);
+    transactionAccountIdentitiesRef.current = [];
+    setDecisions([]);
+    setSettings(DEFAULT_SETTINGS);
+  }, []);
 
   const activeHousehold = useMemo(
     () => households.find(household => household.householdId === activeHouseholdId) ?? null,
@@ -1242,18 +1270,62 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   }, [queryClient]);
 
   const refreshPlanInBackground = useCallback(() => {
-    if (!user || demoMode || loadError || !loaded.current || backgroundRefreshPendingRef.current) return;
-    const online = Platform.OS !== "web" || typeof navigator === "undefined" || navigator.onLine !== false;
-    if (!shouldRefreshPlanOnResume({ lastRefreshAt: lastPlanRefreshAtRef.current, online })) return;
+    if (!userId || demoMode || loadError || !loaded.current || backgroundRefreshPendingRef.current) return;
+    const online = knownNetworkStatus() === true;
+    if (!shouldRefreshPlanOnResume({
+      lastRefreshAt: lastPlanRefreshAtRef.current,
+      online,
+      staleAfterMs: Platform.OS === "web" ? PWA_RESUME_STALE_MS : undefined,
+    })) return;
     backgroundRefreshPendingRef.current = true;
-    void queryClient.invalidateQueries({ queryKey: ["budget-core", user.id] });
+    void queryClient.invalidateQueries({ queryKey: ["budget-core", userId] });
     setLoadRetryNonce(value => value + 1);
-  }, [demoMode, loadError, queryClient, user]);
+  }, [demoMode, loadError, queryClient, userId]);
 
   const refreshHouseholds = useCallback(async () => {
-    if (!user || demoMode) return;
-    await resolveHouseholds(user.id);
-  }, [user, demoMode, resolveHouseholds]);
+    if (!userId || demoMode) return;
+    await resolveHouseholds(userId);
+  }, [userId, demoMode, resolveHouseholds]);
+
+  const refreshHouseholdsForPrivacy = useCallback(async () => {
+    if (!userId || demoMode) return;
+    const priorScope = householdScopeRef.current;
+    if (!priorScope) {
+      clearScopedFinancialData();
+      queryClient.removeQueries({ queryKey: ["budget-core", userId] });
+      const next = await withLoadTimeout(resolveHouseholds(userId), 8000, "Restore household access");
+      if (next) setLoadRetryNonce(value => value + 1);
+      return;
+    }
+    // A personal household cannot revoke its sole owner's membership. Avoid a
+    // redundant foreground network round trip so returning to the app is
+    // immediate; the normal background plan refresh still checks live data.
+    if (priorScope.isPersonal) return;
+    const stillAuthorized = await withLoadTimeout(
+      verifyCurrentHouseholdMembership(userId, priorScope.householdId),
+      8000,
+      "Verify household access",
+    );
+    if (!stillAuthorized) {
+      loadRequestRef.current += 1;
+      bankRefreshRequestRef.current += 1;
+      clearScopedFinancialData();
+      queryClient.removeQueries({ queryKey: ["budget-core", userId] });
+      const next = await withLoadTimeout(resolveHouseholds(userId), 8000, "Restore household access");
+      if (next) {
+        loaded.current = false;
+        setLoading(true);
+        setLoadRetryNonce(value => value + 1);
+      } else {
+        loaded.current = false;
+        setLoading(false);
+      }
+      return;
+    }
+    // The membership row is the only security decision needed on a quick
+    // resume. The ordinary stale-plan refresh updates household metadata and
+    // financial data without blocking the already-rendered screen.
+  }, [clearScopedFinancialData, demoMode, queryClient, resolveHouseholds, userId]);
 
   const refreshHouseholdActivity = useCallback(async () => {
     if (!activeHousehold) {
@@ -1384,7 +1456,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
       return;
     }
-    if (!user) {
+    if (!userId) {
       setLoadError(null);
       setBills([]); setOverrides([]); setBillDateMoves([]); setTransactions([]); setDeletedTransactions([]); setPendingBankTransactions([]); setIncomes([]);
       setGoals([]); setExtraPayments([]); setCategories([]); setAccounts([]); setConnectedBankAccounts([]); setTransactionAccountIdentities([]); setDecisions([]); setSettings(DEFAULT_SETTINGS);
@@ -1396,8 +1468,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     const backgroundRefresh = backgroundRefreshPendingRef.current && loaded.current;
-    backgroundRefreshPendingRef.current = false;
     if (!backgroundRefresh) {
+      backgroundRefreshPendingRef.current = false;
       loaded.current = false;
       setLoading(true);
     }
@@ -1405,7 +1477,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       const loadStarted = Date.now();
       try {
-        const uid = user.id;
+        const uid = userId;
         const scope = await withLoadTimeout(
           resolveHouseholds(uid),
           8000,
@@ -1509,7 +1581,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         const pendingRows = checkingPendingBankRows(normalizePendingBankRows(pendingData ?? []), rawConnectedAccounts);
         setPendingBankTransactions(pendingPlaidActivityWithBalanceHolds(pendingRows.included, rawConnectedAccounts, localDateString()));
         if (transactionCollections.unknownPlaid.length > 0 || pendingRows.unknownCount > 0) {
-          void recordDiagnostic(user.id, {
+          void recordDiagnostic(userId, {
             eventType: "unhandled_error", operation: "app_error", platform: diagnosticPlatform(),
             errorCode: "unknown_plaid_account",
           }).catch(() => undefined);
@@ -1564,18 +1636,19 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           setLoadError(error instanceof Error ? error.message : "FlowLedger could not load your plan.");
         }
       } finally {
+        if (backgroundRefresh) backgroundRefreshPendingRef.current = false;
         if (requestId === loadRequestRef.current) {
           loaded.current = true;
           lastPlanRefreshAtRef.current = Date.now();
           if (!backgroundRefresh) setLoading(false);
         }
-        void recordDiagnostic(user.id, {
+        void recordDiagnostic(userId, {
           eventType: "performance", operation: "data_load", platform: diagnosticPlatform(),
           durationMs: Date.now() - loadStarted,
         }).catch(() => undefined);
       }
     })();
-  }, [user, demoMode, loadRetryNonce, resolveHouseholds, applyHouseholdSelect, loadScopedSettings, queryClient]);
+  }, [userId, demoMode, loadRetryNonce, resolveHouseholds, applyHouseholdSelect, loadScopedSettings, queryClient]);
 
   const loadBankData = useCallback(async () => {
     if (!user || demoMode) return;
@@ -1722,33 +1795,49 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   }, [user, demoMode, loadBankData, resolveHouseholds]);
 
   useEffect(() => {
-    if (!user || demoMode) return;
-    void refreshBankData();
-    const subscription = AppState.addEventListener("change", state => {
-      if (state === "active") {
-        refreshPlanInBackground();
-        void refreshBankData();
-      }
-    });
+    if (!userId || demoMode || loading || !loaded.current) return;
     if (Platform.OS !== "web" || typeof document === "undefined" || typeof window === "undefined") {
-      return () => subscription.remove();
+      let resumeTimer: ReturnType<typeof setTimeout> | null = null;
+      const subscription = AppState.addEventListener("change", state => {
+        if (resumeTimer) clearTimeout(resumeTimer);
+        resumeTimer = null;
+        if (state === "active") {
+          // Let the cached screen become interactive before starting a stale
+          // plan refresh. The refresh never replaces the visible page with a
+          // loading state.
+          resumeTimer = setTimeout(refreshPlanInBackground, 750);
+        }
+      });
+      return () => {
+        if (resumeTimer) clearTimeout(resumeTimer);
+        subscription.remove();
+      };
     }
-    const refreshVisibleBankData = () => {
-      if (document.visibilityState !== "hidden") {
-        refreshPlanInBackground();
-        void refreshBankData();
-      }
+
+    let resumeTimer: ReturnType<typeof setTimeout> | null = null;
+    const runResumeRefresh = () => {
+      if (document.visibilityState === "hidden") return;
+      refreshPlanInBackground();
     };
-    document.addEventListener("visibilitychange", refreshVisibleBankData);
-    window.addEventListener("focus", refreshVisibleBankData);
-    window.addEventListener("online", refreshVisibleBankData);
+    const scheduleResumeRefresh = () => {
+      if (document.visibilityState === "hidden") return;
+      if (resumeTimer) clearTimeout(resumeTimer);
+      resumeTimer = setTimeout(runResumeRefresh, 750);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") scheduleResumeRefresh();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pageshow", scheduleResumeRefresh);
+    window.addEventListener("online", scheduleResumeRefresh);
     return () => {
-      subscription.remove();
-      document.removeEventListener("visibilitychange", refreshVisibleBankData);
-      window.removeEventListener("focus", refreshVisibleBankData);
-      window.removeEventListener("online", refreshVisibleBankData);
+      if (resumeTimer) clearTimeout(resumeTimer);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pageshow", scheduleResumeRefresh);
+      window.removeEventListener("online", scheduleResumeRefresh);
     };
-  }, [user, demoMode, activeHouseholdId, refreshBankData, refreshPlanInBackground]);
+  }, [userId, demoMode, loading, refreshPlanInBackground]);
 
   // ─── Bills ────────────────────────────────────────────────────────────────────
 
@@ -4147,7 +4236,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   }), [bills, transactions, deletedTransactions, incomes, goals, decisions, overrides, billDateMoves, extraPayments, connectedBankAccounts, accounts, getBillEffectiveMonthlyTotal, getRemainingDebtPlanForMonth, pendingBankTransactions, pendingPlanMatches, settings.starting_balance, settings.starting_balance_date]);
 
   const getDailyBalances = useCallback((month: number, year: number): DailyBalance[] => {
-    const dailyKey = `${year}-${month}`;
+    // A posted/reviewed payment can change the dated plan while this context
+    // instance remains mounted. Include that plan in the cache key so the
+    // calendar cannot retain an older blank day after the planner is current.
+    const requestedDebtPlan = getRemainingDebtPlanForMonth(month, year);
+    const dailyKey = `${year}-${month}:${datedDebtPlanCacheSignature(requestedDebtPlan)}`;
     const cachedDaily = balanceComputationCache.daily.get(dailyKey);
     if (cachedDaily) return cachedDaily;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -4305,7 +4398,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       });
     });
     const billsByDay: Record<number, number> = {};
-    const debtPlan = getRemainingDebtPlanForMonth(month, year);
+    const debtPlan = requestedDebtPlan;
     bills.filter(b => (b.is_recurring || b.is_debt) && isBillEligibleForUpcomingPlan(b)).forEach(b => {
       let occ = getBillOccurrencesInMonth(b, month, year);
       if (occ.length === 0) return;
@@ -4430,7 +4523,13 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     });
     const currentMonthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
     let openingBalance = carryover;
-    let balanceEvents = suppressDebtBillPlanDuplicates(financialEvents);
+    // Bank anchoring may remove an unresolved plan dated before the bank's
+    // latest balance so it does not reduce cash twice. Keep the canonical,
+    // de-duplicated plan separately for calendar visibility: an overdue debt
+    // remainder still belongs on its original date even when its cash impact
+    // is excluded from the anchored projection.
+    const displayEvents = suppressDebtBillPlanDuplicates(financialEvents);
+    let balanceEvents = [...displayEvents];
     if (connectedBankAnchor?.date.startsWith(currentMonthPrefix)) {
       const settledTransactionEventIds = new Set(monthTxs
         .filter(transaction => transaction.source === "plaid" || transaction.source === "statement" || Boolean(transaction.import_hash))
@@ -4478,7 +4577,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     const visibleEventsByDate = new Map<string, FinancialEvent[]>();
     const visibleTransactionIds = new Set(transactionLedger.visibleTransactions.map(transaction => transaction.id));
-    balanceEvents.forEach(event => {
+    displayEvents.forEach(event => {
       if (event.sourceType === "transaction" && !visibleTransactionIds.has(event.sourceId)) return;
       visibleEventsByDate.set(event.date, [...(visibleEventsByDate.get(event.date) ?? []), event]);
     });
@@ -4905,7 +5004,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const updateConnectedBankAccountDisplayName = useCallback(async (accountId: string, displayName: string | null) => {
     if (!user) return;
     assertCanEditHousehold("rename a savings account");
-    if (Platform.OS !== "web") throw new Error("Connected account names can currently be changed in the FlowLedger website or PWA.");
     const previous = connectedBankAccounts.find(account => account.id === accountId);
     if (!previous || previous.account_subtype !== "savings") throw new Error("Savings account not found.");
     const normalized = displayName === null ? undefined : displayName.trim().replace(/\s+/g, " ");
@@ -5083,7 +5181,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     <BudgetContext.Provider value={{
       bills, overrides, billDateMoves, transactions, deletedTransactions, pendingBankTransactions, pendingPlanMatches, incomes, goals, extraPayments, categories, settings, accounts, connectedBankAccounts, decisions,
       households, householdMembers, householdActivity, activeHousehold, householdRole, canEditHousehold,
-      refreshHouseholds, refreshHouseholdActivity, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
+      refreshHouseholds, refreshHouseholdsForPrivacy, refreshHouseholdActivity, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
       updateHouseholdMemberRole, removeHouseholdMember, leaveActiveHousehold,
       forecastConfidence, loading, loadError, retryBudgetLoad, refreshBankData, demoMode,
       saveStatus, saveError, retryLastSave, clearSaveError,

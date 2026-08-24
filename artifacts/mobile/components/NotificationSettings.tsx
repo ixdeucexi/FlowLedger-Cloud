@@ -10,6 +10,7 @@ import {
 } from "react-native";
 
 import { useAuth } from "@/context/AuthContext";
+import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { desktopPalette as palette } from "@/components/desktop/DesktopUI";
 import { isCompactSettingsLayout } from "@/lib/settingsLayout";
@@ -101,6 +102,7 @@ export function NotificationSettings({
   const { width: viewportWidth } = useWindowDimensions();
   const compactLayout = isCompactSettingsLayout(viewportWidth);
   const { session, user } = useAuth();
+  const { activeHousehold } = useBudget();
   const [status, setStatus] = useState<PushNotificationStatus>("checking");
   const [preferences, setPreferences] = useState<NotificationPreferences>(
     DEFAULT_NOTIFICATION_PREFERENCES,
@@ -121,11 +123,12 @@ export function NotificationSettings({
       return;
     }
     try {
-      setStatus(await getPushNotificationStatus(user.id));
-    } catch {
-      setStatus("unsupported");
+      setStatus(await getPushNotificationStatus(user.id, session?.access_token, activeHousehold?.householdId));
+    } catch (error) {
+      setStatus("degraded");
+      setMessage(error instanceof Error ? error.message : "Notification registration could not be confirmed. Retry when the service is available.");
     }
-  }, [user?.id]);
+  }, [activeHousehold?.householdId, session?.access_token, user?.id]);
 
   const refreshPreferences = useCallback(async () => {
     if (!session?.access_token) {
@@ -169,7 +172,7 @@ export function NotificationSettings({
     setMessage(null);
     try {
       if (enabled) {
-        await enablePushNotifications(session.access_token, user.id);
+        await enablePushNotifications(session.access_token, user.id, activeHousehold?.householdId);
         setMessage("Phone notifications are on for this device.");
       } else {
         await disablePushNotifications(session.access_token, user.id);
@@ -219,7 +222,7 @@ export function NotificationSettings({
     setTestingKey(option.key);
     setMessage(null);
     try {
-      await sendTestPushNotification(session.access_token, option.key);
+      await sendTestPushNotification(session.access_token, option.key, activeHousehold?.householdId);
       setMessage(`${option.title} test sent. Check your phone notifications.`);
     } catch (error) {
       setMessage(
@@ -239,6 +242,8 @@ export function NotificationSettings({
       ? "Notifications are blocked. Allow them for FlowLedger in your phone or browser settings."
       : status === "unsupported"
         ? "This browser or app does not support FlowLedger phone notifications."
+        : status === "degraded"
+          ? "Notifications need to be reconnected for this household. Turn them on again to retry."
         : "Allow this device to receive the alerts you choose below.";
 
   const options = ALERT_OPTIONS.filter((option) =>

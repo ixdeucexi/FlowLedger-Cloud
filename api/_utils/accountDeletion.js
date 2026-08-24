@@ -1,6 +1,8 @@
 const { bearerToken, authenticatedUser, serviceSupabase } = require("./supabase");
 const { decryptAccessToken } = require("./crypto");
 const { plaid } = require("./plaid");
+const { required } = require("./env");
+const { revokeAppleAuthorization } = require("./appleProvider");
 
 const RECENT_LOGIN_SECONDS = 10 * 60;
 
@@ -42,17 +44,43 @@ function isAlreadyRemovedPlaidItem(error) {
   return code === "ITEM_NOT_FOUND" || code === "INVALID_ACCESS_TOKEN";
 }
 
+async function deleteRevenueCatCustomer(userId, dependencies = {}) {
+  const request = dependencies.fetch || fetch;
+  const apiKey = dependencies.revenueCatSecretApiKey || required("REVENUECAT_SECRET_API_KEY");
+  const response = await request(`https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(userId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+  });
+  if (!response.ok && response.status !== 404) throw new Error("REVENUECAT_CUSTOMER_DELETION_FAILED");
+}
+
+function userUsesApple(user) {
+  const providers = Array.isArray(user?.app_metadata?.providers) ? user.app_metadata.providers : [user?.app_metadata?.provider];
+  return providers.map(String).includes("apple");
+}
+
 async function disconnectPlaidItems(client, userId, dependencies = {}) {
   const makePlaid = dependencies.plaid || plaid;
   const decrypt = dependencies.decryptAccessToken || decryptAccessToken;
-  const { data, error } = await client
+  const { data: ownedHouseholds, error: householdError } = await client
+    .from("households")
+    .select("id")
+    .eq("created_by", userId);
+  if (householdError) throw householdError;
+  const ownedHouseholdIds = (ownedHouseholds || []).map(row => row.id).filter(Boolean);
+  const ownedByUser = await client
     .from("plaid_items")
     .select("id,status,encrypted_access_token,access_token_ciphertext")
     .eq("user_id", userId);
-  if (error) throw error;
+  if (ownedByUser.error) throw ownedByUser.error;
+  const ownedByHousehold = ownedHouseholdIds.length
+    ? await client.from("plaid_items").select("id,status,encrypted_access_token,access_token_ciphertext").in("household_id", ownedHouseholdIds)
+    : { data: [], error: null };
+  if (ownedByHousehold.error) throw ownedByHousehold.error;
+  const items = [...new Map([...(ownedByUser.data || []), ...(ownedByHousehold.data || [])].map(item => [item.id, item])).values()];
 
   let revoked = 0;
-  for (const item of data || []) {
+  for (const item of items) {
     const encrypted = item.encrypted_access_token || item.access_token_ciphertext;
     if (encrypted) {
       try {
@@ -69,8 +97,7 @@ async function disconnectPlaidItems(client, userId, dependencies = {}) {
         access_token_ciphertext: null,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", item.id)
-      .eq("user_id", userId);
+      .eq("id", item.id);
     if (updateError) throw updateError;
     revoked += 1;
   }
@@ -125,6 +152,21 @@ function createAccountDeletionHandler(dependencies = {}) {
         });
       }
 
+      if (userUsesApple(auth.user)) {
+        try {
+          await (dependencies.revokeAppleAuthorization || revokeAppleAuthorization)(client, auth.user.id, dependencies);
+        } catch (error) {
+          console.error("Account deletion Apple revocation failed", error?.message || "unknown");
+          return res.status(502).json({ error: "APPLE_REVOCATION_FAILED", message: "Apple sign-in access could not be revoked. No financial records were deleted; try again." });
+        }
+      }
+      try {
+        await deleteRevenueCatCustomer(auth.user.id, dependencies);
+      } catch (error) {
+        console.error("Account deletion RevenueCat cleanup failed", error?.message || "unknown");
+        return res.status(502).json({ error: "BILLING_CUSTOMER_DELETION_FAILED", message: "Store subscription history could not be removed from the billing processor. No financial records were deleted; try again." });
+      }
+
       let plaidItemsRevoked;
       try {
         plaidItemsRevoked = await disconnectPlaidItems(client, auth.user.id, dependencies);
@@ -144,7 +186,7 @@ function createAccountDeletionHandler(dependencies = {}) {
         if (String(prepareError.message || "").includes("account_deletion_owner_transfer_required")) {
           return res.status(409).json({
             error: "HOUSEHOLD_OWNER_TRANSFER_REQUIRED",
-            message: "Transfer ownership or remove the other members before deleting your account.",
+            message: "Remove every other member from each household you own before deleting your account. Ownership transfer is not currently available.",
           });
         }
         throw prepareError;
@@ -184,8 +226,10 @@ module.exports = {
   RECENT_LOGIN_SECONDS,
   createAccountDeletionHandler,
   disconnectPlaidItems,
+  deleteRevenueCatCustomer,
   hasRecentVerifiedLogin,
   isAlreadyRemovedPlaidItem,
   jwtIssuedAt,
   jwtSessionId,
+  userUsesApple,
 };

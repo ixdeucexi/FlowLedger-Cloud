@@ -38,6 +38,7 @@ import {
 } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
 import { flowLedgerUserGuideTarget } from "@/lib/userGuide";
+import { FOUNDING_FREE_LAUNCH, hasAdminProAccess } from "@/lib/launchMode";
 import * as Haptics from "@/lib/haptics";
 
 export type DesktopSettingsSection =
@@ -141,6 +142,7 @@ export function DesktopSettingsPage({
   const { user, signOut } = useAuth();
   const { accounts, connectedBankAccounts, activeHousehold } = useBudget();
   const { actualPlan, loading: membershipLoading } = useMembership();
+  const adminProAccess = hasAdminProAccess(actualPlan);
   const { themeMode, setThemeMode, fontStyle, setFontStyle } = useThemeMode();
   const {
     enabled: hapticsEnabled,
@@ -502,15 +504,14 @@ export function DesktopSettingsPage({
                 <DesktopCard>
                   <CardHeader title="Bank Connections" />
                   <View style={styles.connectionActions}>
-                    <PlaidLinkButton
-                      colors={desktopColors as never}
-                      onConnected={onSync}
-                    />
-                    <SecondaryButton
-                      label={syncing ? "Syncing..." : "Sync Accounts"}
-                      icon="refresh-cw"
-                      onPress={() => void syncConnections()}
-                    />
+                    {FOUNDING_FREE_LAUNCH && !adminProAccess ? (
+                      <Text style={styles.supportNote}>Bank sync is planned for Pro in 2027. Manual accounts and activity are available during the Founding Free launch.</Text>
+                    ) : (
+                      <>
+                        <PlaidLinkButton colors={desktopColors as never} onConnected={onSync} />
+                        <SecondaryButton label={syncing ? "Syncing..." : "Sync Accounts"} icon="refresh-cw" onPress={() => void syncConnections()} />
+                      </>
+                    )}
                   </View>
                 </DesktopCard>
                 <DesktopCard>

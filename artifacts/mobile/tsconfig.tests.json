@@ -166,6 +166,7 @@
     ,"lib/userGuide.ts"
     ,"lib/userGuide.test.ts"
     ,"lib/startupBrand.test.ts"
+    ,"lib/foundingFreeLaunch.test.ts"
     ,"lib/hapticsPreference.test.ts"
     ,"lib/householdActivity.ts"
     ,"lib/householdActivity.test.ts"
@@ -184,5 +185,14 @@
     ,"lib/floAiConsent.test.ts"
     ,"lib/accountDeletionPolicy.ts"
     ,"lib/accountDeletion.test.ts"
+    ,"lib/billingIdentityPolicy.ts"
+    ,"lib/billingIdentityPolicy.test.ts"
+    ,"lib/nativeNotificationRoute.ts"
+    ,"lib/nativeNotificationRoute.test.ts"
+    ,"lib/nativePushStatusPolicy.ts"
+    ,"lib/nativePushStatusPolicy.test.ts"
+    ,"lib/accessibilityContract.test.ts"
+    ,"lib/latestOperation.ts"
+    ,"lib/latestOperation.test.ts"
   ]
 }

@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "anchorDate": "2026-08-21",
+  "householdName": "Harbor Household",
+  "startingBalance": 3240,
+  "safetyFloor": 500,
+  "accounts": [
+    { "key": "checking", "name": "Harbor Checking", "account_type": "checking", "current_balance": 3240 },
+    { "key": "savings", "name": "Rainy Day Savings", "account_type": "savings", "current_balance": 1800 }
+  ],
+  "incomes": [
+    { "key": "paycheck", "name": "Paycheck", "amount": 2300, "frequency": "biweekly", "start_date": "2026-08-07", "next_payment_date": "2026-08-21" }
+  ],
+  "bills": [
+    { "key": "rent", "name": "Rent", "amount": 1450, "category": "Housing", "due_day": 1, "is_debt": false, "balance": 0, "interest_rate": 0 },
+    { "key": "utilities", "name": "Utilities", "amount": 185, "category": "Utilities", "due_day": 10, "is_debt": false, "balance": 0, "interest_rate": 0 },
+    { "key": "harbor-card", "name": "Harbor Card", "amount": 75, "category": "Debt", "due_day": 15, "is_debt": true, "balance": 940, "interest_rate": 18.9 },
+    { "key": "auto", "name": "Auto Loan", "amount": 310, "category": "Debt", "due_day": 24, "is_debt": true, "balance": 6200, "interest_rate": 6.2 }
+  ],
+  "transactions": [
+    { "key": "groceries", "date": "2026-08-18", "amount": -86.42, "category": "Food", "note": "Neighborhood Market" },
+    { "key": "fuel", "date": "2026-08-19", "amount": -44.17, "category": "Transportation", "note": "Fuel" },
+    { "key": "pay", "date": "2026-08-21", "amount": 2300, "category": "Income", "note": "Paycheck" }
+  ],
+  "goals": [
+    { "key": "emergency", "name": "Emergency Fund", "target_amount": 5000, "current_amount": 1800, "target_date": "2027-06-30" }
+  ]
+}

@@ -1037,10 +1037,10 @@ async function syncTransactions({ client, userId, item, accessToken }) {
   }
   try {
     if (originalCursor && pendingNotificationTransactionIds.length) {
-      await queuePendingTransactionNotifications(userId, pendingNotificationTransactionIds);
+      await queuePendingTransactionNotifications(userId, item.household_id, pendingNotificationTransactionIds);
     }
     if (originalCursor && notificationTransactionIds.length) {
-      await queuePostedTransactionNotifications(userId, notificationTransactionIds);
+      await queuePostedTransactionNotifications(userId, item.household_id, notificationTransactionIds);
     } else if (!pendingNotificationTransactionIds.length) {
       await deliverPendingPostedTransactionNotifications(userId);
     }

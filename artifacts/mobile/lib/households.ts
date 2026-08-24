@@ -262,6 +262,17 @@ export async function loadHouseholdActivity(householdId?: string | null, limit =
   return summarizeHouseholdActivity(activity, targetLimit);
 }
 
+export async function verifyCurrentHouseholdMembership(userId: string, householdId: string): Promise<boolean> {
+  const result = await supabase
+    .from("household_members")
+    .select("household_id")
+    .eq("user_id", userId)
+    .eq("household_id", householdId)
+    .maybeSingle();
+  if (result.error) throw new Error("Household membership could not be verified.");
+  return Boolean(result.data?.household_id);
+}
+
 export async function updateHouseholdMemberRole(
   householdId: string,
   memberUserId: string,

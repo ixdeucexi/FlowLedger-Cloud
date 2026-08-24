@@ -1,4 +1,5 @@
 const PLAID_ENVIRONMENTS = new Set(["production", "development", "sandbox"]);
+const PUSH_ENVIRONMENTS = new Set(["production", "preview", "development"]);
 
 function required(name) {
   const value = String(process.env[name] || "").trim();
@@ -58,4 +59,14 @@ function supabaseConfig() {
   return { url, serviceRoleKey };
 }
 
-module.exports = { required, optional, plaidConfig, supabaseConfig };
+function pushEnvironment() {
+  const value = String(optional("PUSH_APP_ENVIRONMENT") || optional("VERCEL_ENV") || "").toLowerCase();
+  if (!PUSH_ENVIRONMENTS.has(value)) {
+    const error = new Error("PUSH_APP_ENVIRONMENT (or VERCEL_ENV) must identify production, preview, or development.");
+    error.code = "PUSH_ENVIRONMENT_INVALID";
+    throw error;
+  }
+  return value;
+}
+
+module.exports = { required, optional, plaidConfig, pushEnvironment, supabaseConfig };

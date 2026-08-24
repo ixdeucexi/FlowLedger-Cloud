@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -38,4 +39,16 @@ test("guarded fetch never sends an offline mutation and resumes after reconnect"
   const response = await guarded("https://example.test/rest/v1/bills", { method: "PATCH" });
   assert.equal(response.status, 204);
   assert.equal(requests, 1);
+});
+
+test("one root network provider resolves onboarding before guarded setup writes", () => {
+  const hook = readFileSync("hooks/useNetworkStatus.ts", "utf8");
+  const root = readFileSync("app/_layout.tsx", "utf8");
+  const banner = readFileSync("components/ConnectivityBanner.tsx", "utf8");
+  assert.match(root, /<NetworkStatusProvider>/);
+  assert.ok(root.indexOf("<NetworkStatusProvider>") < root.indexOf("<BudgetProvider>"));
+  assert.match(hook, /NetInfo\.fetch\(\)\.then\(applyState\)/);
+  assert.equal((hook.match(/NetInfo\.addEventListener/g) || []).length, 1);
+  assert.match(banner, /useNetworkStatus\(\)/);
+  assert.doesNotMatch(banner, /NetInfo|publishNetworkStatus/);
 });

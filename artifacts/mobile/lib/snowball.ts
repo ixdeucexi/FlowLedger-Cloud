@@ -106,18 +106,32 @@ export function remainingDatedDebtAllocations(
     remainingSettledByKey.set(key, cents((remainingSettledByKey.get(key) ?? 0) + Math.max(0, settlement.amount)));
   });
 
-  return allocations.flatMap(allocation => {
+  const absorbedByIndex = new Map<number, number>();
+  const settlementOrder = allocations
+    .map((allocation, index) => ({ allocation, index }))
+    // A partially paid debt can already have a lower live balance. In that
+    // case the canonical plan turns the balance gap into rollover. Consume
+    // that projected rollover before the payment still owed to the source
+    // debt, or the same payment is deducted twice and the real remainder
+    // disappears from Forecast.
+    .sort((left, right) => Number(left.allocation.kind !== "rollover") - Number(right.allocation.kind !== "rollover"));
+
+  settlementOrder.forEach(({ allocation, index }) => {
     const key = allocation.kind === "extra"
       ? datedSettlementKey("extra", allocation.targetBillId, allocation.date)
       : allocation.sourceBillId
         ? datedSettlementKey("bill", allocation.sourceBillId, allocation.date)
         : undefined;
-    if (!key) return [allocation];
+    if (!key) return;
     const settled = remainingSettledByKey.get(key) ?? 0;
-    if (settled <= 0.009) return [allocation];
+    if (settled <= 0.009) return;
     const absorbed = cents(Math.min(settled, allocation.amount));
     remainingSettledByKey.set(key, cents(settled - absorbed));
-    const remaining = cents(allocation.amount - absorbed);
+    absorbedByIndex.set(index, absorbed);
+  });
+
+  return allocations.flatMap((allocation, index) => {
+    const remaining = cents(allocation.amount - (absorbedByIndex.get(index) ?? 0));
     return remaining > 0.009 ? [{ ...allocation, amount: remaining }] : [];
   });
 }

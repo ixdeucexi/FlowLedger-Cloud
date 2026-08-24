@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   applyDebtSourceCommitments,
   advanceDebtProjectionWithCommitments,
+  datedDebtPlanCacheSignature,
   configuredDebtAmountForRemainingPayment,
   configuredDebtMonthObligation,
   effectiveDebtOccurrenceAmount,
@@ -15,6 +16,45 @@ import {
   resolveDebtMonthSettlement,
 } from "./debtPlanDomain";
 import { projectDatedSnowballMonth } from "./snowball";
+
+test("dated debt cache signature changes when a remaining payment appears", () => {
+  const base = {
+    payments: [],
+    balances: new Map<string, number>(),
+    payoffOrder: [],
+    paidOffNames: [],
+    rolledPayment: 0,
+    minimumPayments: 0,
+    scheduledPayments: 0,
+    extraPayment: 0,
+    interest: 0,
+    endingDebt: 0,
+    plannedPayment: 0,
+    unusedAmount: 0,
+    allocations: [],
+  };
+  const withDiscover = {
+    ...base,
+    plannedPayment: 28,
+    allocations: [{
+      id: "discover-remaining",
+      date: "2026-08-22",
+      sourceBillId: "discover",
+      targetBillId: "discover",
+      targetBillName: "Discover",
+      kind: "required" as const,
+      amount: 28,
+      sourceAmount: 85,
+      balanceBefore: 3046.97,
+      balanceAfter: 3018.97,
+      paidOff: false,
+    }],
+  };
+
+  assert.equal(datedDebtPlanCacheSignature(base), "");
+  assert.notEqual(datedDebtPlanCacheSignature(base), datedDebtPlanCacheSignature(withDiscover));
+  assert.match(datedDebtPlanCacheSignature(withDiscover), /2026-08-22:discover:discover:required:28\.00/);
+});
 
 test("settled August debt fixtures retain their actual paid amounts without remaining obligations", () => {
   const fixtures = [73, 127, 450.08];

@@ -1,4 +1,5 @@
 export const PLAN_RESUME_STALE_MS = 2 * 60 * 1000;
+export const PWA_RESUME_STALE_MS = 5 * 60 * 1000;
 
 export interface HouseholdRestoreCandidate {
   householdId: string;

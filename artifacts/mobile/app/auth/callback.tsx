@@ -1,7 +1,8 @@
 import { useRouter } from "expo-router";
 import { useEffect } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { AppLoadingIntro } from "@/components/AppLoadingIntro";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -14,16 +15,17 @@ export default function AuthCallbackScreen() {
     if (session && !loading) router.replace("/(tabs)" as any);
   }, [loading, router, session]);
 
+  if (loading || session) {
+    return <AppLoadingIntro phase="privacy" accessibilityLabel="FlowLedger is finishing your sign in" />;
+  }
+
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
-      <ActivityIndicator size="large" color={colors.primary} />
-      <Text style={[styles.title, { color: colors.foreground }]}>Finishing your sign in…</Text>
-      <Text style={[styles.body, { color: colors.mutedForeground }]}>FlowLedger is securely restoring your account.</Text>
-      {!loading && !session ? (
-        <Pressable accessibilityRole="button" onPress={() => router.replace("/login" as any)} style={[styles.button, { backgroundColor: colors.primary }]}>
-          <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Back to sign in</Text>
-        </Pressable>
-      ) : null}
+      <Text style={[styles.title, { color: colors.foreground }]}>Sign in wasn’t completed</Text>
+      <Text style={[styles.body, { color: colors.mutedForeground }]}>Return to sign in and try again.</Text>
+      <Pressable accessibilityRole="button" onPress={() => router.replace("/login" as any)} style={[styles.button, { backgroundColor: colors.primary }]}>
+        <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Back to sign in</Text>
+      </Pressable>
     </View>
   );
 }

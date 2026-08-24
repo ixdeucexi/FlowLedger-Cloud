@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/context/AuthContext";
 import { useBudget } from "@/context/BudgetContext";
@@ -12,6 +12,9 @@ import {
   type PlanTier,
 } from "@/lib/membership";
 import { supabase } from "@/lib/supabase";
+import { activateBillingIdentity, deactivateBillingIdentity } from "@/lib/nativeBilling";
+import { readBillingStatus } from "@/lib/billing";
+import { FOUNDING_FREE_LAUNCH } from "@/lib/launchMode";
 
 interface MembershipContextValue {
   actualPlan: HouseholdPlan;
@@ -19,6 +22,7 @@ interface MembershipContextValue {
   previewTier: PlanTier | null;
   isAdmin: boolean;
   loading: boolean;
+  refreshPlan: () => Promise<void>;
   isFeatureLocked: (feature: PlanFeature) => boolean;
   bypassFeature: (feature: PlanFeature) => void;
   setPreviewTier: (tier: PlanTier) => Promise<void>;
@@ -45,9 +49,21 @@ export function MembershipProvider({ children }: { children: React.ReactNode }) 
   const [bypassedFeatures, setBypassedFeatures] = useState<PlanFeature[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
+  const planRequestRef = useRef(0);
 
   const householdId = activeHousehold?.householdId ?? "local";
   const storageKey = user?.id ? previewStorageKey(user.id, householdId) : null;
+
+  useEffect(() => {
+    if (FOUNDING_FREE_LAUNCH || !user?.id || demoMode) {
+      deactivateBillingIdentity();
+      return;
+    }
+    void activateBillingIdentity(user.id).catch(error => {
+      console.warn("Native billing identity is unavailable", error instanceof Error ? error.message : error);
+    });
+    return () => deactivateBillingIdentity();
+  }, [demoMode, user?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,35 +86,46 @@ export function MembershipProvider({ children }: { children: React.ReactNode }) 
     return () => { cancelled = true; };
   }, [user?.id]);
 
-  useEffect(() => {
-    let cancelled = false;
+  const refreshPlan = useCallback(async () => {
+    const requestId = ++planRequestRef.current;
     setLoading(true);
     if (demoMode) {
-      setActualPlan(mapHouseholdPlan({ tier: "pro", source: "admin" }, householdId, "pro"));
-      setLoading(false);
-      return () => { cancelled = true; };
+      if (requestId === planRequestRef.current) {
+        setActualPlan(mapHouseholdPlan({ tier: "pro", source: "admin" }, householdId, "pro"));
+        setLoading(false);
+      }
+      return;
     }
     if (!activeHousehold?.householdId) {
-      setActualPlan(FALLBACK_PLAN);
-      setLoading(false);
-      return () => { cancelled = true; };
-    }
-    void (async () => {
-      try {
-        const { data } = await supabase
-          .from("household_plans")
-          .select("household_id,tier,source,grandfathered_at,created_at,updated_at")
-          .eq("household_id", activeHousehold.householdId)
-          .maybeSingle();
-        if (!cancelled) setActualPlan(mapHouseholdPlan(data as Record<string, unknown> | null, activeHousehold.householdId));
-      } catch {
-        if (!cancelled) setActualPlan(mapHouseholdPlan(null, activeHousehold.householdId));
-      } finally {
-        if (!cancelled) setLoading(false);
+      if (requestId === planRequestRef.current) {
+        setActualPlan(FALLBACK_PLAN);
+        setLoading(false);
       }
-    })();
-    return () => { cancelled = true; };
-  }, [activeHousehold?.householdId, demoMode, householdId]);
+      return;
+    }
+    try {
+      if (!FOUNDING_FREE_LAUNCH && user?.id && activeHousehold.role === "owner") {
+        // The server rate-limits this authoritative RevenueCat reconciliation;
+        // foreground refreshes recover missed expiry/refund webhooks without
+        // trusting cached client purchase state.
+        await readBillingStatus(activeHousehold.householdId).catch(() => undefined);
+      }
+      const { data } = await supabase
+        .from("household_plans")
+        .select("household_id,tier,source,grandfathered_at,created_at,updated_at")
+        .eq("household_id", activeHousehold.householdId)
+        .maybeSingle();
+      if (requestId === planRequestRef.current) setActualPlan(mapHouseholdPlan(data as Record<string, unknown> | null, activeHousehold.householdId));
+    } catch {
+      if (requestId === planRequestRef.current) setActualPlan(mapHouseholdPlan(null, activeHousehold.householdId));
+    } finally {
+      if (requestId === planRequestRef.current) setLoading(false);
+    }
+  }, [activeHousehold?.householdId, activeHousehold?.role, demoMode, householdId, user?.id]);
+
+  useEffect(() => {
+    void refreshPlan();
+  }, [refreshPlan]);
 
   useEffect(() => {
     let cancelled = false;
@@ -131,6 +158,7 @@ export function MembershipProvider({ children }: { children: React.ReactNode }) 
 
   const effectiveTier = previewTier ?? actualPlan.tier;
   const isFeatureLocked = useCallback((feature: PlanFeature) => {
+    if (FOUNDING_FREE_LAUNCH) return false;
     if (bypassedFeatures.includes(feature)) return false;
     const lockedForTier = !canUseFeature(effectiveTier, feature);
     if (isAdmin && previewTier) return lockedForTier;
@@ -143,11 +171,12 @@ export function MembershipProvider({ children }: { children: React.ReactNode }) 
     previewTier,
     isAdmin,
     loading,
+    refreshPlan,
     isFeatureLocked,
     bypassFeature,
     setPreviewTier,
     resetPreview,
-  }), [actualPlan, effectiveTier, previewTier, isAdmin, loading, isFeatureLocked, bypassFeature, setPreviewTier, resetPreview]);
+  }), [actualPlan, effectiveTier, previewTier, isAdmin, loading, refreshPlan, isFeatureLocked, bypassFeature, setPreviewTier, resetPreview]);
 
   return <MembershipContext.Provider value={value}>{children}</MembershipContext.Provider>;
 }

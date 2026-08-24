@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "fictionalDataOnly": true,
+  "featureGraphic": {
+    "output": "google-play/feature-graphic-1024x500.png",
+    "dimensions": "1024x500",
+    "colorMode": "24-bit RGB, no alpha",
+    "sha256": "DFBAE1DDA38B83DB7181DE234A5E852A93F2EE33EDCB5F5C483C49A340561280",
+    "background": "source/feature-background.png",
+    "backgroundSourceDimensions": "1794x877",
+    "backgroundProvenance": "Generated with the recorded imagegen prompt, then imported as store-assets/v1/source/feature-background.png.",
+    "backgroundPrompt": "premium abstract midnight navy fintech, violet/cyan/green flow paths, quiet center-left, no text/logo/UI/people",
+    "logo": "../../artifacts/mobile/assets/images/startup_f_transparent.png",
+    "logoSha256": "8E257B66888F79E4F9C7AAF1AC9CA7A66386F438FA9887A02F6E85BF2828838F",
+    "text": ["FlowLedger", "Know what's next."],
+    "buildCommand": "powershell -ExecutionPolicy Bypass -File scripts/build-store-feature-graphic.ps1"
+  },
+  "screenshots": {
+    "fixture": "fixture/reviewer-v1.json",
+    "captureProcedure": "capture/README.md",
+    "status": "Requires signed native builds and fictional reviewer account; no screenshots are represented as complete."
+  }
+}

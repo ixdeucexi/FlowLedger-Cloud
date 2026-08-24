@@ -152,6 +152,30 @@ describe("payoff simulation", () => {
     assert.deepEqual(remaining.map(allocation => [allocation.targetBillName, allocation.amount]), [["Concert", 35.41]]);
   });
 
+  it("keeps the true debt remainder after a partial payment already lowered its live balance", () => {
+    const plan = projectDatedSnowballMonth({
+      debts: [
+        { id: "discover", name: "Discover", balance: 28, minimum: 85, apr: 0, dueDay: 22, included: true },
+        { id: "next", name: "Next debt", balance: 500, minimum: 40, apr: 0, dueDay: 28, included: true },
+      ],
+      method: "snowball",
+      month: 7,
+      year: 2026,
+    });
+    const remaining = remainingDatedDebtAllocations(plan.allocations, [{
+      sourceType: "bill",
+      billId: "discover",
+      date: "2026-08-22",
+      amount: 57,
+    }]);
+
+    const discover = remaining.find(allocation => allocation.sourceBillId === "discover" && allocation.targetBillId === "discover");
+    const discoverRollover = remaining.find(allocation => allocation.sourceBillId === "discover" && allocation.kind === "rollover");
+    assert.equal(discover?.amount, 28);
+    assert.equal(discoverRollover, undefined);
+    assert.equal(remaining.reduce((sum, allocation) => sum + allocation.amount, 0), 68);
+  });
+
   it("keeps paying minimum payments on all active debts", () => {
     const result = projectSnowballMonth({
       debts,
