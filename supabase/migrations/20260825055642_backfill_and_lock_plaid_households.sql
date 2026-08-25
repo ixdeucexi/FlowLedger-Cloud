@@ -170,3 +170,5 @@ drop policy if exists "plaid transactions: members read" on public.plaid_transac
 create policy "plaid transactions: members read" on public.plaid_transactions
 for select to authenticated
 using ((select private.is_household_member(household_id)));
+
+;

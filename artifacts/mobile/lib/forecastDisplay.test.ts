@@ -19,6 +19,15 @@ test("calendar balances round cents to the nearest whole dollar", () => {
   assert.equal(formatCalendarBalance(0.49), "$0");
 });
 
+test("mobile calendar displays and announces the full balance", () => {
+  const calendar = readFileSync(path.resolve(process.cwd(), "components/CalendarView.tsx"), "utf8");
+
+  assert.match(calendar, /Projected closing balance \$\{formatCalendarBalance\(db\.balance\)\}/);
+  assert.match(calendar, /accessibilityLabel=\{formatCalendarBalance\(db\.balance\)\}/);
+  assert.match(calendar, /\{formatCalendarBalance\(db\.balance\)\}/);
+  assert.doesNotMatch(calendar, /formatCompactCalendarBalance/);
+});
+
 test("groups forecast events into plain-language sections", () => {
   const groups = groupForecastEvents([
     event({ id: "income", sourceType: "income", sourceId: "pay", kind: "scheduled_income", date: "2026-07-01", amount: 1000, status: "scheduled", name: "Paycheck" }),

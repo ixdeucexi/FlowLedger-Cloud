@@ -13,7 +13,9 @@ test("financial context gates writes before updateBill optimistic state", () => 
   const updateEnd = source.indexOf("const stopFutureBill", updateStart);
   const updateBill = source.slice(updateStart, updateEnd);
   assert.ok(updateBill.indexOf('assertCanEditHousehold("update a bill")') < updateBill.indexOf("setBills("));
-  assert.match(updateBill, /Object\.entries\(reviewedBill\)/);
+  assert.match(updateBill, /billEditableDbPatch\(reviewedBill, activeEditableFields\)/);
+  assert.match(updateBill, /update_bill_with_override_intents/);
+  assert.doesNotMatch(updateBill, /\.\.\.reviewedBill, user_id/);
 });
 
 test("category budgets check connectivity before changing visible totals or cache", () => {

@@ -24,6 +24,7 @@ import Svg, {
 import { AddBillModal } from "@/components/AddBillModal";
 import { AppText } from "@/components/AppText";
 import { DashboardCustomizer } from "@/components/DashboardCustomizer";
+import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import { DashboardUtilityWidgets } from "@/components/DashboardUtilityWidgets";
 import { DesktopAddMenu } from "@/components/desktop/DesktopAddMenu";
 import { GoalModal } from "@/components/GoalModal";
@@ -48,6 +49,7 @@ import { transactionDebt } from "@/lib/transactionDebt";
 import { buildReviewQueue } from "@/lib/reviewCenter";
 import { buildTodaysDecisions } from "@/lib/todaysDecisions";
 import { buildFlowGuideRouteParams } from "@/lib/flowledgerGuide";
+import type { BillEditableBaseline, BillEditableField } from "@/lib/billEditPersistence";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 type Accent = "cyan" | "purple" | "green" | "amber" | "blue" | "neutral";
@@ -548,8 +550,13 @@ export function DesktopDashboard() {
     router.setParams({ action: "" } as never);
   }, [openAddAction, routeParams.action, router]);
 
-  const saveBill = useCallback((bill: Omit<Bill, "id" | "created_at"> | Bill) =>
-    "id" in bill ? updateBill(bill) : addBill(bill), [addBill, updateBill]);
+  const saveBill = useCallback((
+    bill: Omit<Bill, "id" | "created_at"> | Bill,
+    dirtyFields?: readonly BillEditableField[],
+    baseline?: BillEditableBaseline,
+  ) => "id" in bill
+    ? updateBill(bill, dirtyFields ?? [], baseline)
+    : addBill(bill), [addBill, updateBill]);
   const saveGoal = useCallback((goal: Omit<Goal, "id" | "created_at"> | Goal) =>
     "id" in goal ? updateGoal(goal) : addGoal(goal), [addGoal, updateGoal]);
   const saveIncome = useCallback((income: Omit<IncomeItem, "id"> | IncomeItem) =>
@@ -897,6 +904,7 @@ export function DesktopDashboard() {
             {greetingForHour(now.getHours())}, {firstName}
           </Text>
           <Text style={styles.greetingSub}>Here&apos;s your financial overview for today.</Text>
+          <DataFreshnessLabel compact />
         </View>
         <View style={styles.pageActions}>
           <Pressable

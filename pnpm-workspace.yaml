@@ -77,6 +77,7 @@ onlyBuiltDependencies:
   - '@swc/core'
   - esbuild
   - msw
+  - sharp
   - unrs-resolver
 
 overrides:
@@ -189,3 +190,4 @@ overrides:
 allowBuilds:
   dtrace-provider: false
   esbuild: true
+  sharp: true

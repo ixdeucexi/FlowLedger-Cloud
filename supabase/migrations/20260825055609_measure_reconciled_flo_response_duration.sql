@@ -86,3 +86,5 @@ revoke all on function public.reconcile_stale_flo_responses(uuid, uuid, timestam
   from public, anon, authenticated;
 grant execute on function public.reconcile_stale_flo_responses(uuid, uuid, timestamptz)
   to service_role;
+
+;

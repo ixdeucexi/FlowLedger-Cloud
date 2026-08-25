@@ -4,6 +4,7 @@ import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { FloLogo } from "@/components/FloLogo";
+import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import type { DecisionBaselineDay } from "@/lib/decisions";
@@ -43,7 +44,7 @@ const HELP_ANSWERS: Record<string, string> = {
   "add-goal": "Open More, choose Goals, and add the target.",
 };
 
-export function BasicFlo({ facts, baseline, asOf }: { facts: FloFacts; baseline: DecisionBaselineDay[]; asOf: string }) {
+export function BasicFlo({ facts, baseline }: { facts: FloFacts; baseline: DecisionBaselineDay[] }) {
   const c = useColors();
   const router = useRouter();
   const { isAdmin, previewTier, bypassFeature } = useMembership();
@@ -76,7 +77,7 @@ export function BasicFlo({ facts, baseline, asOf }: { facts: FloFacts; baseline:
         </View>
       </View>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[styles.asOf, { color: c.mutedForeground }]}>Data as of {new Date(asOf).toLocaleString()}</Text>
+        <DataFreshnessLabel compact />
         <View style={styles.grid}>
           {BASIC_PROMPTS.map(prompt => (
             <Pressable
@@ -148,7 +149,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontFamily: "Inter_800ExtraBold" },
   subtitle: { marginTop: 3, fontSize: 12, lineHeight: 17, fontFamily: "Inter_500Medium" },
   content: { padding: 16, paddingBottom: 120, gap: 14 },
-  asOf: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   prompt: { width: "48%", minHeight: 76, borderWidth: 1, borderRadius: 16, padding: 14, justifyContent: "space-between", gap: 8 },
   promptText: { fontSize: 13, lineHeight: 17, fontFamily: "Inter_700Bold" },

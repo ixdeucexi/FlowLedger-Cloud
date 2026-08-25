@@ -27,7 +27,8 @@ export function DashboardUtilityWidgets({ layout, decisions, reviewCount, compac
   const stack = compact || width < 1120;
   const [expanded, setExpanded] = useState(false);
   const visible = useMemo(() => visibleDashboardWidgets(layout), [layout]);
-  const visibleDecisions = compact && !expanded ? decisions.slice(0, 1) : decisions;
+  const compactDecisionLimit = 2;
+  const visibleDecisions = compact && !expanded ? decisions.slice(0, compactDecisionLimit) : decisions;
 
   const toneColor = (tone: TodayDecisionTone) => {
     if (tone === "safe") return c.success;
@@ -55,8 +56,8 @@ export function DashboardUtilityWidgets({ layout, decisions, reviewCount, compac
                   <Feather name="sun" size={18} color={c.primary} />
                 </View>
                 <View style={styles.headerCopy}>
-                  <Text accessibilityRole="header" style={[styles.cardTitle, { color: c.foreground }]}>Today’s Decisions</Text>
-                  <Text style={[styles.cardSubtitle, { color: c.mutedForeground }]}>Based on your current FlowLedger plan</Text>
+                  <Text accessibilityRole="header" style={[styles.cardTitle, { color: c.foreground }]}>Next up</Text>
+                  <Text style={[styles.cardSubtitle, { color: c.mutedForeground }]}>The few things worth your attention</Text>
                 </View>
               </View>
               <View style={styles.decisionList}>
@@ -84,14 +85,14 @@ export function DashboardUtilityWidgets({ layout, decisions, reviewCount, compac
                   );
                 })}
               </View>
-              {compact && decisions.length > 1 ? (
+              {compact && decisions.length > compactDecisionLimit ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityState={{ expanded }}
                   onPress={() => setExpanded(value => !value)}
                   style={[styles.expandButton, { borderTopColor: c.border }]}
                 >
-                  <Text style={[styles.expandText, { color: c.primary }]}>{expanded ? "Show less" : `View ${decisions.length - 1} more`}</Text>
+                  <Text style={[styles.expandText, { color: c.primary }]}>{expanded ? "Show less" : `View ${decisions.length - compactDecisionLimit} more`}</Text>
                   <Feather name={expanded ? "chevron-up" : "chevron-down"} size={15} color={c.primary} />
                 </Pressable>
               ) : null}
@@ -144,20 +145,20 @@ const styles = StyleSheet.create({
   card: { borderWidth: 1, borderRadius: 20, overflow: "hidden" },
   decisionsCard: { width: "100%", padding: 17 },
   decisionsCardWide: { flex: 2.1, minWidth: 0 },
-  shortcutCard: { minHeight: 98, flexDirection: "row", alignItems: "center", gap: 13, padding: 16 },
+  shortcutCard: { minHeight: 88, flexDirection: "row", alignItems: "center", gap: 13, padding: 16 },
   shortcutCardWide: { flex: 1, minWidth: 0 },
   cardHeader: { flexDirection: "row", alignItems: "center", gap: 11 },
   cardIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   headerCopy: { flex: 1, minWidth: 0 },
   cardTitle: { fontFamily: "Inter_800ExtraBold", fontSize: 17, letterSpacing: -0.2 },
   cardSubtitle: { fontFamily: "Inter_500Medium", fontSize: 12, marginTop: 2 },
-  decisionList: { marginTop: 10 },
-  decisionRow: { flexDirection: "row", alignItems: "flex-start", gap: 11, paddingVertical: 10 },
+  decisionList: { marginTop: 8 },
+  decisionRow: { flexDirection: "row", alignItems: "flex-start", gap: 11, paddingVertical: 12 },
   decisionIcon: { width: 34, height: 34, borderRadius: 11, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   decisionCopy: { flex: 1, minWidth: 0 },
   decisionTitle: { fontFamily: "Inter_700Bold", fontSize: 14, lineHeight: 19 },
   decisionReason: { fontFamily: "Inter_500Medium", fontSize: 12, lineHeight: 18, marginTop: 2 },
-  decisionAction: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 5, marginTop: 7, minHeight: 24 },
+  decisionAction: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 5, marginTop: 7, minHeight: 32, paddingHorizontal: 10, borderRadius: 10 },
   decisionActionText: { fontFamily: "Inter_700Bold", fontSize: 12 },
   expandButton: { minHeight: 42, borderTopWidth: 1, marginHorizontal: -17, marginBottom: -17, paddingHorizontal: 17, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
   expandText: { fontFamily: "Inter_700Bold", fontSize: 13 },

@@ -1,5 +1,6 @@
 const PRODUCTION_ORIGIN = "https://flowledger-algo.com";
 const isProductionEasBuild = process.env.EAS_BUILD_PROFILE === "production";
+const isIosEasBuild = process.env.EAS_BUILD_PLATFORM === "ios";
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 const apiOrigin = process.env.EXPO_PUBLIC_API_ORIGIN || PRODUCTION_ORIGIN;
@@ -52,7 +53,7 @@ if (isProductionEasBuild) {
   ) throw new Error("Production EAS builds require an HTTPS project URL on *.supabase.co with no path or credentials.");
   if (paidLaunch && billingEnvironment !== "production") throw new Error("Paid production EAS builds require EXPO_PUBLIC_BILLING_ENVIRONMENT=production.");
   if (configuredAppEnvironment !== "production") throw new Error("Production EAS builds require EXPO_PUBLIC_APP_ENVIRONMENT=production.");
-  if (!appleAuthEnabled) throw new Error("Production iOS readiness requires EXPO_PUBLIC_APPLE_AUTH_ENABLED=true after the Supabase Apple provider is configured.");
+  if (isIosEasBuild && !appleAuthEnabled) throw new Error("Production iOS readiness requires EXPO_PUBLIC_APPLE_AUTH_ENABLED=true after the Supabase Apple provider is configured.");
 }
 
 module.exports = {

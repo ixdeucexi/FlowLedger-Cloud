@@ -18,6 +18,18 @@
   "screenshots": {
     "fixture": "fixture/reviewer-v1.json",
     "captureProcedure": "capture/README.md",
-    "status": "Requires signed native builds and fictional reviewer account; no screenshots are represented as complete."
+    "draftPwa": {
+      "status": "Composition and copy review only; not approved for store submission.",
+      "fixture": "Local-only artifacts/mobile/context/BudgetContext.tsx#createDemoBudgetData",
+      "copy": "screenshots/draft-pwa/copy.json",
+      "generatedManifest": "screenshots/draft-pwa/manifest.json",
+      "workflow": "scripts/build-store-screenshot-drafts.mjs",
+      "buildCommand": "pnpm run build:store-screenshots",
+      "androidRaw": "450x900",
+      "androidStoreOutput": "1350x2700, 24-bit RGB PNG, no alpha",
+      "iosRaw": "430x932",
+      "iosStoreOutput": "1290x2796, 24-bit RGB PNG, no alpha"
+    },
+    "status": "Requires signed native builds and fictional reviewer account; PWA drafts are never represented as completed submission screenshots."
   }
 }

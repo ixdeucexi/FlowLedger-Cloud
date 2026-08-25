@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { AddBillModal } from "@/components/AddBillModal";
+import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import {
   CardHeader,
   DesktopCard,
@@ -23,6 +24,7 @@ import type { Bill } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { orderActiveDebtsForStrategy } from "@/lib/debtOrder";
 import { effectiveDebtMinimum } from "@/lib/snowball";
+import type { BillEditableBaseline, BillEditableField } from "@/lib/billEditPersistence";
 
 const MONTHS = [
   "January",
@@ -296,8 +298,12 @@ export function DesktopBillsDebtsPage() {
   }, []);
 
   const saveBill = useCallback(
-    (data: Omit<Bill, "id" | "created_at"> | Bill) => {
-      if ("id" in data) return updateBill(data);
+    (
+      data: Omit<Bill, "id" | "created_at"> | Bill,
+      dirtyFields?: readonly BillEditableField[],
+      baseline?: BillEditableBaseline,
+    ) => {
+      if ("id" in data) return updateBill(data, dirtyFields ?? [], baseline);
       return addBill(data);
     },
     [addBill, updateBill],
@@ -350,6 +356,7 @@ export function DesktopBillsDebtsPage() {
                 />
               }
             />
+            <DataFreshnessLabel compact />
             <View style={styles.tabs}>
               {[
                 "Overview",
@@ -853,6 +860,7 @@ function DebtsDesktop({
           description={`${active.length} debt${active.length === 1 ? "" : "s"} · $${total.toLocaleString(undefined, { maximumFractionDigits: 0 })} total`}
           actions={<PrimaryButton label="Add Debt" onPress={onAdd} />}
         />
+        <DataFreshnessLabel compact />
       </View>
       <View style={styles.debtOverviewRow}>
         <DesktopCard style={styles.debtOverviewCard}>

@@ -12,8 +12,10 @@ assert.equal(fs.existsSync(path.join(root, "eas.json")), false, "Root eas.json i
 
 const configPath = path.join(mobile, "app.config.js");
 const easPath = path.join(mobile, "eas.json");
+const assetLinksPath = path.join(mobile, "public", ".well-known", "assetlinks.json");
 assert.equal(fs.existsSync(configPath), true, "Missing artifacts/mobile/app.config.js");
 assert.equal(fs.existsSync(easPath), true, "Missing artifacts/mobile/eas.json");
+assert.equal(fs.existsSync(assetLinksPath), true, "Missing Android Digital Asset Links statement.");
 
 const config = fs.readFileSync(configPath, "utf8");
 assert.match(config, /bundleIdentifier:\s*"com\.flowledger\.app"/);
@@ -39,6 +41,7 @@ const productionWithoutAppEnvironment = spawnSync(process.execPath, ["-e", "requ
   env: {
     ...process.env,
     EAS_BUILD_PROFILE: "production",
+    EAS_BUILD_PLATFORM: "android",
     EXPO_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
     EXPO_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key",
     EXPO_PUBLIC_API_ORIGIN: "https://flowledger-algo.com",
@@ -60,6 +63,7 @@ function productionConfig(overrides) {
     env: {
       ...process.env,
       EAS_BUILD_PROFILE: "production",
+      EAS_BUILD_PLATFORM: "android",
       EXPO_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
       EXPO_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key",
       EXPO_PUBLIC_API_ORIGIN: "https://flowledger-algo.com",
@@ -82,6 +86,13 @@ for (const badSupabase of ["http://example.supabase.co", "https://example.supaba
 }
 assert.notEqual(productionConfig({ GOOGLE_SERVICES_JSON: "" }).status, 0, "Production Android push must require the Firebase client config file path.");
 assert.equal(productionConfig({}).status, 0, "A complete canonical production configuration must load.");
+assert.equal(productionConfig({
+  EXPO_PUBLIC_APPLE_AUTH_ENABLED: "",
+}).status, 0, "Android production must not require the iOS-only Apple provider.");
+assert.notEqual(productionConfig({
+  EAS_BUILD_PLATFORM: "ios",
+  EXPO_PUBLIC_APPLE_AUTH_ENABLED: "",
+}).status, 0, "iOS production must require the configured Apple provider.");
 assert.equal(productionConfig({
   EXPO_PUBLIC_LAUNCH_MODE: "free",
   EXPO_PUBLIC_REVENUECAT_IOS_API_KEY: "",
@@ -136,5 +147,15 @@ const eas = JSON.parse(fs.readFileSync(easPath, "utf8"));
 assert.equal(eas.cli?.version, "20.0.0");
 assert.equal(eas.cli?.appVersionSource, "remote");
 assert.equal(eas.build?.production?.android?.buildType, "app-bundle");
+
+const assetLinks = JSON.parse(fs.readFileSync(assetLinksPath, "utf8"));
+assert.deepEqual(assetLinks[0]?.relation, ["delegate_permission/common.handle_all_urls"]);
+assert.equal(assetLinks[0]?.target?.namespace, "android_app");
+assert.equal(assetLinks[0]?.target?.package_name, "com.flowledger.app");
+assert.match(
+  assetLinks[0]?.target?.sha256_cert_fingerprints?.[0] ?? "",
+  /^(?:[0-9A-F]{2}:){31}[0-9A-F]{2}$/,
+  "Android App Links require a complete SHA-256 signing-certificate fingerprint.",
+);
 
 console.log("Mobile config authority and required release assets are consistent.");

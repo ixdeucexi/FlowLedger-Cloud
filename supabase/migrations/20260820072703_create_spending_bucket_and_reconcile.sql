@@ -195,3 +195,5 @@ grant execute on function public.create_spending_bucket_for_transaction(text, te
 
 comment on function public.create_spending_bucket_for_transaction(text, text, text, numeric, date) is
   'Atomically creates an open planned-expense bucket and applies one needs-review posted money-out transaction.';
+
+;

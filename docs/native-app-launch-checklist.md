@@ -1,10 +1,10 @@
 # FlowLedger Native App Launch Checklist
 
-Last audited: August 21, 2026
+Last audited: August 25, 2026
 
 Maintenance rule: Update this checklist automatically whenever related work is completed or verified. Check an item only when evidence confirms it is done, keep incomplete or unverified work unchecked, and update the audit date with each material checklist change. This maintenance is part of the related task and does not require a separate request from the owner.
 
-Current verified progress: **142 of 253 items complete**. Public version 1 is now intentionally **Founding Free**: no purchase controls, no paywall, and no new bank-link control are exposed. The repository preserves future billing and Plaid implementations for a later reviewed Pro release. Release still requires applying and testing the prepared migrations/functions on a temporary Supabase branch, EAS/store console setup, signing, sacrificial-account testing, accessibility/device testing, screenshots, declarations, and final reviewer credentials.
+Current verified progress is evidence-counted below. Public version 1 is intentionally **Founding Free**: no purchase controls, no paywall, and no new public bank-link control are exposed. The repository preserves future billing and Plaid implementations for a later reviewed Pro release. Production database hardening and the safe Android EAS environment are complete; release still requires store-account setup, current signed store binaries, sacrificial-account and physical-device testing, accessibility testing, screenshots, declarations, and final reviewer credentials.
 
 ## Goal
 
@@ -67,7 +67,8 @@ Release FlowLedger as a signed iOS and Android app while keeping the existing PW
 - [x] Add iOS Associated Domains for `flowledger-algo.com`
 - [x] Add Android intent filters/App Links for `flowledger-algo.com`
 - [ ] Host and verify Apple `apple-app-site-association`
-- [ ] Host and verify Android `assetlinks.json`
+- [x] Host and verify Android `assetlinks.json` for the EAS preview signing certificate
+- [ ] Add and verify the separate Google Play App Signing certificate fingerprint before production-track promotion
 - [x] Add native routes for sign-in, password recovery, and email-verification callbacks
 - [ ] Add and physically test Plaid return, notification-tap, and record deep links
 - [ ] Add every native callback URL to the Supabase Auth redirect allowlist
@@ -104,12 +105,13 @@ Official reference: [Apple Login Services guideline](https://developer.apple.com
 - [x] Use `https://flowledger-algo.com` as the production API origin in native builds
 - [x] Replace native-reachable relative requests such as `/api/feedback`, `/api/plaid/sync`, and `/api/plaid/account-nickname`
 - [x] Keep browser requests same-origin where appropriate
-- [ ] Configure `EXPO_PUBLIC_SUPABASE_URL` in the EAS production environment
-- [ ] Configure `EXPO_PUBLIC_SUPABASE_ANON_KEY` in the EAS production environment
-- [ ] Configure an explicit production API origin in EAS
+- [x] Configure `EXPO_PUBLIC_SUPABASE_URL` in the EAS production environment
+- [x] Configure `EXPO_PUBLIC_SUPABASE_ANON_KEY` in the EAS production environment
+- [x] Configure an explicit production API origin in EAS
 - [x] Remove development/Replit fallbacks from release builds
 - [x] Add a release-time validation that rejects missing or development environment values
-- [ ] Verify Flo Edge Function secrets and allowed production origins
+- [x] Verify the deployed Flo path completes requests, accepts the production origin, and rejects an unapproved origin without exposing secret values
+- [x] Apply and postflight the three pending production hardening migrations for Flo duration telemetry, Plaid household scope, and post-membership financial reads
 - [ ] Test all API calls on an installed build, not only Expo Web or Expo Go
 
 Current code evidence:
@@ -127,8 +129,8 @@ Current code evidence:
 - [ ] Create or verify the Google Play organization account
 - [ ] Obtain and verify the organization D-U-N-S number
 - [ ] Verify public developer email, phone, address, support URL, and website
-- [ ] Authenticate EAS CLI with the correct Expo organization
-- [ ] Confirm ownership of EAS project `80ec219d-8a12-43f9-b7cf-0dd6541e60f1`
+- [x] Authenticate EAS CLI with the correct Expo organization
+- [x] Confirm ownership of EAS project `80ec219d-8a12-43f9-b7cf-0dd6541e60f1`
 - [ ] Configure iOS distribution certificate and provisioning profile
 - [ ] Configure App Store Connect API credentials for submission
 - [ ] Configure Android upload/signing key and protect its recovery material
@@ -137,7 +139,7 @@ Current code evidence:
 - [ ] Add Google Play track/submission settings to `eas.json`
 - [x] Pin the tested EAS CLI version (`20.0.0`) rather than using an open-ended minimum
 - [ ] Produce an iOS preview build
-- [ ] Produce an Android preview APK
+- [x] Produce an Android preview APK (signed internal build exists; it predates the current UI release candidate)
 - [ ] Produce a production iOS IPA
 - [ ] Produce a production Android App Bundle
 - [ ] Upload the first build to TestFlight
@@ -174,7 +176,7 @@ Official references:
 - [Apple account-deletion requirement](https://developer.apple.com/app-store/review/guidelines/#data-collection-and-storage)
 - [Google account-deletion requirement](https://support.google.com/googleplay/android-developer/answer/13327111?hl=en)
 
-Current implementation evidence: `artifacts/mobile/app/delete-account.tsx`, the `/api/account/delete` rewrite through `api/feedback.js`, `api/_utils/accountDeletion.js`, `api/_utils/appleProvider.js`, `supabase/migrations/20260821123517_account_deletion_and_flo_rpc_hardening.sql`, and `docs/native-release-runbook.md`. End-to-end persona/device testing remains separately unchecked below.
+Current implementation evidence: `artifacts/mobile/app/delete-account.tsx`, the `/api/account/delete` rewrite through `api/feedback.js`, `api/_utils/accountDeletion.js`, `api/_utils/appleProvider.js`, `supabase/migrations/20260821184159_account_deletion_and_flo_rpc_hardening.sql`, `supabase/migrations/20260825094550_preserve_shared_plan_after_member_exit.sql`, and `docs/native-release-runbook.md`. End-to-end persona/device testing remains separately unchecked below.
 
 ## 6. Privacy, financial, and AI disclosures
 
@@ -221,7 +223,7 @@ Official references:
 - [ ] Exercise purchase, replay, wrong-account restore, cancellation, grace, expiry, refund, and renewal in store sandboxes on signed devices
 - [ ] Give App Review access to every paid feature
 
-Current implementation evidence: `artifacts/mobile/components/MembershipPanel.tsx`, `artifacts/mobile/lib/nativeBilling.native.ts`, `supabase/functions/billing-dispatcher`, `supabase/migrations/20260821222611_native_billing_plaid_push.sql`, and `docs/native-subscription-and-provider-setup.md`.
+Current implementation evidence: `artifacts/mobile/components/MembershipPanel.tsx`, `artifacts/mobile/lib/nativeBilling.native.ts`, `supabase/functions/billing-dispatcher`, `supabase/migrations/20260822224633_native_billing_plaid_push.sql`, and `docs/native-subscription-and-provider-setup.md`.
 
 Official reference: [Apple In-App Purchase guideline](https://developer.apple.com/app-store/review/guidelines/#in-app-purchase)
 
@@ -259,7 +261,7 @@ Current code evidence: `artifacts/mobile/components/PlaidLinkButton.tsx`, `api/p
 - [x] Process Expo tickets/receipts, invalidate DeviceNotRegistered tokens, and retain transient failures for retry
 - [ ] Test token rotation, reinstall, multiple devices, household switching, revoked permission, and expired tokens
 
-Current implementation evidence: `artifacts/mobile/lib/pushNotifications.native.ts`, `artifacts/mobile/app/_layout.tsx`, `api/_utils/push.js`, and `supabase/migrations/20260821222611_native_billing_plaid_push.sql`. APNs/FCM/EAS credentials and physical delivery tests remain unchecked.
+Current implementation evidence: `artifacts/mobile/lib/pushNotifications.native.ts`, `artifacts/mobile/app/_layout.tsx`, `api/_utils/push.js`, and `supabase/migrations/20260822224633_native_billing_plaid_push.sql`. APNs/FCM/EAS credentials and physical delivery tests remain unchecked.
 
 ## 10. Native biometric lock and secure storage
 
@@ -287,7 +289,7 @@ Current implementation uses browser passkeys on the PWA and native device authen
 - [x] Add native connectivity detection using `@react-native-community/netinfo`
 - [x] Keep native connectivity unknown until NetInfo reports instead of assuming the device is online
 - [x] Define which data is safe to show from a last-known cache
-- [ ] Show the exact data/sync timestamp when displaying cached financial information
+- [x] Show the exact successful data/sync timestamp when displaying cached financial information across mobile and desktop financial workspaces
 - [x] Block or clearly queue mutations while offline
 - [x] Never display an unconfirmed offline mutation as saved
 - [x] Refresh auth and household data safely when the app returns to the foreground
@@ -311,7 +313,7 @@ Current native network-status hook uses NetInfo and exposes offline/reconnected 
 - [ ] Capture Play Store phone screenshots using fictional data only
 - [x] Create and deterministically verify the Google Play 1024×500 feature graphic from fictional brand-only assets
 - [x] Draft app name, subtitle/short description, long description, keywords, Finance category positioning, and version 1 release notes
-- [ ] Add public support email, support URL, privacy URL, deletion URL, and marketing URL
+- [x] Add and live-verify public support email, support URL, privacy URL, deletion URL, and marketing URL
 - [ ] Ensure screenshots represent the current app and identify Pro-only features accurately
 - [x] Prepare review notes explaining Flo, Forecast calculations, Plaid, Pro gating, simulator, and demo/reviewer access
 

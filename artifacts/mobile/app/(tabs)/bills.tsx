@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AddBillModal } from "@/components/AddBillModal";
 import { CommandPlusButton } from "@/components/CommandPlusButton";
 import { DesktopBillsDebtsPage } from "@/components/desktop/DesktopBillsDebtsPage";
+import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import { EmptyState } from "@/components/EmptyState";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { PlanFeatureGate } from "@/components/PlanFeatureGate";
@@ -27,6 +28,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { confirmAction } from "@/lib/confirmAction";
+import type { BillEditableBaseline, BillEditableField } from "@/lib/billEditPersistence";
 import { effectiveDebtMinimum } from "@/lib/snowball";
 import { buildDebtPaymentPlanSummary } from "@/lib/debtPaymentPlan";
 import {
@@ -99,7 +101,10 @@ export default function BillsScreen() {
   const isDesktop = useDesktopExperience();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const routeParams = useLocalSearchParams<{ view?: string; debtId?: string }>();
+  const routeParams = useLocalSearchParams<{
+    view?: string;
+    debtId?: string;
+  }>();
   const { user } = useAuth();
   const {
     bills,
@@ -290,6 +295,24 @@ export default function BillsScreen() {
       getPaidAmount(bill.id, currentMonth, currentYear) >= planned - 0.005
     );
   }).length;
+  const currentBillPaidAmount = currentNonDebtBills.reduce((sum, bill) => {
+    const planned = getBillMonthlyTotal(bill, currentMonth, currentYear);
+    return (
+      sum +
+      Math.min(
+        Math.max(0, getPaidAmount(bill.id, currentMonth, currentYear)),
+        Math.max(0, planned),
+      )
+    );
+  }, 0);
+  const currentBillRemaining = Math.max(
+    0,
+    currentBillTotal - currentBillPaidAmount,
+  );
+  const currentBillPaymentProgress =
+    currentBillTotal > 0
+      ? Math.min(100, (currentBillPaidAmount / currentBillTotal) * 100)
+      : 0;
   const livePendingMatches = useMemo(
     () => activePendingPlanMatches(pendingPlanMatches, pendingBankTransactions),
     [pendingBankTransactions, pendingPlanMatches],
@@ -384,7 +407,7 @@ export default function BillsScreen() {
         onConfirm: async () => {
           try {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            await updateBill({ ...bill, end_date: undefined });
+            await updateBill({ ...bill, end_date: undefined }, ["end_date"]);
           } catch (error) {
             Alert.alert(
               "Couldn’t restart bill",
@@ -461,6 +484,9 @@ export default function BillsScreen() {
   })();
 
   const totalDebt = debtBills.reduce((sum, debt) => sum + debt.balance, 0);
+  const activeDebtCount = debtBills.filter(
+    (debt) => debt.balance > 0.009,
+  ).length;
   const totalMinPayments = planDebts.reduce(
     (sum, debt) => sum + debtRequiredMinimum(debt),
     0,
@@ -485,25 +511,39 @@ export default function BillsScreen() {
     ? debtMonthlyMinimum(activeDebtTarget)
     : 0;
   const nextStrategyTarget = strategyOrder[1] ?? null;
-  const activeDebtRollover = activeDebtTarget && datedDebtPlan
-    ? datedDebtPlan.allocations.filter(allocation =>
-      allocation.kind === "rollover"
-      && allocation.sourceBillId === activeDebtTarget.id
-      && allocation.targetBillId !== activeDebtTarget.id)
-    : [];
-  const activeDebtRolloverAmount = activeDebtRollover.reduce((sum, allocation) => sum + allocation.amount, 0);
-  const activeDebtRolloverNames = Array.from(new Set(activeDebtRollover.map(allocation => allocation.targetBillName))).join(", ");
+  const activeDebtRollover =
+    activeDebtTarget && datedDebtPlan
+      ? datedDebtPlan.allocations.filter(
+          (allocation) =>
+            allocation.kind === "rollover" &&
+            allocation.sourceBillId === activeDebtTarget.id &&
+            allocation.targetBillId !== activeDebtTarget.id,
+        )
+      : [];
+  const activeDebtRolloverAmount = activeDebtRollover.reduce(
+    (sum, allocation) => sum + allocation.amount,
+    0,
+  );
+  const activeDebtRolloverNames = Array.from(
+    new Set(activeDebtRollover.map((allocation) => allocation.targetBillName)),
+  ).join(", ");
   const activeDebtRolloverDate = activeDebtRollover[0]?.date;
   const forecastPaymentByDebtId = new Map(
-    datedDebtPlan?.payments.map(payment => [payment.billId, payment.totalPayment]) ?? [],
+    datedDebtPlan?.payments.map((payment) => [
+      payment.billId,
+      payment.totalPayment,
+    ]) ?? [],
   );
   const forecastRolloverByDebtId = new Map<string, number>();
-  datedDebtPlan?.allocations.filter(allocation => allocation.kind === "rollover").forEach(allocation => {
-    forecastRolloverByDebtId.set(
-      allocation.targetBillId,
-      (forecastRolloverByDebtId.get(allocation.targetBillId) ?? 0) + allocation.amount,
-    );
-  });
+  datedDebtPlan?.allocations
+    .filter((allocation) => allocation.kind === "rollover")
+    .forEach((allocation) => {
+      forecastRolloverByDebtId.set(
+        allocation.targetBillId,
+        (forecastRolloverByDebtId.get(allocation.targetBillId) ?? 0) +
+          allocation.amount,
+      );
+    });
 
   const priorityColors = [
     "#22c55e",
@@ -514,8 +554,12 @@ export default function BillsScreen() {
   ];
   // ── Handlers ────────────────────────────────────────────────────
   const handleSave = useCallback(
-    (data: Omit<Bill, "id" | "created_at"> | Bill) => {
-      if ("id" in data) return updateBill(data as Bill);
+    (
+      data: Omit<Bill, "id" | "created_at"> | Bill,
+      dirtyFields?: readonly BillEditableField[],
+      baseline?: BillEditableBaseline,
+    ) => {
+      if ("id" in data) return updateBill(data as Bill, dirtyFields ?? [], baseline);
       return addBill(data);
     },
     [addBill, updateBill],
@@ -571,7 +615,10 @@ export default function BillsScreen() {
               { paddingTop: isDesktop ? 8 : insets.top + 12 + webTopPad },
             ]}
           >
-            <View>
+            <View style={styles.headerCopy}>
+              <Text style={[styles.pageEyebrow, { color: c.primary }]}>
+                {activeTab === "bills" ? "PLAN & PAY" : "PAYOFF PLAN"}
+              </Text>
               <Text
                 style={[
                   styles.title,
@@ -579,9 +626,13 @@ export default function BillsScreen() {
                   { color: c.foreground },
                 ]}
               >
-                Bills
+                {activeTab === "bills" ? "Bills" : "Debt Payoff"}
               </Text>
-              <Text style={[styles.subtitle, { color: c.mutedForeground }]}>
+              <Text
+                style={[styles.subtitle, { color: c.mutedForeground }]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
                 {subtitle}
               </Text>
             </View>
@@ -595,6 +646,7 @@ export default function BillsScreen() {
               }
             />
           </View>
+          <DataFreshnessLabel inset compact />
 
           {/* Keep the Bills / Debt switch in one stable location for both views. */}
           <View
@@ -722,12 +774,9 @@ export default function BillsScreen() {
               <View style={styles.billSnapshotHeader}>
                 <View>
                   <Text
-                    style={[
-                      styles.billSnapshotLabel,
-                      { color: c.mutedForeground },
-                    ]}
+                    style={[styles.billSnapshotLabel, { color: c.primary }]}
                   >
-                    Bill snapshot
+                    Monthly plan
                   </Text>
                   <Text
                     style={[styles.billSnapshotTitle, { color: c.foreground }]}
@@ -759,31 +808,89 @@ export default function BillsScreen() {
                       },
                     ]}
                   >
-                    {paidBillCount} paid
+                    {paidBillCount}/{currentNonDebtBills.length} paid
                   </Text>
                 </View>
               </View>
-              <View style={styles.billSnapshotStats}>
-                <View
-                  style={[
-                    styles.billSnapshotStat,
-                    { backgroundColor: c.background, borderColor: c.border },
-                  ]}
-                >
-                  <Text
-                    style={[styles.billSnapshotValue, { color: c.foreground }]}
-                  >
-                    ${currentBillTotal.toFixed(0)}
-                  </Text>
+              <View style={styles.billSnapshotHero}>
+                <View style={styles.billSnapshotAmountWrap}>
                   <Text
                     style={[
-                      styles.billSnapshotStatLabel,
+                      styles.billSnapshotAmountLabel,
                       { color: c.mutedForeground },
                     ]}
                   >
-                    Due this month
+                    Still to pay
+                  </Text>
+                  <Text
+                    style={[
+                      styles.billSnapshotAmount,
+                      {
+                        color:
+                          currentBillRemaining > 0 ? c.foreground : c.success,
+                      },
+                    ]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.72}
+                  >
+                    ${currentBillRemaining.toFixed(0)}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.billSnapshotAmountSub,
+                      { color: c.mutedForeground },
+                    ]}
+                  >
+                    of ${currentBillTotal.toFixed(0)} planned
                   </Text>
                 </View>
+                <View
+                  style={[
+                    styles.billSnapshotPaidTile,
+                    {
+                      backgroundColor: c.success + "10",
+                      borderColor: c.success + "28",
+                    },
+                  ]}
+                >
+                  <Feather name="check-circle" size={17} color={c.success} />
+                  <Text
+                    style={[styles.billSnapshotPaidValue, { color: c.success }]}
+                  >
+                    ${currentBillPaidAmount.toFixed(0)}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.billSnapshotPaidLabel,
+                      { color: c.mutedForeground },
+                    ]}
+                  >
+                    paid
+                  </Text>
+                </View>
+              </View>
+              <View
+                accessibilityRole="progressbar"
+                accessibilityLabel="Bill payment progress"
+                accessibilityValue={{
+                  min: 0,
+                  max: 100,
+                  now: Math.round(currentBillPaymentProgress),
+                }}
+                style={[styles.billProgressTrack, { backgroundColor: c.muted }]}
+              >
+                <View
+                  style={[
+                    styles.billProgressFill,
+                    {
+                      backgroundColor: c.success,
+                      width: `${currentBillPaymentProgress}%` as any,
+                    },
+                  ]}
+                />
+              </View>
+              <View style={styles.billSnapshotStats}>
                 <View
                   style={[
                     styles.billSnapshotStat,
@@ -824,6 +931,26 @@ export default function BillsScreen() {
                     Paid
                   </Text>
                 </View>
+                <View
+                  style={[
+                    styles.billSnapshotStat,
+                    { backgroundColor: c.background, borderColor: c.border },
+                  ]}
+                >
+                  <Text
+                    style={[styles.billSnapshotValue, { color: c.warning }]}
+                  >
+                    {Math.max(0, currentNonDebtBills.length - paidBillCount)}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.billSnapshotStatLabel,
+                      { color: c.mutedForeground },
+                    ]}
+                  >
+                    Remaining
+                  </Text>
+                </View>
               </View>
             </View>
           ) : null}
@@ -831,6 +958,21 @@ export default function BillsScreen() {
           {/* ════════════════════ BILLS VIEW ════════════════════ */}
           {activeTab === "bills" && (
             <>
+              <View style={styles.sectionHeading}>
+                <View>
+                  <Text style={[styles.sectionEyebrow, { color: c.primary }]}>
+                    Upcoming
+                  </Text>
+                  <Text style={[styles.sectionTitle, { color: c.foreground }]}>
+                    Your bills
+                  </Text>
+                </View>
+                <Text
+                  style={[styles.sectionCount, { color: c.mutedForeground }]}
+                >
+                  {filteredBills.length} shown
+                </Text>
+              </View>
               <View
                 style={[styles.filterRow, isDesktop && styles.desktopToolbar]}
               >
@@ -838,16 +980,20 @@ export default function BillsScreen() {
                   (f) => (
                     <Pressable
                       key={f}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: filter === f }}
                       onPress={() => setFilter(f)}
                       style={[
                         styles.filterChip,
+                        !isDesktop && styles.mobileFilterChip,
                         {
                           backgroundColor: filter === f ? c.primary : c.card,
-                          borderRadius: colors.radius,
+                          borderColor: filter === f ? c.primary : c.border,
                         },
                       ]}
                     >
                       <Text
+                        numberOfLines={1}
                         style={[
                           styles.filterText,
                           {
@@ -902,57 +1048,50 @@ export default function BillsScreen() {
                         }}
                         style={({ pressed }) => [
                           styles.card,
-                          styles.activitySizedBillCard,
                           {
                             backgroundColor: c.card,
-                            borderRadius: colors.radius,
+                            borderRadius: 20,
                             opacity: pressed ? 0.88 : 1,
                           },
                         ]}
                       >
                         <View
-                          style={[styles.catBar, { backgroundColor: catColor }]}
-                        />
-                        <View
                           style={[
-                            styles.cardBody,
-                            styles.activitySizedBillCardBody,
+                            styles.categoryIcon,
+                            {
+                              backgroundColor: catColor + "16",
+                              borderColor: catColor + "30",
+                            },
                           ]}
                         >
-                          <View
-                            style={[
-                              styles.cardTop,
-                              styles.activitySizedBillCardTop,
-                            ]}
-                          >
+                          <Feather
+                            name="file-text"
+                            size={18}
+                            color={catColor}
+                          />
+                        </View>
+                        <View style={styles.cardBody}>
+                          <View style={styles.cardTop}>
                             <View style={styles.cardLeft}>
                               <Text
                                 style={[
                                   styles.billName,
-                                  styles.activitySizedBillName,
                                   { color: c.foreground },
                                 ]}
                                 numberOfLines={1}
                               >
                                 {item.name}
                               </Text>
-                              <View
-                                style={[
-                                  styles.metaRow,
-                                  styles.activitySizedBillMetaRow,
-                                ]}
-                              >
+                              <View style={[styles.metaRow]}>
                                 <View
                                   style={[
                                     styles.tag,
-                                    styles.activitySizedBillTag,
                                     { backgroundColor: catColor + "18" },
                                   ]}
                                 >
                                   <Text
                                     style={[
                                       styles.tagText,
-                                      styles.activitySizedBillTagText,
                                       { color: catColor },
                                     ]}
                                   >
@@ -962,7 +1101,6 @@ export default function BillsScreen() {
                                 <Text
                                   style={[
                                     styles.metaText,
-                                    styles.activitySizedBillMetaText,
                                     { color: c.mutedForeground },
                                   ]}
                                 >
@@ -974,14 +1112,12 @@ export default function BillsScreen() {
                                   <View
                                     style={[
                                       styles.tag,
-                                      styles.activitySizedBillTag,
                                       { backgroundColor: c.muted },
                                     ]}
                                   >
                                     <Text
                                       style={[
                                         styles.tagText,
-                                        styles.activitySizedBillTagText,
                                         { color: c.mutedForeground },
                                       ]}
                                     >
@@ -993,14 +1129,12 @@ export default function BillsScreen() {
                                   <View
                                     style={[
                                       styles.tag,
-                                      styles.activitySizedBillTag,
                                       { backgroundColor: c.destructive + "18" },
                                     ]}
                                   >
                                     <Text
                                       style={[
                                         styles.tagText,
-                                        styles.activitySizedBillTagText,
                                         { color: c.destructive },
                                       ]}
                                     >
@@ -1013,7 +1147,6 @@ export default function BillsScreen() {
                                   <View
                                     style={[
                                       styles.tag,
-                                      styles.activitySizedBillTag,
                                       {
                                         backgroundColor:
                                           colors.brand.blue + "18",
@@ -1023,7 +1156,6 @@ export default function BillsScreen() {
                                     <Text
                                       style={[
                                         styles.tagText,
-                                        styles.activitySizedBillTagText,
                                         { color: colors.brand.blue },
                                       ]}
                                     >
@@ -1037,14 +1169,12 @@ export default function BillsScreen() {
                                   <View
                                     style={[
                                       styles.tag,
-                                      styles.activitySizedBillTag,
                                       { backgroundColor: c.muted },
                                     ]}
                                   >
                                     <Text
                                       style={[
                                         styles.tagText,
-                                        styles.activitySizedBillTagText,
                                         { color: c.mutedForeground },
                                       ]}
                                     >
@@ -1054,25 +1184,18 @@ export default function BillsScreen() {
                                 )}
                               </View>
                             </View>
-                            <View
-                              style={[
-                                styles.cardRight,
-                                styles.activitySizedBillCardRight,
-                              ]}
-                            >
+                            <View style={styles.cardRight}>
                               <Text
-                                style={[
-                                  styles.amount,
-                                  styles.activitySizedBillAmount,
-                                  { color: c.foreground },
-                                ]}
+                                style={[styles.amount, { color: c.foreground }]}
+                                numberOfLines={1}
+                                adjustsFontSizeToFit
+                                minimumFontScale={0.72}
                               >
                                 ${item.amount.toFixed(2)}
                               </Text>
                               <Text
                                 style={[
                                   styles.amountSub,
-                                  styles.activitySizedBillAmountSub,
                                   { color: c.mutedForeground },
                                 ]}
                               >
@@ -1104,15 +1227,10 @@ export default function BillsScreen() {
                             />
                           </Pressable>
                         ) : (
-                          <View
-                            style={[
-                              styles.editHint,
-                              styles.activitySizedBillEditHint,
-                            ]}
-                          >
+                          <View style={styles.editHint}>
                             <Feather
-                              name="edit-2"
-                              size={13}
+                              name="chevron-right"
+                              size={17}
                               color={c.mutedForeground}
                             />
                           </View>
@@ -1128,6 +1246,106 @@ export default function BillsScreen() {
           {/* ════════════════════ DEBT VIEW ════════════════════ */}
           {activeTab === "debt" && (
             <View style={[styles.list, isDesktop && styles.desktopList]}>
+              <View
+                style={[
+                  styles.debtOverviewCard,
+                  { backgroundColor: c.card, borderColor: c.border },
+                ]}
+              >
+                <View style={styles.debtOverviewHeader}>
+                  <View style={styles.debtOverviewHeaderCopy}>
+                    <Text style={[styles.sectionEyebrow, { color: c.primary }]}>
+                      Payoff overview
+                    </Text>
+                    <Text
+                      style={[
+                        styles.debtOverviewLabel,
+                        { color: c.mutedForeground },
+                      ]}
+                    >
+                      Total remaining
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.debtActiveBadge,
+                      { backgroundColor: c.primary + "14" },
+                    ]}
+                  >
+                    <Text
+                      style={[styles.debtActiveBadgeText, { color: c.primary }]}
+                    >
+                      {activeDebtCount} active
+                    </Text>
+                  </View>
+                </View>
+                <Text
+                  style={[styles.debtOverviewAmount, { color: c.foreground }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.72}
+                >
+                  $
+                  {totalDebt.toLocaleString(undefined, {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 0,
+                  })}
+                </Text>
+                <View style={styles.debtOverviewStats}>
+                  <View
+                    style={[
+                      styles.debtOverviewStat,
+                      { backgroundColor: c.background, borderColor: c.border },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.debtOverviewStatValue,
+                        { color: c.foreground },
+                      ]}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.7}
+                    >
+                      ${totalMinPayments.toFixed(0)}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.debtOverviewStatLabel,
+                        { color: c.mutedForeground },
+                      ]}
+                    >
+                      Required / month
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.debtOverviewStat,
+                      { backgroundColor: c.background, borderColor: c.border },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.debtOverviewStatValue,
+                        { color: c.success },
+                      ]}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.7}
+                    >
+                      +${debtPaymentPlan.extraPayment.toFixed(0)}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.debtOverviewStatLabel,
+                        { color: c.mutedForeground },
+                      ]}
+                    >
+                      Extra planned
+                    </Text>
+                  </View>
+                </View>
+              </View>
               <>
                 <PlanFeatureGate feature="debt_payoff" compact>
                   {settings.debtPayoffEnabled && debts.length > 0 && (
@@ -1138,7 +1356,7 @@ export default function BillsScreen() {
                           backgroundColor: c.card,
                           borderColor: c.border,
                           marginHorizontal: 0,
-                          borderRadius: colors.radius,
+                          borderRadius: 24,
                         },
                       ]}
                     >
@@ -1149,26 +1367,23 @@ export default function BillsScreen() {
                             { backgroundColor: c.primary + "18" },
                           ]}
                         >
-                          <Feather
-                            name="trending-down"
-                            size={17}
-                            color={c.primary}
-                          />
+                          <Feather name="target" size={17} color={c.primary} />
                         </View>
-                        <View style={{ flex: 1 }}>
+                        <View style={styles.debtTargetCopy}>
                           <Text
                             style={[
                               styles.debtAlgoEyebrow,
                               { color: c.primary },
                             ]}
                           >
-                            Snowball Plan
+                            Current target
                           </Text>
                           <Text
                             style={[
                               styles.debtAlgoTitle,
                               { color: c.foreground },
                             ]}
+                            numberOfLines={2}
                           >
                             {activeDebtTarget?.name ?? "No active target"}
                           </Text>
@@ -1205,7 +1420,7 @@ export default function BillsScreen() {
                         ]}
                       >
                         <Feather
-                          name="calendar"
+                          name="arrow-right"
                           size={16}
                           color={c.primaryForeground}
                         />
@@ -1216,8 +1431,8 @@ export default function BillsScreen() {
                           ]}
                         >
                           {existingSnowball
-                            ? "Open Planner · plan saved"
-                            : "Open Debt Payoff Planner"}
+                            ? "Review saved payoff plan"
+                            : "Open payoff planner"}
                         </Text>
                       </Pressable>
                       {existingSnowball ? (
@@ -1244,6 +1459,9 @@ export default function BillsScreen() {
                                 styles.debtPaymentStatValue,
                                 { color: c.primary },
                               ]}
+                              numberOfLines={1}
+                              adjustsFontSizeToFit
+                              minimumFontScale={0.7}
                             >
                               +${debtPaymentPlan.extraPayment.toFixed(0)}
                             </Text>
@@ -1268,6 +1486,9 @@ export default function BillsScreen() {
                                 styles.debtPaymentStatValue,
                                 { color: c.success },
                               ]}
+                              numberOfLines={1}
+                              adjustsFontSizeToFit
+                              minimumFontScale={0.7}
                             >
                               ${debtPaymentPlan.totalPlanned.toFixed(0)}
                             </Text>
@@ -1302,10 +1523,12 @@ export default function BillsScreen() {
                               { color: c.foreground },
                             ]}
                           >
-                            ${activeDebtRolloverAmount.toFixed(2)} rolls to {activeDebtRolloverNames} on{" "}
+                            ${activeDebtRolloverAmount.toFixed(2)} rolls to{" "}
+                            {activeDebtRolloverNames} on{" "}
                             {activeDebtRolloverDate
                               ? `${MONTH_FULL[Number(activeDebtRolloverDate.slice(5, 7)) - 1]} ${Number(activeDebtRolloverDate.slice(8, 10))}`
-                              : "the same day"}.
+                              : "the same day"}
+                            .
                           </Text>
                         </View>
                       ) : null}
@@ -1319,10 +1542,22 @@ export default function BillsScreen() {
                         { marginHorizontal: 0, marginTop: 10 },
                       ]}
                     >
+                      <View style={styles.methodHeading}>
+                        <Text
+                          style={[styles.sectionEyebrow, { color: c.primary }]}
+                        >
+                          Payoff order
+                        </Text>
+                        <Text
+                          style={[styles.sectionTitle, { color: c.foreground }]}
+                        >
+                          Your debts
+                        </Text>
+                      </View>
                       <View
                         style={[
                           styles.sortToggle,
-                          { backgroundColor: c.muted, borderRadius: 10 },
+                          { backgroundColor: c.muted, borderRadius: 14 },
                         ]}
                       >
                         {(
@@ -1336,7 +1571,7 @@ export default function BillsScreen() {
                               {
                                 backgroundColor:
                                   sortMode === s ? c.card : "transparent",
-                                borderRadius: 8,
+                                borderRadius: 11,
                               },
                             ]}
                           >
@@ -1352,10 +1587,10 @@ export default function BillsScreen() {
                               ]}
                             >
                               {s === "priority"
-                                ? "#"
+                                ? "Plan"
                                 : s === "balance"
-                                  ? "$"
-                                  : "%"}
+                                  ? "Balance"
+                                  : "APR"}
                             </Text>
                           </Pressable>
                         ))}
@@ -1395,7 +1630,8 @@ export default function BillsScreen() {
                   const effectiveMinimum = debtMonthlyMinimum(item);
                   const requiredMinimum = debtRequiredMinimum(item);
                   const forecastPayment = forecastPaymentByDebtId.get(item.id);
-                  const forecastRollover = forecastRolloverByDebtId.get(item.id) ?? 0;
+                  const forecastRollover =
+                    forecastRolloverByDebtId.get(item.id) ?? 0;
                   const monthsToPayoff =
                     item.balance > 0 && effectiveMinimum > 0
                       ? Math.ceil(item.balance / effectiveMinimum)
@@ -1410,21 +1646,35 @@ export default function BillsScreen() {
                       }}
                       style={({ pressed }) => [
                         styles.card,
+                        styles.debtCard,
                         isDesktop && styles.desktopCard,
                         {
                           backgroundColor: c.card,
-                          borderRadius: colors.radius,
+                          borderColor: priorityColor + "30",
+                          borderRadius: 20,
                           opacity: pressed ? 0.88 : 1,
                         },
                       ]}
                     >
                       <View
                         style={[
-                          styles.priorityStrip,
-                          { backgroundColor: priorityColor },
+                          styles.priorityBadge,
+                          {
+                            backgroundColor: priorityColor + "16",
+                            borderColor: priorityColor + "32",
+                          },
                         ]}
                       >
-                        <Text style={styles.priorityNum}>
+                        {isPaidOff ? (
+                          <Feather
+                            name="check"
+                            size={17}
+                            color={priorityColor}
+                          />
+                        ) : null}
+                        <Text
+                          style={[styles.priorityNum, { color: priorityColor }]}
+                        >
                           {isPaidOff
                             ? "PAID"
                             : isExcluded
@@ -1440,6 +1690,7 @@ export default function BillsScreen() {
                           <View style={styles.cardLeft}>
                             <Text
                               style={[styles.debtName, { color: c.foreground }]}
+                              numberOfLines={2}
                             >
                               {item.name}
                             </Text>
@@ -1495,6 +1746,9 @@ export default function BillsScreen() {
                                   color: isPaidOff ? c.success : c.destructive,
                                 },
                               ]}
+                              numberOfLines={1}
+                              adjustsFontSizeToFit
+                              minimumFontScale={0.68}
                             >
                               {isPaidOff
                                 ? "Paid"
@@ -1506,23 +1760,21 @@ export default function BillsScreen() {
                                   styles.minPay,
                                   { color: c.mutedForeground },
                                 ]}
+                                numberOfLines={2}
                               >
                                 {forecastPayment !== undefined
                                   ? `$${forecastPayment.toFixed(2)} forecast payment`
                                   : `$${requiredMinimum.toFixed(2)}/mo required`}
                               </Text>
                             )}
-                            {!isPaidOff &&
-                              forecastRollover > 0.005 && (
-                                <Text
-                                  style={[
-                                    styles.metaText,
-                                    { color: c.success },
-                                  ]}
-                                >
-                                  Includes ${forecastRollover.toFixed(2)} rollover
-                                </Text>
-                              )}
+                            {!isPaidOff && forecastRollover > 0.005 && (
+                              <Text
+                                style={[styles.metaText, { color: c.success }]}
+                                numberOfLines={2}
+                              >
+                                Includes ${forecastRollover.toFixed(2)} rollover
+                              </Text>
+                            )}
                           </View>
                         </View>
 
@@ -1571,11 +1823,7 @@ export default function BillsScreen() {
                             { backgroundColor: priorityColor + "12" },
                           ]}
                         >
-                          <Feather
-                            name="zap"
-                            size={11}
-                            color={priorityColor}
-                          />
+                          <Feather name="zap" size={11} color={priorityColor} />
                           <Text
                             style={[
                               styles.strategyText,
@@ -1597,8 +1845,8 @@ export default function BillsScreen() {
 
                       <View style={styles.editHint}>
                         <Feather
-                          name="edit-2"
-                          size={13}
+                          name="chevron-right"
+                          size={17}
                           color={c.mutedForeground}
                         />
                       </View>
@@ -1753,30 +2001,6 @@ const styles = StyleSheet.create({
   desktopSection: { alignSelf: "stretch" },
   desktopToolbar: { alignSelf: "stretch" },
   desktopList: { alignSelf: "stretch", paddingTop: 8 },
-  activitySizedBillCard: {
-    minHeight: 58,
-    marginBottom: 7,
-    alignItems: "center",
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 2,
-  },
-  activitySizedBillCardBody: { padding: 11 },
-  activitySizedBillCardTop: { alignItems: "center", marginBottom: 0 },
-  activitySizedBillName: { fontSize: 13, marginBottom: 3, letterSpacing: 0 },
-  activitySizedBillMetaRow: { gap: 5 },
-  activitySizedBillMetaText: { fontSize: 9 },
-  activitySizedBillTag: {
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 5,
-  },
-  activitySizedBillTagText: { fontSize: 9 },
-  activitySizedBillCardRight: { marginLeft: 10 },
-  activitySizedBillAmount: { fontSize: 14 },
-  activitySizedBillAmountSub: { fontSize: 9 },
-  activitySizedBillEditHint: { paddingHorizontal: 11, paddingVertical: 10 },
   desktopCard: {
     minHeight: 82,
     borderRadius: 16,
@@ -1788,7 +2012,15 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingBottom: 14,
+    paddingBottom: 16,
+  },
+  headerCopy: { flex: 1, minWidth: 0, paddingRight: 14 },
+  pageEyebrow: {
+    fontSize: 10,
+    fontFamily: "Inter_800ExtraBold",
+    textTransform: "uppercase",
+    letterSpacing: 1.4,
+    marginBottom: 3,
   },
   title: {
     fontSize: 34,
@@ -1806,8 +2038,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 11,
     borderWidth: 1,
-    borderRadius: 22,
-    padding: 14,
+    borderRadius: 24,
+    padding: 16,
     marginHorizontal: 16,
     marginBottom: 12,
   },
@@ -1838,17 +2070,22 @@ const styles = StyleSheet.create({
   },
   billSnapshotCard: {
     borderWidth: 1,
-    borderRadius: 20,
-    padding: 12,
+    borderRadius: 24,
+    padding: 18,
     marginHorizontal: 16,
-    marginBottom: 10,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.1,
+    shadowRadius: 18,
+    elevation: 3,
   },
   billSnapshotHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
-    marginBottom: 10,
+    marginBottom: 14,
   },
   billSnapshotLabel: {
     fontSize: 9,
@@ -1857,7 +2094,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   billSnapshotTitle: {
-    fontSize: 17,
+    fontSize: 19,
     fontFamily: "Inter_800ExtraBold",
     marginTop: 2,
   },
@@ -1872,13 +2109,64 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
-  billSnapshotStats: { flexDirection: "row", gap: 10 },
+  billSnapshotHero: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 16,
+  },
+  billSnapshotAmountWrap: { flex: 1 },
+  billSnapshotAmountLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
+  billSnapshotAmount: {
+    fontSize: 36,
+    lineHeight: 41,
+    fontFamily: "Inter_800ExtraBold",
+    letterSpacing: -1.3,
+    marginTop: 1,
+  },
+  billSnapshotAmountSub: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    marginTop: 1,
+  },
+  billSnapshotPaidTile: {
+    minWidth: 88,
+    minHeight: 80,
+    borderWidth: 1,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  billSnapshotPaidValue: {
+    fontSize: 16,
+    fontFamily: "Inter_800ExtraBold",
+    marginTop: 3,
+  },
+  billSnapshotPaidLabel: {
+    fontSize: 10,
+    fontFamily: "Inter_600SemiBold",
+    marginTop: 1,
+  },
+  billProgressTrack: {
+    height: 7,
+    borderRadius: 999,
+    overflow: "hidden",
+    marginTop: 16,
+    marginBottom: 14,
+  },
+  billProgressFill: { height: "100%", borderRadius: 999 },
+  billSnapshotStats: { flexDirection: "row", gap: 8 },
   billSnapshotStat: {
     flex: 1,
     borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
+    borderRadius: 16,
+    paddingHorizontal: 9,
+    paddingVertical: 10,
   },
   billSnapshotValue: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
   billSnapshotStatLabel: {
@@ -1887,6 +2175,32 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginTop: 2,
+  },
+  sectionHeading: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 18,
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  sectionEyebrow: {
+    fontSize: 9,
+    fontFamily: "Inter_800ExtraBold",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+  },
+  sectionTitle: {
+    fontSize: 19,
+    fontFamily: "Inter_800ExtraBold",
+    letterSpacing: -0.3,
+    marginTop: 2,
+  },
+  sectionCount: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    paddingBottom: 2,
   },
 
   // Segment toggle
@@ -1913,31 +2227,53 @@ const styles = StyleSheet.create({
   // Bills filters
   filterRow: {
     flexDirection: "row",
-    gap: 8,
+    flexWrap: "wrap",
+    gap: 6,
     paddingHorizontal: 16,
     marginBottom: 12,
   },
-  filterChip: { paddingHorizontal: 14, paddingVertical: 8 },
-  filterText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  filterChip: {
+    flex: 1,
+    minHeight: 44,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mobileFilterChip: { flexBasis: "45%" },
+  filterText: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    textAlign: "center",
+  },
 
   // Shared list / card
   list: { paddingHorizontal: 16, paddingTop: 6 },
   card: {
     flexDirection: "row",
-    marginBottom: 12,
+    alignItems: "center",
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.12)",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.18,
-    shadowRadius: 22,
-    elevation: 5,
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 3,
     overflow: "hidden",
   },
-  cardBody: { flex: 1, padding: 14 },
-  cardTop: { flexDirection: "row", alignItems: "flex-start", marginBottom: 10 },
-  cardLeft: { flex: 1 },
-  cardRight: { alignItems: "flex-end", marginLeft: 8 },
+  cardBody: { flex: 1, paddingHorizontal: 12, paddingVertical: 14 },
+  cardTop: { flexDirection: "row", alignItems: "flex-start" },
+  cardLeft: { flex: 1, minWidth: 0 },
+  cardRight: {
+    maxWidth: "45%",
+    minWidth: 0,
+    flexShrink: 1,
+    alignItems: "flex-end",
+    marginLeft: 8,
+  },
   metaRow: {
     flexDirection: "row",
     gap: 8,
@@ -1945,7 +2281,12 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   metaText: { fontSize: 11, fontFamily: "Inter_400Regular" },
-  editHint: { padding: 14, justifyContent: "center" },
+  editHint: {
+    width: 42,
+    minHeight: 48,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   restartHint: {
     width: 46,
     marginVertical: 12,
@@ -1956,7 +2297,15 @@ const styles = StyleSheet.create({
   },
 
   // Bills-specific
-  catBar: { width: 4 },
+  categoryIcon: {
+    width: 44,
+    height: 44,
+    marginLeft: 13,
+    borderWidth: 1,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   billName: {
     fontSize: 17,
     fontFamily: "Inter_800ExtraBold",
@@ -1969,14 +2318,76 @@ const styles = StyleSheet.create({
   amountSub: { fontSize: 10, fontFamily: "Inter_400Regular" },
 
   // Debt-specific
+  debtOverviewCard: {
+    borderWidth: 1,
+    borderRadius: 24,
+    padding: 18,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.1,
+    shadowRadius: 18,
+    elevation: 3,
+  },
+  debtOverviewHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  debtOverviewHeaderCopy: { flex: 1, minWidth: 0 },
+  debtOverviewLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    marginTop: 5,
+  },
+  debtActiveBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  debtActiveBadgeText: {
+    fontSize: 10,
+    fontFamily: "Inter_800ExtraBold",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  debtOverviewAmount: {
+    fontSize: 36,
+    lineHeight: 42,
+    fontFamily: "Inter_800ExtraBold",
+    letterSpacing: -1.3,
+    marginTop: 2,
+  },
+  debtOverviewStats: { flexDirection: "row", gap: 8, marginTop: 15 },
+  debtOverviewStat: {
+    flex: 1,
+    minWidth: 0,
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 11,
+    paddingVertical: 10,
+  },
+  debtOverviewStatValue: {
+    fontSize: 16,
+    fontFamily: "Inter_800ExtraBold",
+  },
+  debtOverviewStatLabel: {
+    fontSize: 10,
+    lineHeight: 14,
+    fontFamily: "Inter_600SemiBold",
+    marginTop: 2,
+  },
   debtAlgoCard: {
     borderWidth: 1,
-    padding: 14,
+    borderRadius: 22,
+    padding: 16,
     marginTop: 10,
     marginBottom: 2,
     gap: 10,
   },
   debtAlgoHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  debtTargetCopy: { flex: 1, minWidth: 0 },
   dataIcon: {
     width: 36,
     height: 36,
@@ -2089,6 +2500,7 @@ const styles = StyleSheet.create({
   },
   debtPaymentStat: {
     flex: 1,
+    minWidth: 0,
     alignItems: "center",
     gap: 3,
     paddingHorizontal: 5,
@@ -2121,20 +2533,35 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   methodRow: {
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    marginBottom: 6,
+    gap: 10,
+    marginBottom: 8,
   },
-  sortToggle: { flexDirection: "row", padding: 4, gap: 2 },
-  sortBtn: { paddingHorizontal: 12, paddingVertical: 9 },
-  sortBtnText: { fontSize: 13, fontFamily: "Inter_700Bold" },
-  priorityStrip: { width: 32, alignItems: "center", justifyContent: "center" },
+  methodHeading: { paddingHorizontal: 2 },
+  sortToggle: { flexDirection: "row", padding: 4, gap: 3 },
+  sortBtn: {
+    flex: 1,
+    minHeight: 38,
+    paddingHorizontal: 8,
+    paddingVertical: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sortBtnText: { fontSize: 11, fontFamily: "Inter_700Bold" },
+  debtCard: { minHeight: 104 },
+  priorityBadge: {
+    width: 46,
+    minHeight: 50,
+    marginLeft: 13,
+    borderWidth: 1,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+  },
   priorityNum: {
-    fontSize: 11,
-    fontFamily: "Inter_700Bold",
-    color: "#fff",
-    transform: [{ rotate: "-90deg" }],
+    fontSize: 9,
+    fontFamily: "Inter_800ExtraBold",
+    letterSpacing: 0.3,
   },
   debtName: { fontSize: 16, fontFamily: "Inter_700Bold", marginBottom: 6 },
   aprBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
@@ -2155,8 +2582,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    padding: 7,
-    borderRadius: 6,
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+    borderRadius: 11,
+    marginTop: 10,
   },
   strategyText: {
     flex: 1,

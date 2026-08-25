@@ -67,7 +67,7 @@ test("Plaid household scope is mandatory and removed members lose Data API acces
   const workspaceRoot = path.resolve(__dirname, "../..");
   const migration = readFileSync(path.resolve(
     workspaceRoot,
-    "supabase/migrations/20260815094708_backfill_and_lock_plaid_households.sql",
+    "supabase/migrations/20260825055642_backfill_and_lock_plaid_households.sql",
   ), "utf8");
 
   assert.match(migration, /alter table public\.plaid_transactions[\s\S]*alter column household_id set not null/);
@@ -85,7 +85,7 @@ test("removed household members lose Data API access to the shared financial pla
   const workspaceRoot = path.resolve(__dirname, "../..");
   const migration = readFileSync(path.resolve(
     workspaceRoot,
-    "supabase/migrations/20260815100346_remove_creator_read_after_household_exit.sql",
+    "supabase/migrations/20260825055659_remove_creator_read_after_household_exit.sql",
   ), "utf8");
 
   for (const table of [

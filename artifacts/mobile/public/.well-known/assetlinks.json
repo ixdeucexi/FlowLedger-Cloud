@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.flowledger.app",
+      "sha256_cert_fingerprints": [
+        "05:2F:08:08:11:01:3E:F2:11:B4:8C:FA:49:6F:EF:50:B0:52:16:76:8A:CD:1F:09:78:5C:01:89:DC:B3:39:AB"
+      ]
+    }
+  }
+]

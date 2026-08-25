@@ -25,6 +25,7 @@ import {
   desktopPalette as palette,
   desktopTableStyles as table,
 } from "@/components/desktop/DesktopUI";
+import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import { exportActivityCsv } from "@/lib/activityCsv";
 
 export type DesktopActivityRow = {
@@ -259,6 +260,7 @@ export function DesktopActivityPage({
             </>
           }
         />
+        <DataFreshnessLabel compact />
         <View style={styles.metrics}>
           <SummaryMetricCard
             label="Total Inflows"

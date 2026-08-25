@@ -3,6 +3,35 @@ export const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December",
 ] as const;
 
+export const COMPACT_MONTH_NAMES = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sept", "Oct", "Nov", "Dec",
+] as const;
+
+export function compactMonthDay(month: number, day: number): string {
+  const monthLabel = COMPACT_MONTH_NAMES[month];
+  if (!monthLabel || !Number.isInteger(day) || day < 1 || day > 31) return "Date unavailable";
+  return `${monthLabel} ${day}`;
+}
+
+export function compactDateOnly(value: string): string {
+  const date = dateOnlyToLocalDate(value);
+  return date ? compactMonthDay(date.getMonth(), date.getDate()) : value;
+}
+
+export function compactDateLabel(value: string): string {
+  const dateOnly = dateOnlyToLocalDate(value);
+  if (dateOnly) return compactMonthDay(dateOnly.getMonth(), dateOnly.getDate());
+
+  const match = /^([A-Za-z]+)\s+(\d{1,2})(?:,\s*\d{4})?$/.exec(value.trim());
+  if (!match) return value;
+  const month = MONTH_NAMES.findIndex((name, index) =>
+    name.toLowerCase() === match[1].toLowerCase()
+    || COMPACT_MONTH_NAMES[index].toLowerCase() === match[1].toLowerCase(),
+  );
+  return month >= 0 ? compactMonthDay(month, Number(match[2])) : value;
+}
+
 export function localDateString(date = new Date()): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }

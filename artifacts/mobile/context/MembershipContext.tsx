@@ -15,6 +15,7 @@ import { supabase } from "@/lib/supabase";
 import { activateBillingIdentity, deactivateBillingIdentity } from "@/lib/nativeBilling";
 import { readBillingStatus } from "@/lib/billing";
 import { FOUNDING_FREE_LAUNCH } from "@/lib/launchMode";
+import { isStoreCaptureMode } from "@/lib/demoMode";
 
 interface MembershipContextValue {
   actualPlan: HouseholdPlan;
@@ -91,7 +92,9 @@ export function MembershipProvider({ children }: { children: React.ReactNode }) 
     setLoading(true);
     if (demoMode) {
       if (requestId === planRequestRef.current) {
-        setActualPlan(mapHouseholdPlan({ tier: "pro", source: "admin" }, householdId, "pro"));
+        setActualPlan(isStoreCaptureMode()
+          ? mapHouseholdPlan({ tier: "free", source: "default" }, householdId)
+          : mapHouseholdPlan({ tier: "pro", source: "admin" }, householdId, "pro"));
         setLoading(false);
       }
       return;

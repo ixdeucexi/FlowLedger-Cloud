@@ -452,7 +452,7 @@ test("Plan Simulator is a direct Pro route launched only from mobile and desktop
   assert.match(route, /projectPlanSimulation/);
   assert.match(route, /canEditHousehold/);
   assert.match(route, /planSimulationStorageKey\(user\.id, householdId\)/);
-  assert.match(route, /Nothing in this workspace changes the real plan/);
+  assert.match(route, /Nothing changes your real plan/);
   assert.match(route, /minHeight: 44[\s\S]*chip/);
   assert.doesNotMatch(route, /chip:\s*\{[^}]*minHeight:\s*40/);
   assert.match(route, /Reset unsupported changes/);

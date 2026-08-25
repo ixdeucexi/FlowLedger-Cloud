@@ -21,6 +21,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useBudget } from "@/context/BudgetContext";
 import { BasicFlo } from "@/components/BasicFlo";
+import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import { FloConversationBar } from "@/components/FloConversationBar";
 import { FloGroundedAnswer } from "@/components/FloGroundedAnswer";
 import { FloLogo } from "@/components/FloLogo";
@@ -80,6 +81,21 @@ const sampleQuestions = [
 ];
 
 const initialChat: FloChatState = { messages: [], sending: false };
+const storeCaptureChat: FloChatState = {
+  sending: false,
+  messages: [
+    {
+      id: "store-capture-question",
+      role: "user",
+      text: "Can I afford an extra $100 toward Harbor Card?",
+    },
+    {
+      id: "store-capture-answer",
+      role: "flo",
+      text: "Yes. Your plan stays positive through the next payday after reserving upcoming bills. Adding $100 to Harbor Card would leave $2,630 safe to spend this month.",
+    },
+  ],
+};
 
 function moneyValue(value: unknown): string {
   const amount = Number(value);
@@ -94,14 +110,14 @@ export default function FloScreen() {
   const isDesktop = useDesktopExperience();
   const { user } = useAuth();
   const { isFeatureLocked, previewTier } = useMembership();
-  const { activeHousehold, bills, billDateMoves, transactions, decisions, settings, forecastConfidence, retryBudgetLoad, getDailyBalances, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getPaidAmount, getTransactionsForMonth, categories, incomes, goals } = useBudget();
+  const { activeHousehold, bills, billDateMoves, transactions, decisions, settings, forecastConfidence, retryBudgetLoad, getDailyBalances, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getPaidAmount, getTransactionsForMonth, categories, incomes, goals, demoMode } = useBudget();
   const categoryBudgetScope = useMemo(() => ({
     userId: user?.id,
     householdId: activeHousehold?.householdId,
     budgetId: activeHousehold?.budgetId,
   }), [activeHousehold?.budgetId, activeHousehold?.householdId, user?.id]);
   const floProLocked = isFeatureLocked("flo_account_chat");
-  const [chat, dispatch] = useReducer(reduceFloChat, initialChat);
+  const [chat, dispatch] = useReducer(reduceFloChat, demoMode ? storeCaptureChat : initialChat);
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
   const decisionHubSettings = DEFAULT_DECISION_HUB_SETTINGS;
   const [onboardingPreferences, setOnboardingPreferences] = useState(() => readOnboardingPreferences());
@@ -113,7 +129,11 @@ export default function FloScreen() {
   const [followUpsByMessageId, setFollowUpsByMessageId] = useState<Record<string, string[]>>({});
   const [proposalByMessageId, setProposalByMessageId] = useState<Record<string, FloReviewProposal | null>>({});
   const [confirmedProposalIds, setConfirmedProposalIds] = useState<Set<string>>(new Set());
-  const [groundingByMessageId, setGroundingByMessageId] = useState<Record<string, { dataAsOf?: string | null; coverage?: string; partial?: boolean; caveat?: string }>>({});
+  const [groundingByMessageId, setGroundingByMessageId] = useState<Record<string, { dataAsOf?: string | null; coverage?: string; partial?: boolean; caveat?: string }>>(
+    demoMode
+      ? { "store-capture-answer": { dataAsOf: "2026-08-25T01:30:00-05:00", coverage: "Complete for this question" } }
+      : {},
+  );
   const [floPreferences, setFloPreferences] = useState<FloPreferences>(DEFAULT_FLO_PREFERENCES);
   const [reviewProposal, setReviewProposal] = useState<FloReviewProposal | null>(null);
   const [proposalConfirmState, setProposalConfirmState] = useState<"idle" | "reviewing" | "confirming" | "failed">("idle");
@@ -159,14 +179,16 @@ export default function FloScreen() {
     requestGenerationRef.current = nextFloRequestGeneration(requestGenerationRef.current);
     streamAbortRef.current?.abort();
     streamAbortRef.current = null;
-    dispatch({ type: "hydrate", messages: [] });
+    dispatch({ type: "hydrate", messages: demoMode ? storeCaptureChat.messages : [] });
     setSourcesByMessageId({});
     setFollowUpsByMessageId({});
     setProposalByMessageId({});
-    setGroundingByMessageId({});
+    setGroundingByMessageId(demoMode
+      ? { "store-capture-answer": { dataAsOf: "2026-08-25T01:30:00-05:00", coverage: "Complete for this question" } }
+      : {});
     setOlderMessageCursor(null);
     setChatError(null);
-    if (!user?.id || !activeHousehold?.householdId || floProLocked) {
+    if (demoMode || !user?.id || !activeHousehold?.householdId || floProLocked) {
       setConversations([]);
       setActiveConversationId(null);
       return () => { cancelled = true; };
@@ -179,11 +201,11 @@ export default function FloScreen() {
       if (!cancelled) setChatError("Private Flo history is unavailable right now.");
     });
     return () => { cancelled = true; };
-  }, [activeHousehold?.householdId, floProLocked, user?.id]);
+  }, [activeHousehold?.householdId, demoMode, floProLocked, user?.id]);
 
   useEffect(() => {
     let cancelled = false;
-    if (!user?.id || !activeHousehold?.householdId) return () => { cancelled = true; };
+    if (demoMode || !user?.id || !activeHousehold?.householdId) return () => { cancelled = true; };
     void Promise.all([
       readFloPreferences(user.id, activeHousehold.householdId),
       readFloHouseholdMemory(activeHousehold.householdId, user.id).catch(() => ({ enabled: false, note: "" })),
@@ -191,7 +213,7 @@ export default function FloScreen() {
       if (!cancelled) setFloPreferences({ ...preferences, rememberPreferences: memory.enabled, preferenceNote: memory.enabled ? memory.note : "" });
     });
     return () => { cancelled = true; };
-  }, [activeHousehold?.householdId, user?.id]);
+  }, [activeHousehold?.householdId, demoMode, user?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -652,6 +674,7 @@ export default function FloScreen() {
   const hasSetupAnswers = onboardingPreferences.help.length > 0 || onboardingPreferences.goals.length > 0 || Boolean(onboardingPreferences.savingsGoal);
 
   const quickPrompts = useMemo(() => {
+    if (demoMode) return ["What's safe to spend?", "What bills are next?"];
     const categoryPrompts = buildFloCategoryQuickPrompts(categoryPlan);
     const planningPrompts = ["Which bills are due next?", "What account data can I improve?"];
     return Array.from(new Set([
@@ -664,7 +687,7 @@ export default function FloScreen() {
       "Which bills are due next?",
       "Which records did you use?",
     ])).slice(0, 2);
-  }, [categoryPlan, decisionHistory, decisionRiskAlerts, hasSetupAnswers, setupPersonalization]);
+  }, [categoryPlan, decisionHistory, decisionRiskAlerts, demoMode, hasSetupAnswers, setupPersonalization]);
 
   const startNewConversation = () => {
     requestGenerationRef.current = nextFloRequestGeneration(requestGenerationRef.current);
@@ -720,7 +743,7 @@ export default function FloScreen() {
     setFollowUpsByMessageId({});
     setProposalByMessageId({});
     setGroundingByMessageId({});
-    dispatch({ type: "hydrate", messages: [] });
+    dispatch({ type: "hydrate", messages: demoMode ? storeCaptureChat.messages : [] });
   };
 
   const exportConversations = async () => {
@@ -783,7 +806,7 @@ export default function FloScreen() {
           : code.includes("proposal_role_denied") || code.includes("proposal_access_denied")
             ? "Your household role cannot confirm this change."
             : code.includes("proposal_pro_required")
-              ? "A Pro membership is required to confirm this Flo change."
+              ? "Confirming Flo changes is planned for Pro. Your plan was not changed."
               : "This change could not be confirmed. Your plan was not changed.";
       setProposalConfirmError(message);
       setProposalConfirmState("failed");
@@ -915,7 +938,9 @@ export default function FloScreen() {
         setSourcesByMessageId({});
         setFollowUpsByMessageId({});
         setProposalByMessageId({});
-        setGroundingByMessageId({});
+    setGroundingByMessageId(demoMode
+      ? { "store-capture-answer": { dataAsOf: "2026-08-25T01:30:00-05:00", coverage: "Complete for this question" } }
+      : {});
         setChatError("Flo couldn't clear this no-history chat. Local content was cleared; please try again.");
         retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: null };
         return;
@@ -982,7 +1007,7 @@ export default function FloScreen() {
   const composerBottom = Platform.OS === "web" ? 88 : Math.max(insets.bottom, 8) + 54;
 
   if (floProLocked) {
-    return <BasicFlo facts={facts} baseline={baseline} asOf={new Date().toISOString()} />;
+    return <BasicFlo facts={facts} baseline={baseline} />;
   }
 
   return (
@@ -1001,6 +1026,7 @@ export default function FloScreen() {
         <View style={styles.headerText}>
           <Text style={[styles.title, { color: colors.foreground }]}>Ask Flo</Text>
           <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{activeHousehold?.name ?? "Personal household"} · {floFreshnessSummary(groundingByMessageId)}</Text>
+          <DataFreshnessLabel compact />
         </View>
         <Feather name="message-circle" size={24} color={colors.primaryForeground} />
       </LinearGradient>
@@ -1205,7 +1231,7 @@ function decisionStillHasSource(decision: { status: string; scenario: { type?: s
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   header: {
-    minHeight: 92,
+    minHeight: 96,
     paddingHorizontal: 18,
     paddingBottom: 14,
     flexDirection: "row",
@@ -1214,10 +1240,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   headerText: { flex: 1 },
-  title: { fontSize: 25, fontFamily: "Inter_700Bold" },
-  subtitle: { fontSize: 12, lineHeight: 17, marginTop: 3 },
+  title: { fontSize: 27, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.5 },
+  subtitle: { fontSize: 13, lineHeight: 18, marginTop: 3 },
   conversation: { flex: 1 },
-  conversationContent: { paddingHorizontal: 18, paddingTop: 18, paddingBottom: 28, gap: 16 },
+  conversationContent: { paddingHorizontal: 18, paddingTop: 20, paddingBottom: 30, gap: 16 },
   desktopHistoryLayer: { position: "absolute", left: 0, top: 92, bottom: 0, width: 292, zIndex: 4 },
   conversationDesktop: { marginLeft: 292 },
   conversationContentDesktop: { width: "100%", maxWidth: 820, alignSelf: "center", paddingHorizontal: 28, paddingTop: 24 },
@@ -1242,14 +1268,14 @@ const styles = StyleSheet.create({
   followButton: { flex: 1, minHeight: 46, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   followButtonText: { fontSize: 14, fontFamily: "Inter_700Bold" },
   followPrimaryText: { color: "#fff", fontSize: 14, fontFamily: "Inter_700Bold" },
-  bubble: { maxWidth: "90%", paddingHorizontal: 16, paddingVertical: 15, borderRadius: 18 },
+  bubble: { maxWidth: "90%", paddingHorizontal: 17, paddingVertical: 16, borderRadius: 20 },
   floBubble: { alignSelf: "flex-start", borderWidth: 1, borderTopLeftRadius: 6 },
   userBubble: { alignSelf: "flex-end", borderTopRightRadius: 6 },
   thinkingRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   bubbleText: { fontSize: 15, lineHeight: 23, fontFamily: "Inter_400Regular" },
   trustLine: { marginTop: 8, fontSize: 10, lineHeight: 15, fontFamily: "Inter_500Medium" },
   cardGrid: { marginTop: 10, gap: 8 },
-  insightCard: { borderWidth: 1, borderRadius: 12, padding: 10 },
+  insightCard: { borderWidth: 1, borderRadius: 15, padding: 12 },
   insightTitle: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.5 },
   insightValue: { fontSize: 18, fontFamily: "Inter_700Bold", marginTop: 3 },
   insightDetail: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2, lineHeight: 15 },
@@ -1283,7 +1309,7 @@ const styles = StyleSheet.create({
     maxWidth: 820,
     minHeight: 62,
     maxHeight: 112,
-    borderRadius: 20,
+    borderRadius: 22,
     borderWidth: 1,
     paddingLeft: 15,
     paddingRight: 7,

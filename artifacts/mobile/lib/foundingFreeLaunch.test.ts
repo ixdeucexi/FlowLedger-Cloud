@@ -16,6 +16,13 @@ test("public v1 is Founding Free without starting native billing", () => {
   assert.match(panel, /Bank sync and advanced automation/);
 });
 
+test("account deletion only shows store subscription controls for a billing plan", () => {
+  const deletion = readFileSync("app/delete-account.tsx", "utf8");
+
+  assert.match(deletion, /actualPlan\.source === "billing"/);
+  assert.match(deletion, /Manage store subscription/);
+});
+
 test("public v1 replaces unavailable bank linking with honest launch copy", () => {
   const more = readFileSync("app\/(tabs)\/more.tsx", "utf8");
   const desktop = readFileSync("components/desktop/DesktopSettingsPage.tsx", "utf8");
@@ -24,6 +31,17 @@ test("public v1 replaces unavailable bank linking with honest launch copy", () =
   assert.match(more, /Bank sync is planned for Pro/);
   assert.match(desktop, /FOUNDING_FREE_LAUNCH && !adminProAccess \? \(/);
   assert.match(desktop, /Manual accounts and activity are available/);
+});
+
+test("public matching and Flo copy does not send Founding Free users to a missing upgrade", () => {
+  const activity = readFileSync("app\/(tabs)\/transactions.tsx", "utf8");
+  const flo = readFileSync("app\/(tabs)\/flo.tsx", "utf8");
+
+  assert.doesNotMatch(activity, /Upgrade to Pro/i);
+  assert.match(activity, /stay available in Activity during Founding Free/);
+  assert.match(activity, /Pending charges stay visible during Founding Free/);
+  assert.doesNotMatch(flo, /Pro membership is required/i);
+  assert.match(flo, /Confirming Flo changes is planned for Pro/);
 });
 
 test("admin Pro remains account-scoped and keeps Plaid available during Founding Free", () => {
@@ -40,4 +58,24 @@ test("admin Pro remains account-scoped and keeps Plaid available during Founding
   assert.match(panel, /does not expose purchase controls/);
   assert.match(adminTools, /Manage Pro by email/);
   assert.match(adminTools, /Upgrade to Pro/);
+});
+
+test("founding free unlocked workspaces are not mislabeled as paid-only", () => {
+  const simulator = readFileSync("app/plan-simulator.tsx", "utf8");
+  const reviewCenter = readFileSync("components/ReviewCenter.tsx", "utf8");
+
+  assert.match(simulator, /foundingFreeLocalOnly \? "FOUNDING FREE PLAN SIMULATOR" : "PRO PLAN SIMULATOR"/);
+  assert.match(reviewCenter, /FOUNDING_FREE_LAUNCH \? "FOUNDING FREE REVIEW CENTER" : "PRO REVIEW CENTER"/);
+});
+
+test("Founding Free Plan Simulator keeps calculations local while admin Pro retains household scenarios", () => {
+  const simulator = readFileSync("app/plan-simulator.tsx", "utf8");
+
+  assert.match(simulator, /canPersistPlanSimulations\(actualPlan\)/);
+  assert.match(simulator, /!canPersistScenarios \|\| demoMode \|\| householdId === "local" \? Promise\.resolve\(\[\]\) : loadPlanSimulations/);
+  assert.match(simulator, /keepsLocalDraft && draftStorageKey \? AsyncStorage\.getItem/);
+  assert.match(simulator, /Founding Free keeps this draft on this device and does not sync it to your household/);
+  assert.match(simulator, /foundingFreeLocalOnly \? <Button label=\{draft\.invalidDefinition/);
+  assert.match(simulator, /foundingFreeLocalOnly \? "New local draft" : "New"/);
+  assert.match(simulator, /foundingFreeLocalOnly \? "Compare your real Forecast with a private draft kept on this device[^:]+: "Compare your real Forecast with a saved what-if scenario/);
 });

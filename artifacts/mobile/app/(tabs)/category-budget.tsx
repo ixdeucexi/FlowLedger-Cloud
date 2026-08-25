@@ -5,6 +5,7 @@ import { Alert, Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextIn
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
+import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import { PlanViewSelector } from "@/components/PlanViewSelector";
 import { useAuth } from "@/context/AuthContext";
 import { useBudget } from "@/context/BudgetContext";
@@ -213,6 +214,7 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
         <View style={{ flex: 1 }}>
           {embedded ? <PlanViewSelector textStyle={styles.title} /> : <Text style={[styles.title, { color: c.foreground }]}>Category Budget</Text>}
           <Text style={[styles.subtitle, { color: c.mutedForeground }]}>Give every dollar a job</Text>
+          <DataFreshnessLabel compact />
         </View>
         <Pressable disabled={!canEditHousehold} onPress={saveDrafts} style={[styles.saveBtn, { backgroundColor: c.primary, opacity: canEditHousehold ? 1 : 0.5 }]}>
           <Text style={[styles.saveText, { color: c.primaryForeground }]}>Save</Text>

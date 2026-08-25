@@ -2,7 +2,18 @@
 
 Last reviewed: August 24, 2026
 
-This copy is ready to paste into App Store Connect and Google Play Console after the developer accounts, app records, screenshots, and support URLs are finalized. Version 1 launches as Founding Free without in-app purchases or bank connection controls.
+This copy is ready to paste into App Store Connect and Google Play Console after the developer accounts, app records, and screenshots are finalized. Version 1 launches as Founding Free without in-app purchases or bank connection controls.
+
+## Verified public contact and policy URLs
+
+- Marketing website: https://flowledger-algo.com
+- Support URL: https://flowledger-algo.com/support
+- Support email: Flowledger-algo@gmail.com
+- Privacy Policy: https://flowledger-algo.com/legal?doc=privacy
+- Terms of Service: https://flowledger-algo.com/legal?doc=terms
+- Account deletion: https://flowledger-algo.com/delete-account
+
+All five public web routes returned HTTP 200 on August 25, 2026. Console forms must use these exact canonical URLs.
 
 ## Shared positioning
 
@@ -111,7 +122,7 @@ Version 1 is Founding Free. No subscription or trial is required. Bank sync and 
 ## Required owner/console inputs before submission
 
 - Apple/Google organization and developer contact details
-- Public account-deletion URL
+- Enter the verified public account-deletion URL above in Google Play Data Safety
 - Final reviewer username/password entered only in the private review portal
 - Approved fictional screenshots and Google Play feature graphic
 - Final build numbers, signed build IDs, and release date

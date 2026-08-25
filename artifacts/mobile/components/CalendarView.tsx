@@ -322,7 +322,10 @@ export function CalendarView({
                         isDesktop && styles.desktopBalanceText,
                         { color: db.balance >= safetyFloor ? calendarTheme.green : db.balance < 0 ? calendarTheme.red : calendarTheme.amber },
                       ]}
+                      accessibilityLabel={formatCalendarBalance(db.balance)}
                       numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.55}
                     >
                       {formatCalendarBalance(db.balance)}
                     </Text>
@@ -410,7 +413,7 @@ const styles = StyleSheet.create({
   desktopDayTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   todayCircle: { minWidth: 22, height: 22, borderRadius: 7, alignItems: "center", justifyContent: "center", paddingHorizontal: 6, backgroundColor: CALENDAR.today },
   dayNum: { fontSize: 15 },
-  balanceText: { flexShrink: 1, fontSize: 9, fontFamily: "Inter_800ExtraBold" },
+  balanceText: { maxWidth: "100%", flexShrink: 1, fontSize: 9, fontFamily: "Inter_800ExtraBold" },
   desktopBalanceText: { fontSize: 10 },
   eventStack: { marginTop: 4, gap: 2 },
   eventChip: {

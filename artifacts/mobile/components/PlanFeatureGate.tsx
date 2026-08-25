@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { PLAN_FEATURE_COPY, type PlanFeature } from "@/lib/membership";
+import { FOUNDING_FREE_LAUNCH, FOUNDING_FREE_NAME, PRO_AVAILABILITY } from "@/lib/launchMode";
 
 export function PlanFeatureGate({ feature, children, compact = false }: { feature: Exclude<PlanFeature, "manual_budgeting" | "flo_basic">; children: React.ReactNode; compact?: boolean }) {
   const c = useColors();
@@ -18,10 +19,10 @@ export function PlanFeatureGate({ feature, children, compact = false }: { featur
       <View style={[styles.icon, { backgroundColor: c.primary + "18" }]}>
         <Feather name="lock" size={20} color={c.primary} />
       </View>
-      <Text style={[styles.eyebrow, { color: c.primary }]}>{previewTier ? "FREE PLAN PREVIEW" : "PRO FEATURE"}</Text>
+      <Text style={[styles.eyebrow, { color: c.primary }]}>{previewTier ? "FREE PLAN PREVIEW" : FOUNDING_FREE_LAUNCH ? "PLANNED FOR PRO" : "PRO FEATURE"}</Text>
       <Text style={[styles.title, { color: c.foreground }]}>{copy.title}</Text>
       <Text style={[styles.description, { color: c.mutedForeground }]}>{copy.description}</Text>
-      <Text style={[styles.note, { color: c.mutedForeground }]}>{previewTier ? "This is only a test lock. Your real household plan is unchanged." : "Upgrade controls are coming with billing. Your manual FlowLedger tools remain available."}</Text>
+      <Text style={[styles.note, { color: c.mutedForeground }]}>{previewTier ? "This is only a test lock. Your real household plan is unchanged." : FOUNDING_FREE_LAUNCH ? `${PRO_AVAILABILITY}. Your ${FOUNDING_FREE_NAME} tools remain available without a subscription.` : "Manage your household plan from Membership."}</Text>
       {isAdmin && previewTier ? <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Admin bypass for ${copy.title}`}

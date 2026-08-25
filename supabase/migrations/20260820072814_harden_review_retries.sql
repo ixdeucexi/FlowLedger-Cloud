@@ -167,3 +167,5 @@ grant execute on function public.reconcile_transaction(text, text, text, date, n
   to authenticated, service_role;
 
 notify pgrst, 'reload schema';
+
+;

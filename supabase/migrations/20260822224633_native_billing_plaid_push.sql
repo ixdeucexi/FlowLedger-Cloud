@@ -767,3 +767,5 @@ select cron.schedule(
     where exists (select 1 from vault.decrypted_secrets where name = 'flowledger_cron_secret');
   $cron$
 );
+
+;

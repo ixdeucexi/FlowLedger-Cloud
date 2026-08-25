@@ -5,7 +5,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Alert, BackHandler, FlatList, Keyboard, Modal, PanResponder, Platform,
   Pressable, ScrollView, StyleSheet, Text,
-  TextInput, View,
+  TextInput, useWindowDimensions, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -16,6 +16,7 @@ import { CommandPlusButton } from "@/components/CommandPlusButton";
 import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
 import { DebtPaymentAppliedModal, type DebtPaymentAppliedDetail } from "@/components/DebtPaymentAppliedModal";
 import { DesktopCalendarPage } from "@/components/desktop/DesktopCalendarPage";
+import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import { EmptyState } from "@/components/EmptyState";
 import { FullPaymentPromptModal } from "@/components/FullPaymentPromptModal";
 import { GoalModal } from "@/components/GoalModal";
@@ -53,7 +54,7 @@ import {
   snowballPaymentName,
   snowballPlanTotalThroughDate,
 } from "@/lib/debtPaymentPlan";
-import { hasBucketRemainderFunding, latestBucketRemainderAvailableDate, replaceBillSurplusFundingSource } from "@/lib/snowballFunding";
+import { hasBucketRemainderFunding, latestBucketRemainderAvailableDate } from "@/lib/snowballFunding";
 import { readInterfacePreferences, updateInterfacePreferences } from "@/lib/interfacePreferences";
 
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -80,6 +81,12 @@ function formatLongDate(date: string) {
   const parsed = new Date(`${date}T12:00:00`);
   if (Number.isNaN(parsed.getTime())) return date;
   return parsed.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+}
+
+function formatCompactOverlayDate(date: string) {
+  const parsed = new Date(`${date}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return date;
+  return parsed.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
 function isoDateForMonthDay(year: number, month: number, day: number) {
@@ -227,15 +234,15 @@ function CalendarDebtPaymentCard({
       <View style={styles.dayBillNumbers}>
         <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
           <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Amount</Text>
-          <Text style={[styles.dayBillNumberValue, { color: c.foreground }]}>${amount.toFixed(2)}</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: c.foreground }]}>${amount.toFixed(2)}</Text>
         </View>
         <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
           <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Paid</Text>
-          <Text style={[styles.dayBillNumberValue, { color: applied ? c.success : c.mutedForeground }]}>${(applied ? amount : 0).toFixed(2)}</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: applied ? c.success : c.mutedForeground }]}>${(applied ? amount : 0).toFixed(2)}</Text>
         </View>
         <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
           <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Left</Text>
-          <Text style={[styles.dayBillNumberValue, { color: applied ? c.success : c.warning }]}>${(applied ? 0 : amount).toFixed(2)}</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: applied ? c.success : c.warning }]}>${(applied ? 0 : amount).toFixed(2)}</Text>
         </View>
       </View>
 
@@ -367,6 +374,9 @@ function CalendarDebtPaymentCard({
 export default function MonthlyScreen() {
   const c = useColors();
   const isDesktop = useDesktopExperience();
+  const { width: viewportWidth, fontScale } = useWindowDimensions();
+  const isNarrowForecastLayout = !isDesktop && viewportWidth <= 390;
+  const stackForecastHeader = isNarrowForecastLayout && fontScale > 1.35;
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isFeatureLocked } = useMembership();
@@ -923,20 +933,35 @@ export default function MonthlyScreen() {
     setFullPaymentPrompt(null);
   }, [fullPaymentPrompt]);
 
+  const openDebtPaymentActivity = useCallback(() => {
+    setSelectedDate(null);
+    router.push("/(tabs)/transactions" as never);
+  }, [router]);
+
+  const explainDebtPaymentRoute = useCallback(() => {
+    Alert.alert(
+      "Record debt payments in Activity",
+      "Matching the payment there updates both the paid amount and debt balance together.",
+      [
+        { text: "Not now", style: "cancel" },
+        { text: "Open Activity", onPress: openDebtPaymentActivity },
+      ],
+    );
+  }, [openDebtPaymentActivity]);
+
   const keepPromptAsPartialPayment = useCallback(async () => {
     if (!fullPaymentPrompt) return;
-    const { bill, actual, paidDate, paidKey, editValue } = fullPaymentPrompt;
+    const { bill, actual, paidKey, editValue } = fullPaymentPrompt;
+    if (bill.is_debt) {
+      closeFullPaymentPrompt();
+      explainDebtPaymentRoute();
+      return;
+    }
     paidSaveInFlightRef.current.add(paidKey);
     setSavingPaidKey(paidKey);
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const directPaidBefore = getPaidAmount(bill.id, month, selectedYear);
-      if (bill.is_debt) await removeDebtSurplusTransaction(bill.id);
       await setPaidAmount(bill.id, month, selectedYear, actual);
-      if (bill.is_debt) {
-        const delta = actual - directPaidBefore;
-        if (delta > 0.005) showDebtPaymentNotice(bill, delta, paidDate, { scheduled: false, balanceBefore: bill.balance });
-      }
       paidSaveSnapshotRef.current = { ...paidSaveSnapshotRef.current, [paidKey]: { value: editValue, at: Date.now() } };
       clearPaidEditForKey(paidKey);
       paidPromptPendingRef.current.delete(paidKey);
@@ -947,11 +972,16 @@ export default function MonthlyScreen() {
       paidSaveInFlightRef.current.delete(paidKey);
       setSavingPaidKey(current => current === paidKey ? null : current);
     }
-  }, [clearPaidEditForKey, fullPaymentPrompt, getPaidAmount, month, removeDebtSurplusTransaction, selectedYear, setPaidAmount, showDebtPaymentNotice]);
+  }, [clearPaidEditForKey, closeFullPaymentPrompt, explainDebtPaymentRoute, fullPaymentPrompt, month, selectedYear, setPaidAmount]);
 
   const confirmPromptAsFullPayment = useCallback(() => {
     if (!fullPaymentPrompt) return;
     const { bill, budgeted, actual, paidDate, paidKey, editValue } = fullPaymentPrompt;
+    if (bill.is_debt) {
+      closeFullPaymentPrompt();
+      explainDebtPaymentRoute();
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSurplusPrompt({ bill, budgeted, actual, paidDate, matchAmountToActual: true });
     setSurplusPaymentDate(paidDate);
@@ -961,10 +991,16 @@ export default function MonthlyScreen() {
     clearPaidEditForKey(paidKey);
     paidPromptPendingRef.current.delete(paidKey);
     setFullPaymentPrompt(null);
-  }, [clearPaidEditForKey, fullPaymentPrompt]);
+  }, [clearPaidEditForKey, closeFullPaymentPrompt, explainDebtPaymentRoute, fullPaymentPrompt]);
 
   const handlePaidBlur = useCallback(async (billId: string, key: string, submittedValue?: string) => {
     if (savingPaidKey === key || paidSaveInFlightRef.current.has(key) || paidPromptPendingRef.current.has(key)) return;
+    const bill = bills.find(item => item.id === billId);
+    if (bill?.is_debt) {
+      clearPaidEditForKey(key);
+      explainDebtPaymentRoute();
+      return;
+    }
     const hasActiveEdit = Object.prototype.hasOwnProperty.call(editingPaidRef.current, key)
       || Object.prototype.hasOwnProperty.call(editingPaid, key);
     const submittedTrimmed = submittedValue?.trim();
@@ -987,14 +1023,8 @@ export default function MonthlyScreen() {
     paidSaveInFlightRef.current.add(key);
     setSavingPaidKey(key);
     try {
-      const bill = bills.find(item => item.id === billId);
       if (trimmed.length === 0) {
         clearPaidEdit();
-        if (bill?.is_debt) {
-          const key = `flowledger:debt-surplus:${bill.id}:${selectedYear}-${String(month + 1).padStart(2, "0")}`;
-          const existingTx = transactions.find(transaction => transaction.import_hash === key);
-          if (existingTx) await deleteTransaction(existingTx.id);
-        }
         await setPaidAmount(billId, month, selectedYear, 0);
         paidSaveSnapshotRef.current = { ...paidSaveSnapshotRef.current, [key]: { value: "", at: Date.now() } };
         return;
@@ -1009,18 +1039,12 @@ export default function MonthlyScreen() {
       const newSurplus = Math.max(0, budgeted - parsed);
 
       if (bill && previousSource && newSurplus <= previousSource.amount + 0.005) {
-        const directPaidBefore = bill ? getPaidAmount(bill.id, month, selectedYear) : 0;
         const sources = (existing?.sources ?? [])
           .filter(source => !(source.type === "bill_surplus" && source.billId === billId));
         if (newSurplus > 0.005) sources.push({ ...previousSource, amount: newSurplus });
         const total = sources.reduce((sum, source) => sum + source.amount, 0);
         const preview = previewDebtSnowball(month, selectedYear, total);
-        if (bill.is_debt) {
-          await setPaidAmount(bill.id, month, selectedYear, parsed);
-          const delta = parsed - directPaidBefore;
-          if (delta > 0.005) showDebtPaymentNotice(bill, delta, paidDate, { scheduled: false, balanceBefore: bill.balance });
-        }
-        else await finalizeBillPayment(bill.id, month, selectedYear, parsed, paidDate);
+        await finalizeBillPayment(bill.id, month, selectedYear, parsed, paidDate);
         if (total > 0.005) await applyDebtSnowballPayment(preview, sources);
         else await removeDebtSnowballPayment(month, selectedYear);
         paidSaveSnapshotRef.current = { ...paidSaveSnapshotRef.current, [key]: { value: trimmed, at: Date.now() } };
@@ -1035,15 +1059,8 @@ export default function MonthlyScreen() {
         return;
       }
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      if (bill && !bill.is_debt) await finalizeBillPayment(billId, month, selectedYear, parsed, paidDate);
-      else {
-        const directPaidBefore = bill ? getPaidAmount(bill.id, month, selectedYear) : 0;
-        await setPaidAmount(billId, month, selectedYear, parsed);
-        if (bill?.is_debt) {
-          const delta = parsed - directPaidBefore;
-          if (delta > 0.005) showDebtPaymentNotice(bill, delta, paidDate, { scheduled: false, balanceBefore: bill.balance });
-        }
-      }
+      if (bill) await finalizeBillPayment(billId, month, selectedYear, parsed, paidDate);
+      else await setPaidAmount(billId, month, selectedYear, parsed);
       paidSaveSnapshotRef.current = { ...paidSaveSnapshotRef.current, [key]: { value: trimmed, at: Date.now() } };
       clearPaidEdit();
       if (bill) askToTreatPaidAsFullPayment({ bill, budgeted, actual: parsed, paidDate });
@@ -1051,16 +1068,14 @@ export default function MonthlyScreen() {
       paidSaveInFlightRef.current.delete(key);
       setSavingPaidKey(current => current === key ? null : current);
     }
-  }, [clearPaidEditForKey, editingPaid, savingPaidKey, setPaidAmount, bills, overrides, transactions, deleteTransaction, getBillMonthlyTotal, getCustomDueDay, getPaidAmount, getExtraPayment, previewDebtSnowball, finalizeBillPayment, applyDebtSnowballPayment, removeDebtSnowballPayment, showDebtPaymentNotice, askToTreatPaidAsFullPayment, parsePaidInput, month, selectedYear]);
+  }, [clearPaidEditForKey, editingPaid, savingPaidKey, setPaidAmount, bills, overrides, getBillMonthlyTotal, getCustomDueDay, getExtraPayment, previewDebtSnowball, finalizeBillPayment, applyDebtSnowballPayment, removeDebtSnowballPayment, askToTreatPaidAsFullPayment, parsePaidInput, month, selectedYear, explainDebtPaymentRoute]);
 
   const finalizeBillAtActualForMonth = useCallback(async (prompt: { bill: Bill; actual: number; paidDate: string }) => {
     if (prompt.bill.is_debt) {
-      await setPaidAmount(prompt.bill.id, month, selectedYear, prompt.actual);
-      await finalizeBillPayment(prompt.bill.id, month, selectedYear, prompt.actual, prompt.paidDate);
-      return;
+      throw new Error("Record or match this debt payment in Activity so the payment and debt balance save together.");
     }
     await finalizeBillPayment(prompt.bill.id, month, selectedYear, prompt.actual, prompt.paidDate);
-  }, [finalizeBillPayment, month, selectedYear, setPaidAmount]);
+  }, [finalizeBillPayment]);
 
   const matchSurplusAmountToActual = useCallback(async (prompt: { bill: Bill; actual: number; matchAmountToActual?: boolean } | null) => {
     if (!prompt?.matchAmountToActual || prompt.bill.frequency === "weekly") return;
@@ -1074,23 +1089,13 @@ export default function MonthlyScreen() {
 
   const keepBillSurplus = async () => {
     if (!surplusPrompt) return;
-    if (!settings.debtPayoffEnabled) {
-      await finalizeBillAtActualForMonth(surplusPrompt);
-      await matchSurplusAmountToActual(surplusPrompt);
+    if (surplusPrompt.bill.is_debt) {
       setSurplusPrompt(null);
+      explainDebtPaymentRoute();
       return;
     }
-    if (surplusPrompt.bill.is_debt) {
-      const directPaidBefore = getPaidAmount(surplusPrompt.bill.id, month, selectedYear);
+    if (!settings.debtPayoffEnabled) {
       await finalizeBillAtActualForMonth(surplusPrompt);
-      await removeDebtSurplusTransaction(surplusPrompt.bill.id);
-      const delta = surplusPrompt.actual - directPaidBefore;
-      if (delta > 0.005) {
-        showDebtPaymentNotice(surplusPrompt.bill, delta, surplusPrompt.paidDate, {
-          scheduled: false,
-          balanceBefore: surplusPrompt.bill.balance,
-        });
-      }
       await matchSurplusAmountToActual(surplusPrompt);
       setSurplusPrompt(null);
       return;
@@ -1112,44 +1117,8 @@ export default function MonthlyScreen() {
     if (!surplusPrompt || !surplusSnowballOffer) return;
     const surplus = surplusPrompt.budgeted - surplusPrompt.actual;
     if (surplusPrompt.bill.is_debt) {
-      const target = surplusSnowballOffer.preview.allocations[0];
-      if (!surplusSnowballOffer.safe || !target) return;
-      const existing = getExtraPayment(month, selectedYear);
-      const sources = replaceBillSurplusFundingSource(
-        existing?.sources,
-        existing?.amount ?? 0,
-        {
-          type: "bill_surplus",
-          amount: surplus,
-          billId: surplusPrompt.bill.id,
-          billName: surplusPrompt.bill.name,
-        },
-      );
-      const directPaidBefore = getPaidAmount(surplusPrompt.bill.id, month, selectedYear);
-      await finalizeBillAtActualForMonth(surplusPrompt);
-      let snowballAdded = false;
-      try {
-        await removeDebtSurplusTransaction(surplusPrompt.bill.id);
-        await applyDebtSnowballPayment(surplusSnowballOffer.preview, sources);
-        snowballAdded = true;
-      } catch {
-        Alert.alert(
-          "Debt Finalized",
-          "The debt payment was saved, but the leftover could not be added as a snowball payment. The difference is still available, so you can try again.",
-        );
-      }
-      const delta = surplusPrompt.actual - directPaidBefore;
-      if (delta > 0.005) {
-        showDebtPaymentNotice(surplusPrompt.bill, delta, surplusPrompt.paidDate, {
-          scheduled: false,
-          balanceBefore: surplusPrompt.bill.balance,
-          extraMessage: snowballAdded
-            ? `I also added $${surplus.toFixed(2)} to ${target.billName} for ${formatShortDate(surplusSnowballOffer.paymentDate)}.`
-            : undefined,
-        });
-      }
-      await matchSurplusAmountToActual(surplusPrompt);
       setSurplusPrompt(null);
+      explainDebtPaymentRoute();
       return;
     }
     const existing = getExtraPayment(month, selectedYear);
@@ -1227,16 +1196,13 @@ export default function MonthlyScreen() {
   const handleQuickPaid = useCallback(async (billId: string, amount: number, isPaid: boolean) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const bill = bills.find(item => item.id === billId);
-    const day = bill ? Math.min(new Date(selectedYear, month + 1, 0).getDate(), getCustomDueDay(bill.id, month, selectedYear) ?? bill.due_day) : 1;
-    const paidDate = isoDateForMonthDay(selectedYear, month, day);
-    const paidBefore = bill?.is_debt ? getPaidAmount(billId, month, selectedYear) : 0;
+    if (bill?.is_debt) {
+      explainDebtPaymentRoute();
+      return;
+    }
     if (isPaid) await removeDebtSurplusTransaction(billId);
     await setPaidAmount(billId, month, selectedYear, isPaid ? 0 : amount);
-    if (!isPaid && bill?.is_debt) {
-      const appliedAmount = Math.max(0, amount - paidBefore);
-      if (appliedAmount > 0.005) showDebtPaymentNotice(bill, appliedAmount, paidDate, { scheduled: false, balanceBefore: bill.balance });
-    }
-  }, [setPaidAmount, removeDebtSurplusTransaction, bills, getCustomDueDay, getPaidAmount, showDebtPaymentNotice, month, selectedYear]);
+  }, [setPaidAmount, removeDebtSurplusTransaction, bills, explainDebtPaymentRoute]);
 
   const showTransactionDebtNotice = useCallback((tx: Omit<Transaction, "id"> | Transaction) => {
     const linkedDebtId = tx.linked_bill_id ?? tx.debt_applied_bill_id;
@@ -1676,24 +1642,42 @@ export default function MonthlyScreen() {
       ) : (
         <>
       <PremiumBackdrop variant="purple" />
-      <View style={[styles.header, isDesktop && styles.desktopHeader, { paddingTop: insets.top + 12 + webTopPad }]}>
-        <View>
-          <Text style={[styles.calendarBrand, { color: c.primary }]}>FLOWLEDGER ALGO</Text>
-          <Text style={[styles.calendarScreenLabel, { color: c.foreground }]}>Forecast</Text>
+      <View style={[
+        styles.header,
+        isDesktop && styles.desktopHeader,
+        isNarrowForecastLayout && styles.narrowHeader,
+        stackForecastHeader && styles.stackedHeader,
+        { paddingTop: insets.top + 12 + webTopPad },
+      ]}>
+        <View style={[styles.headerCopy, stackForecastHeader && styles.stackedHeaderCopy]}>
+          <Text numberOfLines={1} style={[styles.calendarBrand, { color: c.primary }]}>FLOWLEDGER ALGO</Text>
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.8}
+            style={[styles.calendarScreenLabel, { color: c.foreground }]}
+          >
+            Forecast
+          </Text>
           {isFuture && <Text style={[styles.forecastTag, { color: c.primary }]}>Forecast Mode</Text>}
         </View>
-        <View style={styles.headerActions}>
+        <View style={[
+          styles.headerActions,
+          isNarrowForecastLayout && styles.narrowHeaderActions,
+          stackForecastHeader && styles.stackedHeaderActions,
+        ]}>
           <Pressable
             onPress={() => router.push("/plan-simulator")}
             accessibilityRole="button"
             accessibilityLabel={`${isFeatureLocked("plan_simulator") ? "Locked Pro " : ""}Plan Simulator`}
             style={({ pressed }) => [
               styles.simulatorButton,
+              isNarrowForecastLayout && styles.narrowSimulatorButton,
               { borderColor: c.primary + "55", backgroundColor: c.primary + "14", opacity: pressed ? 0.72 : 1 },
             ]}
           >
             <Feather name={isFeatureLocked("plan_simulator") ? "lock" : "sliders"} size={15} color={c.primary} />
-            <Text style={[styles.simulatorButtonText, { color: c.primary }]}>Simulator</Text>
+            {!isNarrowForecastLayout ? <Text style={[styles.simulatorButtonText, { color: c.primary }]}>Simulator</Text> : null}
           </Pressable>
           <Pressable
             onPress={jumpToToday}
@@ -1701,6 +1685,7 @@ export default function MonthlyScreen() {
             accessibilityLabel="Jump to today"
             style={({ pressed }) => [
               styles.todayChip,
+              isNarrowForecastLayout && styles.narrowTodayChip,
               {
                 borderColor: isCurrentMonth ? c.primary : "rgba(226,232,240,0.58)",
                 backgroundColor: isCurrentMonth ? c.primary : "rgba(2,6,23,0.58)",
@@ -1715,9 +1700,12 @@ export default function MonthlyScreen() {
           <CommandPlusButton
             onPress={() => openAddTransaction(selectedDate)}
             accessibilityLabel="Add to calendar"
+            size={isNarrowForecastLayout ? 44 : 54}
+            iconSize={isNarrowForecastLayout ? 20 : 22}
           />
         </View>
       </View>
+      <DataFreshnessLabel inset compact />
 
       <View
         style={[
@@ -1928,12 +1916,14 @@ export default function MonthlyScreen() {
                     <View style={styles.entryRight}>
                       <PayStatus paid={isPaid} partial={isPartial} />
                       <Pressable
-                        onPress={() => handleQuickPaid(bill.id, amount, isPaid)}
-                        style={({ pressed }) => [styles.quickPaidBtn, { backgroundColor: isPaid ? c.muted : c.success + "20", opacity: pressed ? 0.7 : 1, borderRadius: 8, marginTop: 6 }]}
+                        accessibilityRole="button"
+                        accessibilityLabel={bill.is_debt ? `Record ${bill.name} payment in Activity` : isPaid ? `Mark ${bill.name} unpaid` : `Mark ${bill.name} paid`}
+                        onPress={bill.is_debt ? openDebtPaymentActivity : () => handleQuickPaid(bill.id, amount, isPaid)}
+                        style={({ pressed }) => [styles.quickPaidBtn, { backgroundColor: bill.is_debt ? c.primary + "18" : isPaid ? c.muted : c.success + "20", opacity: pressed ? 0.7 : 1, borderRadius: 8, marginTop: 6 }]}
                       >
-                        <Feather name={isPaid ? "x" : "check"} size={12} color={isPaid ? c.mutedForeground : c.success} />
-                        <Text style={[styles.quickPaidText, { color: isPaid ? c.mutedForeground : c.success }]}>
-                          {isPaid ? "Unpay" : "Mark Paid"}
+                        <Feather name={bill.is_debt ? "activity" : isPaid ? "x" : "check"} size={12} color={bill.is_debt ? c.primary : isPaid ? c.mutedForeground : c.success} />
+                        <Text style={[styles.quickPaidText, { color: bill.is_debt ? c.primary : isPaid ? c.mutedForeground : c.success }]}>
+                          {bill.is_debt ? "Record payment" : isPaid ? "Unpay" : "Mark Paid"}
                         </Text>
                       </Pressable>
                     </View>
@@ -1987,25 +1977,36 @@ export default function MonthlyScreen() {
                     </View>
                     <View style={styles.amtField}>
                       <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>Paid</Text>
-                      <TextInput
-                        style={[styles.fieldInput, { backgroundColor: isPaid ? c.success + "20" : c.muted, color: isPaid ? c.success : c.foreground }]}
-                        value={showPaid}
-                        onChangeText={v => {
-                          editingPaidRef.current = { ...editingPaidRef.current, [paidKey]: v };
-                          setEditingPaid(p => ({ ...p, [paidKey]: v }));
-                        }}
-                        onFocus={() => {
-                          const focusValue = paid > 0 ? paid.toFixed(2) : "";
-                          editingPaidRef.current = { ...editingPaidRef.current, [paidKey]: focusValue };
-                          setEditingPaid(p => ({ ...p, [paidKey]: focusValue }));
-                        }}
-                        onBlur={() => handlePaidBlur(bill.id, paidKey, editingPaidRef.current[paidKey] ?? showPaid)}
-                        keyboardType="decimal-pad"
-                        placeholder="0.00"
-                        placeholderTextColor={c.mutedForeground}
-                        returnKeyType="done"
-                        onSubmitEditing={Keyboard.dismiss}
-                      />
+                      {bill.is_debt ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Open Activity to record ${bill.name} payment`}
+                          onPress={openDebtPaymentActivity}
+                          style={[styles.fieldInput, { backgroundColor: c.primary + "14", justifyContent: "center" }]}
+                        >
+                          <Text numberOfLines={1} style={[styles.quickPaidText, { color: c.primary }]}>Use Activity</Text>
+                        </Pressable>
+                      ) : (
+                        <TextInput
+                          style={[styles.fieldInput, { backgroundColor: isPaid ? c.success + "20" : c.muted, color: isPaid ? c.success : c.foreground }]}
+                          value={showPaid}
+                          onChangeText={v => {
+                            editingPaidRef.current = { ...editingPaidRef.current, [paidKey]: v };
+                            setEditingPaid(p => ({ ...p, [paidKey]: v }));
+                          }}
+                          onFocus={() => {
+                            const focusValue = paid > 0 ? paid.toFixed(2) : "";
+                            editingPaidRef.current = { ...editingPaidRef.current, [paidKey]: focusValue };
+                            setEditingPaid(p => ({ ...p, [paidKey]: focusValue }));
+                          }}
+                          onBlur={() => handlePaidBlur(bill.id, paidKey, editingPaidRef.current[paidKey] ?? showPaid)}
+                          keyboardType="decimal-pad"
+                          placeholder="0.00"
+                          placeholderTextColor={c.mutedForeground}
+                          returnKeyType="done"
+                          onSubmitEditing={Keyboard.dismiss}
+                        />
+                      )}
                     </View>
                     <View style={styles.amtField}>
                       <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>Left</Text>
@@ -2116,9 +2117,17 @@ export default function MonthlyScreen() {
                       <Text style={[styles.dayOverlayBigDay, { color: c.foreground }]}>
                         {selectedDay ?? ""}
                       </Text>
-                      <View>
-                        <Text style={[styles.dayOverlayTitle, { color: c.foreground }]}>
-                          {selectedDate ? formatLongDate(selectedDate) : ""}
+                      <View style={styles.dayOverlayDateCopy}>
+                        <Text
+                          accessibilityLabel={selectedDate ? formatLongDate(selectedDate) : undefined}
+                          numberOfLines={2}
+                          style={[styles.dayOverlayTitle, { color: c.foreground }]}
+                        >
+                          {selectedDate
+                            ? isNarrowForecastLayout
+                              ? formatCompactOverlayDate(selectedDate)
+                              : formatLongDate(selectedDate)
+                            : ""}
                         </Text>
                         <Text style={[styles.dayOverlaySub, { color: c.mutedForeground }]}>
                           {selectedDayItemCount} item{selectedDayItemCount === 1 ? "" : "s"}
@@ -2276,51 +2285,65 @@ export default function MonthlyScreen() {
                                 </View>
                                 <View style={[styles.dayBillNumberTile, styles.dayBillPaidTile, { backgroundColor: c.background + "66", borderColor: editingPaid[paidKey] !== undefined ? c.primary + "80" : c.border }]}>
                                   <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Paid</Text>
-                                  <View style={styles.dayBillPaidInputRow}>
-                                    <Text style={[styles.dayBillPaidDollar, { color: showPaid ? c.success : c.mutedForeground }]}>$</Text>
-                                    <TextInput
-                                      value={showPaid}
-                                      onChangeText={text => {
-                                        editingPaidRef.current = { ...editingPaidRef.current, [paidKey]: text };
-                                        setEditingPaid(current => ({ ...current, [paidKey]: text }));
-                                      }}
-                                      onFocus={() => {
-                                        editingPaidRef.current = { ...editingPaidRef.current, [paidKey]: showPaid || "" };
-                                        setEditingPaid(current => ({ ...current, [paidKey]: showPaid || "" }));
-                                      }}
-                                      onBlur={() => handlePaidBlur(bill.id, paidKey, editingPaidRef.current[paidKey] ?? showPaid)}
-                                      keyboardType="decimal-pad"
-                                      returnKeyType="done"
-                                      blurOnSubmit
-                                      placeholder="0.00"
-                                      placeholderTextColor={c.mutedForeground}
-                                      selectTextOnFocus
-                                      style={[styles.dayBillPaidInput, { color: showPaid ? c.success : c.mutedForeground }]}
-                                    />
-                                    {paidEditing ? (
-                                      <Pressable
-                                        disabled={savingPaidKey === paidKey}
-                                        onPress={() => handlePaidBlur(bill.id, paidKey, editingPaidRef.current[paidKey] ?? showPaid)}
-                                        hitSlop={8}
-                                        style={[styles.dayBillPaidSave, { backgroundColor: c.primary + "22", opacity: savingPaidKey === paidKey ? 0.5 : 1 }]}
-                                      >
-                                        <Feather name="check" size={12} color={c.primary} />
-                                      </Pressable>
-                                    ) : null}
-                                  </View>
+                                  {bill.is_debt ? (
+                                    <Pressable
+                                      accessibilityRole="button"
+                                      accessibilityLabel={`Open Activity to record ${bill.name} payment`}
+                                      onPress={openDebtPaymentActivity}
+                                      style={styles.dayBillPaidInputRow}
+                                    >
+                                      <Feather name="activity" size={12} color={c.primary} />
+                                      <Text numberOfLines={1} style={[styles.dayBillPaidInput, { color: c.primary }]}>Activity</Text>
+                                    </Pressable>
+                                  ) : (
+                                    <View style={styles.dayBillPaidInputRow}>
+                                      <Text style={[styles.dayBillPaidDollar, { color: showPaid ? c.success : c.mutedForeground }]}>$</Text>
+                                      <TextInput
+                                        value={showPaid}
+                                        onChangeText={text => {
+                                          editingPaidRef.current = { ...editingPaidRef.current, [paidKey]: text };
+                                          setEditingPaid(current => ({ ...current, [paidKey]: text }));
+                                        }}
+                                        onFocus={() => {
+                                          editingPaidRef.current = { ...editingPaidRef.current, [paidKey]: showPaid || "" };
+                                          setEditingPaid(current => ({ ...current, [paidKey]: showPaid || "" }));
+                                        }}
+                                        onBlur={() => handlePaidBlur(bill.id, paidKey, editingPaidRef.current[paidKey] ?? showPaid)}
+                                        keyboardType="decimal-pad"
+                                        returnKeyType="done"
+                                        blurOnSubmit
+                                        placeholder="0.00"
+                                        placeholderTextColor={c.mutedForeground}
+                                        selectTextOnFocus
+                                        style={[styles.dayBillPaidInput, { color: showPaid ? c.success : c.mutedForeground }]}
+                                      />
+                                      {paidEditing ? (
+                                        <Pressable
+                                          disabled={savingPaidKey === paidKey}
+                                          onPress={() => handlePaidBlur(bill.id, paidKey, editingPaidRef.current[paidKey] ?? showPaid)}
+                                          hitSlop={8}
+                                          style={[styles.dayBillPaidSave, { backgroundColor: c.primary + "22", opacity: savingPaidKey === paidKey ? 0.5 : 1 }]}
+                                        >
+                                          <Feather name="check" size={12} color={c.primary} />
+                                        </Pressable>
+                                      ) : null}
+                                    </View>
+                                  )}
                                 </View>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
                                   <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Left</Text>
-                                  <Text style={[styles.dayBillNumberValue, { color: remaining > 0 ? c.destructive : c.success }]}>${remaining.toFixed(2)}</Text>
+                                  <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: remaining > 0 ? c.destructive : c.success }]}>${remaining.toFixed(2)}</Text>
                                 </View>
                               </View>
                               <View style={styles.dayBillActions}>
                                 <Pressable
-                                  onPress={() => handleQuickPaid(bill.id, amount, isPaid)}
-                                  style={({ pressed }) => [styles.dayBillAction, { backgroundColor: isPaid ? c.background : c.success + "20", borderColor: isPaid ? c.border : c.success + "35", opacity: pressed ? 0.74 : 1 }]}
+                                  accessibilityRole="button"
+                                  accessibilityLabel={bill.is_debt ? `Record ${bill.name} payment in Activity` : isPaid ? `Mark ${bill.name} unpaid` : `Mark ${bill.name} paid`}
+                                  onPress={bill.is_debt ? openDebtPaymentActivity : () => handleQuickPaid(bill.id, amount, isPaid)}
+                                  style={({ pressed }) => [styles.dayBillAction, { backgroundColor: bill.is_debt ? c.primary + "16" : isPaid ? c.background : c.success + "20", borderColor: bill.is_debt ? c.primary + "35" : isPaid ? c.border : c.success + "35", opacity: pressed ? 0.74 : 1 }]}
                                 >
-                                  <Feather name={isPaid ? "x" : "check"} size={13} color={isPaid ? c.mutedForeground : c.success} />
-                                  <Text style={[styles.dayBillActionText, { color: isPaid ? c.mutedForeground : c.success }]}>{isPaid ? "Unpay" : "Mark paid"}</Text>
+                                  <Feather name={bill.is_debt ? "activity" : isPaid ? "x" : "check"} size={13} color={bill.is_debt ? c.primary : isPaid ? c.mutedForeground : c.success} />
+                                  <Text style={[styles.dayBillActionText, { color: bill.is_debt ? c.primary : isPaid ? c.mutedForeground : c.success }]}>{bill.is_debt ? "Record payment" : isPaid ? "Unpay" : "Mark paid"}</Text>
                                 </Pressable>
                                 {canReschedule ? (
                                   <Pressable
@@ -2578,15 +2601,15 @@ export default function MonthlyScreen() {
                               <View style={styles.dayBillNumbers}>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
                                   <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Planned</Text>
-                                  <Text numberOfLines={1} style={[styles.dayBillNumberValue, { color: c.foreground }]}>${group.plannedAmount.toFixed(2)}</Text>
+                                  <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: c.foreground }]}>${group.plannedAmount.toFixed(2)}</Text>
                                 </View>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
                                   <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Spent</Text>
-                                  <Text numberOfLines={1} style={[styles.dayBillNumberValue, { color: c.success }]}>${group.spentAmount.toFixed(2)}</Text>
+                                  <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: c.success }]}>${group.spentAmount.toFixed(2)}</Text>
                                 </View>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
                                   <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>{finalLabel}</Text>
-                                  <Text numberOfLines={1} style={[styles.dayBillNumberValue, { color: statusColor }]}>${finalAmount.toFixed(2)}</Text>
+                                  <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: statusColor }]}>${finalAmount.toFixed(2)}</Text>
                                 </View>
                               </View>
                               {group.source === "goal" ? (
@@ -2672,15 +2695,15 @@ export default function MonthlyScreen() {
                               <View style={styles.dayBillNumbers}>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
                                   <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Amount</Text>
-                                  <Text numberOfLines={1} style={[styles.dayBillNumberValue, { color: c.foreground }]}>${settlement.amount.toFixed(2)}</Text>
+                                  <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: c.foreground }]}>${settlement.amount.toFixed(2)}</Text>
                                 </View>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
                                   <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>{isTransfer ? "Moved" : isMoneyIn ? "Received" : "Paid"}</Text>
-                                  <Text numberOfLines={1} style={[styles.dayBillNumberValue, { color: c.success }]}>${settlement.paid.toFixed(2)}</Text>
+                                  <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: c.success }]}>${settlement.paid.toFixed(2)}</Text>
                                 </View>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
                                   <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Left</Text>
-                                  <Text numberOfLines={1} style={[styles.dayBillNumberValue, { color: remaining > 0.005 ? c.warning : c.success }]}>${remaining.toFixed(2)}</Text>
+                                  <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: remaining > 0.005 ? c.warning : c.success }]}>${remaining.toFixed(2)}</Text>
                                 </View>
                               </View>
 
@@ -3205,17 +3228,25 @@ export default function MonthlyScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 22, paddingBottom: 10 },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10, paddingHorizontal: 22, paddingBottom: 14 },
   desktopHeader: { width: "96%", maxWidth: 1440, alignSelf: "center" },
+  headerCopy: { flex: 1, minWidth: 0 },
+  narrowHeader: { gap: 8, paddingHorizontal: 14 },
+  stackedHeader: { flexDirection: "column", alignItems: "stretch", gap: 10 },
+  stackedHeaderCopy: { width: "100%" },
   calendarBrand: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 2.2, marginBottom: 3, textTransform: "uppercase" },
-  calendarScreenLabel: { fontSize: 28, fontFamily: "Inter_700Bold", letterSpacing: -0.8 },
+  calendarScreenLabel: { fontSize: 30, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.9 },
   forecastTag: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginTop: 1 },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 10 },
-  simulatorButton: { minHeight: 44, borderWidth: 1, borderRadius: 13, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  narrowHeaderActions: { gap: 6 },
+  stackedHeaderActions: { alignSelf: "flex-end" },
+  simulatorButton: { minHeight: 46, borderWidth: 1, borderRadius: 16, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  narrowSimulatorButton: { width: 44, height: 44, minHeight: 44, borderRadius: 15, paddingHorizontal: 0 },
   simulatorButtonText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   todayChip: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", borderWidth: 2 },
+  narrowTodayChip: { width: 44, height: 44, borderRadius: 14 },
   todayChipText: { fontSize: 17, fontFamily: "Inter_800ExtraBold", lineHeight: 20 },
-  calendarMonthBar: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginHorizontal: 22, marginTop: 0, marginBottom: 12, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", backgroundColor: "rgba(2,6,23,0.32)", borderRadius: 24, paddingHorizontal: 8, paddingVertical: 10 },
+  calendarMonthBar: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginHorizontal: 22, marginTop: 0, marginBottom: 14, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", backgroundColor: "rgba(2,6,23,0.32)", borderRadius: 26, paddingHorizontal: 10, paddingVertical: 11 },
   desktopMonthBar: { width: "96%", maxWidth: 1440, alignSelf: "center", marginHorizontal: 0 },
   monthArrowBtn: { width: 46, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: "rgba(15,23,42,0.58)" },
   monthCenterLabel: { flex: 1, minHeight: 42, alignItems: "center", justifyContent: "center", borderRadius: 18 },
@@ -3266,7 +3297,7 @@ const styles = StyleSheet.create({
   pill: { paddingHorizontal: 12, paddingVertical: 5 },
   pillText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   list: { paddingHorizontal: 16, paddingTop: 6 },
-  entryCard: { marginBottom: 12, borderLeftWidth: 4, borderWidth: 1, borderColor: "rgba(148,163,184,0.10)", shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.16, shadowRadius: 18, elevation: 4 },
+  entryCard: { marginBottom: 12, borderLeftWidth: 4, borderWidth: 1, borderColor: "rgba(148,163,184,0.10)", shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.10, shadowRadius: 14, elevation: 3 },
   entryTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", padding: 12, paddingBottom: 6 },
   entryLeft: { flex: 1 },
   entryName: { fontSize: 15, fontFamily: "Inter_600SemiBold", marginBottom: 2 },
@@ -3307,7 +3338,8 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   dayOverlayHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 14 },
-  dayOverlayDateBlock: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
+  dayOverlayDateBlock: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1, minWidth: 0 },
+  dayOverlayDateCopy: { flex: 1, minWidth: 0 },
   dayOverlayBigDay: { fontSize: 34, fontFamily: "Inter_700Bold", lineHeight: 40 },
   dayOverlayTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
   dayOverlaySub: { fontSize: 12, fontFamily: "Inter_500Medium", marginTop: 2 },
@@ -3327,9 +3359,9 @@ const styles = StyleSheet.create({
   dayBillName: { fontSize: 14, fontFamily: "Inter_700Bold" },
   dayBillMeta: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
   dayBillNumbers: { flexDirection: "row", gap: 8 },
-  dayBillNumberTile: { flex: 1, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 8 },
+  dayBillNumberTile: { flex: 1, minWidth: 0, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 8 },
   dayBillNumberLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.5 },
-  dayBillNumberValue: { fontSize: 13, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
+  dayBillNumberValue: { maxWidth: "100%", fontSize: 13, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
   dayDebtPlanSummary: { borderWidth: 1, borderRadius: 12, padding: 10, gap: 3 },
   dayDebtPlanText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   dayDebtPlanTotal: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },

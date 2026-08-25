@@ -11,19 +11,19 @@ type Props = {
 
 const VARIANT_GLOWS: Record<FlowWaveVariant, { primary: string; secondary: string; edge: string }> = {
   blue: {
-    primary: "rgba(56,189,248,0.18)",
-    secondary: "rgba(37,99,235,0.14)",
-    edge: "rgba(34,197,94,0.08)",
+    primary: "rgba(56,189,248,0.07)",
+    secondary: "rgba(37,99,235,0.045)",
+    edge: "rgba(34,197,94,0.02)",
   },
   green: {
-    primary: "rgba(34,197,94,0.16)",
-    secondary: "rgba(56,189,248,0.12)",
-    edge: "rgba(139,92,246,0.08)",
+    primary: "rgba(34,197,94,0.06)",
+    secondary: "rgba(56,189,248,0.04)",
+    edge: "rgba(139,92,246,0.02)",
   },
   purple: {
-    primary: "rgba(168,85,247,0.18)",
-    secondary: "rgba(56,189,248,0.13)",
-    edge: "rgba(34,197,94,0.08)",
+    primary: "rgba(168,85,247,0.07)",
+    secondary: "rgba(56,189,248,0.04)",
+    edge: "rgba(34,197,94,0.02)",
   },
 };
 
@@ -44,7 +44,7 @@ export function FlowWaveBackground({ variant = "blue", intensity = "standard" }:
       <View style={[styles.glowSecondary, { backgroundColor: glow.secondary, opacity: soft ? 0.50 : 0.9 }]} />
       <View style={[styles.glowEdge, { backgroundColor: glow.edge, opacity: soft ? 0.42 : 0.72 }]} />
       <LinearGradient
-        colors={["rgba(255,255,255,0.035)", "rgba(255,255,255,0)", "rgba(255,255,255,0.025)"]}
+        colors={["rgba(255,255,255,0.018)", "rgba(255,255,255,0)", "rgba(255,255,255,0.01)"]}
         locations={[0, 0.58, 1]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -90,6 +90,6 @@ const styles = StyleSheet.create({
   },
   readabilityWash: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(2,6,23,0.16)",
+    backgroundColor: "rgba(2,6,23,0.10)",
   },
 });

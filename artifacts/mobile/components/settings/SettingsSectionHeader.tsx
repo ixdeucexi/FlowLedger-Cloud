@@ -43,13 +43,13 @@ export function SettingsSectionHeader({ section, onBack, backLabel = "More" }: S
 }
 
 const styles = StyleSheet.create({
-  container: { marginBottom: 20 },
-  backRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 12, alignSelf: "flex-start" },
+  container: { marginBottom: 24 },
+  backRow: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 10, alignSelf: "flex-start", paddingRight: 8 },
   backText: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
-  headingRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  headingRow: { flexDirection: "row", alignItems: "center", gap: 14 },
   headingRowCompact: { alignItems: "flex-start", flexDirection: "column", gap: 8 },
-  icon: { width: 46, height: 46, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  icon: { width: 52, height: 52, borderRadius: 17, alignItems: "center", justifyContent: "center" },
   headingCopy: { flex: 1, minWidth: 0 },
-  title: { fontSize: 27, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.7 },
-  description: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 18, marginTop: 2 },
+  title: { fontSize: 29, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.8 },
+  description: { fontSize: 13, fontFamily: "Inter_500Medium", lineHeight: 19, marginTop: 3 },
 });

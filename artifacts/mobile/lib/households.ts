@@ -48,18 +48,35 @@ function storageKey(userId?: string | null) {
   return `${ACTIVE_HOUSEHOLD_KEY}-${userId ?? "local"}`;
 }
 
-function friendlyHouseholdError(message: string | undefined, fallback: string): string {
+function friendlyHouseholdError(
+  message: string | undefined,
+  fallback: string,
+): string {
   const lower = (message ?? "").toLowerCase();
-  if (lower.includes("only household owners or managers")) return "Only household owners or managers can do that.";
-  if (lower.includes("only the household owner")) return "Only the household owner can do that.";
-  if (lower.includes("view only") || lower.includes("viewer")) return "This household is view only for your account.";
-  if (lower.includes("invalid invite role")) return "Choose Manager, Can edit, or View only, then try again.";
-  if (lower.includes("invite code is required")) return "Enter an invite code first.";
-  if (lower.includes("invalid or expired")) return "That invite code is invalid or expired.";
+  if (lower.includes("only household owners or managers"))
+    return "Only household owners or managers can do that.";
+  if (lower.includes("only the household owner"))
+    return "Only the household owner can do that.";
+  if (lower.includes("view only") || lower.includes("viewer"))
+    return "This household is view only for your account.";
+  if (lower.includes("invalid invite role"))
+    return "Choose Manager, Can edit, or View only, then try again.";
+  if (lower.includes("invite code is required"))
+    return "Enter an invite code first.";
+  if (lower.includes("invalid or expired"))
+    return "That invite code is invalid or expired.";
+  if (lower.includes("household_member_plaid_disconnect_required")) {
+    return "Disconnect this member’s bank connection before they leave or are removed.";
+  }
+  if (lower.includes("household_member_billing_management_required")) {
+    return "This member’s active Pro subscription is tied to the household. Keep them in the household until it ends, or contact support.";
+  }
   return fallback;
 }
 
-export async function readStoredActiveHouseholdId(userId?: string | null): Promise<string | null> {
+export async function readStoredActiveHouseholdId(
+  userId?: string | null,
+): Promise<string | null> {
   try {
     return await AsyncStorage.getItem(storageKey(userId));
   } catch {
@@ -67,13 +84,18 @@ export async function readStoredActiveHouseholdId(userId?: string | null): Promi
   }
 }
 
-export async function writeStoredActiveHouseholdId(userId: string | undefined | null, householdId: string): Promise<void> {
+export async function writeStoredActiveHouseholdId(
+  userId: string | undefined | null,
+  householdId: string,
+): Promise<void> {
   try {
     await AsyncStorage.setItem(storageKey(userId), householdId);
   } catch {}
 }
 
-export async function loadRemoteActiveHouseholdId(userId?: string | null): Promise<string | null> {
+export async function loadRemoteActiveHouseholdId(
+  userId?: string | null,
+): Promise<string | null> {
   if (!userId) return null;
   const { data, error } = await supabase
     .from("user_preferences")
@@ -81,22 +103,30 @@ export async function loadRemoteActiveHouseholdId(userId?: string | null): Promi
     .eq("user_id", userId)
     .maybeSingle();
   if (error) return null;
-  return typeof data?.active_household_id === "string" ? data.active_household_id : null;
+  return typeof data?.active_household_id === "string"
+    ? data.active_household_id
+    : null;
 }
 
-export async function saveActiveHouseholdId(userId: string | undefined | null, householdId: string): Promise<void> {
+export async function saveActiveHouseholdId(
+  userId: string | undefined | null,
+  householdId: string,
+): Promise<void> {
   await writeStoredActiveHouseholdId(userId, householdId);
   if (!userId) return;
-  const { error } = await supabase
-    .from("user_preferences")
-    .upsert({
-      user_id: userId,
-      active_household_id: householdId,
-      updated_at: new Date().toISOString(),
-    });
+  const { error } = await supabase.from("user_preferences").upsert({
+    user_id: userId,
+    active_household_id: householdId,
+    updated_at: new Date().toISOString(),
+  });
   if (error) {
     const message = error.message.toLowerCase();
-    if (message.includes("active_household_id") || message.includes("schema cache") || message.includes("user_preferences")) return;
+    if (
+      message.includes("active_household_id") ||
+      message.includes("schema cache") ||
+      message.includes("user_preferences")
+    )
+      return;
     // The local preference was already saved above. A remote preference sync is
     // cross-device convenience and must never prevent a valid plan from loading
     // when a mobile browser is still reconnecting after resume.
@@ -104,7 +134,9 @@ export async function saveActiveHouseholdId(userId: string | undefined | null, h
   }
 }
 
-export async function loadHouseholdMemberships(userId?: string | null): Promise<HouseholdMembership[]> {
+export async function loadHouseholdMemberships(
+  userId?: string | null,
+): Promise<HouseholdMembership[]> {
   if (!userId) return [];
 
   const memberships = await supabase
@@ -116,7 +148,13 @@ export async function loadHouseholdMemberships(userId?: string | null): Promise<
     return [];
   }
 
-  const householdIds = Array.from(new Set((memberships.data ?? []).map((row: any) => String(row.household_id)).filter(Boolean)));
+  const householdIds = Array.from(
+    new Set(
+      (memberships.data ?? [])
+        .map((row: any) => String(row.household_id))
+        .filter(Boolean),
+    ),
+  );
   if (householdIds.length === 0) return [];
 
   const [households, budgets] = await Promise.all([
@@ -132,11 +170,13 @@ export async function loadHouseholdMemberships(userId?: string | null): Promise<
 
   if (households.error) return [];
 
-  const householdById = new Map((households.data ?? []).map((row: any) => [String(row.id), row]));
+  const householdById = new Map(
+    (households.data ?? []).map((row: any) => [String(row.id), row]),
+  );
   const budgetByHousehold = new Map(
     (budgets.data ?? [])
       .filter((row: any) => row.is_default !== false)
-      .map((row: any) => [String(row.household_id), String(row.id)])
+      .map((row: any) => [String(row.household_id), String(row.id)]),
   );
 
   return (memberships.data ?? [])
@@ -145,28 +185,37 @@ export async function loadHouseholdMemberships(userId?: string | null): Promise<
       const household = householdById.get(householdId);
       if (!household) return null;
       const isPersonal = household.is_personal === true;
-      const ownerName = isPersonal ? "Personal" : String(household.name ?? "Household");
+      const ownerName = isPersonal
+        ? "Personal"
+        : String(household.name ?? "Household");
       return {
         householdId,
         budgetId: budgetByHousehold.get(householdId) ?? null,
         name: ownerName,
         isPersonal,
         role: normalizeHouseholdRole(membership.role),
-        createdAt: membership.created_at ? String(membership.created_at) : undefined,
+        createdAt: membership.created_at
+          ? String(membership.created_at)
+          : undefined,
       };
     })
     .filter((item): item is HouseholdMembership => Boolean(item))
     .sort((a, b) => {
       if (a.isPersonal !== b.isPersonal) return a.isPersonal ? -1 : 1;
-      if (a.role !== b.role) return a.role === "owner" ? -1 : b.role === "owner" ? 1 : 0;
+      if (a.role !== b.role)
+        return a.role === "owner" ? -1 : b.role === "owner" ? 1 : 0;
       return a.name.localeCompare(b.name);
     });
 }
 
-export async function loadHouseholdInvites(householdId: string): Promise<HouseholdInvite[]> {
+export async function loadHouseholdInvites(
+  householdId: string,
+): Promise<HouseholdInvite[]> {
   const { data, error } = await supabase
     .from("household_invites")
-    .select("id, household_id, role, expires_at, accepted_at, revoked_at, created_at")
+    .select(
+      "id, household_id, role, expires_at, accepted_at, revoked_at, created_at",
+    )
     .eq("household_id", householdId)
     .order("created_at", { ascending: false });
 
@@ -185,12 +234,21 @@ export async function loadHouseholdInvites(householdId: string): Promise<Househo
   }));
 }
 
-export async function createHouseholdInviteCode(householdId: string, role: HouseholdInviteRole = "editor"): Promise<string> {
+export async function createHouseholdInviteCode(
+  householdId: string,
+  role: HouseholdInviteRole = "editor",
+): Promise<string> {
   const { data, error } = await supabase.rpc("create_household_invite", {
     p_household_id: householdId,
     p_role: role,
   });
-  if (error) throw new Error(friendlyHouseholdError(error.message, "Couldn't create invite code. Try again."));
+  if (error)
+    throw new Error(
+      friendlyHouseholdError(
+        error.message,
+        "Couldn't create invite code. Try again.",
+      ),
+    );
   return String(data ?? "");
 }
 
@@ -198,23 +256,35 @@ export async function acceptHouseholdInviteCode(code: string): Promise<string> {
   const { data, error } = await supabase.rpc("accept_household_invite", {
     p_code: code,
   });
-  if (error) throw new Error(friendlyHouseholdError(error.message, "Couldn't join that household. Try again."));
+  if (error)
+    throw new Error(
+      friendlyHouseholdError(
+        error.message,
+        "Couldn't join that household. Try again.",
+      ),
+    );
   return String(data ?? "");
 }
 
-export async function loadHouseholdMembers(householdId?: string | null): Promise<HouseholdMember[]> {
+export async function loadHouseholdMembers(
+  householdId?: string | null,
+): Promise<HouseholdMember[]> {
   if (!householdId) return [];
 
-  const rpcResult = await supabase.rpc("get_household_members", { p_household_id: householdId });
+  const rpcResult = await supabase.rpc("get_household_members", {
+    p_household_id: householdId,
+  });
   if (!rpcResult.error && Array.isArray(rpcResult.data)) {
-    return rpcResult.data.map((row: any): HouseholdMember => ({
-      userId: String(row.user_id),
-      role: normalizeHouseholdRole(row.role),
-      joinedAt: row.joined_at ? String(row.joined_at) : undefined,
-      email: row.email ?? null,
-      displayName: row.display_name ?? row.email ?? null,
-      isCurrentUser: Boolean(row.is_current_user),
-    }));
+    return rpcResult.data.map(
+      (row: any): HouseholdMember => ({
+        userId: String(row.user_id),
+        role: normalizeHouseholdRole(row.role),
+        joinedAt: row.joined_at ? String(row.joined_at) : undefined,
+        email: row.email ?? null,
+        displayName: row.display_name ?? row.email ?? null,
+        isCurrentUser: Boolean(row.is_current_user),
+      }),
+    );
   }
 
   const fallback = await supabase
@@ -224,15 +294,22 @@ export async function loadHouseholdMembers(householdId?: string | null): Promise
     .order("created_at", { ascending: true });
 
   if (fallback.error) return [];
-  return (fallback.data ?? []).map((row: any): HouseholdMember => ({
-    userId: String(row.user_id),
-    role: normalizeHouseholdRole(row.role),
-    joinedAt: row.created_at ? String(row.created_at) : undefined,
-    displayName: row.user_id ? `Member ${String(row.user_id).slice(0, 6)}` : "Household member",
-  }));
+  return (fallback.data ?? []).map(
+    (row: any): HouseholdMember => ({
+      userId: String(row.user_id),
+      role: normalizeHouseholdRole(row.role),
+      joinedAt: row.created_at ? String(row.created_at) : undefined,
+      displayName: row.user_id
+        ? `Member ${String(row.user_id).slice(0, 6)}`
+        : "Household member",
+    }),
+  );
 }
 
-export async function loadHouseholdActivity(householdId?: string | null, limit = 12): Promise<HouseholdActivity[]> {
+export async function loadHouseholdActivity(
+  householdId?: string | null,
+  limit = 12,
+): Promise<HouseholdActivity[]> {
   if (!householdId) return [];
   const targetLimit = Math.max(0, Math.floor(limit));
   if (targetLimit === 0) return [];
@@ -240,36 +317,44 @@ export async function loadHouseholdActivity(householdId?: string | null, limit =
 
   const { data, error } = await supabase
     .from("household_activity")
-    .select("id, household_id, actor_user_id, actor_email, actor_name, actor_verified, action, entity_type, entity_id, entity_label, created_at")
+    .select(
+      "id, household_id, actor_user_id, actor_email, actor_name, actor_verified, action, entity_type, entity_id, entity_label, created_at",
+    )
     .eq("household_id", householdId)
     .order("created_at", { ascending: false })
     .limit(rawLimit);
 
   if (error) return [];
-  const activity = (data ?? []).map((row: any): HouseholdActivity => ({
-    id: String(row.id),
-    householdId: String(row.household_id),
-    actorUserId: row.actor_user_id ?? null,
-    actorEmail: row.actor_email ?? null,
-    actorName: row.actor_name ?? row.actor_email ?? null,
-    actorVerified: row.actor_verified === true,
-    action: String(row.action ?? "updated"),
-    entityType: String(row.entity_type ?? "item"),
-    entityId: row.entity_id ?? null,
-    entityLabel: row.entity_label ?? null,
-    createdAt: String(row.created_at),
-  }));
+  const activity = (data ?? []).map(
+    (row: any): HouseholdActivity => ({
+      id: String(row.id),
+      householdId: String(row.household_id),
+      actorUserId: row.actor_user_id ?? null,
+      actorEmail: row.actor_email ?? null,
+      actorName: row.actor_name ?? row.actor_email ?? null,
+      actorVerified: row.actor_verified === true,
+      action: String(row.action ?? "updated"),
+      entityType: String(row.entity_type ?? "item"),
+      entityId: row.entity_id ?? null,
+      entityLabel: row.entity_label ?? null,
+      createdAt: String(row.created_at),
+    }),
+  );
   return summarizeHouseholdActivity(activity, targetLimit);
 }
 
-export async function verifyCurrentHouseholdMembership(userId: string, householdId: string): Promise<boolean> {
+export async function verifyCurrentHouseholdMembership(
+  userId: string,
+  householdId: string,
+): Promise<boolean> {
   const result = await supabase
     .from("household_members")
     .select("household_id")
     .eq("user_id", userId)
     .eq("household_id", householdId)
     .maybeSingle();
-  if (result.error) throw new Error("Household membership could not be verified.");
+  if (result.error)
+    throw new Error("Household membership could not be verified.");
   return Boolean(result.data?.household_id);
 }
 
@@ -283,20 +368,41 @@ export async function updateHouseholdMemberRole(
     p_member_user_id: memberUserId,
     p_role: role,
   });
-  if (error) throw new Error(friendlyHouseholdError(error.message, "Couldn't update that member. Try again."));
+  if (error)
+    throw new Error(
+      friendlyHouseholdError(
+        error.message,
+        "Couldn't update that member. Try again.",
+      ),
+    );
 }
 
-export async function removeHouseholdMember(householdId: string, memberUserId: string): Promise<void> {
+export async function removeHouseholdMember(
+  householdId: string,
+  memberUserId: string,
+): Promise<void> {
   const { error } = await supabase.rpc("remove_household_member", {
     p_household_id: householdId,
     p_member_user_id: memberUserId,
   });
-  if (error) throw new Error(friendlyHouseholdError(error.message, "Couldn't remove that member. Try again."));
+  if (error)
+    throw new Error(
+      friendlyHouseholdError(
+        error.message,
+        "Couldn't remove that member. Try again.",
+      ),
+    );
 }
 
 export async function leaveHousehold(householdId: string): Promise<void> {
   const { error } = await supabase.rpc("leave_household", {
     p_household_id: householdId,
   });
-  if (error) throw new Error(friendlyHouseholdError(error.message, "Couldn't leave that household. Try again."));
+  if (error)
+    throw new Error(
+      friendlyHouseholdError(
+        error.message,
+        "Couldn't leave that household. Try again.",
+      ),
+    );
 }

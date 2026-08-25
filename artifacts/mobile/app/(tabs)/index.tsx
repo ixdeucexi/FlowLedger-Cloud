@@ -13,6 +13,7 @@ import { AddBillModal } from "@/components/AddBillModal";
 import { AppLoadingIntro } from "@/components/AppLoadingIntro";
 import { AppText } from "@/components/AppText";
 import { DashboardCustomizer } from "@/components/DashboardCustomizer";
+import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import { DashboardUtilityWidgets } from "@/components/DashboardUtilityWidgets";
 import { FlowmentumHandoffModal } from "@/components/FlowmentumHandoffModal";
 import { GoalModal } from "@/components/GoalModal";
@@ -38,7 +39,7 @@ import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache,
 import { buildDashboardFinancialModel, type DashboardSavingsAccount } from "@/lib/dashboardFinancialModel";
 import { isCheckingBalanceTransaction } from "@/lib/billMatching";
 import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
-import { dateOnlyToLocalDate, localDateString } from "@/lib/dateLabels";
+import { compactDateLabel, dateOnlyToLocalDate, localDateString } from "@/lib/dateLabels";
 import {
   FLOWMENTUM_URL,
   flowmentumPreviewStorageKey,
@@ -227,7 +228,7 @@ function MobileDashboardScreen() {
     goals, addGoal, updateGoal, deleteGoal,
     getCashFlow, addBill, getDailyBalances, getTransactionsForMonth, settings,
     accounts, connectedBankAccounts, incomes, updateAccount, updateConnectedBankAccountDisplayName, forecastConfidence,
-    categories, activeHousehold, canEditHousehold,
+    categories, activeHousehold, canEditHousehold, demoMode,
     pendingBankTransactions, pendingPlanMatches, transactions,
   } = useBudget();
   const { readiness: setupReadiness } = useSetupReadiness();
@@ -342,7 +343,9 @@ function MobileDashboardScreen() {
   const now          = new Date();
   const currentMonth = now.getMonth();
   const today        = now.getDate();
-  const timeGreeting = now.getHours() < 5
+  const timeGreeting = demoMode
+    ? "Good morning"
+    : now.getHours() < 5
     ? "Good night"
     : now.getHours() < 12
     ? "Good morning"
@@ -893,6 +896,14 @@ function MobileDashboardScreen() {
       } : null,
     }).filter(decision => decision.id !== "breathing-room-opportunity");
   }, [algorithmSuite.billPriority.nextBill, algorithmSuite.safeCushion, bills, currentMonth, getRemainingDebtPlanForMonth, mobileGoalNearCompletion, mobileSnowballTarget, now, reviewCenterCount, selectedYear, settings.safety_floor, today]);
+  const dashboardBillsLeft = Math.max(0, cashFlow.totalBillsDue);
+  const dashboardSafeToSpend = Math.max(0, algorithmSuite.safeCushion.amount);
+  const dashboardNextPaydayFull = algorithmSuite.stability.nextPaycheckLabel || "Not scheduled";
+  const dashboardNextPayday = compactDateLabel(dashboardNextPaydayFull);
+  const dashboardPlanned = Math.max(0, cashFlow.totalBillsDue + cashFlow.goalAllocations);
+  const dashboardProgress = cashFlow.monthlyIncome > 0
+    ? Math.max(0, Math.min(1, dashboardPlanned / cashFlow.monthlyIncome))
+    : 0;
   return (
     <ScrollView
       style={[styles.screen, styles.dashboardStage, { backgroundColor: dashboardTheme.screen }]}
@@ -1000,6 +1011,7 @@ function MobileDashboardScreen() {
           </Pressable>
         </View>
       </View>
+      <DataFreshnessLabel inset compact />
       {!settings.onboarding_completed && (
         <View style={[styles.setupCard, { backgroundColor: c.card, borderColor: c.border }]}>
           <View style={styles.setupHeader}>
@@ -1131,77 +1143,81 @@ function MobileDashboardScreen() {
             ]}
           >
             <View style={[styles.referenceHeroMoneyPanel, isCommandWide && styles.referenceHeroMoneyPanelWide]}>
-            <View style={styles.referenceMoneyHeader}>
-              <View style={{ flex: 1 }}>
-                <AppText tone="title" style={[styles.referenceGreeting, { color: dashboardTheme.text }]}>{timeGreeting}</AppText>
-              </View>
-              <Pressable onPress={doFlip} accessibilityLabel="Show savings and goals" style={[styles.referenceFlipButton, { backgroundColor: dashboardTheme.purpleSurface, borderColor: dashboardTheme.purpleBorder }]}>
-                <Feather name="repeat" size={13} color={dashboardTheme.purpleText} />
-                <AppText style={[styles.referenceFlipButtonText, { color: dashboardTheme.purpleText }]}>Savings</AppText>
-              </Pressable>
-            </View>
-            <View style={styles.referenceBalanceRow}>
-              <View style={styles.referenceBalanceAmount}>
-                <AppText tone="label" style={[styles.referenceHeroLabel, { color: dashboardTheme.mutedText }]}>Checking balance</AppText>
-                <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={[styles.referenceHeroAmount, { color: dashboardTheme.amount, textShadowColor: c.isDark ? "rgba(34,211,238,0.25)" : "transparent" }]}>{formatDashboardCurrency(dashboardCheckingBalance)}</AppText>
-                {pendingCheckingSummary && pendingCheckingSummary.pendingCount > 0 ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`${pendingCheckingSummary.pendingCount} pending bank transaction${pendingCheckingSummary.pendingCount === 1 ? "" : "s"}. ${formatDashboardCurrency(pendingCheckingSummary.availableBalance)} available after pending activity.`}
-                    onPress={() => openPendingActivity(unplannedCheckingPending[0] ?? checkingPendingTransactions[0])}
-                    style={({ pressed }) => [
-                      styles.pendingBalanceStrip,
-                      {
-                        backgroundColor: c.warning + "12",
-                        borderColor: c.warning + "38",
-                        opacity: pressed ? 0.76 : 1,
-                      },
-                    ]}
-                  >
-                    <Feather name="clock" size={12} color={c.warning} />
-                    <AppText style={[styles.pendingBalancePrimary, { color: c.warning }]} numberOfLines={1}>
-                      {pendingCheckingSummary.pendingOutflow > 0
-                        ? `−${formatDashboardCurrency(pendingCheckingSummary.pendingOutflow)} pending`
-                        : `+${formatDashboardCurrency(pendingCheckingSummary.pendingInflow)} pending`}
-                    </AppText>
-                    <View style={[styles.pendingBalanceDot, { backgroundColor: dashboardTheme.subtleText }]} />
-                    <AppText style={[styles.pendingBalanceAvailable, { color: dashboardTheme.mutedText }]} numberOfLines={1}>
-                      {formatDashboardCurrency(pendingCheckingSummary.availableBalance)} available
-                    </AppText>
-                    <Feather name="chevron-right" size={12} color={dashboardTheme.subtleText} />
-                  </Pressable>
-                ) : null}
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Open Flo"
-                onPress={openFlo}
-                style={({ pressed }) => [
-                  styles.referenceHeroFloButton,
-                  {
-                    backgroundColor: c.primary + "14",
-                    borderColor: c.primary + "38",
-                    opacity: pressed ? 0.78 : 1,
-                  },
-                ]}
-              >
-                <View style={[styles.referenceHeroFloIcon, { backgroundColor: c.primary + "22" }]}>
-                  <Feather name="message-circle" size={17} color={c.primary} />
+              <View style={styles.referenceMoneyHeader}>
+                <View style={{ flex: 1 }}>
+                  <AppText tone="title" style={[styles.referenceGreeting, { color: dashboardTheme.text }]}>{timeGreeting}</AppText>
                 </View>
-                <AppText tone="title" style={[styles.referenceHeroFloText, { color: dashboardTheme.text }]}>Flo</AppText>
-              </Pressable>
+                <Pressable onPress={doFlip} accessibilityLabel="Show savings and goals" style={[styles.referenceFlipButton, { backgroundColor: dashboardTheme.purpleSurface, borderColor: dashboardTheme.purpleBorder }]}>
+                  <Feather name="repeat" size={13} color={dashboardTheme.purpleText} />
+                  <AppText style={[styles.referenceFlipButtonText, { color: dashboardTheme.purpleText }]}>Savings</AppText>
+                </Pressable>
+              </View>
+              <View style={styles.referenceHeroPrimaryRow}>
+                <View style={styles.referenceBalanceAmount}>
+                  <AppText tone="label" style={[styles.referenceHeroLabel, { color: dashboardTheme.mutedText }]}>Checking balance</AppText>
+                  <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.62} style={[styles.referenceHeroAmount, { color: dashboardTheme.amount, textShadowColor: "transparent" }]}>{formatDashboardCurrency(dashboardCheckingBalance)}</AppText>
+                  {pendingCheckingSummary && pendingCheckingSummary.pendingCount > 0 ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`${pendingCheckingSummary.pendingCount} pending bank transaction${pendingCheckingSummary.pendingCount === 1 ? "" : "s"}. ${formatDashboardCurrency(pendingCheckingSummary.availableBalance)} available after pending activity.`}
+                      onPress={() => openPendingActivity(unplannedCheckingPending[0] ?? checkingPendingTransactions[0])}
+                      style={({ pressed }) => [styles.pendingBalanceStrip, { backgroundColor: c.warning + "12", borderColor: c.warning + "38", opacity: pressed ? 0.76 : 1 }]}
+                    >
+                      <Feather name="clock" size={12} color={c.warning} />
+                      <AppText style={[styles.pendingBalancePrimary, { color: c.warning }]} numberOfLines={1}>
+                        {pendingCheckingSummary.pendingOutflow > 0
+                          ? `−${formatDashboardCurrency(pendingCheckingSummary.pendingOutflow)} pending`
+                          : `+${formatDashboardCurrency(pendingCheckingSummary.pendingInflow)} pending`}
+                      </AppText>
+                      <View style={[styles.pendingBalanceDot, { backgroundColor: dashboardTheme.subtleText }]} />
+                      <AppText style={[styles.pendingBalanceAvailable, { color: dashboardTheme.mutedText }]} numberOfLines={1}>
+                        {formatDashboardCurrency(pendingCheckingSummary.availableBalance)} available
+                      </AppText>
+                    </Pressable>
+                  ) : (
+                    <AppText style={[styles.referenceSafeThrough, { color: algorithmSuite.stability.safeUntilPayday === false ? c.warning : dashboardTheme.scoreStatus }]} numberOfLines={1}>
+                      {algorithmSuite.stability.safeUntilPayday === true
+                        ? `Safe through ${compactDateLabel(algorithmSuite.stability.nextPaycheckLabel || "next payday")}`
+                        : algorithmSuite.stability.safeUntilPayday === false
+                        ? "Review your plan before payday"
+                        : "Add an income date to finish your plan"}
+                    </AppText>
+                  )}
+                </View>
+                <Pressable
+                  nativeID="guided-tour-index"
+                  accessibilityRole="button"
+                  accessibilityLabel={`View Flow Score details. ${algorithmSuite.flowScore.score}, ${algorithmSuite.flowScore.label}.`}
+                  onPress={() => setFlowScoreVisible(true)}
+                  style={({ pressed }) => [styles.referenceScorePanel, { opacity: pressed ? 0.86 : 1 }]}
+                >
+                  <FlowScoreGauge score={algorithmSuite.flowScore.score} theme={dashboardTheme} />
+                  <AppText tone="title" style={[styles.referenceScoreStatus, { color: dashboardTheme.scoreStatus }]}>{algorithmSuite.flowScore.label}</AppText>
+                </Pressable>
+              </View>
+              <View style={styles.referenceHeroActionRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Ask Flo about your plan"
+                  onPress={openFlo}
+                  style={({ pressed }) => [styles.referenceHeroFloButton, { backgroundColor: c.primary + "14", borderColor: c.primary + "38", opacity: pressed ? 0.78 : 1 }]}
+                >
+                  <View style={[styles.referenceHeroFloIcon, { backgroundColor: c.primary + "22" }]}>
+                    <Feather name="message-circle" size={16} color={c.primary} />
+                  </View>
+                  <AppText tone="title" style={[styles.referenceHeroFloText, { color: dashboardTheme.text }]}>Ask Flo</AppText>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Open monthly forecast"
+                  onPress={() => router.push("/(tabs)/monthly" as any)}
+                  style={({ pressed }) => [styles.referenceHeroForecastButton, { borderColor: dashboardTheme.goalBorder, opacity: pressed ? 0.78 : 1 }]}
+                >
+                  <Feather name="calendar" size={14} color={dashboardTheme.mutedText} />
+                  <AppText style={[styles.referenceHeroForecastText, { color: dashboardTheme.mutedText }]}>Forecast</AppText>
+                </Pressable>
+              </View>
             </View>
-            </View>
-
-            <Pressable
-              nativeID="guided-tour-index"
-              onPress={() => setFlowScoreVisible(true)}
-              style={({ pressed }) => [styles.referenceScorePanel, { opacity: pressed ? 0.86 : 1 }]}
-            >
-              <FlowScoreGauge score={algorithmSuite.flowScore.score} theme={dashboardTheme} />
-              <AppText tone="title" style={[styles.referenceScoreStatus, { color: dashboardTheme.scoreStatus }]}>{algorithmSuite.flowScore.label}</AppText>
-              <View style={[styles.referenceScoreUnderline, { backgroundColor: dashboardTheme.scoreStatus }]} />
-            </Pressable>
           </Animated.View>
 
           <Animated.View
@@ -1222,9 +1238,9 @@ function MobileDashboardScreen() {
             ]}
           >
             <View style={styles.referenceMoneyHeader}>
-              <View style={{ flex: 1 }}>
+              <View style={styles.referenceSavingsHeaderCopy}>
                 <AppText tone="label" style={[styles.referenceHeroLabel, { color: dashboardTheme.mutedText }]}>Savings accounts</AppText>
-                <AppText tone="number" style={[styles.referenceHeroAmount, styles.referenceSavingsAmount, { color: dashboardTheme.savings, textShadowColor: "transparent" }]}>{formatDashboardCurrency(savingsAccountBalance)}</AppText>
+                <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.62} style={[styles.referenceHeroAmount, styles.referenceSavingsAmount, { color: dashboardTheme.savings, textShadowColor: "transparent" }]}>{formatDashboardCurrency(savingsAccountBalance)}</AppText>
               </View>
               <Pressable onPress={doFlip} accessibilityLabel="Show checking balance" style={[styles.referenceFlipButton, { backgroundColor: dashboardTheme.purpleSurface, borderColor: dashboardTheme.purpleBorder }]}>
                 <Feather name="repeat" size={13} color={dashboardTheme.purpleText} />
@@ -1246,7 +1262,7 @@ function MobileDashboardScreen() {
                     ) : null}
                   </View>
                   <View style={styles.referenceSavingsValue}>
-                    <AppText tone="number" style={[styles.referenceSavingsBalance, { color: dashboardTheme.savings }]}>
+                    <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={[styles.referenceSavingsBalance, { color: dashboardTheme.savings }]}>
                       {formatDashboardCurrency(account.balance)}
                     </AppText>
                     {canEditHousehold ? (
@@ -1285,7 +1301,7 @@ function MobileDashboardScreen() {
                 >
                   <View style={styles.referenceGoalTopRow}>
                     <AppText style={[styles.referenceGoalName, { color: dashboardTheme.mutedText }]} numberOfLines={1}>{goal.name}</AppText>
-                    <AppText style={[styles.referenceGoalAmounts, { color: dashboardTheme.subtleText }]}>{formatDashboardCurrency(goal.current_amount)} / {formatDashboardCurrency(goal.target_amount)}</AppText>
+                    <AppText numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.referenceGoalAmounts, { color: dashboardTheme.subtleText }]}>{formatDashboardCurrency(goal.current_amount)} / {formatDashboardCurrency(goal.target_amount)}</AppText>
                   </View>
                   <View style={styles.referenceGoalTrack}>
                     <View style={[styles.referenceGoalFill, { width: `${percent}%` as any }]} />
@@ -1302,6 +1318,45 @@ function MobileDashboardScreen() {
           </Animated.View>
       </View>
 
+      <View style={[styles.dashboardSnapshotCard, { backgroundColor: c.card, borderColor: c.border }]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Open bills. ${formatDashboardCurrency(dashboardBillsLeft)} left this month.`}
+          onPress={() => router.push("/(tabs)/bills" as any)}
+          style={styles.dashboardSnapshotItem}
+        >
+          <View style={[styles.dashboardSnapshotIcon, { backgroundColor: c.primary + "16" }]}>
+            <Feather name="file-text" size={18} color={c.primary} />
+          </View>
+          <AppText style={[styles.dashboardSnapshotLabel, { color: c.mutedForeground }]}>Bills left</AppText>
+          <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.dashboardSnapshotValue, { color: c.foreground }]}>{formatDashboardCurrency(dashboardBillsLeft)}</AppText>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`See safe-to-spend details. ${formatDashboardCurrency(dashboardSafeToSpend)} safe to spend.`}
+          onPress={() => setSafeCushionVisible(true)}
+          style={[styles.dashboardSnapshotItem, styles.dashboardSnapshotItemBorder, { borderColor: c.border }]}
+        >
+          <View style={[styles.dashboardSnapshotIcon, { backgroundColor: c.success + "16" }]}>
+            <Feather name="shield" size={18} color={c.success} />
+          </View>
+          <AppText style={[styles.dashboardSnapshotLabel, { color: c.mutedForeground }]}>Safe to spend</AppText>
+          <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.dashboardSnapshotValue, { color: c.success }]}>{formatDashboardCurrency(dashboardSafeToSpend)}</AppText>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Open income plan. Next payday ${dashboardNextPaydayFull}.`}
+          onPress={() => router.push({ pathname: "/(tabs)/more", params: { section: "money" } } as any)}
+          style={[styles.dashboardSnapshotItem, styles.dashboardSnapshotItemBorder, { borderColor: c.border }]}
+        >
+          <View style={[styles.dashboardSnapshotIcon, { backgroundColor: c.warning + "16" }]}>
+            <Feather name="calendar" size={18} color={c.warning} />
+          </View>
+          <AppText style={[styles.dashboardSnapshotLabel, { color: c.mutedForeground }]}>Next payday</AppText>
+          <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.dashboardSnapshotValue, { color: c.foreground }]}>{dashboardNextPayday}</AppText>
+        </Pressable>
+      </View>
+
       <DashboardUtilityWidgets
         layout={dashboardLayout}
         decisions={todayDecisions}
@@ -1309,6 +1364,37 @@ function MobileDashboardScreen() {
         compact
         onNavigate={(pathname, params) => router.push({ pathname: pathname as any, params } as any)}
       />
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open monthly forecast progress"
+        onPress={() => router.push("/(tabs)/monthly" as any)}
+        style={({ pressed }) => [styles.dashboardProgressCard, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.78 : 1 }]}
+      >
+        <View style={styles.dashboardProgressHeader}>
+          <View style={styles.dashboardProgressHeaderCopy}>
+            <AppText tone="title" style={[styles.dashboardProgressTitle, { color: c.foreground }]}>Monthly progress</AppText>
+            <AppText style={[styles.dashboardProgressCopy, { color: c.mutedForeground }]}>Your planned income and commitments</AppText>
+          </View>
+          <Feather name="arrow-up-right" size={18} color={c.primary} />
+        </View>
+        <View style={[styles.dashboardProgressTrack, { backgroundColor: c.muted }]}>
+          <View style={[styles.dashboardProgressFill, { width: `${dashboardProgress * 100}%` as any }]} />
+        </View>
+        <View style={styles.dashboardProgressStats}>
+          <View style={styles.dashboardProgressStat}>
+            <View style={[styles.dashboardProgressDot, { backgroundColor: "#4f86ff" }]} />
+            <AppText style={[styles.dashboardProgressLabel, { color: c.mutedForeground }]}>Income</AppText>
+            <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.dashboardProgressValue, { color: c.foreground }]}>{formatDashboardCurrency(cashFlow.monthlyIncome)}</AppText>
+          </View>
+          <View style={[styles.dashboardProgressDivider, { backgroundColor: c.border }]} />
+          <View style={styles.dashboardProgressStat}>
+            <View style={[styles.dashboardProgressDot, { backgroundColor: c.success }]} />
+            <AppText style={[styles.dashboardProgressLabel, { color: c.mutedForeground }]}>Planned</AppText>
+            <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.dashboardProgressValue, { color: c.foreground }]}>{formatDashboardCurrency(dashboardPlanned)}</AppText>
+          </View>
+        </View>
+      </Pressable>
 
       <StabilityPathCard
         progress={algorithmSuite.stability}
@@ -1968,7 +2054,7 @@ const styles = StyleSheet.create({
   dashboardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 14, marginBottom: 18 },
   dashboardHeaderCompact: { gap: 9 },
   brandLockup: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1, minWidth: 0 },
-  brandMark: { width: 48, height: 48, borderRadius: 17, alignItems: "center", justifyContent: "center", overflow: "hidden", borderWidth: 1, borderColor: "rgba(96,165,250,0.35)", backgroundColor: "#020617", shadowColor: "#38bdf8", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 18, elevation: 9 },
+  brandMark: { width: 48, height: 48, borderRadius: 17, alignItems: "center", justifyContent: "center", overflow: "hidden", borderWidth: 1, borderColor: "rgba(96,165,250,0.30)", backgroundColor: "#020617", shadowColor: "#020617", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.22, shadowRadius: 12, elevation: 4 },
   brandMarkCompact: { width: 40, height: 40, borderRadius: 14 },
   brandMarkImage: { width: "100%", height: "100%" },
   dashboardHeaderActions: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8 },
@@ -2016,43 +2102,47 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.14)",
     backgroundColor: "rgba(2,6,23,0.42)",
-    padding: 11,
-    marginBottom: 6,
+    padding: 16,
+    marginBottom: 10,
     overflow: "hidden",
-    shadowColor: "#22d3ee",
+    shadowColor: "#020617",
     shadowOffset: { width: 0, height: 18 },
-    shadowOpacity: 0.24,
-    shadowRadius: 34,
-    elevation: 10,
+    shadowOpacity: 0.32,
+    shadowRadius: 24,
+    elevation: 6,
   },
   referenceCommandHeroWide: { minHeight: 320, padding: 30 },
   referenceCommandHeroFlipShell: { width: "100%", position: "relative", marginBottom: 6 },
   referenceCommandHeroFlipFace: { width: "100%", marginBottom: 0, backfaceVisibility: "hidden" },
   referenceCommandHeroBackFace: { ...StyleSheet.absoluteFillObject, marginBottom: 0 },
   referenceHeroFaceCompact: { minHeight: 250 },
-  referenceHeroFrontWide: { minHeight: 260, flexDirection: "row", alignItems: "center", gap: 22 },
+  referenceHeroFrontWide: { minHeight: 260, alignItems: "stretch" },
   referenceHeroMoneyPanel: { width: "100%" },
   referenceHeroMoneyPanelWide: { flex: 1, width: "auto" },
   referenceMoneyHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  referenceBalanceRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  referenceHeroPrimaryRow: { flexDirection: "row", alignItems: "center", gap: 14, marginTop: 12 },
   referenceBalanceAmount: { flex: 1, minWidth: 0 },
   pendingBalanceStrip: { alignSelf: "flex-start", maxWidth: "100%", minHeight: 27, borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, marginTop: 3, flexDirection: "row", alignItems: "center", gap: 5 },
   pendingBalancePrimary: { fontSize: 10, fontFamily: "Inter_800ExtraBold" },
   pendingBalanceDot: { width: 3, height: 3, borderRadius: 2 },
   pendingBalanceAvailable: { flexShrink: 1, fontSize: 10, fontFamily: "Inter_700Bold" },
-  referenceHeroFloButton: { minHeight: 40, flexDirection: "row", alignItems: "center", gap: 7, borderWidth: 1, borderRadius: 999, paddingHorizontal: 9 },
+  referenceHeroActionRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 },
+  referenceHeroFloButton: { minHeight: 42, flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderWidth: 1, borderRadius: 14, paddingHorizontal: 11 },
   referenceHeroFloIcon: { width: 29, height: 29, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   referenceHeroFloText: { fontSize: 13, paddingRight: 3 },
+  referenceHeroForecastButton: { minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12 },
+  referenceHeroForecastText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   referenceFlipButton: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, borderWidth: 1, borderColor: "rgba(196,181,253,0.28)", backgroundColor: "rgba(124,58,237,0.18)", paddingHorizontal: 9, paddingVertical: 6 },
   referenceFlipButtonText: { color: "#c4b5fd", fontSize: 9, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.5 },
+  referenceSavingsHeaderCopy: { flex: 1, minWidth: 0 },
   referenceSavingsAmount: { color: "#6ee7b7", fontSize: 34, lineHeight: 38, letterSpacing: -1.4 },
   referenceSavingsList: { marginTop: 8, gap: 5 },
   referenceSavingsItem: { minHeight: 31, borderRadius: 10, borderWidth: 1, paddingHorizontal: 9, paddingVertical: 6, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   referenceSavingsIdentity: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 },
   referenceSavingsName: { flexShrink: 1, fontSize: 11, fontFamily: "Inter_700Bold" },
   referenceSavingsMask: { fontSize: 9, fontFamily: "Inter_600SemiBold" },
-  referenceSavingsValue: { flexDirection: "row", alignItems: "center", gap: 6 },
-  referenceSavingsBalance: { fontSize: 12, lineHeight: 16, fontFamily: "Inter_800ExtraBold" },
+  referenceSavingsValue: { maxWidth: "48%", minWidth: 0, flexShrink: 1, flexDirection: "row", alignItems: "center", gap: 6 },
+  referenceSavingsBalance: { flexShrink: 1, fontSize: 12, lineHeight: 16, fontFamily: "Inter_800ExtraBold" },
   referenceSavingsEdit: { width: 28, height: 28, borderRadius: 9, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   referenceSavingsEmpty: { minHeight: 36, borderRadius: 10, borderWidth: 1, borderStyle: "dashed", alignItems: "center", justifyContent: "center", paddingHorizontal: 9 },
   referenceSavingsEmptyText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
@@ -2062,23 +2152,43 @@ const styles = StyleSheet.create({
   referenceGoalItem: { borderRadius: 10, backgroundColor: "rgba(15,23,42,0.56)", borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", paddingHorizontal: 9, paddingVertical: 6, marginTop: 4 },
   referenceGoalTopRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   referenceGoalName: { flex: 1, color: "#e2e8f0", fontSize: 11, fontFamily: "Inter_700Bold" },
-  referenceGoalAmounts: { color: "#94a3b8", fontSize: 9, fontFamily: "Inter_700Bold" },
+  referenceGoalAmounts: { maxWidth: "52%", flexShrink: 1, color: "#94a3b8", fontSize: 9, fontFamily: "Inter_700Bold", textAlign: "right" },
   referenceGoalTrack: { height: 4, borderRadius: 999, overflow: "hidden", backgroundColor: "rgba(148,163,184,0.22)", marginTop: 5 },
   referenceGoalFill: { height: "100%", borderRadius: 999, backgroundColor: "#34d399" },
   referenceGoalsEmpty: { minHeight: 74, borderRadius: 14, borderWidth: 1, borderStyle: "dashed", borderColor: "rgba(167,139,250,0.38)", backgroundColor: "rgba(124,58,237,0.10)", alignItems: "center", justifyContent: "center", gap: 7, padding: 12 },
   referenceGoalsEmptyText: { color: "#cbd5e1", fontSize: 11, lineHeight: 15, textAlign: "center", fontFamily: "Inter_600SemiBold" },
   referenceGoalsMore: { color: "#a78bfa", fontSize: 9, fontFamily: "Inter_800ExtraBold", textAlign: "right", marginTop: 5 },
-  referenceGreeting: { color: "#f8fafc", fontSize: 19, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.7 },
+  referenceGreeting: { color: "#f8fafc", fontSize: 21, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.8 },
   referenceHeroLabel: { color: "#cbd5e1", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.4, textTransform: "uppercase" },
-  referenceHeroAmount: { color: "#ffffff", fontSize: 40, lineHeight: 44, fontFamily: "Inter_800ExtraBold", letterSpacing: -2.2, textShadowColor: "rgba(34,211,238,0.25)", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 18 },
-  referenceScorePanel: { alignItems: "center", justifyContent: "center", paddingTop: 4 },
-  referenceGaugeWrap: { width: 102, height: 102, alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
+  referenceHeroAmount: { color: "#ffffff", fontSize: 42, lineHeight: 46, fontFamily: "Inter_800ExtraBold", letterSpacing: -2.4, textShadowColor: "transparent", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 0 },
+  referenceSafeThrough: { fontSize: 11, fontFamily: "Inter_700Bold", marginTop: 7 },
+  referenceScorePanel: { width: 112, alignItems: "center", justifyContent: "center", paddingVertical: 1 },
+  referenceGaugeWrap: { width: 98, height: 98, alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
   referenceGaugeSvg: { backgroundColor: "transparent" },
   referenceGaugeCenter: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
   referenceGaugeScore: { color: "#ffffff", fontSize: 29, fontFamily: "Inter_800ExtraBold", lineHeight: 33 },
   referenceGaugeLabel: { color: "#cbd5e1", fontSize: 9, fontFamily: "Inter_700Bold" },
-  referenceScoreStatus: { color: "#4ade80", fontSize: 12, fontFamily: "Inter_800ExtraBold", marginTop: 4 },
+  referenceScoreStatus: { color: "#4ade80", fontSize: 12, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
   referenceScoreUnderline: { width: 64, height: 3, borderRadius: 3, backgroundColor: "#22c55e", marginTop: 4, marginBottom: 4 },
+  dashboardSnapshotCard: { minHeight: 134, flexDirection: "row", borderRadius: 24, borderWidth: 1, overflow: "hidden", marginBottom: 12 },
+  dashboardSnapshotItem: { flex: 1, minWidth: 0, paddingVertical: 15, paddingHorizontal: 9, alignItems: "center", justifyContent: "center" },
+  dashboardSnapshotItemBorder: { borderLeftWidth: 1 },
+  dashboardSnapshotIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center", marginBottom: 7 },
+  dashboardSnapshotLabel: { fontSize: 10, lineHeight: 13, fontFamily: "Inter_700Bold", textAlign: "center" },
+  dashboardSnapshotValue: { maxWidth: "100%", fontSize: 18, lineHeight: 23, letterSpacing: -0.5, fontFamily: "Inter_800ExtraBold", marginTop: 4, textAlign: "center" },
+  dashboardProgressCard: { borderWidth: 1, borderRadius: 24, padding: 17, marginTop: 12, marginBottom: 12 },
+  dashboardProgressHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 },
+  dashboardProgressHeaderCopy: { flex: 1, minWidth: 0 },
+  dashboardProgressTitle: { fontSize: 18, letterSpacing: -0.4 },
+  dashboardProgressCopy: { fontSize: 12, fontFamily: "Inter_500Medium", marginTop: 3 },
+  dashboardProgressTrack: { height: 11, borderRadius: 999, overflow: "hidden", marginTop: 15 },
+  dashboardProgressFill: { height: "100%", borderRadius: 999, backgroundColor: "#38bdf8" },
+  dashboardProgressStats: { flexDirection: "row", alignItems: "stretch", marginTop: 16 },
+  dashboardProgressStat: { flex: 1, minWidth: 0 },
+  dashboardProgressDivider: { width: 1, marginHorizontal: 14 },
+  dashboardProgressDot: { width: 8, height: 8, borderRadius: 4, marginBottom: 5 },
+  dashboardProgressLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  dashboardProgressValue: { fontSize: 20, lineHeight: 26, letterSpacing: -0.7, marginTop: 2 },
   algoScoreRing: { width: 68, height: 68, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.24)", borderWidth: 1, borderColor: "rgba(34,211,238,0.42)" },
   algoScoreValue: { color: "#f8fafc", fontSize: 24, fontFamily: "Inter_800ExtraBold", lineHeight: 27 },
   algoScoreLabel: { color: "#93c5fd", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 1 },

@@ -33,6 +33,7 @@ import { AdminMembershipTools } from "@/components/AdminMembershipTools";
 import { AdminMoneyHealth } from "@/components/AdminMoneyHealth";
 import { AppText } from "@/components/AppText";
 import { BiometricLockSettings } from "@/components/BiometricLockSettings";
+import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import { FloLogo } from "@/components/FloLogo";
 import { FeedbackManageModal } from "@/components/FeedbackManageModal";
 import { IncomeModal } from "@/components/IncomeModal";
@@ -40,6 +41,7 @@ import { HouseholdMemberActionsModal } from "@/components/HouseholdMemberActions
 import { LegalDocumentModal } from "@/components/LegalDocumentModal";
 import { MembershipPanel } from "@/components/MembershipPanel";
 import { FOUNDING_FREE_LAUNCH, FOUNDING_FREE_NAME, hasAdminProAccess } from "@/lib/launchMode";
+import { isStoreCaptureMode } from "@/lib/demoMode";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { PayRaiseCelebrationModal } from "@/components/PayRaiseCelebrationModal";
 import { MoreHub } from "@/components/settings/MoreHub";
@@ -156,6 +158,15 @@ const FREQ_LABELS: Record<string, string> = {
   biweekly: "Biweekly",
   weekly: "Weekly",
 };
+
+const BUILT_IN_CATEGORY_NAMES = new Set([
+  "housing", "utilities", "insurance", "transportation", "food",
+  "entertainment", "health", "education", "savings", "debt",
+  "shopping", "rent", "other",
+]);
+
+const isBuiltInCategory = (name: string) =>
+  BUILT_IN_CATEGORY_NAMES.has(name.trim().replace(/\s+/g, " ").toLowerCase());
 
 const THEME_OPTIONS: { label: string; value: ThemeMode; icon: string }[] = [
   { label: "Light", value: "light", icon: "sun" },
@@ -290,6 +301,19 @@ function subscriptionDecisionToStatus(
 }
 
 const VISIBLE_SETTINGS_SECTIONS = SETTINGS_SECTIONS;
+const FINANCIAL_DATA_SECTIONS = new Set<SettingsSectionId>([
+  "overview",
+  "plaid",
+  "accounts",
+  "money",
+  "review",
+  "subscriptions",
+  "reports",
+  "goals",
+  "backup",
+  "deleted",
+  "admin",
+]);
 
 function isSettingsSectionId(value: unknown): value is SettingsSectionId {
   return (
@@ -2203,7 +2227,7 @@ export default function MoreScreen({
                 ? `${householdRoleLabel(householdRole)} access`
                 : "Private plan"
             }
-            identity={user?.email ?? "Signed in"}
+            identity={isStoreCaptureMode() ? "Fictional reviewer" : user?.email ?? "Signed in"}
             membershipLabel={membershipStatusLabel}
             statuses={hubStatuses}
             isAdmin={feedbackAdmin}
@@ -2223,6 +2247,7 @@ export default function MoreScreen({
             onBack={() => openSettingsSection("overview")}
           />
         ) : null}
+        {FINANCIAL_DATA_SECTIONS.has(activeSettingsSection) ? <DataFreshnessLabel inset compact /> : null}
 
         {activeSettingsSection === "membership" && <MembershipPanel />}
 
@@ -3732,33 +3757,41 @@ export default function MoreScreen({
                       <Text style={[styles.catName, { color: c.foreground }]}>
                         {cat}
                       </Text>
-                      <View style={styles.catActions}>
-                        <Pressable
-                          onPress={() => {
-                            setRenamingCategory(cat);
-                            setRenameValue(cat);
-                          }}
-                          hitSlop={8}
-                          style={styles.catActionBtn}
-                        >
-                          <Feather
-                            name="edit-2"
-                            size={14}
-                            color={c.mutedForeground}
-                          />
-                        </Pressable>
-                        <Pressable
-                          onPress={() => handleDeleteCategory(cat)}
-                          hitSlop={8}
-                          style={styles.catActionBtn}
-                        >
-                          <Feather
-                            name="trash-2"
-                            size={14}
-                            color={c.destructive}
-                          />
-                        </Pressable>
-                      </View>
+                      {isBuiltInCategory(cat) ? (
+                        <Text style={[styles.builtInCategoryLabel, { color: c.mutedForeground }]}>Built-in</Text>
+                      ) : (
+                        <View style={styles.catActions}>
+                          <Pressable
+                            accessibilityLabel={`Rename ${cat}`}
+                            accessibilityRole="button"
+                            onPress={() => {
+                              setRenamingCategory(cat);
+                              setRenameValue(cat);
+                            }}
+                            hitSlop={8}
+                            style={styles.catActionBtn}
+                          >
+                            <Feather
+                              name="edit-2"
+                              size={14}
+                              color={c.mutedForeground}
+                            />
+                          </Pressable>
+                          <Pressable
+                            accessibilityLabel={`Delete ${cat}`}
+                            accessibilityRole="button"
+                            onPress={() => handleDeleteCategory(cat)}
+                            hitSlop={8}
+                            style={styles.catActionBtn}
+                          >
+                            <Feather
+                              name="trash-2"
+                              size={14}
+                              color={c.destructive}
+                            />
+                          </Pressable>
+                        </View>
+                      )}
                     </>
                   )}
                 </View>
@@ -5930,7 +5963,7 @@ const styles = StyleSheet.create({
   infoCard: {
     minHeight: 88,
     borderWidth: 1,
-    borderRadius: 18,
+    borderRadius: 22,
     padding: 16,
     flexDirection: "row",
     alignItems: "flex-start",
@@ -5941,7 +5974,7 @@ const styles = StyleSheet.create({
   settingsSectionIcon: {
     width: 44,
     height: 44,
-    borderRadius: 15,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -5951,10 +5984,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.12)",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.18,
-    shadowRadius: 22,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.10,
+    shadowRadius: 16,
+    elevation: 3,
   },
   planningModeIntro: {
     fontSize: 12,
@@ -6405,6 +6438,7 @@ const styles = StyleSheet.create({
   },
   catDot: { width: 8, height: 8, borderRadius: 4, marginRight: 10 },
   catName: { flex: 1, fontSize: 14, fontFamily: "Inter_500Medium" },
+  builtInCategoryLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   catActions: { flexDirection: "row", gap: 14 },
   catActionBtn: { padding: 2 },
   renameRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },

@@ -1,0 +1,55 @@
+{
+  "release": "FlowLedger Founding Free v1",
+  "purpose": "Draft screenshot narrative shared by the Android and iOS store asset workflow.",
+  "sequence": [
+    {
+      "slot": 1,
+      "file": "01-dashboard.png",
+      "screen": "Dashboard",
+      "headline": "Your whole plan, at a glance",
+      "caption": "See balances, priorities, and what to do next."
+    },
+    {
+      "slot": 2,
+      "file": "02-forecast.png",
+      "screen": "Forecast",
+      "headline": "Know what is coming every day",
+      "caption": "See bills, income, and projected daily closes."
+    },
+    {
+      "slot": 3,
+      "file": "03-bills.png",
+      "screen": "Bills",
+      "headline": "Finish the month with clarity",
+      "caption": "Track what is due, paid, and still left."
+    },
+    {
+      "slot": 4,
+      "file": "04-debt-payoff.png",
+      "screen": "Debt Payoff",
+      "headline": "Build a Snowball payoff path",
+      "caption": "Protect required payments while extra money rolls forward."
+    },
+    {
+      "slot": 5,
+      "file": "05-activity.png",
+      "screen": "Activity",
+      "headline": "See what changed, instantly",
+      "caption": "Review income and spending without losing the big picture."
+    },
+    {
+      "slot": 6,
+      "file": "06-flo.png",
+      "screen": "Flo",
+      "headline": "Ask your plan, not a generic chatbot",
+      "caption": "Flo grounds answers in the household records you approve."
+    },
+    {
+      "slot": 7,
+      "file": "07-settings.png",
+      "screen": "Settings",
+      "headline": "Your data. Your control.",
+      "caption": "Manage privacy, notifications, security, and household access."
+    }
+  ]
+}

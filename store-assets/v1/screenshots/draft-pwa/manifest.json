@@ -1,0 +1,498 @@
+{
+  "schemaVersion": 1,
+  "assetClass": "FlowLedger Founding Free PWA screenshot drafts",
+  "submissionReady": false,
+  "disclosure": "These images are fictional-data PWA drafts for composition and copy review. They must be recaptured from the signed native release candidate before App Store or Google Play submission.",
+  "generatedAt": "2026-08-25T08:07:58.114Z",
+  "generatedBy": "scripts/build-store-screenshot-drafts.mjs",
+  "fixture": "Local-only reviewer capture mode: artifacts/mobile/context/BudgetContext.tsx#createDemoBudgetData",
+  "copy": "screenshots/draft-pwa/copy.json",
+  "sequence": [
+    {
+      "slot": 1,
+      "file": "01-dashboard.png",
+      "screen": "Dashboard",
+      "headline": "Your whole plan, at a glance",
+      "caption": "See balances, priorities, and what to do next."
+    },
+    {
+      "slot": 2,
+      "file": "02-forecast.png",
+      "screen": "Forecast",
+      "headline": "Know what is coming every day",
+      "caption": "See bills, income, and projected daily closes."
+    },
+    {
+      "slot": 3,
+      "file": "03-bills.png",
+      "screen": "Bills",
+      "headline": "Finish the month with clarity",
+      "caption": "Track what is due, paid, and still left."
+    },
+    {
+      "slot": 4,
+      "file": "04-debt-payoff.png",
+      "screen": "Debt Payoff",
+      "headline": "Build a Snowball payoff path",
+      "caption": "Protect required payments while extra money rolls forward."
+    },
+    {
+      "slot": 5,
+      "file": "05-activity.png",
+      "screen": "Activity",
+      "headline": "See what changed, instantly",
+      "caption": "Review income and spending without losing the big picture."
+    },
+    {
+      "slot": 6,
+      "file": "06-flo.png",
+      "screen": "Flo",
+      "headline": "Ask your plan, not a generic chatbot",
+      "caption": "Flo grounds answers in the household records you approve."
+    },
+    {
+      "slot": 7,
+      "file": "07-settings.png",
+      "screen": "Settings",
+      "headline": "Your data. Your control.",
+      "caption": "Manage privacy, notifications, security, and household access."
+    }
+  ],
+  "platforms": {
+    "android-phone": {
+      "label": "Google Play phone",
+      "sourceKind": "Local PWA reviewer-capture draft",
+      "submissionReady": false,
+      "rawCaptureDimensions": "450x900",
+      "storeOutputDimensions": "1350x2700",
+      "outputColorMode": "24-bit RGB, no alpha",
+      "scaling": "Exact 3x resize with Lanczos3 resampling for readable CSS-DPR1 text; no UI content is added, removed, or altered.",
+      "files": [
+        {
+          "slot": 1,
+          "screen": "Dashboard",
+          "headline": "Your whole plan, at a glance",
+          "caption": "See balances, priorities, and what to do next.",
+          "raw": {
+            "file": "screenshots/draft-pwa/android-phone/raw/01-dashboard.png",
+            "width": 450,
+            "height": 900,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "0DD318FF01357AC41C1D06C28D0841E2C6DF48EB2E4D35A38C5DC6231EBC2759"
+          },
+          "captureNormalization": null,
+          "store": {
+            "file": "screenshots/draft-pwa/android-phone/store/01-dashboard.png",
+            "width": 1350,
+            "height": 2700,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "4EB651C2BA2ECC2E18D1A2FC8566D5E6876CFE0CF563EB40C70E289C9C753DB7"
+          }
+        },
+        {
+          "slot": 2,
+          "screen": "Forecast",
+          "headline": "Know what is coming every day",
+          "caption": "See bills, income, and projected daily closes.",
+          "raw": {
+            "file": "screenshots/draft-pwa/android-phone/raw/02-forecast.png",
+            "width": 450,
+            "height": 900,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "935D013414ED40CA3ED769664B536D173088FFCBFCD337F1D48151BC0A29FE9F"
+          },
+          "captureNormalization": null,
+          "store": {
+            "file": "screenshots/draft-pwa/android-phone/store/02-forecast.png",
+            "width": 1350,
+            "height": 2700,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "9CB72A35A272A1FE8C28F16DDA718FB6E91EFCB73F8AFFC8A810896E657F40A1"
+          }
+        },
+        {
+          "slot": 3,
+          "screen": "Bills",
+          "headline": "Finish the month with clarity",
+          "caption": "Track what is due, paid, and still left.",
+          "raw": {
+            "file": "screenshots/draft-pwa/android-phone/raw/03-bills.png",
+            "width": 450,
+            "height": 900,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "8503C288705BC3499FA1C3C89908C159B9BE23691CF0FD9D2141C30E855A51F9"
+          },
+          "captureNormalization": null,
+          "store": {
+            "file": "screenshots/draft-pwa/android-phone/store/03-bills.png",
+            "width": 1350,
+            "height": 2700,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "9A3D317D44583D5B9457A7C3C3A6D38CDD6A4D03052EDA5A9D6703F47B20750B"
+          }
+        },
+        {
+          "slot": 4,
+          "screen": "Debt Payoff",
+          "headline": "Build a Snowball payoff path",
+          "caption": "Protect required payments while extra money rolls forward.",
+          "raw": {
+            "file": "screenshots/draft-pwa/android-phone/raw/04-debt-payoff.png",
+            "width": 450,
+            "height": 900,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "485C48F02F05B3291655278D8059FFD2AE09803FFCF434EF9F7AC2D3F4F77F78"
+          },
+          "captureNormalization": null,
+          "store": {
+            "file": "screenshots/draft-pwa/android-phone/store/04-debt-payoff.png",
+            "width": 1350,
+            "height": 2700,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "06C5CFA841FD11C2C35C036F908EC81BB0B2EA9E72DF748E1FB3DF96641CB000"
+          }
+        },
+        {
+          "slot": 5,
+          "screen": "Activity",
+          "headline": "See what changed, instantly",
+          "caption": "Review income and spending without losing the big picture.",
+          "raw": {
+            "file": "screenshots/draft-pwa/android-phone/raw/05-activity.png",
+            "width": 450,
+            "height": 900,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "842E6F61C6D571042AFC621FE41FF8B96AC43FA0A4793A0BC43BF9B6DFD7C05B"
+          },
+          "captureNormalization": null,
+          "store": {
+            "file": "screenshots/draft-pwa/android-phone/store/05-activity.png",
+            "width": 1350,
+            "height": 2700,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "76F8B9020C8E1A0A63CF7DD0BCB83284D0BFCE091EABD035843907A8CB52CD51"
+          }
+        },
+        {
+          "slot": 6,
+          "screen": "Flo",
+          "headline": "Ask your plan, not a generic chatbot",
+          "caption": "Flo grounds answers in the household records you approve.",
+          "raw": {
+            "file": "screenshots/draft-pwa/android-phone/raw/06-flo.png",
+            "width": 450,
+            "height": 900,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "25432E866466A397951705BB92A8DF0485216A5F57FD58CB32A16BDBB307FB2D"
+          },
+          "captureNormalization": null,
+          "store": {
+            "file": "screenshots/draft-pwa/android-phone/store/06-flo.png",
+            "width": 1350,
+            "height": 2700,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "F632BED4A5BBB454086942087FA4295DA5ED291E712567498AA36A5B3C99D383"
+          }
+        },
+        {
+          "slot": 7,
+          "screen": "Settings",
+          "headline": "Your data. Your control.",
+          "caption": "Manage privacy, notifications, security, and household access.",
+          "raw": {
+            "file": "screenshots/draft-pwa/android-phone/raw/07-settings.png",
+            "width": 450,
+            "height": 900,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "E6C95453019C66E06D19F1B6C5D7101B9EB7704E6DF4A5AF4E8015DDBA8A2BA2"
+          },
+          "captureNormalization": null,
+          "store": {
+            "file": "screenshots/draft-pwa/android-phone/store/07-settings.png",
+            "width": 1350,
+            "height": 2700,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "2C86CDD3F84012D4098B37B9B64C746F06F16625DF72E2A010237685FD131F14"
+          }
+        }
+      ],
+      "contactSheet": {
+        "file": "screenshots/draft-pwa/android-phone/contact-sheet.png",
+        "width": 2400,
+        "height": 1840,
+        "format": "png",
+        "channels": 3,
+        "hasAlpha": false,
+        "colorSpace": "srgb",
+        "sha256": "8D062D485DAD55E27E8F1A4CF468339588DC81507B00653552E02D12442A99CC"
+      }
+    },
+    "ios-6.9": {
+      "label": "Apple 6.9-inch portrait",
+      "sourceKind": "Local PWA reviewer-capture draft",
+      "submissionReady": false,
+      "rawCaptureDimensions": "430x932",
+      "storeOutputDimensions": "1290x2796",
+      "outputColorMode": "24-bit RGB, no alpha",
+      "scaling": "Exact 3x resize with Lanczos3 resampling for readable CSS-DPR1 text; no UI content is added, removed, or altered.",
+      "files": [
+        {
+          "slot": 1,
+          "screen": "Dashboard",
+          "headline": "Your whole plan, at a glance",
+          "caption": "See balances, priorities, and what to do next.",
+          "raw": {
+            "file": "screenshots/draft-pwa/ios-6.9/raw/01-dashboard.png",
+            "width": 430,
+            "height": 932,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "4E72A7D7447D3B175359082DB65565447E974D66AC2C563A22A23CC5295D8BE1"
+          },
+          "captureNormalization": null,
+          "store": {
+            "file": "screenshots/draft-pwa/ios-6.9/store/01-dashboard.png",
+            "width": 1290,
+            "height": 2796,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "1FAA849E0718BBB4D42D0427DDB2CB8D2D31D8AAF37A5F67C6CD3678710E2727"
+          }
+        },
+        {
+          "slot": 2,
+          "screen": "Forecast",
+          "headline": "Know what is coming every day",
+          "caption": "See bills, income, and projected daily closes.",
+          "raw": {
+            "file": "screenshots/draft-pwa/ios-6.9/raw/02-forecast.png",
+            "width": 430,
+            "height": 932,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "57B4784BE989D0F68D2BBCFC93FD0564F4FD0D73934BAA330834803803CF0B7A"
+          },
+          "captureNormalization": null,
+          "store": {
+            "file": "screenshots/draft-pwa/ios-6.9/store/02-forecast.png",
+            "width": 1290,
+            "height": 2796,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "13EB6FE800E57575735D1C115A4D70CB13388DA530F7E52841FF0B1E2601E367"
+          }
+        },
+        {
+          "slot": 3,
+          "screen": "Bills",
+          "headline": "Finish the month with clarity",
+          "caption": "Track what is due, paid, and still left.",
+          "raw": {
+            "file": "screenshots/draft-pwa/ios-6.9/raw/03-bills.png",
+            "width": 430,
+            "height": 932,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "D6E770DAEEDBC9DBD5F41E05D523BFE8BE83E1F0C1C36D92C2A3D97386C62CA6"
+          },
+          "captureNormalization": null,
+          "store": {
+            "file": "screenshots/draft-pwa/ios-6.9/store/03-bills.png",
+            "width": 1290,
+            "height": 2796,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "3A916BA3CDABAC78859857FBD9ADE0CB9A201FDF31B074D602CC827DCA566CA9"
+          }
+        },
+        {
+          "slot": 4,
+          "screen": "Debt Payoff",
+          "headline": "Build a Snowball payoff path",
+          "caption": "Protect required payments while extra money rolls forward.",
+          "raw": {
+            "file": "screenshots/draft-pwa/ios-6.9/raw/04-debt-payoff.png",
+            "width": 430,
+            "height": 932,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "048543C90CD87D241CC6CCFC239D0BB817931535A25900C362217242AC844501"
+          },
+          "captureNormalization": null,
+          "store": {
+            "file": "screenshots/draft-pwa/ios-6.9/store/04-debt-payoff.png",
+            "width": 1290,
+            "height": 2796,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "97D0C51284081A4C714F1E2A836DF22538393BBC7EB3799F8DEE3979DD57BA5A"
+          }
+        },
+        {
+          "slot": 5,
+          "screen": "Activity",
+          "headline": "See what changed, instantly",
+          "caption": "Review income and spending without losing the big picture.",
+          "raw": {
+            "file": "screenshots/draft-pwa/ios-6.9/raw/05-activity.png",
+            "width": 430,
+            "height": 932,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "9F22290FBF49BD6D45B4E9A831026CBFA4D1E97C17C5905D04D2339A276D4B8C"
+          },
+          "captureNormalization": null,
+          "store": {
+            "file": "screenshots/draft-pwa/ios-6.9/store/05-activity.png",
+            "width": 1290,
+            "height": 2796,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "660C2116544DDEC7473A7A6B0FA5E33240905DE5ADE841A3E2FF6C7EA750B5B6"
+          }
+        },
+        {
+          "slot": 6,
+          "screen": "Flo",
+          "headline": "Ask your plan, not a generic chatbot",
+          "caption": "Flo grounds answers in the household records you approve.",
+          "raw": {
+            "file": "screenshots/draft-pwa/ios-6.9/raw/06-flo.png",
+            "width": 430,
+            "height": 932,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "72979FC894631D578848D2D5BAE730AED3438655A141950D24258546C88AAAF1"
+          },
+          "captureNormalization": null,
+          "store": {
+            "file": "screenshots/draft-pwa/ios-6.9/store/06-flo.png",
+            "width": 1290,
+            "height": 2796,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "D01481E6C86721A6988E53CFD380EA25169F8226D49383B778BC88D088B49171"
+          }
+        },
+        {
+          "slot": 7,
+          "screen": "Settings",
+          "headline": "Your data. Your control.",
+          "caption": "Manage privacy, notifications, security, and household access.",
+          "raw": {
+            "file": "screenshots/draft-pwa/ios-6.9/raw/07-settings.png",
+            "width": 430,
+            "height": 932,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "6A7CCC3E2EECA993483C77F5E09F236DF9BA0E9C191ABA5B5103BEC30214F60A"
+          },
+          "captureNormalization": null,
+          "store": {
+            "file": "screenshots/draft-pwa/ios-6.9/store/07-settings.png",
+            "width": 1290,
+            "height": 2796,
+            "format": "png",
+            "channels": 3,
+            "hasAlpha": false,
+            "colorSpace": "srgb",
+            "sha256": "733124F9280AA449A9696C70AD62C25B259A9DC28EC415419DCD9A08690D3D27"
+          }
+        }
+      ],
+      "contactSheet": {
+        "file": "screenshots/draft-pwa/ios-6.9/contact-sheet.png",
+        "width": 2400,
+        "height": 1840,
+        "format": "png",
+        "channels": 3,
+        "hasAlpha": false,
+        "colorSpace": "srgb",
+        "sha256": "755A409D6A79C7C3482EA57620D8B3F11C6CA80F4F50A0CC92FDC1C55F9091F3"
+      }
+    }
+  },
+  "contactSheet": {
+    "file": "screenshots/draft-pwa/contact-sheet.png",
+    "width": 2400,
+    "height": 1840,
+    "format": "png",
+    "channels": 3,
+    "hasAlpha": false,
+    "colorSpace": "srgb",
+    "sha256": "8D062D485DAD55E27E8F1A4CF468339588DC81507B00653552E02D12442A99CC"
+  },
+  "approvalGate": {
+    "nativeRecaptureRequired": true,
+    "nativeMetadataRequired": "Record device model, OS, app version/build, fixture version, locale, display scale, and SHA-256 after signed-build capture.",
+    "manualPrivacyReviewRequired": "Confirm each image contains fictional data only and no credentials, email addresses, notifications, debug overlays, or other apps."
+  }
+}

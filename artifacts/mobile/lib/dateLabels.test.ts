@@ -4,6 +4,9 @@ import test from "node:test";
 import {
   addDateOnlyDays,
   addDateOnlyMonths,
+  compactDateLabel,
+  compactDateOnly,
+  compactMonthDay,
   dateOnlyToLocalDate,
   localDateString,
   MONTH_NAMES,
@@ -17,6 +20,13 @@ test("shared month labels cover the calendar year", () => {
   assert.equal(MONTH_NAMES.length, 12);
   assert.equal(MONTH_NAMES[0], "January");
   assert.equal(MONTH_NAMES[11], "December");
+});
+
+test("compact dates fit dashboard and card labels", () => {
+  assert.equal(compactMonthDay(8, 24), "Sept 24");
+  assert.equal(compactDateOnly("2026-09-24"), "Sept 24");
+  assert.equal(compactDateLabel("September 24, 2026"), "Sept 24");
+  assert.equal(compactDateLabel("Not scheduled"), "Not scheduled");
 });
 
 test("date-only values stay on their named local calendar day", () => {

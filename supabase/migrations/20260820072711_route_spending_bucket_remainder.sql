@@ -757,3 +757,5 @@ grant execute on function public.close_spending_bucket_and_route_remainder(text,
 grant execute on function public.reopen_spending_bucket_and_unroute_remainder(text, numeric, jsonb) to authenticated, service_role;
 
 notify pgrst, 'reload schema';
+
+;

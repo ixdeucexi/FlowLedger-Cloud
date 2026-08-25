@@ -707,8 +707,8 @@ function SetupWizard() {
         editBill={editBill}
         onClose={() => { setBillModalVisible(false); setEditBill(null); }}
         onDelete={async id => { await deleteBillMistake(id); setEditBill(null); }}
-        onSave={async data => {
-          if (editBill) await updateBill(data as Bill);
+        onSave={async (data, dirtyFields, baseline) => {
+          if (editBill) await updateBill(data as Bill, dirtyFields ?? [], baseline);
           else await addBill(data as Omit<Bill, "id" | "created_at">);
           setBillModalVisible(false);
           setEditBill(null);
@@ -721,8 +721,8 @@ function SetupWizard() {
         forceDebt
         onClose={() => { setDebtModalVisible(false); setEditDebt(null); }}
         onDelete={async id => { await deleteBillMistake(id); setEditDebt(null); }}
-        onSave={async data => {
-          if (editDebt) await updateBill(data as Bill);
+        onSave={async (data, dirtyFields, baseline) => {
+          if (editDebt) await updateBill(data as Bill, dirtyFields ?? [], baseline);
           else await addBill(data as Omit<Bill, "id" | "created_at">);
           setDebtModalVisible(false);
           setEditDebt(null);

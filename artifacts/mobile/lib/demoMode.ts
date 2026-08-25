@@ -26,8 +26,19 @@ export function enableDevDemoMode() {
   }
 }
 
-export function isDevDemoMode(_hostname = globalThis.location?.hostname ?? "", _authPreference = readDemoAuthPreference()): boolean {
-  return false;
+export function isStoreCaptureMode(
+  hostname = globalThis.location?.hostname ?? "",
+  captureMode = process.env.EXPO_PUBLIC_STORE_CAPTURE_MODE,
+): boolean {
+  return captureMode === "reviewer-v1" && (hostname === "localhost" || hostname === "127.0.0.1");
+}
+
+export function isDevDemoMode(
+  hostname = globalThis.location?.hostname ?? "",
+  _authPreference = readDemoAuthPreference(),
+  captureMode = process.env.EXPO_PUBLIC_STORE_CAPTURE_MODE,
+): boolean {
+  return isStoreCaptureMode(hostname, captureMode);
 }
 
 export const DEV_DEMO_USER_ID = "dev-demo-user";

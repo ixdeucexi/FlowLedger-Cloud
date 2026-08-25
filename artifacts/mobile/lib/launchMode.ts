@@ -11,3 +11,10 @@ export const PRO_AVAILABILITY = "Pro is planned for 2027";
 export function hasAdminProAccess(plan: { tier?: string; source?: string } | null | undefined) {
   return plan?.tier === "pro" && plan.source === "admin";
 }
+
+export function canPersistPlanSimulations(
+  plan: { tier?: string; source?: string } | null | undefined,
+  foundingFreeLaunch = FOUNDING_FREE_LAUNCH,
+) {
+  return hasAdminProAccess(plan) || (!foundingFreeLaunch && plan?.tier === "pro");
+}

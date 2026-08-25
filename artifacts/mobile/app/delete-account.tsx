@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { AccessibleIconButton, AccessiblePressable } from "@/components/AccessiblePressable";
 import { useAuth } from "@/context/AuthContext";
+import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { clearDeletedAccountStorage, deleteFlowLedgerAccount } from "@/lib/accountDeletion";
@@ -24,6 +25,7 @@ export default function DeleteAccountScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, session, demoMode, signInWithGoogle, signInWithApple } = useAuth();
+  const { actualPlan } = useMembership();
   const { online } = useNetworkStatus();
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -162,13 +164,15 @@ export default function DeleteAccountScreen() {
                 <Feather name="users" size={18} color={colors.warning} />
                 <Text style={[styles.warningText, { color: colors.foreground }]}>If you own a household with other members, remove every other member first. FlowLedger stops rather than deleting their shared plan.</Text>
               </View>
-              <View style={[styles.warning, { marginTop: 10, borderColor: `${colors.warning}55`, backgroundColor: `${colors.warning}10` }]}>
-                <Feather name="credit-card" size={18} color={colors.warning} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.warningText, { color: colors.foreground }]}>Deleting FlowLedger does not cancel an App Store or Google Play subscription. Cancel it in your store first to stop future billing.</Text>
-                  {Platform.OS !== "web" ? <Pressable accessibilityRole="button" onPress={() => void openStoreSubscriptionSettings().catch(nextError => setError(nextError instanceof Error ? nextError.message : "Could not open store subscription settings."))} style={styles.manageStore}><Text style={[styles.verifyText, { color: colors.primary }]}>Manage store subscription</Text></Pressable> : null}
+              {actualPlan.source === "billing" ? (
+                <View style={[styles.warning, { marginTop: 10, borderColor: `${colors.warning}55`, backgroundColor: `${colors.warning}10` }]}>
+                  <Feather name="credit-card" size={18} color={colors.warning} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.warningText, { color: colors.foreground }]}>Deleting FlowLedger does not cancel an App Store or Google Play subscription. Cancel it in your store first to stop future billing.</Text>
+                    {Platform.OS !== "web" ? <Pressable accessibilityRole="button" onPress={() => void openStoreSubscriptionSettings().catch(nextError => setError(nextError instanceof Error ? nextError.message : "Could not open store subscription settings."))} style={styles.manageStore}><Text style={[styles.verifyText, { color: colors.primary }]}>Manage store subscription</Text></Pressable> : null}
+                  </View>
                 </View>
-              </View>
+              ) : null}
               {usesPassword ? (
                 <>
                   <Text style={[styles.label, { color: colors.foreground }]}>Current password (required)</Text>

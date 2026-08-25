@@ -905,7 +905,7 @@ export default function UserGuideScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   header: {
-    minHeight: 88,
+    minHeight: 96,
     paddingHorizontal: 18,
     paddingVertical: 11,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -919,12 +919,12 @@ const styles = StyleSheet.create({
     fontSize: 10,
     letterSpacing: 1.25,
   },
-  headerTitle: { fontFamily: "Inter_800ExtraBold", fontSize: 20, marginTop: 1 },
+  headerTitle: { fontFamily: "Inter_800ExtraBold", fontSize: 23, letterSpacing: -0.45, marginTop: 1 },
   headerHint: { fontFamily: "Inter_500Medium", fontSize: 12, marginTop: 2 },
   closeButton: {
     width: 46,
     height: 46,
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -939,19 +939,12 @@ const styles = StyleSheet.create({
   heroCard: {
     minHeight: 176,
     borderWidth: 1,
-    borderRadius: 24,
+    borderRadius: 28,
     overflow: "hidden",
     padding: 20,
   },
   compactHeroCard: { minHeight: 0, padding: 14 },
-  heroGlow: {
-    position: "absolute",
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    right: -72,
-    top: -108,
-  },
+  heroGlow: { position: "absolute", width: 180, height: 180, borderRadius: 90, right: -70, top: -100, opacity: 0.55 },
   heroIcon: {
     width: 48,
     height: 48,
@@ -995,8 +988,8 @@ const styles = StyleSheet.create({
   compactIntro: { fontSize: 13, lineHeight: 19, marginTop: 6 },
   previewCard: {
     borderWidth: 1,
-    borderRadius: 22,
-    padding: 9,
+    borderRadius: 24,
+    padding: 10,
     alignItems: "center",
   },
   previewImage: { width: "100%", borderRadius: 14 },
@@ -1012,8 +1005,8 @@ const styles = StyleSheet.create({
   itemList: { gap: 8 },
   itemCard: {
     borderWidth: 1,
-    borderRadius: 17,
-    padding: 12,
+    borderRadius: 18,
+    padding: 14,
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 11,
@@ -1035,8 +1028,8 @@ const styles = StyleSheet.create({
   },
   callout: {
     borderWidth: 1,
-    borderRadius: 18,
-    padding: 14,
+    borderRadius: 20,
+    padding: 15,
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 11,

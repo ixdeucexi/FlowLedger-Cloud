@@ -59,6 +59,7 @@ import {
 } from "@/lib/appBadge";
 import { MOBILE_RIBBON_ITEMS } from "@/lib/mobileRibbon";
 import * as Haptics from "@/lib/haptics";
+import { isStoreCaptureMode } from "@/lib/demoMode";
 
 function todayIsoDate() {
   const now = new Date();
@@ -821,7 +822,7 @@ function TabContent() {
           )}
         </ResponsiveDesktopChrome>
         </AppDiscoveryProvider>
-        {demoMode ? <DemoModeBanner /> : null}
+        {demoMode && !isStoreCaptureMode() ? <DemoModeBanner /> : null}
         <PlanPreviewBanner />
         <SaveStatusBanner />
         <DecisionDueModal />
@@ -889,7 +890,7 @@ const styles = StyleSheet.create({
   addTabButton: {
     width: 66,
     height: 66,
-    marginTop: -23,
+    marginTop: -27,
     borderRadius: 33,
     borderWidth: 1,
     alignItems: "center",
@@ -1063,12 +1064,12 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     borderRadius: 18,
     borderWidth: 3,
-    borderColor: "#38bdf8",
-    backgroundColor: "rgba(56,189,248,0.14)",
-    shadowColor: "#38bdf8",
-    shadowOpacity: 0.9,
-    shadowRadius: 14,
-    elevation: 12,
+    borderColor: "#a78bfa",
+    backgroundColor: "rgba(167,139,250,0.12)",
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 4,
   },
   learningCursor: {
     position: "absolute",
@@ -1093,14 +1094,14 @@ const styles = StyleSheet.create({
     left: 12,
     right: 12,
     borderWidth: 1,
-    borderRadius: 20,
-    padding: 11,
+    borderRadius: 24,
+    padding: 14,
     backgroundColor: "rgba(15,23,42,0.96)",
-    shadowColor: "#8b5cf6",
-    shadowOpacity: 0.24,
-    shadowRadius: 26,
-    shadowOffset: { width: 0, height: 14 },
-    elevation: 16,
+    shadowColor: "#000",
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 6,
   },
   learningSheetCollapsed: { left: 58 },
   learningHeader: {
@@ -1117,7 +1118,7 @@ const styles = StyleSheet.create({
   },
   learningTitle: {
     color: "#f8fafc",
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "900",
     marginTop: 2,
   },
@@ -1142,10 +1143,10 @@ const styles = StyleSheet.create({
     gap: 7,
     marginTop: 8,
     padding: 8,
-    borderRadius: 12,
-    backgroundColor: "rgba(56,189,248,0.10)",
+    borderRadius: 14,
+    backgroundColor: "rgba(167,139,250,0.10)",
     borderWidth: 1,
-    borderColor: "rgba(56,189,248,0.22)",
+    borderColor: "rgba(167,139,250,0.24)",
   },
   learningTryText: {
     flex: 1,

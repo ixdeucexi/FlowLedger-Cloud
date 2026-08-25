@@ -6,6 +6,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDim
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { DatePickerField } from "@/components/DatePickerField";
+import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import { FloLogo } from "@/components/FloLogo";
 import { PlanFeatureGate } from "@/components/PlanFeatureGate";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
@@ -342,6 +343,7 @@ function SnowballPlanScreen() {
             <Text style={[styles.eyebrow, { color: c.primary }]}>DEBT PAYOFF PLAN</Text>
             <Text style={[styles.title, isDesktop && styles.desktopTitle, { color: c.foreground }]}>Debt Payoff Planner</Text>
             {isDesktop ? <Text style={[styles.headerSubtitle, { color: c.mutedForeground }]}>See the full payoff order, preview safe extra money, and follow the exact schedule used by Forecast.</Text> : null}
+            <DataFreshnessLabel compact />
           </View>
           {isDesktop ? (
             <View style={[styles.forecastBadge, { backgroundColor: c.muted + "55", borderColor: c.border }]}>

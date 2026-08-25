@@ -41,14 +41,15 @@ export function MoreHub({
   const colors = useColors();
   const { width: viewportWidth } = useWindowDimensions();
   const compactLayout = isCompactSettingsLayout(viewportWidth);
+  const stackQuickActions = viewportWidth < 430;
 
   return (
     <>
       <Text style={[styles.title, { color: colors.foreground }]}>Settings</Text>
 
-      <View style={styles.householdHeading}>
+      <View style={[styles.householdHeading, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={styles.householdCopy}>
-          <Text style={[styles.eyebrow, { color: colors.mutedForeground }]}>CURRENT HOUSEHOLD</Text>
+          <Text style={[styles.eyebrow, { color: colors.mutedForeground }]}>PLAN & ACCOUNT</Text>
           <View style={styles.householdNameRow}>
             <Text style={[styles.householdName, { color: colors.foreground }]}>{householdName}</Text>
             <View style={[styles.membershipPill, { backgroundColor: colors.primary + "16", borderColor: colors.primary + "35" }]}>
@@ -61,7 +62,7 @@ export function MoreHub({
 
       <View style={styles.groupBlock}>
         <Text style={[styles.groupTitle, { color: colors.foreground }]}>Quick access</Text>
-        <View style={[styles.quickGrid, compactLayout && styles.quickGridCompact]}>
+        <View style={[styles.quickGrid, stackQuickActions && styles.quickGridCompact]}>
           {[
             { label: "Search", description: "Find anything", icon: "search" as const, onPress: onOpenSearch },
             { label: "Quick Actions", description: "Add or navigate", icon: "zap" as const, onPress: onOpenCommands },
@@ -87,6 +88,7 @@ export function MoreHub({
       {visibleSettingsGroups(isAdmin).map(group => (
         <View key={group.id} style={styles.groupBlock}>
           <Text style={[styles.groupTitle, { color: colors.foreground }]}>{group.label}</Text>
+          <Text style={[styles.groupDescription, { color: colors.mutedForeground }]}>{group.description}</Text>
           <View style={[styles.groupCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             {group.sectionIds.map((sectionId, index) => {
               const section = settingsSectionById(sectionId);
@@ -141,8 +143,8 @@ export function MoreHub({
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 32, fontFamily: "Inter_800ExtraBold", letterSpacing: -1, marginBottom: 24 },
-  householdHeading: { paddingHorizontal: 16, marginBottom: 26 },
+  title: { fontSize: 31, fontFamily: "Inter_800ExtraBold", letterSpacing: -1, marginBottom: 16 },
+  householdHeading: { borderWidth: 1, borderRadius: 24, padding: 17, marginBottom: 24 },
   householdCopy: { minWidth: 0 },
   eyebrow: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.1, marginBottom: 5 },
   householdNameRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
@@ -150,19 +152,19 @@ const styles = StyleSheet.create({
   identity: { fontSize: 11, fontFamily: "Inter_500Medium", lineHeight: 16, marginTop: 4 },
   membershipPill: { maxWidth: 104, borderWidth: 1, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
   membershipText: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.4 },
-  groupBlock: { marginBottom: 24 },
+  groupBlock: { marginBottom: 26 },
   quickGrid: { flexDirection: "row", gap: 10 },
   quickGridCompact: { flexDirection: "column" },
-  quickCard: { flex: 1, minHeight: 96, borderWidth: 1, borderRadius: 18, padding: 13 },
+  quickCard: { flex: 1, minHeight: 96, borderWidth: 1, borderRadius: 20, padding: 13 },
   quickIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center", marginBottom: 10 },
   quickLabel: { fontFamily: "Inter_700Bold", fontSize: 14 },
   quickDescription: { fontFamily: "Inter_500Medium", fontSize: 11, marginTop: 3 },
-  groupTitle: { fontSize: 20, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.35, marginBottom: 10, paddingHorizontal: 12 },
-  groupDescription: { fontSize: 12, lineHeight: 17, fontFamily: "Inter_500Medium", marginBottom: 10, paddingHorizontal: 12 },
-  groupCard: { borderWidth: 1, borderRadius: 22, overflow: "hidden" },
-  row: { minHeight: 76, paddingHorizontal: 14, paddingVertical: 11, flexDirection: "row", alignItems: "center", gap: 12 },
+  groupTitle: { fontSize: 17, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.25, marginBottom: 3, paddingHorizontal: 4 },
+  groupDescription: { fontSize: 12, lineHeight: 17, fontFamily: "Inter_500Medium", marginBottom: 10, paddingHorizontal: 4 },
+  groupCard: { borderWidth: 1, borderRadius: 24, overflow: "hidden" },
+  row: { minHeight: 78, paddingHorizontal: 15, paddingVertical: 12, flexDirection: "row", alignItems: "center", gap: 12 },
   rowCompact: { paddingHorizontal: 10, gap: 8 },
-  rowIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  rowIcon: { width: 40, height: 40, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   rowIconCompact: { width: 34, height: 34 },
   rowMain: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 8 },
   rowCopy: { flex: 1, minWidth: 0 },

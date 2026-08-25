@@ -14,6 +14,7 @@ import { useColors } from "@/hooks/useColors";
 import { manualActivityMatchCandidates } from "@/lib/billMatching";
 import { nextPlannedDebtPayment } from "@/lib/billSurplusRouting";
 import { confirmAction } from "@/lib/confirmAction";
+import { FOUNDING_FREE_LAUNCH } from "@/lib/launchMode";
 import { applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupReviewTargets, incomeReviewTargets, matchedOccurrenceAllocations, occurrenceKey, prioritizeReviewTransaction, prioritizeSavedBillTarget, rankReviewTargets, reviewQueueAfterSkips, scheduledSnowballReviewTargets, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
 import { subscriptionLinkKeys } from "@/lib/competitiveGrowth";
 import { prioritizePendingPlanTarget } from "@/lib/pendingPlanMatches";
@@ -770,7 +771,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all", onMana
       <View style={[styles.hero, { backgroundColor: c.card, borderColor: c.primary + "44" }]}>
         <View style={[styles.heroIcon, { backgroundColor: c.primary + "18" }]}><Feather name="check-square" size={22} color={c.primary} /></View>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.eyebrow, { color: c.primary }]}>PRO REVIEW CENTER</Text>
+          <Text style={[styles.eyebrow, { color: c.primary }]}>{FOUNDING_FREE_LAUNCH ? "FOUNDING FREE REVIEW CENTER" : "PRO REVIEW CENTER"}</Text>
           <Text style={[styles.heroTitle, { color: c.foreground }]}>Match the bank to your plan</Text>
           <Text style={[styles.heroCopy, { color: c.mutedForeground }]}>Match each posted transaction once.</Text>
         </View>

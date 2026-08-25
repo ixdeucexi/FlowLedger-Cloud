@@ -81,7 +81,14 @@ export function PlanViewSelector({ textStyle }: PlanViewSelectorProps) {
         onPress={() => setVisible(true)}
         style={({ pressed }) => [styles.trigger, { opacity: pressed ? 0.72 : 1 }]}
       >
-        <Text style={[styles.triggerText, { color: c.foreground }, textStyle]}>{zeroBudgetEnabled ? "Zero Budget" : "Activity"}</Text>
+        <Text
+          style={[styles.triggerText, { color: c.foreground }, textStyle]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
+        >
+          {zeroBudgetEnabled ? "Zero Budget" : "Activity"}
+        </Text>
         <Feather name="chevron-down" size={18} color={c.primary} />
       </Pressable>
 
@@ -176,8 +183,8 @@ function PlanViewOption({ c, icon, title, description, selected, disabled, onPre
 }
 
 const styles = StyleSheet.create({
-  trigger: { flexDirection: "row", alignItems: "center", gap: 5, alignSelf: "flex-start" },
-  triggerText: { fontSize: 28, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.8 },
+  trigger: { maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 5, alignSelf: "flex-start" },
+  triggerText: { flexShrink: 1, fontSize: 28, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.8 },
   overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(2,6,23,0.68)" },
   sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, padding: 20, paddingBottom: 30, gap: 12 },
   handle: { alignSelf: "center", width: 48, height: 4, borderRadius: 999, opacity: 0.45, marginBottom: 5 },

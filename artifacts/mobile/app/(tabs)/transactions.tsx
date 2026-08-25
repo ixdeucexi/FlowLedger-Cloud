@@ -33,6 +33,7 @@ import {
   type DebtPaymentAppliedDetail,
 } from "@/components/DebtPaymentAppliedModal";
 import { DesktopActivityPage } from "@/components/desktop/DesktopActivityPage";
+import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import { EmptyState } from "@/components/EmptyState";
 import { FullPaymentPromptModal } from "@/components/FullPaymentPromptModal";
 import { GoalModal } from "@/components/GoalModal";
@@ -531,6 +532,13 @@ export function ActivityScreen() {
 
   useEffect(() => {
     if (!user || !activeHousehold) return;
+    if (demoMode) {
+      setHistoryTransactions([]);
+      setHistoryTotal(transactions.length);
+      setHistoryError(null);
+      setHistoryLoading(false);
+      return;
+    }
     let active = true;
     const timer = setTimeout(() => {
       setHistoryLoading(true);
@@ -569,7 +577,7 @@ export function ActivityScreen() {
       active = false;
       clearTimeout(timer);
     };
-  }, [activeDateRange.endDate, activeDateRange.startDate, activeHousehold, demoMode, historyPage, historyRetryNonce, search, user]);
+  }, [activeDateRange.endDate, activeDateRange.startDate, activeHousehold, demoMode, historyPage, historyRetryNonce, search, transactions.length, user]);
 
   const activityTransactions = useMemo(() => {
     const byId = new Map<string, Transaction>();
@@ -2088,8 +2096,8 @@ export function ActivityScreen() {
         } as any);
       if (isFeatureLocked("transaction_matching")) {
         Alert.alert(
-          "Income matching is a Pro feature",
-          "Upgrade to Pro to match posted deposits to planned paydays.",
+          "Income matching is planned for Pro",
+          "Posted deposits stay available in Activity during Founding Free. Matching them to planned paydays will arrive with Pro.",
           [
             { text: "Cancel", style: "cancel" },
             {
@@ -2112,7 +2120,7 @@ export function ActivityScreen() {
         isFeatureLocked("transaction_matching")
       ) {
         Alert.alert(
-          "Bill matching is a Pro feature",
+          "Bill matching is locked in this preview",
           "Basic plan preview keeps imported transaction matching locked. This test does not change your real household plan.",
           [
             { text: "Cancel", style: "cancel" },
@@ -2450,8 +2458,8 @@ export function ActivityScreen() {
                     if (!detailItem.rawPending) return;
                     if (isFeatureLocked("transaction_matching")) {
                       Alert.alert(
-                        "Pending matching is a Pro feature",
-                        "Upgrade to Pro to connect pending bank charges to bills or manual Activity.",
+                        "Pending matching is planned for Pro",
+                        "Pending charges stay visible during Founding Free. Connecting them to bills or manual Activity will arrive with Pro.",
                       );
                       return;
                     }
@@ -2582,7 +2590,7 @@ export function ActivityScreen() {
       <View
         style={[styles.header, { paddingTop: activityTopInset + 12 + webTopPad }]}
       >
-        <View>
+        <View style={styles.headerCopy}>
           <PlanViewSelector textStyle={styles.title} />
           <Text style={[styles.subtitle, { color: c.mutedForeground }]}>
             {feedOrderLabel}
@@ -2651,6 +2659,7 @@ export function ActivityScreen() {
         )}
         </View>
       </View>
+      <DataFreshnessLabel inset compact />
 
       {pendingActivityCount > 0 ? (
         <View
@@ -2739,6 +2748,9 @@ export function ActivityScreen() {
                 styles.monthlySummaryValue,
                 { color: activitySummary.net >= 0 ? c.success : c.destructive },
               ]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
             >
               {activitySummary.net >= 0 ? "+" : "-"}$
               {Math.abs(activitySummary.net).toFixed(0)}
@@ -2762,7 +2774,12 @@ export function ActivityScreen() {
               },
             ]}
           >
-            <Text style={[styles.monthlySummaryValue, { color: c.success }]}>
+            <Text
+              style={[styles.monthlySummaryValue, { color: c.success }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
+            >
               ${activitySummary.income.toFixed(0)}
             </Text>
             <Text
@@ -2786,6 +2803,9 @@ export function ActivityScreen() {
           >
             <Text
               style={[styles.monthlySummaryValue, { color: c.destructive }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
             >
               ${activitySummary.out.toFixed(0)}
             </Text>
@@ -2797,7 +2817,7 @@ export function ActivityScreen() {
           </View>
         </View>
         <View style={[styles.weekSummaryTrigger, { borderTopColor: c.border }]}>
-          <View>
+          <View style={styles.weekSummaryCopy}>
             <Text style={[styles.weekSummaryTitle, { color: c.foreground }]}>
               Weekly breakdown
             </Text>
@@ -3113,6 +3133,9 @@ export function ActivityScreen() {
                       styles.txAmount,
                       { color: isExpense ? c.destructive : c.success },
                     ]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.72}
                   >
                     {isExpense ? "−" : "+"}${Math.abs(item.amount).toFixed(2)}
                   </Text>
@@ -4285,6 +4308,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingBottom: 10,
   },
+  headerCopy: { flex: 1, minWidth: 0, paddingRight: 8 },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   exportButton: {
     width: 44,
@@ -4312,11 +4336,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    shadowColor: "#f59e0b",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.34,
-    shadowRadius: 18,
-    elevation: 10,
+    shadowOpacity: 0.13,
+    shadowRadius: 14,
+    elevation: 3,
   },
   reviewAlertBadge: {
     position: "absolute",
@@ -4372,8 +4396,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 10,
     borderWidth: 1,
-    borderRadius: 20,
-    padding: 12,
+    borderRadius: 24,
+    padding: 15,
   },
   monthlySummaryHeader: {
     flexDirection: "row",
@@ -4390,7 +4414,8 @@ const styles = StyleSheet.create({
   monthlySummaryStats: { flexDirection: "row", gap: 10, marginBottom: 10 },
   monthlySummaryStat: {
     flex: 1,
-    borderRadius: 14,
+    minWidth: 0,
+    borderRadius: 16,
     backgroundColor: "rgba(15,23,42,0.42)",
     borderWidth: 1,
     paddingHorizontal: 10,
@@ -4412,6 +4437,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
   },
+  weekSummaryCopy: { flex: 1, minWidth: 0 },
   weekSummaryTitle: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   weekSummarySub: {
     fontSize: 11,
@@ -4508,7 +4534,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     borderWidth: 1,
-    borderRadius: 16,
+    borderRadius: 18,
     paddingHorizontal: 13,
     paddingVertical: 10,
   },
@@ -4756,7 +4782,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  txMid: { flex: 1 },
+  txMid: { flex: 1, minWidth: 0 },
   txNote: { fontSize: 13, fontFamily: "Inter_700Bold", marginBottom: 3 },
   txMeta: {
     flexDirection: "row",
@@ -4771,7 +4797,12 @@ const styles = StyleSheet.create({
   debtBadge: { maxWidth: 180, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, flexDirection: "row", alignItems: "center", gap: 3 },
   debtBadgeText: { flexShrink: 1, fontSize: 9, fontFamily: "Inter_700Bold" },
   txDate: { fontSize: 9, fontFamily: "Inter_400Regular" },
-  txRight: { alignItems: "flex-end" },
+  txRight: {
+    maxWidth: "42%",
+    minWidth: 0,
+    flexShrink: 1,
+    alignItems: "flex-end",
+  },
   txAmount: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
 
   // Detail bottom sheet

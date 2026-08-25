@@ -19,6 +19,12 @@ import { DESKTOP_MODAL_HANDLE, DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_WIDE } from 
 import type { ConfirmActionOptions } from "@/lib/confirmAction";
 import { MONTH_NAMES } from "@/lib/dateLabels";
 import { BILL_IMPORTANCE_OPTIONS, normalizeBillImportance, type BillImportance } from "@/lib/billImportance";
+import {
+  billEditablePatch,
+  changedBillEditableFields,
+  type BillEditableBaseline,
+  type BillEditableField,
+} from "@/lib/billEditPersistence";
 
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
@@ -37,7 +43,11 @@ export interface AddBillInitialValues {
 interface AddBillModalProps {
   visible: boolean;
   onClose: () => void;
-  onSave: (bill: Omit<Bill, "id" | "created_at"> | Bill) => void | Promise<unknown>;
+  onSave: (
+    bill: Omit<Bill, "id" | "created_at"> | Bill,
+    dirtyFields?: readonly BillEditableField[],
+    baseline?: BillEditableBaseline,
+  ) => void | Promise<unknown>;
   onDelete?: (id: string) => void | Promise<unknown>;
   onStopFuture?: (id: string) => void | Promise<unknown>;
   onDeleteMistake?: (id: string) => void | Promise<unknown>;
@@ -175,7 +185,11 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
     };
     setSaving(true);
     try {
-      if (editBill) await onSave({ ...data, id: editBill.id, created_at: editBill.created_at });
+      if (editBill) {
+        const dirtyFields = changedBillEditableFields(editBill, data);
+        const baseline = billEditablePatch(editBill, dirtyFields);
+        await onSave({ ...data, id: editBill.id, created_at: editBill.created_at }, dirtyFields, baseline);
+      }
       else await onSave(data);
       onClose();
     } catch (error) {

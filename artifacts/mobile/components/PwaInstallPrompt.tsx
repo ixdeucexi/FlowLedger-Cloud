@@ -4,6 +4,7 @@ import { Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native
 
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
+import { isStoreCaptureMode } from "@/lib/demoMode";
 
 type DeferredInstallPrompt = Event & {
   prompt: () => Promise<void>;
@@ -38,6 +39,7 @@ function markDismissed() {
 
 export function PwaInstallPrompt() {
   const c = useColors();
+  const storeCaptureMode = isStoreCaptureMode();
   const [visible, setVisible] = useState(false);
   const [installEvent, setInstallEvent] = useState<DeferredInstallPrompt | null>(null);
   const [installed, setInstalled] = useState(false);
@@ -83,7 +85,7 @@ export function PwaInstallPrompt() {
     };
   }, []);
 
-  if (Platform.OS !== "web" || installed || platform === "desktop") return null;
+  if (Platform.OS !== "web" || installed || platform === "desktop" || storeCaptureMode) return null;
 
   const close = () => {
     markDismissed();

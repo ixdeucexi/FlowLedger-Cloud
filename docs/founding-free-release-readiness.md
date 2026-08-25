@@ -1,6 +1,6 @@
 # FlowLedger Founding Free release readiness
 
-Last updated: August 24, 2026
+Last updated: August 25, 2026
 
 ## Locked version 1 scope
 
@@ -19,18 +19,15 @@ Native notifications remain a release-gated feature: they may be shown only in a
 - Background financial refreshes never turn a previously interactive screen back into a blocking startup screen.
 - Offline or unknown connectivity never starts a financial mutation. A failed write must remain visibly failed with a retry or recovery path.
 
-## Prepared database order
+## Production database state
 
-After a verified backup and on a temporary or preview Supabase branch first, apply these pending migrations in timestamp order:
+Production already contained the bucket reconciliation, routed remainder, review retry, subscription-link, account-deletion, and native billing/Plaid/push migrations. On August 25, a read-only production preflight proved every pending Plaid row had one exact canonical household link and that policy tightening would remove no current member's legitimate access. The remaining additive migrations were then applied separately and postflighted in this order:
 
-1. `20260820113000_create_spending_bucket_and_reconcile.sql`
-2. `20260820143000_route_spending_bucket_remainder.sql`
-3. `20260820150000_harden_review_retries.sql`
-4. `20260820173000_link_subscription_patterns_to_bills.sql`
-5. `20260821123517_account_deletion_and_flo_rpc_hardening.sql`
-6. `20260821222611_native_billing_plaid_push.sql`
+1. `20260825055609_measure_reconciled_flo_response_duration.sql`
+2. `20260825055642_backfill_and_lock_plaid_households.sql`
+3. `20260825055659_remove_creator_read_after_household_exit.sql`
 
-Then compare migration history, run authenticated owner/manager/editor/viewer smoke checks, inspect security and performance advisors, deploy compatible API/Edge code, and verify Flo, account deletion, subscription links, notifications, and household isolation. Production is not an acceptable first execution target for untested SQL.
+Postflight found zero null Plaid scope links, all five required columns set `NOT NULL`, all three scope triggers active, all three Plaid reads member-only, all twelve core financial policies tightened, and no security/performance advisor warning or error. Local filenames now match the versions recorded in production so a future CLI migration run will not replay them.
 
 ## Completed without a new EAS build
 
@@ -39,11 +36,12 @@ Then compare migration history, run authenticated owner/manager/editor/viewer sm
 - Fictional Founding Free reviewer fixture and capture procedure.
 - Store listing, privacy/data-safety worksheet, feature graphic, release script, and operational runbook.
 - Static migration/security contracts, configuration assertions, automated tests, typechecks, dependency audit, Expo Doctor, and platform exports are part of the release gate.
+- Explicit Founding Free production EAS environment values, Android-only production configuration without a false Apple-provider requirement, and the EAS-preview Android App Links statement.
+- Exact successful data-update timestamps across financial screens and Founding Free copy that does not send public users to unavailable purchase controls.
 
 ## External evidence still required
 
-- Apply and execute the migrations on a backed-up Supabase target; local PostgreSQL execution is unavailable on this workstation.
-- Configure final EAS, Supabase, Flo, Firebase/APNs, store, redirect, and support values without recording secrets in Git.
+- Configure Apple, APNs, Google Play/FCM sender, final Auth redirect, and store-console values without recording secrets in Git. Add the Google Play App Signing certificate fingerprint to `assetlinks.json` after Play creates it.
 - Produce one signed release candidate, then test clean install, twenty close/reopen cycles, layouts, Flo, notifications, offline/interrupted writes, account deletion, accessibility, and every core money flow on physical devices.
 - Capture fictional signed-device screenshots, create the private reviewer credential, complete console declarations, and finish Google Play testing requirements.
 

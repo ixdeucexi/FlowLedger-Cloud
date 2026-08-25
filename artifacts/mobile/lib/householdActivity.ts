@@ -5,7 +5,15 @@ export interface HouseholdActivity {
   actorEmail?: string | null;
   actorName?: string | null;
   actorVerified?: boolean;
-  action: "created" | "updated" | "deleted" | "joined" | "invited" | "changed_role" | "removed" | string;
+  action:
+    | "created"
+    | "updated"
+    | "deleted"
+    | "joined"
+    | "invited"
+    | "changed_role"
+    | "removed"
+    | string;
   entityType: string;
   entityId?: string | null;
   entityLabel?: string | null;
@@ -31,7 +39,12 @@ function activityIdentity(activity: HouseholdActivity): string {
 }
 
 function actorIdentity(activity: HouseholdActivity): string {
-  return activity.actorUserId || activity.actorEmail || activity.actorName || "unattributed";
+  return (
+    activity.actorUserId ||
+    activity.actorEmail ||
+    activity.actorName ||
+    "unattributed"
+  );
 }
 
 /**
@@ -76,36 +89,57 @@ export function summarizeHouseholdActivity(
 function humanizeEntityType(value: string): string {
   return value
     .replace(/_/g, " ")
-    .replace(/\b\w/g, letter => letter.toUpperCase());
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 export function householdActivityHeadline(activity: HouseholdActivity): string {
   const item = activity.entityLabel || humanizeEntityType(activity.entityType);
-  const actor = activity.actorName || activity.actorEmail || "A household member";
+  const actor =
+    activity.actorName || activity.actorEmail || "A household member";
 
   if (activity.actorVerified) {
     switch (activity.action) {
-      case "created": return `${actor} created ${item}`;
-      case "updated": return `${actor} updated ${item}`;
-      case "deleted": return `${actor} removed ${item}`;
-      case "joined": return `${actor} joined the household`;
-      case "invited": return `${actor} created a ${item} invite`;
-      case "changed_role": return `${actor} changed access for ${item}`;
-      case "removed": return `${actor} removed ${item} from the household`;
-      default: return `${actor} ${activity.action.replace(/_/g, " ")} ${item}`.trim();
+      case "created":
+        return `${actor} created ${item}`;
+      case "updated":
+        return `${actor} updated ${item}`;
+      case "deleted":
+        return `${actor} removed ${item}`;
+      case "joined":
+        return `${actor} joined the household`;
+      case "invited":
+        return `${actor} created a ${item} invite`;
+      case "changed_role":
+        return `${actor} changed access for ${item}`;
+      case "removed":
+        return `${actor} removed ${item} from the household`;
+      case "left":
+        return `${actor} left the household`;
+      default:
+        return `${actor} ${activity.action.replace(/_/g, " ")} ${item}`.trim();
     }
   }
 
   // Older rows used the record owner as a fallback actor, which was not proof
   // that person made the change. Keep those rows useful without assigning blame.
   switch (activity.action) {
-    case "created": return `${item} was added`;
-    case "updated": return `${item} was updated`;
-    case "deleted": return `${item} was removed`;
-    case "joined": return "A member joined the household";
-    case "invited": return "A household invite was created";
-    case "changed_role": return `Household access was changed for ${item}`;
-    case "removed": return `${item} was removed from the household`;
-    default: return `${item} activity was recorded`;
+    case "created":
+      return `${item} was added`;
+    case "updated":
+      return `${item} was updated`;
+    case "deleted":
+      return `${item} was removed`;
+    case "joined":
+      return "A member joined the household";
+    case "invited":
+      return "A household invite was created";
+    case "changed_role":
+      return `Household access was changed for ${item}`;
+    case "removed":
+      return `${item} was removed from the household`;
+    case "left":
+      return "A member left the household";
+    default:
+      return `${item} activity was recorded`;
   }
 }

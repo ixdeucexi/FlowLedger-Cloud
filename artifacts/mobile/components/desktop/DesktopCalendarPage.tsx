@@ -15,6 +15,7 @@ import {
   SummaryMetricCard,
   desktopPalette as palette,
 } from "@/components/desktop/DesktopUI";
+import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import type { DailyBalance } from "@/context/BudgetContext";
 import {
   calendarEventKind,
@@ -163,6 +164,7 @@ function CalendarHeader({
         <Text style={styles.pageSubtitle}>
           View your month at a glance. Click any day to see details.
         </Text>
+        <DataFreshnessLabel compact />
       </View>
       <View style={[styles.monthControls, compact && styles.monthControlsCompact]}>
         <Pressable
