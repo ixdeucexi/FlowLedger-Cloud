@@ -10,6 +10,13 @@ const retentionMigration = fs.readFileSync(
   ),
   "utf8",
 );
+const receiptCounterMigration = fs.readFileSync(
+  path.join(
+    __dirname,
+    "../../supabase/migrations/20260825095801_accumulate_account_deletion_plaid_receipt.sql",
+  ),
+  "utf8",
+);
 const migration = retentionMigration;
 
 test("manager editor and viewer deletion preserves only explicit shared plan ownership columns", () => {
@@ -396,5 +403,30 @@ test("a pending Auth deletion reruns cleanup without creating a second receipt",
     (prepare.match(/insert into private\.account_deletion_receipts/g) ?? [])
       .length,
     1,
+  );
+});
+
+test("the forward deletion migration accumulates Plaid revocations across retries", () => {
+  assert.match(
+    receiptCounterMigration,
+    /create or replace function private\.prepare_account_deletion/,
+  );
+  assert.match(receiptCounterMigration, /where user_id_hash = v_hash\s+for update/);
+  assert.match(
+    receiptCounterMigration,
+    /plaid_items_revoked =\s*receipt\.plaid_items_revoked \+ coalesce\(p_plaid_items_revoked, 0\)/,
+  );
+  assert.doesNotMatch(
+    receiptCounterMigration,
+    /greatest\(receipt\.plaid_items_revoked,\s*coalesce\(p_plaid_items_revoked, 0\)\)/,
+  );
+  assert.match(receiptCounterMigration, /security definer\s+set search_path = ''/);
+  assert.match(
+    receiptCounterMigration,
+    /revoke all on function private\.prepare_account_deletion\(uuid, integer\)[\s\S]*from public, anon, authenticated/,
+  );
+  assert.match(
+    receiptCounterMigration,
+    /grant execute on function private\.prepare_account_deletion\(uuid, integer\) to service_role/,
   );
 });

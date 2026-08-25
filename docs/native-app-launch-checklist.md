@@ -176,7 +176,7 @@ Official references:
 - [Apple account-deletion requirement](https://developer.apple.com/app-store/review/guidelines/#data-collection-and-storage)
 - [Google account-deletion requirement](https://support.google.com/googleplay/android-developer/answer/13327111?hl=en)
 
-Current implementation evidence: `artifacts/mobile/app/delete-account.tsx`, the `/api/account/delete` rewrite through `api/feedback.js`, `api/_utils/accountDeletion.js`, `api/_utils/appleProvider.js`, `supabase/migrations/20260821184159_account_deletion_and_flo_rpc_hardening.sql`, `supabase/migrations/20260825094550_preserve_shared_plan_after_member_exit.sql`, and `docs/native-release-runbook.md`. End-to-end persona/device testing remains separately unchecked below.
+Current implementation evidence: `artifacts/mobile/app/delete-account.tsx`, the `/api/account/delete` rewrite through `api/feedback.js`, `api/_utils/accountDeletion.js`, `api/_utils/appleProvider.js`, `supabase/migrations/20260821184159_account_deletion_and_flo_rpc_hardening.sql`, `supabase/migrations/20260825094550_preserve_shared_plan_after_member_exit.sql`, `supabase/migrations/20260825095801_accumulate_account_deletion_plaid_receipt.sql`, and `docs/native-release-runbook.md`. End-to-end persona/device testing remains separately unchecked below.
 
 ## 6. Privacy, financial, and AI disclosures
 
