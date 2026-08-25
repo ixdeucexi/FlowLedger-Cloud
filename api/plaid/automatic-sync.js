@@ -4,6 +4,11 @@ const { optional } = require("../_utils/env");
 const { plaid, plaidOptions } = require("../_utils/plaid");
 const { serviceSupabase, safeError } = require("../_utils/supabase");
 const { syncItem } = require("../_utils/sync");
+const {
+  captureAfterCoherentHouseholdRefresh,
+  groupItemsByHousehold,
+  refreshHouseholdItems,
+} = require("../_utils/dailyCheckingClose");
 const { isActualProHousehold } = require("../_utils/plaidAccess");
 
 module.exports = async function automaticPlaidSync(req, res) {
@@ -20,7 +25,7 @@ module.exports = async function automaticPlaidSync(req, res) {
     const db = serviceSupabase();
     const { data: items, error } = await db
       .from("plaid_items")
-      .select("id,user_id,household_id,encrypted_access_token,access_token_ciphertext,transactions_cursor,cursor")
+      .select("id,user_id,household_id,status,encrypted_access_token,access_token_ciphertext,transactions_cursor,cursor")
       .in("status", ["active", "needs_repair"]);
     if (error) throw error;
 
@@ -35,34 +40,42 @@ module.exports = async function automaticPlaidSync(req, res) {
       webhookFailed: 0,
       failed: 0,
     };
-    for (const item of items || []) {
-      try {
-        if (!(await isActualProHousehold(item.household_id, db))) continue;
-        const encrypted = item.encrypted_access_token || item.access_token_ciphertext;
-        const accessToken = decryptAccessToken(encrypted);
-        try {
-          await plaid().itemWebhookUpdate({ access_token: accessToken, webhook });
-        } catch (error) {
-          totals.webhookFailed += 1;
-          console.error("[plaid:auto-sync] webhook repair failed", {
-            itemRecordId: item.id,
-            error: safeError(error, "Plaid webhook repair failed."),
-          });
-        }
-        const result = await syncItem({ userId: item.user_id, item });
+    const eligibleItems = (items || []).filter(item => item.encrypted_access_token || item.access_token_ciphertext);
+    for (const [householdId, householdItems] of groupItemsByHousehold(eligibleItems)) {
+      if (!(await isActualProHousehold(householdId, db))) continue;
+      const refresh = await refreshHouseholdItems({
+        items: householdItems,
+        synchronize: async ({ userId, item }) => {
+          const encrypted = item.encrypted_access_token || item.access_token_ciphertext;
+          const accessToken = decryptAccessToken(encrypted);
+          try {
+            await plaid().itemWebhookUpdate({ access_token: accessToken, webhook });
+          } catch (error) {
+            totals.webhookFailed += 1;
+            console.error("[plaid:auto-sync] webhook repair failed", {
+              itemRecordId: item.id,
+              error: safeError(error, "Plaid webhook repair failed."),
+            });
+          }
+          return syncItem({ userId, item });
+        },
+      });
+      for (const { result } of refresh.results) {
         totals.accounts += result.accounts;
         totals.added += result.transactions.added;
         totals.modified += result.transactions.modified;
         totals.removed += result.transactions.removed;
         totals.creditCards += result.liabilities.cards;
         totals.creditCardDebts += result.liabilities.debts;
-      } catch (error) {
+      }
+      for (const { item, error } of refresh.failures) {
         totals.failed += 1;
         console.error("[plaid:auto-sync] item failed", {
           itemRecordId: item.id,
           error: safeError(error, "Automatic Plaid sync failed."),
         });
       }
+      await captureAfterCoherentHouseholdRefresh({ db, householdId, refresh });
     }
 
     console.log("[plaid:auto-sync] completed", totals);

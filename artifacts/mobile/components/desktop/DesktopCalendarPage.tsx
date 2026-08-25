@@ -50,10 +50,11 @@ type DesktopCalendarPageProps = {
   year: number;
   selectedDate: string | null;
   dailyBalances: DailyBalance[];
+  projectedDailyBalances: DailyBalance[];
   transferTransactionIds: ReadonlySet<string>;
   overdueBillOccurrenceKeys: ReadonlySet<string>;
   safetyFloor: number;
-  getDailyBalances: (month: number, year: number) => DailyBalance[];
+  getCalendarDailyBalances: (month: number, year: number) => DailyBalance[];
   onToday: () => void;
   onPreviousMonth: () => void;
   onNextMonth: () => void;
@@ -303,12 +304,13 @@ function DesktopMonthGrid({
           const selected = selectedDate === cell.date;
           const isToday = today === cell.date;
           const isLowest = cell.date === lowestBalanceDate;
-          const isRisk = Boolean(balance && balance.balance < safetyFloor);
+          const tightestForecastIsRisk = lowestBalance < safetyFloor;
+          const isActualClose = balance?.balanceSource === "actual_close";
           return (
             <Pressable
               key={cell.date}
               accessibilityRole="button"
-              accessibilityLabel={`${displayDate(cell.date, true)}. ${events.length} scheduled ${events.length === 1 ? "item" : "items"}${balance ? `. Projected balance ${money(balance.balance)}` : ""}`}
+              accessibilityLabel={`${displayDate(cell.date, true)}. ${events.length} scheduled ${events.length === 1 ? "item" : "items"}${balance ? `. ${isActualClose ? "Actual bank close" : "Projected close"} ${money(balance.balance)}` : ""}`}
               accessibilityState={{ selected }}
               disabled={!cell.inCurrentMonth}
               onPress={() => onSelectDate(cell.date)}
@@ -337,12 +339,15 @@ function DesktopMonthGrid({
               {hiddenCount > 0 ? (
                 <Text style={styles.moreText}>+{hiddenCount} more</Text>
               ) : null}
+              {balance ? (
+                <Text style={styles.dayBalanceSource}>{isActualClose ? "Actual close" : "Projected"} · {money(balance.balance)}</Text>
+              ) : null}
               {isLowest ? (
-                <View style={[styles.lowestCellBadge, isRisk && styles.riskCellBadge]}>
-                  <Text style={[styles.lowestCellLabel, isRisk && styles.riskCellLabel]}>
-                    {isRisk ? "Build room · Tightest point" : "Tightest forecast point"}
+                <View style={[styles.lowestCellBadge, tightestForecastIsRisk && styles.riskCellBadge]}>
+                  <Text style={[styles.lowestCellLabel, tightestForecastIsRisk && styles.riskCellLabel]}>
+                    {tightestForecastIsRisk ? "Build room · Tightest forecast" : "Tightest forecast point"}
                   </Text>
-                  <Text style={[styles.lowestCellValue, isRisk && styles.riskCellValue]}>{money(lowestBalance)}</Text>
+                  <Text style={[styles.lowestCellValue, tightestForecastIsRisk && styles.riskCellValue]}>{money(lowestBalance)}</Text>
                 </View>
               ) : null}
             </Pressable>
@@ -419,6 +424,7 @@ function SelectedDayPanel({
   const weekLabel = `Week of ${shortDate(weekDates[0] ?? selectedDate)} – ${shortDate(weekDates[6] ?? selectedDate)}`;
   const trendValues = weekDays.length ? weekDays.map((day) => day.balance) : [selectedDay?.balance ?? 0];
   const isRiskDay = Boolean(selectedDay && selectedDay.balance < safetyFloor);
+  const isActualClose = selectedDay?.balanceSource === "actual_close";
   return (
     <DesktopCard style={styles.detailPanel}>
       <View style={styles.detailHeader}>
@@ -471,7 +477,7 @@ function SelectedDayPanel({
 
         <View style={[styles.balanceCard, isRiskDay && styles.riskBalanceCard]}>
           <View style={[styles.balanceIcon, isRiskDay && styles.riskBalanceIcon]}><Feather name="shield" size={18} color={isRiskDay ? palette.red : palette.blue} /></View>
-          <View style={styles.balanceCopy}><Text style={styles.balanceLabel}>{isRiskDay ? "Risk Balance" : "Daily Balance"}</Text><Text style={[styles.balanceValue, isRiskDay && styles.riskBalanceValue]}>{money(selectedDay?.balance ?? 0)}</Text><Text style={styles.balanceDetail}>{isRiskDay ? `Below ${money(safetyFloor)} safety floor` : "This day"}</Text></View>
+          <View style={styles.balanceCopy}><Text style={styles.balanceLabel}>{isActualClose ? "Actual Bank Close" : isRiskDay ? "Projected Risk Balance" : "Projected Daily Balance"}</Text><Text style={[styles.balanceValue, isRiskDay && styles.riskBalanceValue]}>{money(selectedDay?.balance ?? 0)}</Text><Text style={styles.balanceDetail}>{isActualClose ? `Last verified bank balance for this completed day${isRiskDay ? ` · below ${money(safetyFloor)} safety floor` : ""}` : isRiskDay ? `Projected below ${money(safetyFloor)} safety floor` : "Projected close for this day"}</Text></View>
           <BalanceTrend balances={trendValues} label={`Balance trend for ${weekLabel}`} tone={isRiskDay ? "risk" : "plan"} />
         </View>
 
@@ -488,8 +494,8 @@ export function DesktopCalendarPage(props: DesktopCalendarPageProps) {
   const { width } = useWindowDimensions();
   const compact = width < 1220;
   const summary = useMemo(
-    () => summarizeCalendarMonth(props.dailyBalances, props.year, props.month, props.transferTransactionIds),
-    [props.dailyBalances, props.month, props.transferTransactionIds, props.year],
+    () => summarizeCalendarMonth(props.projectedDailyBalances, props.year, props.month, props.transferTransactionIds),
+    [props.month, props.projectedDailyBalances, props.transferTransactionIds, props.year],
   );
   const selectedDay = useMemo(() => {
     if (!props.selectedDate) return undefined;
@@ -507,13 +513,13 @@ export function DesktopCalendarPage(props: DesktopCalendarPageProps) {
       const key = `${year}-${month}`;
       let days = monthCache.get(key);
       if (!days) {
-        days = props.getDailyBalances(month - 1, year);
+        days = props.getCalendarDailyBalances(month - 1, year);
         monthCache.set(key, days);
       }
       const match = days.find((item) => item.day === day);
       return match ? [match] : [];
     });
-  }, [props.getDailyBalances, weekDates]);
+  }, [props.getCalendarDailyBalances, weekDates]);
 
   return (
     <View style={styles.screen}>
@@ -632,6 +638,7 @@ const styles = StyleSheet.create({
   eventName: { flex: 1, minWidth: 0, color: palette.text, fontSize: 11, fontFamily: "Inter_600SemiBold" },
   eventAmount: { fontSize: 11, fontFamily: "Inter_700Bold" },
   moreText: { color: palette.purple, fontSize: 11, fontFamily: "Inter_700Bold", marginTop: 1 },
+  dayBalanceSource: { color: palette.textSecondary, fontSize: 10, fontFamily: "Inter_600SemiBold", marginTop: 3 },
   lowestCellBadge: { marginTop: "auto", paddingTop: 5 },
   lowestCellLabel: { color: palette.blue, fontSize: 11, fontFamily: "Inter_700Bold", textTransform: "uppercase" },
   lowestCellValue: { color: palette.blue, fontSize: 12, fontFamily: "Inter_800ExtraBold", marginTop: 2 },

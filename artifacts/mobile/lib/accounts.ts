@@ -1,3 +1,5 @@
+import { localDateInTimeZone } from "./dailyCheckingClose";
+
 export type AccountType = "checking" | "savings" | "cash";
 
 export interface AccountSnapshot {
@@ -27,6 +29,7 @@ export interface ConnectedCheckingSnapshot {
   account_subtype?: string;
   current_balance: number;
   is_active: boolean;
+  updated_at?: string | null;
 }
 
 export function connectedCheckingBalance(accounts: ConnectedCheckingSnapshot[]): number | null {
@@ -37,6 +40,24 @@ export function connectedCheckingBalance(accounts: ConnectedCheckingSnapshot[]):
 export function connectedCheckingAnchor(accounts: ConnectedCheckingSnapshot[], date: string): { balance: number; date: string } | null {
   const balance = connectedCheckingBalance(accounts);
   return balance === null ? null : { balance, date };
+}
+
+export function connectedCheckingObservedAnchor(
+  accounts: ConnectedCheckingSnapshot[],
+  timeZone: string,
+): { balance: number; date: string } | null {
+  const checking = accounts.filter(account => account.is_active && account.account_subtype === "checking");
+  const balance = connectedCheckingBalance(checking);
+  if (balance === null) return null;
+  const observations = checking.map(account => account.updated_at);
+  if (observations.some(value => typeof value !== "string" || !Number.isFinite(Date.parse(value)))) return null;
+  try {
+    const dates = observations.map(value => localDateInTimeZone(new Date(value!), timeZone));
+    if (new Set(dates).size !== 1) return null;
+    return { balance, date: dates[0] };
+  } catch {
+    return null;
+  }
 }
 
 export function historicalMonthOpeningBalance(

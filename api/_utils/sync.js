@@ -286,6 +286,10 @@ function conflictingPlaidAccountHousehold(existingAccounts, incomingAccounts, ho
   ) || null;
 }
 
+function plaidCurrentBalance(account) {
+  return optionalNumber(account && account.balances && account.balances.current);
+}
+
 async function findEquivalentPlaidTransaction({ db, userId, householdId, accountRow, transactionDate, amount, transaction }) {
   if (!accountRow) return null;
   const { data: candidates, error: candidateError } = await db
@@ -381,6 +385,7 @@ async function syncAccounts({ client, userId, item, accessToken }) {
   const householdId = item && item.household_id;
   if (!householdId) throw new Error("PLAID_HOUSEHOLD_REQUIRED");
   const response = await client.accountsGet({ access_token: accessToken });
+  const observedAt = new Date().toISOString();
   const accounts = response.data.accounts || [];
   const db = serviceSupabase();
   const accountIds = [...new Set(accounts.map(account => account.account_id).filter(Boolean))];
@@ -432,7 +437,7 @@ async function syncAccounts({ client, userId, item, accessToken }) {
       subtype: account.subtype || null,
       account_type: account.type || "depository",
       account_subtype: account.subtype || null,
-      current_balance: Number((account.balances && account.balances.current) || 0),
+      current_balance: plaidCurrentBalance(account),
       available_balance:
         account.balances && account.balances.available == null
           ? null
@@ -443,7 +448,7 @@ async function syncAccounts({ client, userId, item, accessToken }) {
           : Number(account.balances && account.balances.limit),
       currency_code: (account.balances && account.balances.iso_currency_code) || "USD",
       is_active: true,
-      updated_at: new Date().toISOString(),
+      updated_at: observedAt,
       ...(displayName ? { display_name: displayName } : {}),
     };
   });
@@ -456,8 +461,19 @@ async function syncAccounts({ client, userId, item, accessToken }) {
     });
     if (error) throw error;
   }
+  const observedItem = await db
+    .from("plaid_items")
+    .update({ accounts_observed_at: observedAt })
+    .eq("id", item.id)
+    .eq("user_id", userId)
+    .eq("household_id", householdId)
+    .in("status", ["active", "needs_repair"])
+    .select("id")
+    .maybeSingle();
+  if (observedItem.error) throw observedItem.error;
+  if (!observedItem.data) throw new Error("PLAID_ITEM_ACCOUNT_OBSERVATION_NOT_SAVED");
   const canonical = await canonicalizePlaidAccounts({ userId, householdId });
-  return { accounts, duplicateItemIds: canonical.duplicateItemIds };
+  return { accounts, duplicateItemIds: canonical.duplicateItemIds, observedAt };
 }
 
 async function findConnectedCardDebt({ db, userId, householdId, accountRow }) {
@@ -1077,6 +1093,8 @@ async function syncItemUnlocked({ userId, item, accessToken, client, db }) {
         transactions: { cursor: item.transactions_cursor || item.cursor || null, added: 0, modified: 0, removed: 0 },
         transactions_pending: false,
         duplicate: true,
+        item_id: item.id,
+        account_observed_at: accountSync.observedAt,
       };
     }
     const liabilities = await syncLiabilities({ client, userId, item, accessToken, accounts });
@@ -1102,6 +1120,8 @@ async function syncItemUnlocked({ userId, item, accessToken, client, db }) {
         liabilities,
         transactions: { cursor: item.transactions_cursor || item.cursor || null, added: 0, modified: 0, removed: 0 },
         transactions_pending: true,
+        item_id: item.id,
+        account_observed_at: accountSync.observedAt,
       };
     }
 
@@ -1122,7 +1142,14 @@ async function syncItemUnlocked({ userId, item, accessToken, client, db }) {
       .eq("user_id", userId)
       .eq("household_id", item.household_id);
     if (error) throw error;
-    return { accounts: accounts.length, liabilities, transactions, transactions_pending: false };
+    return {
+      accounts: accounts.length,
+      liabilities,
+      transactions,
+      transactions_pending: false,
+      item_id: item.id,
+      account_observed_at: accountSync.observedAt,
+    };
   } catch (error) {
     await db
       .from("plaid_items")
@@ -1178,4 +1205,5 @@ module.exports = {
   debtPlanMonthBounds,
   conflictingPlaidAccountHousehold,
   persistCanonicalPlaidTransaction,
+  plaidCurrentBalance,
 };

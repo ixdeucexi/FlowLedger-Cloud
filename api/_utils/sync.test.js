@@ -9,6 +9,7 @@ const {
   duplicatePlaidAccountIds,
   editablePlaidFields,
   plaidAccountIdentity,
+  plaidCurrentBalance,
   isCreditAccount,
   isCreditCardPaymentTransaction,
   isLiabilitiesUnavailable,
@@ -22,6 +23,14 @@ const {
   transferPendingPlaidBillMatch,
   withPlaidSyncLock,
 } = require("./sync");
+
+test("Plaid current balances preserve unavailable values instead of inventing zero", () => {
+  assert.equal(plaidCurrentBalance({ balances: { current: null } }), null);
+  assert.equal(plaidCurrentBalance({ balances: {} }), null);
+  assert.equal(plaidCurrentBalance({}), null);
+  assert.equal(plaidCurrentBalance({ balances: { current: 0 } }), 0);
+  assert.equal(plaidCurrentBalance({ balances: { current: 123.45 } }), 123.45);
+});
 
 test("Plaid sync lock helpers use the migration RPC boundary", async () => {
   const calls = [];
@@ -418,4 +427,18 @@ test("only newly seen pending activity after the initial cursor queues a pending
   assert.equal(shouldQueuePendingNotification("cursor-1", pending), true);
   assert.equal(shouldQueuePendingNotification(null, pending), false);
   assert.equal(shouldQueuePendingNotification("cursor-1", { ...pending, isNewPending: false }), false);
+});
+
+test("account observation time is captured immediately after Plaid accountsGet", () => {
+  const source = require("node:fs").readFileSync(require("node:path").resolve(__dirname, "sync.js"), "utf8");
+  const start = source.indexOf("async function syncAccounts");
+  const end = source.indexOf("async function findConnectedCardDebt", start);
+  const body = source.slice(start, end);
+  assert.match(body, /await client\.accountsGet\([^;]+;\s*const observedAt = new Date\(\)\.toISOString\(\);/s);
+  assert.ok(body.indexOf("const observedAt") < body.indexOf("serviceSupabase()"));
+  assert.match(body, /updated_at: observedAt/);
+  assert.match(body, /current_balance: plaidCurrentBalance\(account\)/);
+  assert.match(body, /update\(\{ accounts_observed_at: observedAt \}\)/);
+  assert.match(source, /account_observed_at: accountSync\.observedAt/);
+  assert.doesNotMatch(source, /record_household_daily_checking_close/);
 });

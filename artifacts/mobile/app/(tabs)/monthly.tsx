@@ -389,7 +389,7 @@ export default function MonthlyScreen() {
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, settings,
     selectedYear, setSelectedYear, dashboardFilter, setDashboardFilter,
     getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill, deleteBill, updateIncome,
-    getCashFlow, getMonthlyIncome, getDailyBalances, getIncomeOccurrencesInMonth,
+    getCashFlow, getMonthlyIncome, getDailyBalances, getCalendarDailyBalances, getIncomeOccurrencesInMonth,
     previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, finalizeBillPayment, getExtraPayment, getDebtPlanForMonth, getRemainingDebtPlanForMonth, setPlannedDebtAmount, canEditHousehold,
     updateDecision, deleteDecision, updateGoal, deleteGoal, activeHousehold,
   } = useBudget();
@@ -714,7 +714,14 @@ export default function MonthlyScreen() {
     () => new Set(overdueBillOccurrenceMap.keys()),
     [overdueBillOccurrenceMap],
   );
-  const dailyBalances = useMemo(() => getDailyBalances(month, selectedYear), [getDailyBalances, month, selectedYear]);
+  const projectedDailyBalances = useMemo(
+    () => getDailyBalances(month, selectedYear),
+    [getDailyBalances, month, selectedYear],
+  );
+  const dailyBalances = useMemo(
+    () => getCalendarDailyBalances(month, selectedYear),
+    [getCalendarDailyBalances, month, selectedYear],
+  );
   const incomeOccurrences = useMemo(() => {
     const occurrences = getIncomeOccurrencesInMonth(month, selectedYear);
     const flat: { day: number; name: string; amount: number; frequency: string; incomeId: string; income: IncomeItem }[] = [];
@@ -1390,7 +1397,7 @@ export default function MonthlyScreen() {
     }
     setSavingPlan(true);
     try {
-      const baseline = dailyBalances
+      const baseline = projectedDailyBalances
         .map(day => ({
           date: `${selectedYear}-${String(month + 1).padStart(2, "0")}-${String(day.day).padStart(2, "0")}`,
           balance: day.balance,
@@ -1624,10 +1631,11 @@ export default function MonthlyScreen() {
           year={selectedYear}
           selectedDate={selectedDate}
           dailyBalances={dailyBalances}
+          projectedDailyBalances={projectedDailyBalances}
           transferTransactionIds={transferTransactionIds}
           overdueBillOccurrenceKeys={overdueBillOccurrenceKeys}
           safetyFloor={settings.safety_floor}
-          getDailyBalances={getDailyBalances}
+          getCalendarDailyBalances={getCalendarDailyBalances}
           onToday={jumpToToday}
           onPreviousMonth={() => changeMonth(-1)}
           onNextMonth={() => changeMonth(1)}
@@ -2131,7 +2139,7 @@ export default function MonthlyScreen() {
                         </Text>
                         <Text style={[styles.dayOverlaySub, { color: c.mutedForeground }]}>
                           {selectedDayItemCount} item{selectedDayItemCount === 1 ? "" : "s"}
-                          {selectedForecastDay ? ` · projected close $${selectedForecastDay.balance.toFixed(2)}` : ""}
+                          {selectedForecastDay ? ` · ${selectedForecastDay.balanceSource === "actual_close" ? "actual bank close" : "projected close"} $${selectedForecastDay.balance.toFixed(2)}` : ""}
                         </Text>
                       </View>
                     </View>
@@ -2145,7 +2153,9 @@ export default function MonthlyScreen() {
                       <View style={[styles.dayOverlayRisk, { backgroundColor: selectedForecastDay.balance < 0 ? c.destructive + "14" : c.warning + "16", borderColor: selectedForecastDay.balance < 0 ? c.destructive + "70" : c.warning + "70" }]}>
                         <Feather name="alert-triangle" size={16} color={selectedForecastDay.balance < 0 ? c.destructive : c.warning} />
                         <Text style={[styles.dayOverlayRiskText, { color: c.foreground }]}>
-                          Projected below your ${settings.safety_floor.toFixed(0)} safety floor.
+                          {selectedForecastDay.balanceSource === "actual_close"
+                            ? `Actual bank close was below your $${settings.safety_floor.toFixed(0)} safety floor.`
+                            : `Projected below your $${settings.safety_floor.toFixed(0)} safety floor.`}
                         </Text>
                       </View>
                     ) : null}

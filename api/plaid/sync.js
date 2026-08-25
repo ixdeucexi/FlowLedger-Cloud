@@ -5,6 +5,10 @@ const {
 } = require("../_utils/supabase");
 const { syncItem } = require("../_utils/sync");
 const {
+  captureAfterCoherentHouseholdRefresh,
+  refreshHouseholdItems,
+} = require("../_utils/dailyCheckingClose");
+const {
   authorizeProHousehold,
   requestedHouseholdId,
 } = require("../_utils/plaidAccess");
@@ -107,11 +111,11 @@ module.exports = async function plaidSync(req, res) {
     const { data: items, error } = await client
       .from("plaid_items")
       .select(
-        "id,household_id,encrypted_access_token,access_token_ciphertext,transactions_cursor,cursor",
+        "id,user_id,household_id,encrypted_access_token,access_token_ciphertext,transactions_cursor,cursor,status",
       )
-      .eq("user_id", auth.user.id)
       .eq("household_id", access.householdId)
-      .eq("status", "active")
+      .in("status", ["active", "needs_repair"])
+      .or("encrypted_access_token.not.is.null,access_token_ciphertext.not.is.null")
       .order("updated_at", { ascending: false });
     if (error) throw error;
     if (!items?.length)
@@ -121,9 +125,14 @@ module.exports = async function plaidSync(req, res) {
           error: "PLAID_ITEM_NOT_FOUND",
           message: "Connect a bank before syncing.",
         });
-    const results = [];
-    for (const item of items)
-      results.push(await syncItem({ userId: auth.user.id, item }));
+    const refresh = await refreshHouseholdItems({ items, synchronize: syncItem });
+    if (refresh.failures.length) throw refresh.failures[0].error;
+    await captureAfterCoherentHouseholdRefresh({
+      db: client,
+      householdId: access.householdId,
+      refresh,
+    });
+    const results = refresh.results.map(entry => entry.result);
     return res.status(200).json({
       ok: true,
       accounts_count: results.reduce(

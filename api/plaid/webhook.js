@@ -1,6 +1,7 @@
 const { plaid } = require("../_utils/plaid");
 const { serviceSupabase, publicError, safeError } = require("../_utils/supabase");
 const { syncItem } = require("../_utils/sync");
+const { captureAfterWebhookSync } = require("../_utils/dailyCheckingClose");
 const { isActualProHousehold } = require("../_utils/plaidAccess");
 const { PlaidWebhookReplayGuard, readRawRequestBody, verifyPlaidWebhook } = require("../_utils/plaidWebhookVerification");
 
@@ -18,6 +19,7 @@ function createPlaidWebhookHandler(dependencies = {}) {
   const database = dependencies.serviceSupabase || serviceSupabase;
   const plaidClient = dependencies.plaid || plaid;
   const synchronize = dependencies.syncItem || syncItem;
+  const captureClose = dependencies.captureAfterWebhookSync || captureAfterWebhookSync;
   const proHousehold = dependencies.isActualProHousehold || isActualProHousehold;
   const readBody = dependencies.readRawRequestBody || readRawRequestBody;
   const verify = dependencies.verifyPlaidWebhook || verifyPlaidWebhook;
@@ -68,6 +70,27 @@ function createPlaidWebhookHandler(dependencies = {}) {
           modified: result.transactions.modified,
           removed: result.transactions.removed,
         });
+        try {
+          const { count, error: countError } = await client
+            .from("plaid_items")
+            .select("id", { count: "exact", head: true })
+            .eq("household_id", item.household_id)
+            .in("status", ["active", "needs_repair"])
+            .or("encrypted_access_token.not.is.null,access_token_ciphertext.not.is.null");
+          if (countError) throw countError;
+          await captureClose({
+            db: client,
+            householdId: item.household_id,
+            eligibleItemCount: count || 0,
+            item,
+            result,
+          });
+        } catch (error) {
+          console.error("[plaid:webhook] daily close deferred", {
+            householdId: item.household_id,
+            error: safeError(error, "Daily close check failed."),
+          });
+        }
         return res.status(200).json({ ok: true, synced: true, added: result.transactions.added, modified: result.transactions.modified, removed: result.transactions.removed });
       }
       return res.status(200).json({ ok: true, ignored: true });

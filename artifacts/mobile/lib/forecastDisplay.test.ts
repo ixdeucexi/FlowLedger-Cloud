@@ -22,10 +22,22 @@ test("calendar balances round cents to the nearest whole dollar", () => {
 test("mobile calendar displays and announces the full balance", () => {
   const calendar = readFileSync(path.resolve(process.cwd(), "components/CalendarView.tsx"), "utf8");
 
-  assert.match(calendar, /Projected closing balance \$\{formatCalendarBalance\(db\.balance\)\}/);
-  assert.match(calendar, /accessibilityLabel=\{formatCalendarBalance\(db\.balance\)\}/);
+  assert.match(calendar, /"Actual bank close" : "Projected closing balance"/);
+  assert.match(calendar, /"Actual bank close" : "Projected close"/);
+  assert.match(calendar, /isActualClose \? "Actual close" : "Projected"/);
   assert.match(calendar, /\{formatCalendarBalance\(db\.balance\)\}/);
   assert.doesNotMatch(calendar, /formatCompactCalendarBalance/);
+});
+
+test("selected-day and desktop details distinguish actual closes from projections", () => {
+  const monthly = readFileSync(path.resolve(process.cwd(), "app/(tabs)/monthly.tsx"), "utf8");
+  const desktop = readFileSync(path.resolve(process.cwd(), "components/desktop/DesktopCalendarPage.tsx"), "utf8");
+
+  assert.match(monthly, /"actual bank close" : "projected close"/);
+  assert.match(monthly, /Actual bank close was below your/);
+  assert.match(desktop, /"Actual bank close" : "Projected close"/);
+  assert.match(desktop, /"Actual Bank Close"/);
+  assert.match(desktop, /Last verified bank balance for this completed day/);
 });
 
 test("groups forecast events into plain-language sections", () => {

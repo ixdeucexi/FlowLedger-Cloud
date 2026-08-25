@@ -59,7 +59,8 @@ import { decisionDbPayload } from "@/lib/decisionPersistence";
 import { recordDiagnostic } from "@/lib/diagnostics";
 import { isDevDemoMode } from "@/lib/demoMode";
 import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, getLatestRecordedIncomeAmount, isBillActiveForMonth, isIncomeActiveForMonth, moveSettledBillOverrideDate, resolveFinalizedBillOccurrenceDays, resolveIncomeMatchOccurrenceDate } from "@/lib/schedule";
-import { bankBalanceAdjustment, connectedCheckingAnchor, evaluateForecastConfidence, historicalMonthOpeningBalance, operatingAccountAnchor, type AccountSnapshot, type AccountType, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
+import { bankBalanceAdjustment, connectedCheckingObservedAnchor, evaluateForecastConfidence, historicalMonthOpeningBalance, operatingAccountAnchor, type AccountSnapshot, type AccountType, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
+import { loadAllDailyCheckingCloses, localDateInTimeZone, overlayCompletedDailyCheckingCloses, type DailyBalanceSource, type DailyCheckingCloseSnapshot } from "@/lib/dailyCheckingClose";
 import { scenarioDates, type DecisionResult, type DecisionScenario, type DecisionType } from "@/lib/decisions";
 import {
   acceptHouseholdInviteCode,
@@ -420,6 +421,9 @@ export interface DailyBalance {
   goalExpenses: GoalExpense[];
   net: number;
   balance: number;
+  balanceSource: DailyBalanceSource;
+  balanceDate: string;
+  balanceObservedAt?: string;
   projectedInflow?: number;
   projectedOutflow?: number;
   events?: FinancialEvent[];
@@ -553,6 +557,7 @@ interface BudgetContextType {
 
   getCashFlow: (month: number, year: number) => CashFlow;
   getDailyBalances: (month: number, year: number) => DailyBalance[];
+  getCalendarDailyBalances: (month: number, year: number) => DailyBalance[];
   getPlanSimulationBaseline: (horizonMonths: PlanSimulationHorizon, startDate?: string) => PlanSimulationBaseline;
 
   addCategory: (name: string) => Promise<void>;
@@ -1066,6 +1071,22 @@ function normalizeConnectedBankRows(rows: any[]): ConnectedBankAccount[] {
   }));
 }
 
+function normalizeDailyCheckingCloseRows(rows: any[]): DailyCheckingCloseSnapshot[] {
+  return rows.flatMap(row => {
+    const checkingBalance = Number(row.checking_balance);
+    const accountCount = Number(row.account_count);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(row.balance_date ?? ""))) return [];
+    if (!Number.isFinite(checkingBalance) || !Number.isFinite(accountCount) || accountCount < 1) return [];
+    return [{
+      balance_date: String(row.balance_date),
+      checking_balance: checkingBalance,
+      observed_at: String(row.observed_at),
+      account_count: accountCount,
+      source: "plaid_sync" as const,
+    }];
+  });
+}
+
 function normalizeAccountRow(account: any): Account {
   return {
     ...account,
@@ -1128,6 +1149,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [categories,    setCategories]    = useState<string[]>([]);
   const [accounts,      setAccounts]      = useState<Account[]>([]);
   const [connectedBankAccounts, setConnectedBankAccounts] = useState<ConnectedBankAccount[]>([]);
+  const [dailyCheckingCloses, setDailyCheckingCloses] = useState<DailyCheckingCloseSnapshot[]>([]);
+  const [householdTimeZone, setHouseholdTimeZone] = useState("UTC");
   const [transactionAccountIdentities, setTransactionAccountIdentities] = useState<ConnectedBankAccount[]>([]);
   const [decisions,     setDecisions]     = useState<DecisionRecord[]>([]);
   const [households,    setHouseholds]    = useState<HouseholdMembership[]>([]);
@@ -1210,6 +1233,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     accountsRef.current = [];
     setConnectedBankAccounts([]);
     connectedBankAccountsRef.current = [];
+    setDailyCheckingCloses([]);
+    setHouseholdTimeZone("UTC");
     setTransactionAccountIdentities([]);
     transactionAccountIdentitiesRef.current = [];
     setDecisions([]);
@@ -1290,6 +1315,35 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     return query.eq("household_id", scope.householdId);
   }, []);
+
+  const loadDailyCheckingCloses = useCallback((scope?: HouseholdMembership | null) => {
+    if (!scope?.householdId) return Promise.resolve({ data: [], error: null });
+    return loadAllDailyCheckingCloses(async (from, to) => {
+      const result = await supabase
+        .from("household_daily_checking_closes")
+        .select("balance_date,checking_balance,observed_at,account_count,source")
+        .eq("household_id", scope.householdId)
+        .order("balance_date", { ascending: false })
+        .range(from, to);
+      return result as any;
+    });
+  }, []);
+
+  const loadDailyCheckingClosesSafely = useCallback(async (scope?: HouseholdMembership | null) => {
+    try {
+      return await withLoadTimeout(
+        loadDailyCheckingCloses(scope),
+        1500,
+        "Load daily checking history",
+      );
+    } catch (error) {
+      console.warn("Daily checking history deferred", error);
+      return {
+        data: null,
+        error: { message: error instanceof Error ? error.message : "Daily checking history unavailable" },
+      };
+    }
+  }, [loadDailyCheckingCloses]);
 
   const deleteRowIdempotently = useCallback(async (
     table: "bills" | "extra_payments" | "incomes" | "goals" | "decisions",
@@ -1660,31 +1714,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!next) return;
     setLoading(true);
     setLoadError(null);
+    clearScopedFinancialData();
     await queryClient.cancelQueries({ queryKey: ["budget-core", user.id] });
     queryClient.removeQueries({ queryKey: ["budget-core", user.id] });
-    setBills([]);
-    setOverrides([]);
-    setBillDateMoves([]);
-    setTransactions([]);
-    setDeletedTransactions([]);
-    setPendingBankTransactions([]);
-    setPendingPlanMatches([]);
-    setIncomes([]);
-    setGoals([]);
-    setExtraPayments([]);
-    setCategories([]);
-    setAccounts([]);
-    setConnectedBankAccounts([]);
-    setTransactionAccountIdentities([]);
-    transactionAccountIdentitiesRef.current = [];
-    setDecisions([]);
-    setSettings(DEFAULT_SETTINGS);
-    setDataUpdatedAt(null);
     replaceActiveHouseholdScope(next);
     await saveActiveHouseholdId(user.id, next.householdId);
     await refreshHouseholdDetails(next);
     setLoadRetryNonce(value => value + 1);
-  }, [user, demoMode, households, queryClient, refreshHouseholdDetails, replaceActiveHouseholdScope]);
+  }, [user, demoMode, households, clearScopedFinancialData, queryClient, refreshHouseholdDetails, replaceActiveHouseholdScope]);
 
   const createHouseholdInvite = useCallback(async (role: HouseholdInviteRole = "editor") => {
     if (!activeHousehold) throw new Error("Choose a household first.");
@@ -1770,6 +1807,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setCategories(demo.categories);
       setAccounts(demo.accounts);
       setConnectedBankAccounts([]);
+      setDailyCheckingCloses([]);
+      setHouseholdTimeZone("UTC");
       setTransactionAccountIdentities([]);
       transactionAccountIdentitiesRef.current = [];
       setDecisions(demo.decisions);
@@ -1785,7 +1824,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!userId) {
       setLoadError(null);
       setBills([]); setOverrides([]); setBillDateMoves([]); setTransactions([]); setDeletedTransactions([]); setPendingBankTransactions([]); setIncomes([]);
-      setGoals([]); setExtraPayments([]); setCategories([]); setAccounts([]); setConnectedBankAccounts([]); setTransactionAccountIdentities([]); setDecisions([]); setSettings(DEFAULT_SETTINGS);
+      setGoals([]); setExtraPayments([]); setCategories([]); setAccounts([]); setConnectedBankAccounts([]); setDailyCheckingCloses([]); setHouseholdTimeZone("UTC"); setTransactionAccountIdentities([]); setDecisions([]); setSettings(DEFAULT_SETTINGS);
       transactionAccountIdentitiesRef.current = [];
       setHouseholds([]); setHouseholdMembers([]); setHouseholdActivity([]); replaceActiveHouseholdScope(null);
       billDateMovesRef.current = [];
@@ -1864,6 +1903,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
                     .order("name"),
                   uid,
                 ),
+                loadDailyCheckingClosesSafely(scope),
                 applyHouseholdSelect(supabase.from("decisions").select("*"), uid).order("created_at", { ascending: false }),
               ]);
               const storedBillDateMoves = await loadBillDateMoves(uid, scope);
@@ -1874,7 +1914,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           "Load budget data",
         );
         const { results, storedBillDateMoves } = coreLoad;
-        const failed = results.find(result => result.error);
+        // Daily closes are display-only. A history read failure must not block the
+        // financial plan; the calendar honestly falls back to projections.
+        const failed = results.find((result, index) => index !== 12 && result.error);
         if (failed?.error) throw new Error(`Load budget data: ${failed.error.message}`);
         const [
           { data: bData },
@@ -1889,6 +1931,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           { data: cData },
           { data: aData },
           { data: connectedAccountData },
+          { data: dailyCloseData },
           { data: dData },
         ] = results;
 
@@ -1906,6 +1949,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         transactionAccountIdentitiesRef.current = rawConnectedAccounts;
         const canonicalBankAccounts = canonicalConnectedAccounts(rawConnectedAccounts);
         setConnectedBankAccounts(canonicalBankAccounts);
+        setDailyCheckingCloses(normalizeDailyCheckingCloseRows(dailyCloseData ?? []));
         const pendingRows = checkingPendingBankRows(normalizePendingBankRows(pendingData ?? []), rawConnectedAccounts);
         setPendingBankTransactions(pendingPlaidActivityWithBalanceHolds(pendingRows.included, rawConnectedAccounts, localDateString()));
         if (transactionCollections.unknownPlaid.length > 0 || pendingRows.unknownCount > 0) {
@@ -1942,6 +1986,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         setAccounts(loadedAccounts);
         setDecisions((dData ?? []).map((d: any) => ({ ...d, calendar_date: d.calendar_date ?? undefined, applied_change: d.applied_change ?? undefined })));
         if (sData) {
+          setHouseholdTimeZone(String(sData.time_zone || "UTC"));
           const nextStartingBalance = Number(sData.starting_balance);
           const nextStartingBalanceDate = sData.starting_balance_date ?? undefined;
           const nextSettings: Settings = {
@@ -1983,14 +2028,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }).catch(() => undefined);
       }
     })();
-  }, [userId, demoMode, loadRetryNonce, resolveHouseholds, applyHouseholdSelect, loadScopedSettings, queryClient, replaceActiveHouseholdScope]);
+  }, [userId, demoMode, loadRetryNonce, resolveHouseholds, applyHouseholdSelect, loadDailyCheckingClosesSafely, loadScopedSettings, queryClient, replaceActiveHouseholdScope]);
 
   const loadBankData = useCallback(async () => {
     if (!user || demoMode) return;
     const requestId = ++bankRefreshRequestRef.current;
     const uid = user.id;
     const scope = householdScopeRef.current;
-    const [billResult, transactionResult, pendingResult, pendingPlanResult, accountResult, connectedAccountResult, settingsResult] = await Promise.all([
+    const [billResult, transactionResult, pendingResult, pendingPlanResult, accountResult, connectedAccountResult, dailyCloseResult, settingsResult] = await Promise.all([
       applyHouseholdSelect(supabase.from("bills").select("*"), uid),
       applyHouseholdSelect(supabase.from("transactions").select("*"), uid),
       applyHouseholdSelect(
@@ -2015,6 +2060,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           .order("name"),
         uid,
       ),
+      loadDailyCheckingClosesSafely(scope),
       loadScopedSettings(uid, scope),
     ]);
     if (requestId !== bankRefreshRequestRef.current || scope?.householdId !== householdScopeRef.current?.householdId) return;
@@ -2064,8 +2110,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }
       }
     }
+    if (!dailyCloseResult.error) {
+      setDailyCheckingCloses(normalizeDailyCheckingCloseRows(dailyCloseResult.data ?? []));
+    }
     if (!settingsResult.error && settingsResult.data) {
       const sData = settingsResult.data;
+      setHouseholdTimeZone(String(sData.time_zone || "UTC"));
       const nextStartingBalance = Number(sData.starting_balance);
       const nextStartingBalanceDate = sData.starting_balance_date ?? undefined;
       const serverSettings: Settings = {
@@ -2092,7 +2142,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     const bankDataResults = [billResult, transactionResult, pendingResult, pendingPlanResult, accountResult, connectedAccountResult, settingsResult];
     if (bankDataResults.every(result => !result.error)) setDataUpdatedAt(new Date().toISOString());
-  }, [user, demoMode, applyHouseholdSelect, loadScopedSettings]);
+  }, [user, demoMode, applyHouseholdSelect, loadDailyCheckingClosesSafely, loadScopedSettings]);
 
   const refreshBankData = useCallback(async () => {
     if (!user || demoMode || Platform.OS !== "web") return;
@@ -4892,7 +4942,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     monthNet: new Map<string, number>(),
     carryover: new Map<string, number>(),
     daily: new Map<string, DailyBalance[]>(),
-  }), [bills, transactions, deletedTransactions, incomes, goals, decisions, overrides, billDateMoves, extraPayments, connectedBankAccounts, accounts, getBillEffectiveMonthlyTotal, getRemainingDebtPlanForMonth, pendingBankTransactions, pendingPlanMatches, settings.starting_balance, settings.starting_balance_date]);
+  }), [bills, transactions, deletedTransactions, incomes, goals, decisions, overrides, billDateMoves, extraPayments, connectedBankAccounts, householdTimeZone, accounts, getBillEffectiveMonthlyTotal, getRemainingDebtPlanForMonth, pendingBankTransactions, pendingPlanMatches, settings.starting_balance, settings.starting_balance_date]);
 
   const getDailyBalances = useCallback((month: number, year: number): DailyBalance[] => {
     // A posted/reviewed payment can change the dated plan while this context
@@ -4903,7 +4953,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const cachedDaily = balanceComputationCache.daily.get(dailyKey);
     if (cachedDaily) return cachedDaily;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const connectedBankAnchor = connectedCheckingAnchor(connectedBankAccounts, localDateString());
+    const connectedBankAnchor = connectedCheckingObservedAnchor(connectedBankAccounts, householdTimeZone);
     const bankAnchor = connectedBankAnchor ?? operatingAccountAnchor(accounts.map(toAccountSnapshot));
     const computeMonthNet = (m: number, y: number, startExclusive?: string): number => {
       const key = `${y}-${m}`;
@@ -5260,13 +5310,31 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       result.push({
         day, income: incomeToday, scheduledIncome, expense: expenseToday, bills: billsToday,
         goalExpenses: dayGoals, net: forecastDay.net, balance: forecastDay.balance,
+        balanceSource: "projected",
+        balanceDate: forecastDay.date,
         projectedInflow, projectedOutflow, events: visibleEvents,
         projectionEvents: forecastDay.events.map(event => ({ ...event })),
       });
     }
     balanceComputationCache.daily.set(dailyKey, result);
     return result;
-  }, [bills, transactions, deletedTransactions, forecastLedgerTransactions, transactionLedger, incomes, goals, decisions, overrides, billDateMoves, extraPayments, connectedBankAccounts, accounts, getBillEffectiveMonthlyTotal, getBillMonthlyTotal, getBillOccurrencesInMonth, getDebtSourceCommitment, getExtraPayment, getRemainingDebtPlanForMonth, pendingBankTransactions, pendingPlanMatches, settings.starting_balance, settings.starting_balance_date, balanceComputationCache, user]);
+  }, [bills, transactions, deletedTransactions, forecastLedgerTransactions, transactionLedger, incomes, goals, decisions, overrides, billDateMoves, extraPayments, connectedBankAccounts, householdTimeZone, accounts, getBillEffectiveMonthlyTotal, getBillMonthlyTotal, getBillOccurrencesInMonth, getDebtSourceCommitment, getExtraPayment, getRemainingDebtPlanForMonth, pendingBankTransactions, pendingPlanMatches, settings.starting_balance, settings.starting_balance_date, balanceComputationCache, user]);
+
+  const getCalendarDailyBalances = useCallback((month: number, year: number): DailyBalance[] => {
+    let householdLocalToday: string;
+    try {
+      householdLocalToday = localDateInTimeZone(new Date(), householdTimeZone);
+    } catch {
+      householdLocalToday = localDateInTimeZone(new Date(), "UTC");
+    }
+    return overlayCompletedDailyCheckingCloses(
+      getDailyBalances(month, year),
+      month,
+      year,
+      dailyCheckingCloses,
+      householdLocalToday,
+    );
+  }, [dailyCheckingCloses, getDailyBalances, householdTimeZone]);
 
   const getPlanSimulationBaseline = useCallback((
     horizonMonths: PlanSimulationHorizon,
@@ -6010,7 +6078,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, matchPendingTransactionToBill, matchPendingTransactionToManual, removePendingPlanMatch, reconcileTransaction, createSpendingBucketForTransaction, undoTransactionReconciliation, removeReviewSurplusFunding, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome, getIncomeOccurrencesInMonth,
       addGoal, updateGoal, closeSpendingBucket, closeSpendingBucketAndRouteRemainder, reopenSpendingBucket, archiveSpendingBucket, restoreArchivedSpendingBucket, deleteGoal, checkGoalAffordability,
-      getCashFlow, getDailyBalances, getPlanSimulationBaseline,
+      getCashFlow, getDailyBalances, getCalendarDailyBalances, getPlanSimulationBaseline,
       addCategory, updateCategory, deleteCategory,
       updateSettings, importBills,
       addAccount, updateAccount, updateConnectedBankAccountDisplayName, reconcileAccount, archiveAccount, importStatementTransactions,

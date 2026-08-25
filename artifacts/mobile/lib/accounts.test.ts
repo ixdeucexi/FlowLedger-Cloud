@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { bankBalanceAdjustment, connectedCheckingAnchor, connectedCheckingBalance, evaluateForecastConfidence, historicalMonthOpeningBalance, operatingAccountAnchor, parseStatementCsv, totalForecastBalance, type AccountSnapshot } from "./accounts";
+import { bankBalanceAdjustment, connectedCheckingAnchor, connectedCheckingBalance, connectedCheckingObservedAnchor, evaluateForecastConfidence, historicalMonthOpeningBalance, operatingAccountAnchor, parseStatementCsv, totalForecastBalance, type AccountSnapshot } from "./accounts";
 
 const accounts: AccountSnapshot[] = [
   { id: "checking", name: "Checking", type: "checking", currentBalance: 1200, balanceAsOf: "2026-06-23", lastReconciledAt: "2026-06-23", active: true },
@@ -26,6 +26,47 @@ test("connected checking uses the same balance for dashboard and calendar", () =
   ];
   assert.equal(connectedCheckingBalance(connected), 1000);
   assert.deepEqual(connectedCheckingAnchor(connected, "2026-07-17"), { balance: 1000, date: "2026-07-17" });
+});
+
+test("connected checking anchor uses the bank observation date instead of the device date", () => {
+  const connected = [
+    { account_subtype: "checking", current_balance: 800, is_active: true, updated_at: "2026-08-25T02:30:00.000Z" },
+    { account_subtype: "checking", current_balance: 200, is_active: true, updated_at: "2026-08-25T02:29:00.000Z" },
+  ];
+  assert.deepEqual(connectedCheckingObservedAnchor(connected, "America/Chicago"), {
+    balance: 1000,
+    date: "2026-08-24",
+  });
+  assert.equal(connectedCheckingObservedAnchor(connected.map(account => ({ ...account, updated_at: null })), "America/Chicago"), null);
+});
+
+test("mixed-age checking observations never relabel an aggregate as the newest date", () => {
+  const connected = [
+    { account_subtype: "checking", current_balance: 800, is_active: true, updated_at: "2026-08-25T04:59:00.000Z" },
+    { account_subtype: "checking", current_balance: 200, is_active: true, updated_at: "2026-08-25T05:01:00.000Z" },
+  ];
+  assert.equal(connectedCheckingObservedAnchor(connected, "America/Chicago"), null);
+});
+
+test("a 23:59 bank observation keeps its household-local date even when work completes after midnight", () => {
+  const connected = [
+    { account_subtype: "checking", current_balance: 1000, is_active: true, updated_at: "2026-08-25T04:59:59.000Z" },
+  ];
+  assert.deepEqual(connectedCheckingObservedAnchor(connected, "America/Chicago"), {
+    balance: 1000,
+    date: "2026-08-24",
+  });
+});
+
+test("DST fallback observations on the same household-local date remain coherent", () => {
+  const connected = [
+    { account_subtype: "checking", current_balance: 700, is_active: true, updated_at: "2026-11-01T06:30:00.000Z" },
+    { account_subtype: "checking", current_balance: 300, is_active: true, updated_at: "2026-11-01T07:30:00.000Z" },
+  ];
+  assert.deepEqual(connectedCheckingObservedAnchor(connected, "America/Chicago"), {
+    balance: 1000,
+    date: "2026-11-01",
+  });
 });
 
 test("a mid-month saved balance is not reused as the first-day bank opening", () => {
