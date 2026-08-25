@@ -274,7 +274,7 @@ export function CalendarView({
               disabled={isBeforeStart}
               onPress={() => onDayPress(ds)}
               accessibilityRole="button"
-              accessibilityLabel={`${ds}. ${db ? `${isActualClose ? "Actual bank close" : "Projected closing balance"} ${formatCalendarBalance(db.balance)}.` : "No forecast available."}`}
+              accessibilityLabel={`${ds}. ${db ? `${isActualClose ? "Actual bank close" : "Closing balance"} ${formatCalendarBalance(db.balance)}.` : "No forecast available."}`}
               accessibilityState={{ disabled: isBeforeStart, selected: isSelected }}
               style={({ pressed }) => [
                 styles.cellOuter,
@@ -323,7 +323,7 @@ export function CalendarView({
                         isDesktop && styles.desktopBalanceText,
                         { color: db.balance >= safetyFloor ? calendarTheme.green : db.balance < 0 ? calendarTheme.red : calendarTheme.amber },
                       ]}
-                      accessibilityLabel={`${isActualClose ? "Actual bank close" : "Projected close"} ${formatCalendarBalance(db.balance)}`}
+                      accessibilityLabel={`${isActualClose ? "Actual bank close" : "Closing balance"} ${formatCalendarBalance(db.balance)}`}
                       numberOfLines={1}
                       adjustsFontSizeToFit
                       minimumFontScale={0.55}
@@ -331,9 +331,11 @@ export function CalendarView({
                       {formatCalendarBalance(db.balance)}
                     </Text>
                   ) : null}
-                  {db ? (
-                    <Text style={[styles.balanceSourceText, { color: calendarTheme.muted }]}>
-                      {isActualClose ? "Actual close" : "Projected"}
+                  {isActualClose ? (
+                    <Text
+                      style={[styles.balanceSourceText, { color: calendarTheme.muted }]}
+                    >
+                      Actual close
                     </Text>
                   ) : null}
                 </View>

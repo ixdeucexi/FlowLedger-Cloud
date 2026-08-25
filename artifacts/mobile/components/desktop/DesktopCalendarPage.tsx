@@ -310,7 +310,7 @@ function DesktopMonthGrid({
             <Pressable
               key={cell.date}
               accessibilityRole="button"
-              accessibilityLabel={`${displayDate(cell.date, true)}. ${events.length} scheduled ${events.length === 1 ? "item" : "items"}${balance ? `. ${isActualClose ? "Actual bank close" : "Projected close"} ${money(balance.balance)}` : ""}`}
+              accessibilityLabel={`${displayDate(cell.date, true)}. ${events.length} scheduled ${events.length === 1 ? "item" : "items"}${balance ? `. ${isActualClose ? "Actual bank close" : "Closing balance"} ${money(balance.balance)}` : ""}`}
               accessibilityState={{ selected }}
               disabled={!cell.inCurrentMonth}
               onPress={() => onSelectDate(cell.date)}
@@ -340,7 +340,7 @@ function DesktopMonthGrid({
                 <Text style={styles.moreText}>+{hiddenCount} more</Text>
               ) : null}
               {balance ? (
-                <Text style={styles.dayBalanceSource}>{isActualClose ? "Actual close" : "Projected"} · {money(balance.balance)}</Text>
+                <Text style={styles.dayBalanceSource}>{isActualClose ? "Actual close · " : ""}{money(balance.balance)}</Text>
               ) : null}
               {isLowest ? (
                 <View style={[styles.lowestCellBadge, tightestForecastIsRisk && styles.riskCellBadge]}>
@@ -477,7 +477,7 @@ function SelectedDayPanel({
 
         <View style={[styles.balanceCard, isRiskDay && styles.riskBalanceCard]}>
           <View style={[styles.balanceIcon, isRiskDay && styles.riskBalanceIcon]}><Feather name="shield" size={18} color={isRiskDay ? palette.red : palette.blue} /></View>
-          <View style={styles.balanceCopy}><Text style={styles.balanceLabel}>{isActualClose ? "Actual Bank Close" : isRiskDay ? "Projected Risk Balance" : "Projected Daily Balance"}</Text><Text style={[styles.balanceValue, isRiskDay && styles.riskBalanceValue]}>{money(selectedDay?.balance ?? 0)}</Text><Text style={styles.balanceDetail}>{isActualClose ? `Last verified bank balance for this completed day${isRiskDay ? ` · below ${money(safetyFloor)} safety floor` : ""}` : isRiskDay ? `Projected below ${money(safetyFloor)} safety floor` : "Projected close for this day"}</Text></View>
+          <View style={styles.balanceCopy}><Text style={styles.balanceLabel}>{isActualClose ? "Actual Bank Close" : isRiskDay ? "Risk Balance" : "Closing Balance"}</Text><Text style={[styles.balanceValue, isRiskDay && styles.riskBalanceValue]}>{money(selectedDay?.balance ?? 0)}</Text><Text style={styles.balanceDetail}>{isActualClose ? `Last verified bank balance for this completed day${isRiskDay ? ` · below ${money(safetyFloor)} safety floor` : ""}` : isRiskDay ? `Below ${money(safetyFloor)} safety floor` : "Closing balance for this day"}</Text></View>
           <BalanceTrend balances={trendValues} label={`Balance trend for ${weekLabel}`} tone={isRiskDay ? "risk" : "plan"} />
         </View>
 

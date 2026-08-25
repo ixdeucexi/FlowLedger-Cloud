@@ -166,8 +166,8 @@ export function groupForecastEvents(events: FinancialEvent[] = []): ForecastEven
 
 export function buildDayForecastFloPrompt(dateLabel: string, isoDate: string, projectedClose?: number, groups: ForecastEventGroup[] = []): string {
   const balanceText = projectedClose === undefined
-    ? "I do not have a projected close for that day."
-    : `Projected close is $${projectedClose.toFixed(2)}.`;
+    ? "I do not have a closing balance for that day."
+    : `Closing balance is $${projectedClose.toFixed(2)}.`;
   const sourceText = groups.length
     ? groups
         .map(group => {

@@ -23,7 +23,7 @@ export const LEARNING_TOUR_STEPS: LearningTourStep[] = [
     path: "/(tabs)/monthly",
     title: "Forecast",
     focus: "See the plan by day",
-    floSays: "I show your projected balance for each day.",
+    floSays: "I show your closing balance for each day.",
     tryThis: "Tap the tightest forecast day to see how you can build more room.",
   },
   {

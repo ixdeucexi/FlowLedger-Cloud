@@ -172,7 +172,7 @@ const GUIDE_SLIDES: readonly GuideSlide[] = [
           },
           {
             title: "4. Forecast",
-            body: "Scan upcoming days and confirm each projected close makes sense.",
+            body: "Scan upcoming days and confirm each closing balance makes sense.",
             icon: "calendar",
           },
         ],
@@ -245,13 +245,13 @@ const GUIDE_SLIDES: readonly GuideSlide[] = [
     eyebrow: "STEP 4",
     title: "Forecast and Plan Simulator",
     intro:
-      "Forecast shows when money should move and what each day's projected close will be.",
+      "Forecast shows when money should move and what each day's closing balance will be.",
     icon: "calendar",
     accent: "#5CA6FF",
     image: require("../assets/images/user-guide/forecast-sample.png"),
     imageLabel: "FlowLedger Forecast calendar",
     imageCaption:
-      "Fictional sample calendar. Open a day to review its projected close.",
+      "Fictional sample calendar. Open a day to review its closing balance.",
     sections: [
       {
         title: "Read the calendar",
@@ -263,7 +263,7 @@ const GUIDE_SLIDES: readonly GuideSlide[] = [
           },
           {
             title: "Open the day",
-            body: "Tap a date to see every item behind its projected close.",
+            body: "Tap a date to see every item behind its closing balance.",
             icon: "search",
           },
           {
@@ -301,7 +301,7 @@ const GUIDE_SLIDES: readonly GuideSlide[] = [
     ],
     callout: {
       title: "Best daily habit",
-      body: "Before the day ends, confirm the next few projected closes match what you expect.",
+      body: "Before the day ends, confirm the next few closing balances match what you expect.",
     },
   },
   {
@@ -466,7 +466,7 @@ const GUIDE_SLIDES: readonly GuideSlide[] = [
           },
           {
             title: "7. Recheck Forecast",
-            body: "Open the affected day and verify the projected close after correcting data.",
+            body: "Open the affected day and verify the closing balance after correcting data.",
             icon: "calendar",
           },
         ],
@@ -490,7 +490,7 @@ const GUIDE_SLIDES: readonly GuideSlide[] = [
             icon: "bar-chart",
           },
           {
-            title: "Projected close",
+            title: "Closing balance",
             body: "The expected balance at the end of a Forecast day.",
             icon: "flag",
           },

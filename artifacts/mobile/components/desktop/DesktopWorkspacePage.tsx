@@ -330,7 +330,7 @@ function CalendarPage({ onOpenPlanner }: { onOpenPlanner: () => void }) {
                   {day.day === today ? <StatusPill label="Today" tone="blue" /> : null}
                 </View>
                 <Text style={styles.dayBalance}>{currency(day.balance, 0)}</Text>
-                <Text style={styles.dayLabel}>projected balance</Text>
+                <Text style={styles.dayLabel}>closing balance</Text>
                 <View style={styles.dayFooter}>
                   <View style={[styles.daySignal, signalTone]} />
                   <Text style={[styles.dayNet, day.net > 0 && styles.positiveMoney]}>{day.net >= 0 ? "+" : "−"}{currency(Math.abs(day.net), 0)}</Text>

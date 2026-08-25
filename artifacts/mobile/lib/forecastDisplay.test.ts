@@ -22,9 +22,9 @@ test("calendar balances round cents to the nearest whole dollar", () => {
 test("mobile calendar displays and announces the full balance", () => {
   const calendar = readFileSync(path.resolve(process.cwd(), "components/CalendarView.tsx"), "utf8");
 
-  assert.match(calendar, /"Actual bank close" : "Projected closing balance"/);
-  assert.match(calendar, /"Actual bank close" : "Projected close"/);
-  assert.match(calendar, /isActualClose \? "Actual close" : "Projected"/);
+  assert.match(calendar, /"Actual bank close" : "Closing balance"/);
+  assert.match(calendar, /\{isActualClose \? \(/);
+  assert.doesNotMatch(calendar, />Projected</);
   assert.match(calendar, /\{formatCalendarBalance\(db\.balance\)\}/);
   assert.doesNotMatch(calendar, /formatCompactCalendarBalance/);
 });
@@ -33,9 +33,9 @@ test("selected-day and desktop details distinguish actual closes from projection
   const monthly = readFileSync(path.resolve(process.cwd(), "app/(tabs)/monthly.tsx"), "utf8");
   const desktop = readFileSync(path.resolve(process.cwd(), "components/desktop/DesktopCalendarPage.tsx"), "utf8");
 
-  assert.match(monthly, /"actual bank close" : "projected close"/);
+  assert.match(monthly, /"actual bank close" : "closing balance"/);
   assert.match(monthly, /Actual bank close was below your/);
-  assert.match(desktop, /"Actual bank close" : "Projected close"/);
+  assert.match(desktop, /"Actual bank close" : "Closing balance"/);
   assert.match(desktop, /"Actual Bank Close"/);
   assert.match(desktop, /Last verified bank balance for this completed day/);
 });
@@ -185,7 +185,7 @@ test("builds a day-specific Flo prompt from forecast groups", () => {
   const prompt = buildDayForecastFloPrompt("Friday, Jul 3", "2026-07-03", 4412.74, groups);
 
   assert.match(prompt, /Friday, Jul 3/);
-  assert.match(prompt, /Projected close is \$4412\.74/);
+  assert.match(prompt, /Closing balance is \$4412\.74/);
   assert.match(prompt, /Income: Paycheck \+\$1500\.00 \(scheduled\)/);
   assert.match(prompt, /Bills: Utilities -\$350\.00 \(finalized\)/);
   assert.match(prompt, /Transactions: Camera Snowball -\$20\.00 \(actual\)/);

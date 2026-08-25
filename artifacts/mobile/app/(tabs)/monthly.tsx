@@ -2139,7 +2139,7 @@ export default function MonthlyScreen() {
                         </Text>
                         <Text style={[styles.dayOverlaySub, { color: c.mutedForeground }]}>
                           {selectedDayItemCount} item{selectedDayItemCount === 1 ? "" : "s"}
-                          {selectedForecastDay ? ` · ${selectedForecastDay.balanceSource === "actual_close" ? "actual bank close" : "projected close"} $${selectedForecastDay.balance.toFixed(2)}` : ""}
+                          {selectedForecastDay ? ` · ${selectedForecastDay.balanceSource === "actual_close" ? "actual bank close" : "closing balance"} $${selectedForecastDay.balance.toFixed(2)}` : ""}
                         </Text>
                       </View>
                     </View>
@@ -2155,7 +2155,7 @@ export default function MonthlyScreen() {
                         <Text style={[styles.dayOverlayRiskText, { color: c.foreground }]}>
                           {selectedForecastDay.balanceSource === "actual_close"
                             ? `Actual bank close was below your $${settings.safety_floor.toFixed(0)} safety floor.`
-                            : `Projected below your $${settings.safety_floor.toFixed(0)} safety floor.`}
+                            : `Below your $${settings.safety_floor.toFixed(0)} safety floor.`}
                         </Text>
                       </View>
                     ) : null}
