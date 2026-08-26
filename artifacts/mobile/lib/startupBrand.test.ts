@@ -18,7 +18,11 @@ test("startup stays constant until the destination screen is ready", () => {
   assert.match(layout, /const navigationReady\s*=\s*appReady\s*&&/);
   assert.match(
     layout,
-    /const readyToReveal =\s*navigationReady && \(!privacyShielded \|\| !!privacyRefreshError\)/,
+    /const initialPlanReady =\s*!session \|\|\s*hasRevealedPlanRef\.current \|\|\s*\(!budgetLoading && Boolean\(dataUpdatedAt \|\| budgetLoadError\)\)/,
+  );
+  assert.match(
+    layout,
+    /const readyToReveal =\s*navigationReady &&\s*initialPlanReady &&\s*\(!privacyShielded \|\| !!privacyRefreshError\)/,
   );
   assert.match(layout, /if \(appReady\) void hideSplash\(\)/);
   assert.match(layout, /\{!readyToReveal \? \(/);

@@ -341,6 +341,8 @@ function RootNavigator({
   const {
     activeHousehold,
     loading: budgetLoading,
+    loadError: budgetLoadError,
+    dataUpdatedAt,
     refreshHouseholdsForPrivacy,
   } = useBudget();
   const { ready: biometricLockReady, locked: biometricLocked } =
@@ -392,8 +394,14 @@ function RootNavigator({
     (session
       ? !onPlaceholderRoute && !onPendingAuthRoute
       : !onPlaceholderRoute && firstRootSegment !== "auth");
+  const initialPlanReady =
+    !session ||
+    hasRevealedPlanRef.current ||
+    (!budgetLoading && Boolean(dataUpdatedAt || budgetLoadError));
   const readyToReveal =
-    navigationReady && (!privacyShielded || !!privacyRefreshError);
+    navigationReady &&
+    initialPlanReady &&
+    (!privacyShielded || !!privacyRefreshError);
 
   const verifySharedHousehold = useCallback((blocking: boolean) => {
     const generation = ++privacyRefreshGenerationRef.current;
