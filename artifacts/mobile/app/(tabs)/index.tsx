@@ -129,7 +129,8 @@ function algoToneColor(tone: AlgorithmInsight["tone"]) {
   return "#38bdf8";
 }
 
-function formatDashboardCurrency(value: number): string {
+function formatDashboardCurrency(value: number | null): string {
+  if (value === null) return "Balance unavailable";
   const safeValue = Number.isFinite(value) ? value : 0;
   return safeValue.toLocaleString("en-US", {
     style: "currency",

@@ -21,6 +21,14 @@ export type DailyCheckingClosePageResult = {
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+export function shouldApplyDailyCheckingCloseLoad(
+  requestGeneration: number,
+  latestGeneration: number,
+  scopeIsCurrent: boolean,
+): boolean {
+  return scopeIsCurrent && requestGeneration === latestGeneration;
+}
+
 export function localDateInTimeZone(now: Date, timeZone: string): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,

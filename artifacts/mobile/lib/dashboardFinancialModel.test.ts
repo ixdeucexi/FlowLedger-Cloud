@@ -155,7 +155,7 @@ test("builds the one financial model consumed by desktop and mobile dashboards",
     plaid_account_id: "connected-checking",
   }];
 
-  const model = buildDashboardFinancialModel({
+  const modelInput: Parameters<typeof buildDashboardFinancialModel>[0] = {
     now: new Date(2026, 6, 10, 12),
     selectedYear: 2026,
     settings,
@@ -184,7 +184,8 @@ test("builds the one financial model consumed by desktop and mobile dashboards",
     getBillMonthlyTotal: () => 1_000,
     getPaidAmount: () => 0,
     getBillOccurrencesInMonth: () => [15],
-  });
+  };
+  const model = buildDashboardFinancialModel(modelInput);
 
   assert.equal(model.checkingAccountBalance, 2_243);
   assert.equal(model.bankCurrentCheckingBalance, 2_243);
@@ -208,6 +209,35 @@ test("builds the one financial model consumed by desktop and mobile dashboards",
   assert.equal(model.categoryPlan.find((row) => row.category === "Food")?.budgeted, 500);
   assert.equal(model.categoryPlan.find((row) => row.category === "Food")?.spent, 125);
   assert.ok(Number.isFinite(model.algorithmSuite.flowScore.score));
+
+  const unavailableBankModel = buildDashboardFinancialModel({
+    ...modelInput,
+    connectedBankAccounts: [{
+      ...connectedBankAccounts[0],
+      current_balance: 0,
+      current_balance_available: false,
+      available_balance: undefined,
+    }],
+    pendingBankTransactions: [],
+  });
+  assert.equal(unavailableBankModel.pendingCheckingSummary, null);
+  assert.equal(unavailableBankModel.checkingAccountBalance, 999);
+  assert.equal(unavailableBankModel.bankCurrentCheckingBalance, 999);
+
+  const unavailableWithoutManualModel = buildDashboardFinancialModel({
+    ...modelInput,
+    accounts: [],
+    connectedBankAccounts: [{
+      ...connectedBankAccounts[0],
+      current_balance: 0,
+      current_balance_available: false,
+      available_balance: undefined,
+    }],
+    pendingBankTransactions: [],
+  });
+  assert.equal(unavailableWithoutManualModel.pendingCheckingSummary, null);
+  assert.equal(unavailableWithoutManualModel.checkingAccountBalance, null);
+  assert.equal(unavailableWithoutManualModel.bankCurrentCheckingBalance, null);
 });
 
 test("lists each canonical savings account once and uses manual savings as a fallback", () => {
@@ -337,6 +367,7 @@ test("uses one Plaid connection action and keeps syncing separate", () => {
   assert.match(plaidConnections, /Attach to an existing debt/);
   assert.match(plaidConnections, /Create new Debt &amp; Snowball account/);
   assert.match(plaidConnections, /api\/plaid\/attach-credit-card/);
+  assert.match(plaidConnections, /value == null[^\n]+Balance unavailable/);
   assert.match(plaidConnections, /OPEN_OAUTH/);
   assert.match(plaidConnections, /markPlaidOAuthAwaitingReturn/);
   assert.match(plaidOAuthResume, /receivedRedirectUri/);

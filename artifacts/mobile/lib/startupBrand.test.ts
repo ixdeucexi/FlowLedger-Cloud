@@ -18,11 +18,12 @@ test("startup stays constant until the destination screen is ready", () => {
   assert.match(layout, /const navigationReady\s*=\s*appReady\s*&&/);
   assert.match(
     layout,
-    /const initialPlanReady =\s*!session \|\|\s*hasRevealedPlanRef\.current \|\|\s*\(!budgetLoading && Boolean\(dataUpdatedAt \|\| budgetLoadError\)\)/,
+    /const readyToReveal =\s*navigationReady && \(!privacyShielded \|\| !!privacyRefreshError\)/,
   );
-  assert.match(
+  assert.doesNotMatch(layout, /const initialPlanReady/);
+  assert.doesNotMatch(
     layout,
-    /const readyToReveal =\s*navigationReady &&\s*initialPlanReady &&\s*\(!privacyShielded \|\| !!privacyRefreshError\)/,
+    /if \(budgetLoading\) \{[\s\S]{0,120}setPrivacyShielded\(true\)/,
   );
   assert.match(layout, /if \(appReady\) void hideSplash\(\)/);
   assert.match(layout, /\{!readyToReveal \? \(/);
@@ -63,6 +64,8 @@ test("cold-start loading states share the FlowLedger loading experience without 
   const callback = readFileSync("app/auth/callback.tsx", "utf8");
 
   assert.doesNotMatch(tabs, /PlanRestoreOverlay|phase="plan"/);
+  assert.match(tabs, /!dataUpdatedAt \? \(/);
+  assert.match(tabs, /accessibilityLabel="FlowLedger is opening your plan"/);
   assert.match(tabs, /<AppLoadingIntro phase="workspace"/);
   assert.match(tabs, /Welcome back/);
   assert.match(tabs, /We’re getting your plan ready/);
@@ -116,7 +119,7 @@ test("startup plan loading fails closed instead of hanging on household discover
     layout,
     /if \(\s*document\.visibilityState !== "visible" \|\|\s*!webWasHiddenRef\.current\s*\)\s*return/,
   );
-  assert.match(
+  assert.doesNotMatch(
     layout,
     /if \(budgetLoading\) \{\s*if \(!hasRevealedPlanRef\.current\) setPrivacyShielded\(true\)/,
   );

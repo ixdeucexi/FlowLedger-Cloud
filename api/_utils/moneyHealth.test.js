@@ -47,3 +47,18 @@ test("household timezone helpers select its local audit window", () => {
   assert.equal(localDateInZone("America/Chicago", now), "2026-07-28");
   assert.equal(localHourInZone("America/Chicago", now), 2);
 });
+
+test("an unavailable connected checking balance is not diagnosed as zero", () => {
+  const result = auditMoneyHealthData({
+    accounts: [{ id: "manual", account_type: "checking", current_balance: 250, is_active: true }],
+    plaidAccounts: [{
+      id: "connected",
+      account_type: "depository",
+      account_subtype: "checking",
+      current_balance: null,
+      is_active: true,
+    }],
+  }, new Date("2026-07-28T12:00:00Z"));
+
+  assert.equal(result.issues.some(issue => issue.code === "checking_balance_divergence"), false);
+});

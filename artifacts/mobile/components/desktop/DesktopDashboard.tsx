@@ -678,6 +678,12 @@ export function DesktopDashboard() {
     unpaidCount,
     unpaidTotal,
   } = dashboardModel;
+  const checkingBalanceLabel =
+    checkingBalance === null ? "Balance unavailable" : currency(checkingBalance, 2);
+  const checkingBalanceAccessibilityLabel =
+    checkingBalance === null
+      ? "Checking balance unavailable"
+      : `Checking balance ${checkingBalanceLabel}`;
 
   const upcoming = useMemo(() => {
     const candidates: UpcomingBill[] = [];
@@ -1061,13 +1067,20 @@ export function DesktopDashboard() {
           <SurfaceCard
             accent="blue"
             style={styles.accountCardWrap}
-            accessibilityLabel={`Checking balance ${currency(checkingBalance, 2)}. Flow Score ${algorithmSuite.flowScore.score}.`}
+            accessibilityLabel={`${checkingBalanceAccessibilityLabel}. Flow Score ${algorithmSuite.flowScore.score}.`}
           >
             <View style={styles.accountCard}>
               <View style={styles.accountHeader}>
                 <View>
                   <Text style={styles.cardEyebrow}>CHECKING BALANCE</Text>
-                  <Text style={styles.checkingValue}>{currency(checkingBalance, 2)}</Text>
+                  <Text
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.55}
+                    numberOfLines={1}
+                    style={styles.checkingValue}
+                  >
+                    {checkingBalanceLabel}
+                  </Text>
                   <Text style={styles.accountMeta}>
                     {pendingCheckingSummary && pendingCheckingSummary.pendingCount > 0
                       ? `${currency(pendingCheckingSummary.availableBalance, 2)} available after ${pendingCheckingSummary.pendingCount} pending`

@@ -536,6 +536,7 @@ function TabContent() {
   const {
     loading,
     loadError,
+    dataUpdatedAt,
     retryBudgetLoad,
     demoMode,
     transactions,
@@ -630,6 +631,11 @@ function TabContent() {
         <ResponsiveDesktopChrome enabled={isDesktop}>
           {loadError ? (
             <BudgetLoadDelayScreen onRetry={retryBudgetLoad} />
+          ) : !dataUpdatedAt ? (
+            <AppLoadingIntro
+              phase="workspace"
+              accessibilityLabel="FlowLedger is opening your plan"
+            />
           ) : (
           <View style={styles.tabsFrame}>
           <Tabs

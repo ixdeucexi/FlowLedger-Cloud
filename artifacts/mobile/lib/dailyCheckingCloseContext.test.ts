@@ -47,15 +47,50 @@ test("household switching clears daily closes and time zone before asynchronous 
     budgetContext.indexOf("const switchHousehold = useCallback"),
     budgetContext.indexOf("const createHouseholdInvite = useCallback"),
   );
-  assert.ok(switchBody.indexOf("clearScopedFinancialData();") < switchBody.indexOf("await "));
+  const firstAwait = switchBody.indexOf("await ");
+  assert.ok(switchBody.indexOf("loadRequestRef.current += 1;") < firstAwait);
+  assert.ok(switchBody.indexOf("bankRefreshRequestRef.current += 1;") < firstAwait);
+  assert.ok(switchBody.indexOf("clearScopedFinancialData();") < firstAwait);
   assert.match(budgetContext, /setDailyCheckingCloses\(\[\]\);[\s\S]*setHouseholdTimeZone\("UTC"\)/);
 });
 
-test("daily-close loading is paged, independently bounded, and shares the existing parallel loads", () => {
+test("daily-close loading is paged and never blocks core startup or bank refresh", () => {
   assert.match(budgetContext, /loadAllDailyCheckingCloses[\s\S]*\.range\(from, to\)/);
-  assert.match(budgetContext, /loadDailyCheckingClosesSafely[\s\S]*withLoadTimeout\([\s\S]*1500[\s\S]*Daily checking history deferred/);
-  const occurrences = budgetContext.match(/loadDailyCheckingClosesSafely\(scope\)/g) ?? [];
+  assert.match(budgetContext, /refreshDailyCheckingCloses[\s\S]*Daily checking history deferred/);
+  const occurrences = budgetContext.match(/refreshDailyCheckingCloses\(scope,/g) ?? [];
   assert.ok(occurrences.length >= 2);
-  assert.match(budgetContext, /const failed = results\.find\(\(result, index\) => index !== 12 && result\.error\)/);
+  const coreLoad = budgetContext.slice(
+    budgetContext.indexOf("const coreLoad = await withLoadTimeout"),
+    budgetContext.indexOf("const { results, storedBillDateMoves } = coreLoad"),
+  );
+  const bankLoad = budgetContext.slice(
+    budgetContext.indexOf("const [billResult, transactionResult"),
+    budgetContext.indexOf("if (requestId !== bankRefreshRequestRef.current"),
+  );
+  assert.doesNotMatch(coreLoad, /loadDailyCheckingCloses|refreshDailyCheckingCloses/);
+  assert.doesNotMatch(bankLoad, /loadDailyCheckingCloses|refreshDailyCheckingCloses/);
+  assert.doesNotMatch(budgetContext, /loadDailyCheckingClosesSafely/);
+  assert.doesNotMatch(budgetContext, /index !== 12/);
   assert.doesNotMatch(budgetContext, /\.limit\(400\)[\s\S]*household_daily_checking_closes/);
+});
+
+test("optional close-history failures retain cached state and cannot update data freshness", () => {
+  const refreshHelper = budgetContext.slice(
+    budgetContext.indexOf("const refreshDailyCheckingCloses = useCallback"),
+    budgetContext.indexOf("const deleteRowIdempotently = useCallback"),
+  );
+  assert.match(refreshHelper, /if \(result\.error\)[\s\S]*return;/);
+  assert.match(refreshHelper, /requestGeneration[\s\S]*dailyCheckingCloseRequestRef\.current[\s\S]*isCurrent\(\)/);
+  assert.match(refreshHelper, /setDailyCheckingCloses/);
+  assert.doesNotMatch(refreshHelper, /setDailyCheckingCloses\(\[\]\)|setDataUpdatedAt|setLoading/);
+});
+
+test("nullable Plaid balances keep an explicit unavailable bit before forecasting", () => {
+  const normalizer = budgetContext.slice(
+    budgetContext.indexOf("function normalizeConnectedBankRows"),
+    budgetContext.indexOf("function normalizeDailyCheckingCloseRows"),
+  );
+  assert.match(normalizer, /account\.current_balance != null && Number\.isFinite\(currentBalance\)/);
+  assert.match(normalizer, /current_balance_available: currentBalanceAvailable/);
+  assert.match(normalizer, /current_balance: currentBalanceAvailable \? currentBalance : 0/);
 });

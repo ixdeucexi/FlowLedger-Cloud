@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { loadAllDailyCheckingCloses, localDateInTimeZone, overlayCompletedDailyCheckingCloses, type DailyCheckingCloseSnapshot } from "./dailyCheckingClose";
+import { loadAllDailyCheckingCloses, localDateInTimeZone, overlayCompletedDailyCheckingCloses, shouldApplyDailyCheckingCloseLoad, type DailyCheckingCloseSnapshot } from "./dailyCheckingClose";
 
 const projected = [
   { day: 23, balance: 910 },
@@ -68,4 +68,12 @@ test("snapshot loading pages through arbitrary history without a 400-row cutoff"
   assert.equal(result.error, null);
   assert.equal(result.data?.length, 450);
   assert.deepEqual(ranges, [[0, 199], [200, 399], [400, 599]]);
+});
+
+test("a newer close-history caller wins across startup and bank-refresh channels", () => {
+  const startupGeneration = 1;
+  const bankRefreshGeneration = 2;
+  assert.equal(shouldApplyDailyCheckingCloseLoad(startupGeneration, bankRefreshGeneration, true), false);
+  assert.equal(shouldApplyDailyCheckingCloseLoad(bankRefreshGeneration, bankRefreshGeneration, true), true);
+  assert.equal(shouldApplyDailyCheckingCloseLoad(bankRefreshGeneration, bankRefreshGeneration, false), false);
 });

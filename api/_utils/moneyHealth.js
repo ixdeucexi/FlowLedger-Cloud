@@ -136,8 +136,10 @@ function auditMoneyHealthData(data, now = new Date()) {
   );
   const connectedChecking = plaidAccounts.filter(checkingAccount);
   if (manualChecking.length === 1 && connectedChecking.length === 1) {
-    const expected = Number(manualChecking[0].current_balance);
-    const actual = Number(connectedChecking[0].current_balance);
+    const expectedRaw = manualChecking[0].current_balance;
+    const actualRaw = connectedChecking[0].current_balance;
+    const expected = expectedRaw == null ? Number.NaN : Number(expectedRaw);
+    const actual = actualRaw == null ? Number.NaN : Number(actualRaw);
     if (Number.isFinite(expected) && Number.isFinite(actual) && Math.abs(expected - actual) > BALANCE_TOLERANCE) {
       issues.push(issue(
         "checking_balance_divergence",

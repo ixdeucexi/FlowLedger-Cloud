@@ -8,7 +8,13 @@ function body(req) {
   return req.body;
 }
 
-module.exports = async function attachCreditCard(req, res) {
+function verifiedConnectedCreditBalance(rawBalance) {
+  if (rawBalance == null) return null;
+  const balance = Number(rawBalance);
+  return Number.isFinite(balance) ? Math.max(0, balance) : null;
+}
+
+async function attachCreditCard(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "METHOD_NOT_ALLOWED" });
   const auth = await authenticatedUser(req);
   if (!auth.user) return res.status(401).json({ error: auth.error, message: "Please sign in again." });
@@ -61,6 +67,13 @@ module.exports = async function attachCreditCard(req, res) {
     if (refreshedAccountResult.error) throw refreshedAccountResult.error;
     if (!refreshedAccountResult.data) throw new Error("PLAID_ACCOUNT_NOT_FOUND_AFTER_SYNC");
     const refreshedAccount = refreshedAccountResult.data;
+    const balance = verifiedConnectedCreditBalance(refreshedAccount.current_balance);
+    if (balance === null) {
+      return res.status(409).json({
+        error: "PLAID_BALANCE_UNAVAILABLE",
+        message: "Your bank has not provided a current card balance yet. Sync again, then attach the card.",
+      });
+    }
     const alreadyLinked = await findConnectedCardDebt({
       db,
       userId: auth.user.id,
@@ -92,7 +105,6 @@ module.exports = async function attachCreditCard(req, res) {
       targetDebt = targetResult.data;
     }
 
-    const balance = Math.max(0, Number(refreshedAccount.current_balance || 0));
     const reportedMinimum = Number(refreshedAccount.minimum_payment_amount);
     const minimum = Number.isFinite(reportedMinimum) && reportedMinimum > 0.005
       ? reportedMinimum
@@ -154,4 +166,7 @@ module.exports = async function attachCreditCard(req, res) {
   } catch (error) {
     return res.status(500).json({ error: error.code || "CARD_ATTACH_FAILED", message: publicError(error, "Could not add this card to Debt and Snowball.") });
   }
-};
+}
+
+module.exports = attachCreditCard;
+module.exports.verifiedConnectedCreditBalance = verifiedConnectedCreditBalance;

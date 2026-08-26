@@ -60,7 +60,7 @@ import { recordDiagnostic } from "@/lib/diagnostics";
 import { isDevDemoMode } from "@/lib/demoMode";
 import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, getLatestRecordedIncomeAmount, isBillActiveForMonth, isIncomeActiveForMonth, moveSettledBillOverrideDate, resolveFinalizedBillOccurrenceDays, resolveIncomeMatchOccurrenceDate } from "@/lib/schedule";
 import { bankBalanceAdjustment, connectedCheckingObservedAnchor, evaluateForecastConfidence, historicalMonthOpeningBalance, operatingAccountAnchor, type AccountSnapshot, type AccountType, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
-import { loadAllDailyCheckingCloses, localDateInTimeZone, overlayCompletedDailyCheckingCloses, type DailyBalanceSource, type DailyCheckingCloseSnapshot } from "@/lib/dailyCheckingClose";
+import { loadAllDailyCheckingCloses, localDateInTimeZone, overlayCompletedDailyCheckingCloses, shouldApplyDailyCheckingCloseLoad, type DailyBalanceSource, type DailyCheckingCloseSnapshot } from "@/lib/dailyCheckingClose";
 import { scenarioDates, type DecisionResult, type DecisionScenario, type DecisionType } from "@/lib/decisions";
 import {
   acceptHouseholdInviteCode,
@@ -282,6 +282,7 @@ export interface ConnectedBankAccount {
   account_type?: string;
   account_subtype?: string;
   current_balance: number;
+  current_balance_available?: boolean;
   available_balance?: number;
   minimum_payment_amount?: number;
   next_payment_due_date?: string;
@@ -1060,15 +1061,22 @@ function normalizePendingPlanMatchRow(row: any): PendingPlanMatch {
 }
 
 function normalizeConnectedBankRows(rows: any[]): ConnectedBankAccount[] {
-  return rows.map(account => ({
-    ...account,
-    current_balance: Number(account.current_balance || 0),
-    available_balance: account.available_balance == null ? undefined : Number(account.available_balance),
-    minimum_payment_amount: account.minimum_payment_amount == null ? undefined : Number(account.minimum_payment_amount),
-    last_statement_balance: account.last_statement_balance == null ? undefined : Number(account.last_statement_balance),
-    purchase_apr: account.purchase_apr == null ? undefined : Number(account.purchase_apr),
-    is_active: account.is_active !== false,
-  }));
+  return rows.map(account => {
+    const currentBalance = Number(account.current_balance);
+    const currentBalanceAvailable = account.current_balance != null && Number.isFinite(currentBalance);
+    return {
+      ...account,
+      // Existing account presentation expects a number, but forecasting must
+      // distinguish an unavailable Plaid balance from a verified zero.
+      current_balance: currentBalanceAvailable ? currentBalance : 0,
+      current_balance_available: currentBalanceAvailable,
+      available_balance: account.available_balance == null ? undefined : Number(account.available_balance),
+      minimum_payment_amount: account.minimum_payment_amount == null ? undefined : Number(account.minimum_payment_amount),
+      last_statement_balance: account.last_statement_balance == null ? undefined : Number(account.last_statement_balance),
+      purchase_apr: account.purchase_apr == null ? undefined : Number(account.purchase_apr),
+      is_active: account.is_active !== false,
+    };
+  });
 }
 
 function normalizeDailyCheckingCloseRows(rows: any[]): DailyCheckingCloseSnapshot[] {
@@ -1204,6 +1212,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const householdScopeRef = useRef<HouseholdMembership | null>(null);
   const loadRequestRef = useRef(0);
   const bankRefreshRequestRef = useRef(0);
+  const dailyCheckingCloseRequestRef = useRef(0);
   const plaidSyncPromiseRef = useRef<Promise<void> | null>(null);
   const lastPlaidSyncAtRef = useRef(0);
   const lastPlanRefreshAtRef = useRef(0);
@@ -1233,6 +1242,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     accountsRef.current = [];
     setConnectedBankAccounts([]);
     connectedBankAccountsRef.current = [];
+    dailyCheckingCloseRequestRef.current += 1;
     setDailyCheckingCloses([]);
     setHouseholdTimeZone("UTC");
     setTransactionAccountIdentities([]);
@@ -1329,20 +1339,29 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const loadDailyCheckingClosesSafely = useCallback(async (scope?: HouseholdMembership | null) => {
-    try {
-      return await withLoadTimeout(
-        loadDailyCheckingCloses(scope),
-        1500,
-        "Load daily checking history",
-      );
-    } catch (error) {
+  const refreshDailyCheckingCloses = useCallback((
+    scope: HouseholdMembership | null | undefined,
+    isCurrent: () => boolean,
+  ) => {
+    const requestGeneration = ++dailyCheckingCloseRequestRef.current;
+    // Actual closes are display-only. Start them beside the financial load,
+    // but never make startup/resume or data freshness wait for paged history.
+    void loadDailyCheckingCloses(scope).then(result => {
+      if (result.error) {
+        console.warn("Daily checking history deferred", result.error.message);
+        return;
+      }
+      if (!shouldApplyDailyCheckingCloseLoad(
+        requestGeneration,
+        dailyCheckingCloseRequestRef.current,
+        isCurrent(),
+      )) return;
+      setDailyCheckingCloses(normalizeDailyCheckingCloseRows(result.data ?? []));
+    }).catch(error => {
+      // Retain the last successful history; the calendar can keep using it or
+      // honestly fall back to projected dates after a household-scope clear.
       console.warn("Daily checking history deferred", error);
-      return {
-        data: null,
-        error: { message: error instanceof Error ? error.message : "Daily checking history unavailable" },
-      };
-    }
+    });
   }, [loadDailyCheckingCloses]);
 
   const deleteRowIdempotently = useCallback(async (
@@ -1712,6 +1731,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     const next = households.find(household => household.householdId === householdId);
     if (!next) return;
+    // Invalidate both load channels before clearing or awaiting cancellation so
+    // an old household response cannot repopulate state during the switch.
+    loadRequestRef.current += 1;
+    bankRefreshRequestRef.current += 1;
     setLoading(true);
     setLoadError(null);
     clearScopedFinancialData();
@@ -1850,6 +1873,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           "Load households",
         );
         if (requestId !== loadRequestRef.current) return;
+        refreshDailyCheckingCloses(scope, () => (
+          requestId === loadRequestRef.current
+          && scope?.householdId === householdScopeRef.current?.householdId
+        ));
         if (scope?.role !== "viewer") {
           try {
             const { error } = await withLoadTimeout(
@@ -1865,7 +1892,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
             console.warn("Scheduled debt sync skipped", error);
           }
         }
-        const coreQueryKey = ["budget-core", uid, scope?.householdId ?? "personal", scope?.budgetId ?? "default"] as const;
+        // Version the positional result cache when its shape changes. This
+        // prevents an in-memory pre-update array from shifting Decisions into
+        // the removed daily-close slot during a web hot reload.
+        const coreQueryKey = ["budget-core", uid, scope?.householdId ?? "personal", scope?.budgetId ?? "default", "core-v2"] as const;
         const coreLoad = await withLoadTimeout(
           queryClient.fetchQuery({
             queryKey: coreQueryKey,
@@ -1903,7 +1933,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
                     .order("name"),
                   uid,
                 ),
-                loadDailyCheckingClosesSafely(scope),
                 applyHouseholdSelect(supabase.from("decisions").select("*"), uid).order("created_at", { ascending: false }),
               ]);
               const storedBillDateMoves = await loadBillDateMoves(uid, scope);
@@ -1914,9 +1943,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           "Load budget data",
         );
         const { results, storedBillDateMoves } = coreLoad;
-        // Daily closes are display-only. A history read failure must not block the
-        // financial plan; the calendar honestly falls back to projections.
-        const failed = results.find((result, index) => index !== 12 && result.error);
+        const failed = results.find(result => result.error);
         if (failed?.error) throw new Error(`Load budget data: ${failed.error.message}`);
         const [
           { data: bData },
@@ -1931,7 +1958,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           { data: cData },
           { data: aData },
           { data: connectedAccountData },
-          { data: dailyCloseData },
           { data: dData },
         ] = results;
 
@@ -1949,7 +1975,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         transactionAccountIdentitiesRef.current = rawConnectedAccounts;
         const canonicalBankAccounts = canonicalConnectedAccounts(rawConnectedAccounts);
         setConnectedBankAccounts(canonicalBankAccounts);
-        setDailyCheckingCloses(normalizeDailyCheckingCloseRows(dailyCloseData ?? []));
         const pendingRows = checkingPendingBankRows(normalizePendingBankRows(pendingData ?? []), rawConnectedAccounts);
         setPendingBankTransactions(pendingPlaidActivityWithBalanceHolds(pendingRows.included, rawConnectedAccounts, localDateString()));
         if (transactionCollections.unknownPlaid.length > 0 || pendingRows.unknownCount > 0) {
@@ -2028,14 +2053,18 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }).catch(() => undefined);
       }
     })();
-  }, [userId, demoMode, loadRetryNonce, resolveHouseholds, applyHouseholdSelect, loadDailyCheckingClosesSafely, loadScopedSettings, queryClient, replaceActiveHouseholdScope]);
+  }, [userId, demoMode, loadRetryNonce, resolveHouseholds, applyHouseholdSelect, refreshDailyCheckingCloses, loadScopedSettings, queryClient, replaceActiveHouseholdScope]);
 
   const loadBankData = useCallback(async () => {
     if (!user || demoMode) return;
     const requestId = ++bankRefreshRequestRef.current;
     const uid = user.id;
     const scope = householdScopeRef.current;
-    const [billResult, transactionResult, pendingResult, pendingPlanResult, accountResult, connectedAccountResult, dailyCloseResult, settingsResult] = await Promise.all([
+    refreshDailyCheckingCloses(scope, () => (
+      requestId === bankRefreshRequestRef.current
+      && scope?.householdId === householdScopeRef.current?.householdId
+    ));
+    const [billResult, transactionResult, pendingResult, pendingPlanResult, accountResult, connectedAccountResult, settingsResult] = await Promise.all([
       applyHouseholdSelect(supabase.from("bills").select("*"), uid),
       applyHouseholdSelect(supabase.from("transactions").select("*"), uid),
       applyHouseholdSelect(
@@ -2060,7 +2089,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           .order("name"),
         uid,
       ),
-      loadDailyCheckingClosesSafely(scope),
       loadScopedSettings(uid, scope),
     ]);
     if (requestId !== bankRefreshRequestRef.current || scope?.householdId !== householdScopeRef.current?.householdId) return;
@@ -2110,9 +2138,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }
       }
     }
-    if (!dailyCloseResult.error) {
-      setDailyCheckingCloses(normalizeDailyCheckingCloseRows(dailyCloseResult.data ?? []));
-    }
     if (!settingsResult.error && settingsResult.data) {
       const sData = settingsResult.data;
       setHouseholdTimeZone(String(sData.time_zone || "UTC"));
@@ -2142,7 +2167,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     const bankDataResults = [billResult, transactionResult, pendingResult, pendingPlanResult, accountResult, connectedAccountResult, settingsResult];
     if (bankDataResults.every(result => !result.error)) setDataUpdatedAt(new Date().toISOString());
-  }, [user, demoMode, applyHouseholdSelect, loadDailyCheckingClosesSafely, loadScopedSettings]);
+  }, [user, demoMode, applyHouseholdSelect, refreshDailyCheckingCloses, loadScopedSettings]);
 
   const refreshBankData = useCallback(async () => {
     if (!user || demoMode || Platform.OS !== "web") return;

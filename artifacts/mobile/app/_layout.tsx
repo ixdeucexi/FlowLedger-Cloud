@@ -341,8 +341,6 @@ function RootNavigator({
   const {
     activeHousehold,
     loading: budgetLoading,
-    loadError: budgetLoadError,
-    dataUpdatedAt,
     refreshHouseholdsForPrivacy,
   } = useBudget();
   const { ready: biometricLockReady, locked: biometricLocked } =
@@ -394,14 +392,8 @@ function RootNavigator({
     (session
       ? !onPlaceholderRoute && !onPendingAuthRoute
       : !onPlaceholderRoute && firstRootSegment !== "auth");
-  const initialPlanReady =
-    !session ||
-    hasRevealedPlanRef.current ||
-    (!budgetLoading && Boolean(dataUpdatedAt || budgetLoadError));
   const readyToReveal =
-    navigationReady &&
-    initialPlanReady &&
-    (!privacyShielded || !!privacyRefreshError);
+    navigationReady && (!privacyShielded || !!privacyRefreshError);
 
   const verifySharedHousehold = useCallback((blocking: boolean) => {
     const generation = ++privacyRefreshGenerationRef.current;
@@ -435,8 +427,9 @@ function RootNavigator({
       });
   }, []);
 
-  // Cold start still waits for the first authoritative plan load. Once a plan
-  // has been shown, later background refreshes must never cover the cached UI.
+  // Plan loading is a workspace concern, not a privacy event. The privacy
+  // shield is reserved for a real shared-household access check so optional
+  // or slow plan requests can never hold the root shell hostage.
   useEffect(() => {
     if (authLoading) return;
     if (!session) {
@@ -447,7 +440,6 @@ function RootNavigator({
       return;
     }
     if (budgetLoading) {
-      if (!hasRevealedPlanRef.current) setPrivacyShielded(true);
       return;
     }
 

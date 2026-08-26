@@ -299,10 +299,10 @@ function ActivityPage({ onOpenReview }: { onOpenReview: () => void }) {
 }
 
 function CalendarPage({ onOpenPlanner }: { onOpenPlanner: () => void }) {
-  const { getDailyBalances, getMonthlyIncome, getMonthlyBills, getBillMonthlyTotal, selectedYear, dataUpdatedAt } = useBudget();
+  const { getDailyBalances, getMonthlyIncome, getMonthlyBills, getBillMonthlyTotal, selectedYear } = useBudget();
   const month = new Date().getMonth();
   const today = new Date().getDate();
-  const balances = dataUpdatedAt ? getDailyBalances(month, selectedYear) : [];
+  const balances = getDailyBalances(month, selectedYear);
   const visibleDays = balances.filter((day) => day.day >= today).slice(0, 16);
   const monthlyIncome = getMonthlyIncome(month, selectedYear);
   const bills = getMonthlyBills(month, selectedYear).filter(isBillEligibleForUpcomingPlan);

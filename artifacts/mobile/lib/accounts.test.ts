@@ -28,6 +28,20 @@ test("connected checking uses the same balance for dashboard and calendar", () =
   assert.deepEqual(connectedCheckingAnchor(connected, "2026-07-17"), { balance: 1000, date: "2026-07-17" });
 });
 
+test("an unavailable connected checking balance is not treated as a verified zero", () => {
+  const connected = [
+    {
+      account_subtype: "checking",
+      current_balance: 0,
+      current_balance_available: false,
+      is_active: true,
+      updated_at: "2026-08-25T02:30:00.000Z",
+    },
+  ];
+  assert.equal(connectedCheckingBalance(connected), null);
+  assert.equal(connectedCheckingObservedAnchor(connected, "America/Chicago"), null);
+});
+
 test("connected checking anchor uses the bank observation date instead of the device date", () => {
   const connected = [
     { account_subtype: "checking", current_balance: 800, is_active: true, updated_at: "2026-08-25T02:30:00.000Z" },

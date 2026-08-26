@@ -48,7 +48,8 @@ type Status = {
 };
 
 function dollars(value?: number | null) {
-  return `$${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (value == null || !Number.isFinite(Number(value))) return "Balance unavailable";
+  return `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 async function getFreshSession() {

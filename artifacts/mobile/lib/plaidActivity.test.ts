@@ -179,6 +179,21 @@ test("pending checking summary derives available money only when the bank omits 
   assert.equal(summary?.availableBalance, 985);
 });
 
+test("pending checking summary never presents an unavailable current balance as zero", () => {
+  const summary = summarizePendingCheckingActivity([], [{
+    id: "checking",
+    name: "Checking",
+    account_type: "depository",
+    account_subtype: "checking",
+    current_balance: 0,
+    current_balance_available: false,
+    available_balance: null,
+    is_active: true,
+  }]);
+
+  assert.equal(summary, null);
+});
+
 test("Flo only calls out real unmatched pending expenses", () => {
   const pending = [
     { plaid_transaction_id: "new-charge", transaction_date: "2026-07-31", amount: -21.43, name: "Drake's" },

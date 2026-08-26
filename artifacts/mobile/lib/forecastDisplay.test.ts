@@ -40,15 +40,16 @@ test("selected-day and desktop details distinguish actual closes from projection
   assert.match(desktop, /Last verified bank balance for this completed day/);
 });
 
-test("calendar waits for a complete plan snapshot before painting financial risk", () => {
+test("calendar never substitutes empty financial arrays while cached data is available", () => {
   const monthly = readFileSync(path.resolve(process.cwd(), "app/(tabs)/monthly.tsx"), "utf8");
   const workspace = readFileSync(path.resolve(process.cwd(), "components/desktop/DesktopWorkspacePage.tsx"), "utf8");
 
-  assert.match(monthly, /const calendarDataReady = Boolean\(dataUpdatedAt\)/);
-  assert.match(monthly, /dailyBalances=\{calendarDataReady \? dailyBalances : \[\]\}/);
-  assert.match(monthly, /transactions=\{calendarDataReady \? calendarTransactions : \[\]\}/);
-  assert.match(monthly, /!calendarDataReady \|\| selectedDay === null/);
-  assert.match(workspace, /dataUpdatedAt \? getDailyBalances\(month, selectedYear\) : \[\]/);
+  assert.doesNotMatch(monthly, /calendarDataReady/);
+  assert.match(monthly, /dailyBalances=\{dailyBalances\}/);
+  assert.match(monthly, /transactions=\{calendarTransactions\}/);
+  assert.match(monthly, /selectedDay === null/);
+  assert.doesNotMatch(workspace, /dataUpdatedAt \? getDailyBalances/);
+  assert.match(workspace, /const balances = getDailyBalances\(month, selectedYear\)/);
 });
 
 test("groups forecast events into plain-language sections", () => {

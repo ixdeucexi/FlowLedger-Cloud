@@ -36,6 +36,7 @@ export interface DashboardConnectedBankAccount {
   account_type?: string;
   account_subtype?: string;
   current_balance: number;
+  current_balance_available?: boolean;
   available_balance?: number;
   is_active: boolean;
   updated_at?: string;
@@ -280,9 +281,12 @@ export function buildDashboardFinancialModel(input: DashboardFinancialModelInput
   );
   const savingsAccounts = buildDashboardSavingsAccounts(accounts, connectedBankAccounts);
   const connectedBalance = connectedCheckingBalance(connectedCheckingAccounts);
-  const checkingAccountBalance = connectedBalance ?? accounts
-    .filter((account) => account.is_active && account.account_type === "checking")
-    .reduce((sum, account) => sum + account.current_balance, 0);
+  const manualCheckingAccounts = accounts
+    .filter((account) => account.is_active && account.account_type === "checking");
+  const manualCheckingBalance = manualCheckingAccounts.length
+    ? manualCheckingAccounts.reduce((sum, account) => sum + account.current_balance, 0)
+    : null;
+  const checkingAccountBalance: number | null = connectedBalance ?? manualCheckingBalance;
   const savingsAccountBalance = savingsAccounts.reduce((sum, account) => sum + account.balance, 0);
 
   const checkingIds = new Set(connectedCheckingAccounts.map((account) => account.id));

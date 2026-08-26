@@ -105,7 +105,7 @@ test("Android channel precedes permission request and token rotation is observed
     layout,
     /window\.addEventListener\("pageshow", verifyAfterReturn\)/,
   );
-  assert.match(
+  assert.doesNotMatch(
     layout,
     /if \(budgetLoading\) \{\s*if \(!hasRevealedPlanRef\.current\) setPrivacyShielded\(true\)/,
   );

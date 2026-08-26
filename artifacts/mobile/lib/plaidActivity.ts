@@ -8,6 +8,7 @@ export interface PlaidAccountIdentityRow {
   account_type?: string | null;
   account_subtype?: string | null;
   current_balance?: number | null;
+  current_balance_available?: boolean;
   available_balance?: number | null;
   is_active: boolean;
   updated_at?: string | null;
@@ -102,6 +103,11 @@ export function summarizePendingCheckingActivity<
 >(pendingRows: T[], accounts: A[]): PendingCheckingSummary | null {
   const checkingAccounts = canonicalConnectedAccounts(accounts).filter(isCheckingAccount);
   if (!checkingAccounts.length) return null;
+  if (checkingAccounts.some(account => (
+    account.current_balance_available === false
+    || account.current_balance == null
+    || !Number.isFinite(Number(account.current_balance))
+  ))) return null;
 
   const checkingIds = new Set(checkingAccounts.map(account => account.id));
   const checkingPending = pendingRows.filter(row => {
@@ -184,6 +190,7 @@ export function pendingPlaidActivityWithBalanceHolds<
   const inferredRows = canonicalConnectedAccounts(accounts)
     .filter(isCheckingAccount)
     .flatMap(account => {
+      if (account.current_balance_available === false) return [];
       const current = Number(account.current_balance);
       const available = Number(account.available_balance);
       if (!Number.isFinite(current) || !Number.isFinite(available)) return [];

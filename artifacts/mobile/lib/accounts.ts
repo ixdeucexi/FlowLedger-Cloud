@@ -28,12 +28,16 @@ export interface ImportedTransactionRow {
 export interface ConnectedCheckingSnapshot {
   account_subtype?: string;
   current_balance: number;
+  current_balance_available?: boolean;
   is_active: boolean;
   updated_at?: string | null;
 }
 
 export function connectedCheckingBalance(accounts: ConnectedCheckingSnapshot[]): number | null {
   const checking = accounts.filter(account => account.is_active && account.account_subtype === "checking");
+  if (checking.some(account => account.current_balance_available === false || !Number.isFinite(account.current_balance))) {
+    return null;
+  }
   return checking.length ? checking.reduce((sum, account) => sum + account.current_balance, 0) : null;
 }
 
