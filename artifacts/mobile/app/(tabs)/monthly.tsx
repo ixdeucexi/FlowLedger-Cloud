@@ -391,7 +391,7 @@ export default function MonthlyScreen() {
     getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill, deleteBill, updateIncome,
     getCashFlow, getMonthlyIncome, getDailyBalances, getCalendarDailyBalances, getIncomeOccurrencesInMonth,
     previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, finalizeBillPayment, getExtraPayment, getDebtPlanForMonth, getRemainingDebtPlanForMonth, setPlannedDebtAmount, canEditHousehold,
-    updateDecision, deleteDecision, updateGoal, deleteGoal, activeHousehold,
+    updateDecision, deleteDecision, updateGoal, deleteGoal, activeHousehold, dataUpdatedAt,
   } = useBudget();
 
   const [month, setMonth] = useState(new Date().getMonth());
@@ -722,6 +722,7 @@ export default function MonthlyScreen() {
     () => getCalendarDailyBalances(month, selectedYear),
     [getCalendarDailyBalances, month, selectedYear],
   );
+  const calendarDataReady = Boolean(dataUpdatedAt);
   const incomeOccurrences = useMemo(() => {
     const occurrences = getIncomeOccurrencesInMonth(month, selectedYear);
     const flat: { day: number; name: string; amount: number; frequency: string; incomeId: string; income: IncomeItem }[] = [];
@@ -738,7 +739,9 @@ export default function MonthlyScreen() {
     return flat.sort((a, b) => a.day - b.day);
   }, [getIncomeOccurrencesInMonth, incomeOccurrenceMatches, month, selectedYear]);
   const selectedDay = selectedDate ? parseInt(selectedDate.split("-")[2]) : null;
-  const selectedForecastDay = selectedDay === null ? undefined : dailyBalances.find(item => item.day === selectedDay);
+  const selectedForecastDay = !calendarDataReady || selectedDay === null
+    ? undefined
+    : dailyBalances.find(item => item.day === selectedDay);
   const selectedForecastGroups = useMemo(
     () => groupForecastEvents(calendarVisibleForecastEvents(selectedForecastDay?.events)),
     [selectedForecastDay]
@@ -1630,8 +1633,8 @@ export default function MonthlyScreen() {
           month={month}
           year={selectedYear}
           selectedDate={selectedDate}
-          dailyBalances={dailyBalances}
-          projectedDailyBalances={projectedDailyBalances}
+          dailyBalances={calendarDataReady ? dailyBalances : []}
+          projectedDailyBalances={calendarDataReady ? projectedDailyBalances : []}
           transferTransactionIds={transferTransactionIds}
           overdueBillOccurrenceKeys={overdueBillOccurrenceKeys}
           safetyFloor={settings.safety_floor}
@@ -2090,12 +2093,12 @@ export default function MonthlyScreen() {
               <CalendarView
                 month={month}
                 year={selectedYear}
-                transactions={calendarTransactions}
+                transactions={calendarDataReady ? calendarTransactions : []}
                 selectedDate={selectedDate}
                 onDayPress={(date) => setSelectedDate(date)}
-                dailyBalances={dailyBalances}
-                goals={goals}
-                decisions={decisions}
+                dailyBalances={calendarDataReady ? dailyBalances : []}
+                goals={calendarDataReady ? goals : []}
+                decisions={calendarDataReady ? decisions : []}
                 safetyFloor={settings.safety_floor}
                 startDate={settings.calendar_start_date ?? settings.starting_balance_date}
                 overdueBillOccurrenceKeys={overdueBillOccurrenceKeys}
