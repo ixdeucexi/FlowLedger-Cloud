@@ -60,6 +60,46 @@ test("date/id keyset loading cannot skip older rows after a concurrent head inse
   assert.equal(pageCalls, 5);
 });
 
+test("accepts database-collated mixed-case ids without re-sorting them in JavaScript", async () => {
+  // PostgreSQL's production ICU en-US collation orders the uppercase-token row
+  // before this lowercase-token row. JavaScript code-point `<` says the
+  // opposite, even though PostgREST's ORDER BY and id.lt cursor agree.
+  const databaseOrdered = [
+    { date: "2026-08-19", id: "plaid:test:Z" },
+    { date: "2026-08-19", id: "plaid:test:r" },
+    { date: "2026-08-18", id: "plaid:test:next-day" },
+  ];
+  const result = await loadAllDateIdKeysetRows(async (cursor, limit) => {
+    const start = cursor
+      ? databaseOrdered.findIndex(row => row.date === cursor.date && row.id === cursor.id) + 1
+      : 0;
+    return { data: databaseOrdered.slice(start, start + limit), error: null };
+  }, 1);
+
+  assert.equal(result.error, null);
+  assert.deepEqual(result.data, databaseOrdered);
+});
+
+test("keyset loading still fails closed on forward dates and repeated rows", async () => {
+  let forwardPage = 0;
+  const forward = await loadAllDateIdKeysetRows(async () => ({
+    data: [forwardPage++ === 0
+      ? { date: "2026-08-19", id: "first" }
+      : { date: "2026-08-20", id: "unexpected-newer-date" }],
+    error: null,
+  }), 1);
+  assert.match(forward.error?.message ?? "", /order changed/);
+
+  let repeatedPage = 0;
+  const repeated = await loadAllDateIdKeysetRows(async () => ({
+    data: [repeatedPage++ === 0
+      ? { date: "2026-08-19", id: "same-row" }
+      : { date: "2026-08-19", id: "same-row" }],
+    error: null,
+  }), 1);
+  assert.match(repeated.error?.message ?? "", /order changed/);
+});
+
 test("date/id keyset filters quote ids and invalid cursors fail closed", () => {
   assert.equal(
     dateIdKeysetFilter({ date: "2026-08-27", id: 'row."quoted"' }),

@@ -19,10 +19,6 @@ function validDateIdCursor(cursor: DateIdCursor): boolean {
     && parsed.getUTCDate() === day;
 }
 
-function isStrictlyOlderDateId(row: DateIdCursor, cursor: DateIdCursor): boolean {
-  return row.date < cursor.date || (row.date === cursor.date && row.id < cursor.id);
-}
-
 export function dateIdKeysetFilter(cursor: DateIdCursor): string {
   if (!validDateIdCursor(cursor)) throw new Error("A valid transaction cursor is required.");
   const quotedId = `"${cursor.id.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
@@ -42,6 +38,7 @@ export async function loadAllDateIdKeysetRows<T extends DateIdCursor>(
   }
 
   const rows: T[] = [];
+  const seenIds = new Set<string>();
   let cursor: DateIdCursor | null = null;
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const result = await loadPage(cursor, pageSize);
@@ -53,10 +50,20 @@ export async function loadAllDateIdKeysetRows<T extends DateIdCursor>(
     let previous: DateIdCursor | null = cursor;
     for (const row of pageRows) {
       const next = { date: row.date, id: row.id };
-      if (!validDateIdCursor(next) || (previous && !isStrictlyOlderDateId(next, previous))) {
+      // PostgREST applies ORDER BY id and id.lt using the database collation.
+      // Do not reimplement that comparison with JavaScript's UTF-16 `<`:
+      // mixed-case Plaid ids legitimately sort differently under ICU locales.
+      // Date monotonicity plus global id uniqueness still detects forward,
+      // repeated, and non-progressing pages without rejecting valid DB order.
+      if (
+        !validDateIdCursor(next)
+        || (previous && next.date > previous.date)
+        || seenIds.has(next.id)
+      ) {
         return { data: null, error: { message: "Paged query order changed while loading." } };
       }
       rows.push(row);
+      seenIds.add(next.id);
       previous = next;
     }
     if (pageRows.length < pageSize) return { data: rows, error: null };
