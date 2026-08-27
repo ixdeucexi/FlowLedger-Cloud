@@ -175,6 +175,10 @@
       "destination": "/api/plaid/sync?plaidAction=account-nickname"
     },
     {
+      "source": "/api/plaid/daily-close",
+      "destination": "/api/plaid/automatic-sync?plaidAction=daily-close"
+    },
+    {
       "source": "/api/notifications/:notificationAction(config|overdue-bills|preferences|receipts|subscription|test)",
       "destination": "/api/notifications?notificationAction=:notificationAction"
     },

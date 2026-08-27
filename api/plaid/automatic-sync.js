@@ -10,6 +10,7 @@ const {
   refreshHouseholdItems,
 } = require("../_utils/dailyCheckingClose");
 const { isActualProHousehold } = require("../_utils/plaidAccess");
+const { dispatchDailyCheckingCloses } = require("../_utils/dailyCloseDispatcher");
 
 module.exports = async function automaticPlaidSync(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "METHOD_NOT_ALLOWED" });
@@ -17,6 +18,19 @@ module.exports = async function automaticPlaidSync(req, res) {
   const secret = optional("CRON_SECRET");
   if (!secret) return res.status(500).json({ error: "CRON_NOT_CONFIGURED" });
   if (!isAuthorizedCron(req, secret)) return res.status(401).json({ error: "UNAUTHORIZED" });
+
+  if (req.query?.plaidAction === "daily-close") {
+    try {
+      const result = await dispatchDailyCheckingCloses({ db: serviceSupabase() });
+      console.log("[plaid:daily-close] completed", result);
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error("[plaid:daily-close] failed", {
+        error: safeError(error, "Daily close dispatcher failed."),
+      });
+      return res.status(500).json({ error: "DAILY_CLOSE_DISPATCH_FAILED" });
+    }
+  }
 
   try {
     const webhook = plaidOptions().webhookUrl;

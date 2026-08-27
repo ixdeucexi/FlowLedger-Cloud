@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const { groupObservations } = require("../plaid/daily-close");
+const { groupObservations } = require("./dailyCloseDispatcher");
 
 test("daily close dispatcher sends every latest known item observation by household", () => {
   const grouped = groupObservations([

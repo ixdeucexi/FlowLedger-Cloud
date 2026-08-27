@@ -10,7 +10,7 @@ const migration = fs.readFileSync(path.resolve(
 const manualSync = fs.readFileSync(path.resolve(__dirname, "../plaid/sync.js"), "utf8");
 const automaticSync = fs.readFileSync(path.resolve(__dirname, "../plaid/automatic-sync.js"), "utf8");
 const webhook = fs.readFileSync(path.resolve(__dirname, "../plaid/webhook.js"), "utf8");
-const closeDispatcher = fs.readFileSync(path.resolve(__dirname, "../plaid/daily-close.js"), "utf8");
+const closeDispatcher = fs.readFileSync(path.resolve(__dirname, "./dailyCloseDispatcher.js"), "utf8");
 const vercel = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../../vercel.json"), "utf8"));
 
 test("daily checking closes are household-scoped read-only client data", () => {
@@ -83,10 +83,32 @@ test("a Hobby-compatible daily dispatcher saves the latest coherent known balanc
   assert.ok(vercel.crons.some(cron => (
     cron.path === "/api/plaid/daily-close" && cron.schedule === "55 5 * * *"
   )));
-  assert.match(closeDispatcher, /isAuthorizedCron\(req, secret\)/);
+  assert.ok(vercel.rewrites.some(rewrite => (
+    rewrite.source === "/api/plaid/daily-close"
+      && rewrite.destination === "/api/plaid/automatic-sync?plaidAction=daily-close"
+  )));
+  assert.match(automaticSync, /isAuthorizedCron\(req, secret\)/);
+  assert.match(automaticSync, /req\.query\?\.plaidAction === "daily-close"/);
+  assert.match(automaticSync, /dispatchDailyCheckingCloses/);
   assert.match(closeDispatcher, /isLocalCloseWindow\(now, timeZone, \[23, 0\]\)/);
   assert.match(closeDispatcher, /Vercel Hobby permits only a once-daily cron/);
   assert.match(closeDispatcher, /accounts_observed_at/);
   assert.match(closeDispatcher, /recordHouseholdDailyCheckingClose/);
   assert.doesNotMatch(closeDispatcher, /plaid\(\)|syncItem/);
+});
+
+test("the Hobby deployment stays within its twelve-function limit", () => {
+  const apiRoot = path.resolve(__dirname, "..");
+  const deployedFunctions = [];
+  const visit = directory => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (entry.name === "_utils") continue;
+      const target = path.join(directory, entry.name);
+      if (entry.isDirectory()) visit(target);
+      else if (entry.name.endsWith(".js") && !entry.name.endsWith(".test.js")) deployedFunctions.push(target);
+    }
+  };
+  visit(apiRoot);
+  assert.equal(deployedFunctions.length, 12);
+  assert.ok(!deployedFunctions.some(file => file.endsWith(path.join("plaid", "daily-close.js"))));
 });
