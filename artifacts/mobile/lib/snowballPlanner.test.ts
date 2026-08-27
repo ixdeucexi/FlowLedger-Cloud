@@ -142,6 +142,49 @@ test("planner rows distinguish settled, partial, and genuinely unscheduled debt 
   assert.equal(byId.get("unscheduled")?.plannedToDebt, 0);
 });
 
+test("planner labels only the original minimum as required and shows rollover separately", () => {
+  const fullPlan: DatedSnowballMonthPlanResult = {
+    ...plan,
+    payments: [{ billId: "card", billName: "Card", dueDay: 15, scheduledPayment: 114, extraPayment: 0, totalPayment: 114, balanceBefore: 500, balanceAfter: 386, paidOff: false }],
+    balances: new Map([["card", 386]]),
+    allocations: [
+      { id: "card-required", date: "2026-08-15", sourceBillId: "card", sourceBillName: "Card", targetBillId: "card", targetBillName: "Card", kind: "required", amount: 85, sourceAmount: 85, balanceBefore: 500, balanceAfter: 415, paidOff: false },
+      { id: "card-rollover", date: "2026-08-15", targetBillId: "card", targetBillName: "Card", kind: "rollover", amount: 29, sourceAmount: 29, balanceBefore: 415, balanceAfter: 386, paidOff: false },
+    ],
+  };
+  const debt = [{ id: "card", name: "Card", balance: 500, minimum: 85, apr: 0, dueDay: 15, included: true }];
+
+  const settledRows = buildSnowballPlannerRows(debt, "snowball", {
+    ...fullPlan,
+    allocations: [fullPlan.allocations[1]!],
+  }, fullPlan, new Map([["card", {
+    configuredObligation: 85,
+    paidAmount: 85,
+    remainingRequired: 0,
+    status: "settled" as const,
+  }]]));
+  assert.equal(settledRows[0]?.plannedToDebt, 29);
+  assert.equal(settledRows[0]?.paymentStatusLabel, "REMAINING REQUIRED");
+  assert.equal(settledRows[0]?.paymentStatusAmount, 0);
+  assert.equal(settledRows[0]?.payoffExtraRemaining, 29);
+
+  const partialRows = buildSnowballPlannerRows(debt, "snowball", {
+    ...fullPlan,
+    allocations: [
+      { ...fullPlan.allocations[0]!, amount: 35, sourceAmount: 35 },
+      fullPlan.allocations[1]!,
+    ],
+  }, fullPlan, new Map([["card", {
+    configuredObligation: 85,
+    paidAmount: 50,
+    remainingRequired: 35,
+    status: "partial" as const,
+  }]]));
+  assert.equal(partialRows[0]?.plannedToDebt, 64);
+  assert.equal(partialRows[0]?.paymentStatusAmount, 35);
+  assert.equal(partialRows[0]?.payoffExtraRemaining, 29);
+});
+
 test("future planner rows use canonical selected-month starting balances and omit prior-paid debts", () => {
   const rows = buildSnowballPlannerRows([
     { id: "camera", name: "Camera", balance: 900, minimum: 103, apr: 0, dueDay: 11, included: true },

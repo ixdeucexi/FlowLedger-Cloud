@@ -6,7 +6,7 @@
 export const FOUNDING_FREE_LAUNCH = process.env.EXPO_PUBLIC_LAUNCH_MODE !== "paid";
 
 export const FOUNDING_FREE_NAME = "Founding Free";
-export const PRO_AVAILABILITY = "Pro is planned for 2027";
+export const PRO_AVAILABILITY = "Pro is planned for a later release";
 
 export function hasAdminProAccess(plan: { tier?: string; source?: string } | null | undefined) {
   return plan?.tier === "pro" && plan.source === "admin";

@@ -28,7 +28,6 @@ import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { loadCategoryBudgets, readCategoryBudgetCache } from "@/lib/categoryBudgetStore";
 import { buildDashboardFinancialModel } from "@/lib/dashboardFinancialModel";
 import { FOUNDING_FREE_LAUNCH, canPersistPlanSimulations } from "@/lib/launchMode";
-import { effectiveDebtMinimum } from "@/lib/snowball";
 import {
   decodePlanSimulationChanges,
   isPlanSimulationHorizon,
@@ -369,7 +368,7 @@ function ResultsPanel({ baseline, scenario, safetyFloor }: { baseline: PlanSimul
       </View>
       <View style={[styles.safetyRow, { borderColor: c.border }]}><View><AppText style={[styles.safetyLabel, { color: c.mutedForeground }]}>Current safety floor</AppText><AppText tone="number" style={[styles.safetyValue, { color: c.foreground }]}>{money(safetyFloor)}</AppText></View><View><AppText style={[styles.safetyLabel, { color: c.mutedForeground }]}>Hypothetical savings added</AppText><AppText tone="number" style={[styles.safetyValue, { color: c.success }]}>{money(scenario.savingsAdded)}</AppText></View></View>
       <View style={[styles.debtImpact, { backgroundColor: c.background, borderColor: c.border }]}><Feather name="trending-down" size={18} color={c.primary} /><View style={styles.debtImpactCopy}><AppText style={[styles.debtImpactTitle, { color: c.foreground }]}>Potential debt-free date</AppText><AppText style={[styles.debtImpactValue, { color: c.primary }]}>{scenario.potentialDebtFreeDate ?? "Not available"}</AppText><AppText style={[styles.debtImpactNote, { color: c.mutedForeground }]}>{scenario.payoffImpactMonths === null ? "Complete the debt details to compare payoff timing." : scenario.payoffImpactMonths > 0 ? `${scenario.payoffImpactMonths} month${scenario.payoffImpactMonths === 1 ? "" : "s"} sooner` : scenario.payoffImpactMonths < 0 ? `${Math.abs(scenario.payoffImpactMonths)} month${scenario.payoffImpactMonths === -1 ? "" : "s"} later` : "Same payoff timing"}</AppText></View></View>
-      <View style={styles.monthSection}><AppText tone="title" style={[styles.monthSectionTitle, { color: c.foreground }]}>Monthly outlook</AppText>{scenario.months.map(month => <View key={month.month} style={[styles.monthRow, { borderColor: c.border }]}><View style={styles.monthRowTop}><AppText style={[styles.monthName, { color: c.foreground }]}>{monthLabel(month.month)}</AppText><AppText tone="number" style={[styles.monthNet, { color: month.cashRemaining >= 0 ? c.success : c.destructive }]}>{money(month.cashRemaining)}</AppText></View><View style={styles.barTrack}><View style={[styles.bar, { backgroundColor: c.success, width: `${Math.max(2, month.inflows / maxFlow * 100)}%` }]} /><View style={[styles.bar, { backgroundColor: c.primary, width: `${Math.max(2, month.outflows / maxFlow * 100)}%` }]} /></View><View style={styles.monthDetails}><AppText style={[styles.monthDetail, { color: c.mutedForeground }]}>In {money(month.inflows)}</AppText><AppText style={[styles.monthDetail, { color: c.mutedForeground }]}>Out {money(month.outflows)}</AppText><AppText style={[styles.monthDetail, { color: c.mutedForeground }]}>Ends {money(month.endingBalance)}</AppText></View></View>)}</View>
+      <View style={styles.monthSection}><AppText tone="title" style={[styles.monthSectionTitle, { color: c.foreground }]}>Scenario timeline</AppText>{scenario.months.map(month => <View key={month.month} style={[styles.monthRow, { borderColor: c.border }]}><View style={styles.monthRowTop}><AppText style={[styles.monthName, { color: c.foreground }]}>{monthLabel(month.month)}</AppText><AppText tone="number" style={[styles.monthNet, { color: month.cashRemaining >= 0 ? c.success : c.destructive }]}>{money(month.cashRemaining)}</AppText></View><View style={styles.barTrack}><View style={[styles.bar, { backgroundColor: c.success, width: `${Math.max(2, month.inflows / maxFlow * 100)}%` }]} /><View style={[styles.bar, { backgroundColor: c.primary, width: `${Math.max(2, month.outflows / maxFlow * 100)}%` }]} /></View><View style={styles.monthDetails}><AppText style={[styles.monthDetail, { color: c.mutedForeground }]}>In {money(month.inflows)}</AppText><AppText style={[styles.monthDetail, { color: c.mutedForeground }]}>Out {money(month.outflows)}</AppText><AppText style={[styles.monthDetail, { color: c.mutedForeground }]}>Ends {money(month.endingBalance)}</AppText></View></View>)}</View>
     </View>
   );
 }
@@ -532,7 +531,8 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
       id: bill.id,
       name: bill.name,
       balance: Math.max(0, bill.balance),
-      minimum: effectiveDebtMinimum(bill.amount, Number(bill.snowball_minimum_boost ?? 0)),
+      minimum: Math.max(0, bill.amount),
+      monthlyRolloverExtra: Math.max(0, Number(bill.snowball_minimum_boost ?? 0)),
       apr: Math.max(0, bill.interest_rate),
       dueDay: bill.due_day,
       included: bill.include_in_snowball !== false,

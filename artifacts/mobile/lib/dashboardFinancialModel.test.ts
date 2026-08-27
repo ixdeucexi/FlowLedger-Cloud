@@ -240,6 +240,69 @@ test("builds the one financial model consumed by desktop and mobile dashboards",
   assert.equal(unavailableWithoutManualModel.bankCurrentCheckingBalance, null);
 });
 
+test("dashboard treats rollover as planned extra without raising the required or overdue amount", () => {
+  const debt: Bill = {
+    ...bill,
+    id: "active-card",
+    name: "Active Card",
+    amount: 85,
+    category: "Debt",
+    is_debt: true,
+    balance: 1_000,
+    due_day: 15,
+    snowball_minimum_boost: 29,
+  };
+  const model = buildDashboardFinancialModel({
+    now: new Date(2026, 7, 16, 12),
+    selectedYear: 2026,
+    settings,
+    forecastConfidence: { level: "high", label: "High", reasons: [] },
+    accounts: [],
+    connectedBankAccounts: [],
+    pendingBankTransactions: [],
+    pendingPlanMatches: [],
+    categories: ["Debt"],
+    categoryBudgets: {},
+    goals: [],
+    incomes: [],
+    cashFlow: {
+      monthlyIncome: 0,
+      totalBillsDue: 114,
+      totalPaid: 85,
+      netTransactions: 0,
+      goalAllocations: 0,
+      remaining: -29,
+    },
+    currentMonthBalances: [{
+      day: 16,
+      income: 0,
+      expense: 0,
+      bills: 29,
+      net: -29,
+      balance: 500,
+    }],
+    getMonthlyBills: month => month === 7 ? [debt] : [],
+    getMonthlyIncome: () => 0,
+    getTransactionsForMonth: () => [],
+    getDailyBalances: month => month === 7 ? [{
+      day: 16,
+      income: 0,
+      expense: 0,
+      bills: 29,
+      net: -29,
+      balance: 500,
+    }] : [],
+    getBillMonthlyTotal: () => 114,
+    getPaidAmount: () => 85,
+    getBillOccurrencesInMonth: () => [15],
+  });
+
+  assert.equal(model.algorithmSuite.flowScore.requiredAmountDue, 85);
+  assert.equal(model.algorithmSuite.flowScore.requiredAmountCovered, 85);
+  assert.equal(model.unpaidTotal, 29);
+  assert.ok(model.algorithmSuite.flowScore.negativeFactors.every(factor => !/overdue bill/i.test(factor)));
+});
+
 test("lists each canonical savings account once and uses manual savings as a fallback", () => {
   const manualSavings: Account[] = [{
     id: "manual-savings",
@@ -302,6 +365,18 @@ test("keeps both dashboard presentations on the shared calculation model", () =>
     assert.doesNotMatch(source, /import \{ buildAlgorithmSuite/);
     assert.doesNotMatch(source, /connectedCheckingBalance\(/);
   }
+});
+
+test("desktop Upcoming uses canonical debt occurrences when the payoff planner is disabled", () => {
+  const desktopDashboard = readFileSync(
+    "components/desktop/DesktopDashboard.tsx",
+    "utf8",
+  );
+
+  assert.match(desktopDashboard, /const debtSettlements = getDebtMonthSettlements\(month, year\)/);
+  assert.match(desktopDashboard, /exactDebtOccurrence\?\.configuredObligation/);
+  assert.match(desktopDashboard, /exactDebtOccurrence\?\.remainingRequired/);
+  assert.match(desktopDashboard, /getDebtMonthSettlements,[\s\S]+getBillMonthlyTotal/);
 });
 
 test("both dashboards resume the same canonical setup walkthrough", () => {

@@ -504,6 +504,7 @@ export function DesktopDashboard() {
     forecastConfidence,
     getBillMonthlyTotal,
     getBillOccurrencesInMonth,
+    getDebtMonthSettlements,
     getCashFlow,
     getDailyBalances,
     getRemainingDebtPlanForMonth,
@@ -636,6 +637,7 @@ export function DesktopDashboard() {
       getBillMonthlyTotal,
       getPaidAmount,
       getBillOccurrencesInMonth,
+      getDebtMonthSettlements,
     }),
     [
       accounts,
@@ -648,6 +650,7 @@ export function DesktopDashboard() {
       forecastConfidence,
       getBillMonthlyTotal,
       getBillOccurrencesInMonth,
+      getDebtMonthSettlements,
       getDailyBalances,
       getMonthlyBills,
       getMonthlyIncome,
@@ -674,7 +677,6 @@ export function DesktopDashboard() {
     monthTransactions,
     monthlyIncome,
     pendingCheckingSummary,
-    savingsAccountBalance: savingsBalance,
     unpaidCount,
     unpaidTotal,
   } = dashboardModel;
@@ -689,19 +691,31 @@ export function DesktopDashboard() {
     const candidates: UpcomingBill[] = [];
     const appendMonth = (month: number, year: number, minimumDay: number) => {
       const debtPlan = getRemainingDebtPlanForMonth(month, year);
+      const debtSettlements = getDebtMonthSettlements(month, year);
       getMonthlyBills(month, year)
         .filter(isBillEligibleForUpcomingPlan)
         .filter(bill => !bill.is_debt || !debtPlan)
         .forEach((bill) => {
           const days = getBillOccurrencesInMonth(bill, month, year).sort((a, b) => a - b);
           if (!days.length) return;
-          const monthlyTotal = getBillMonthlyTotal(bill, month, year);
+          const debtSettlement = bill.is_debt ? debtSettlements.get(bill.id) : undefined;
+          const exactDebtOccurrences = new Map(debtSettlement?.occurrences?.map(occurrence => [
+            Number(occurrence.occurrenceDate.slice(8, 10)),
+            occurrence,
+          ]));
+          const monthlyTotal = debtSettlement?.configuredObligation
+            ?? getBillMonthlyTotal(bill, month, year);
           const occurrenceAmount = monthlyTotal / days.length;
-          let paidRemaining = getPaidAmount(bill.id, month, year);
+          let paidRemaining = debtSettlement?.paidAmount ?? getPaidAmount(bill.id, month, year);
           days.forEach((day) => {
-            const paid = Math.min(occurrenceAmount, Math.max(0, paidRemaining));
+            const exactDebtOccurrence = exactDebtOccurrences.get(day);
+            const required = exactDebtOccurrence?.configuredObligation ?? occurrenceAmount;
+            const paid = exactDebtOccurrence
+              ? Math.min(required, exactDebtOccurrence.paidAmount)
+              : Math.min(required, Math.max(0, paidRemaining));
             paidRemaining = Math.max(0, paidRemaining - paid);
-            const remaining = Math.max(0, occurrenceAmount - paid);
+            const remaining = exactDebtOccurrence?.remainingRequired
+              ?? Math.max(0, required - paid);
             if (remaining <= 0.005 || day < minimumDay) return;
             const occurrenceDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
             candidates.push({
@@ -761,6 +775,7 @@ export function DesktopDashboard() {
   }, [
     activePendingMatches,
     currentMonth,
+    getDebtMonthSettlements,
     getBillMonthlyTotal,
     getBillOccurrencesInMonth,
     getMonthlyBills,
@@ -1117,21 +1132,6 @@ export function DesktopDashboard() {
               <View style={styles.accountBody}>
                 <View pointerEvents="none" style={styles.accountGlow} />
                 <View pointerEvents="none" style={styles.accountGlowSecondary} />
-                <View style={styles.accountInsight}>
-                  <Text style={styles.accountInsightLabel}>MONTHLY OUTLOOK</Text>
-                  <View style={styles.balanceSignal}>
-                    <Feather
-                      name={cashFlow.remaining >= 0 ? "arrow-up-right" : "arrow-down-right"}
-                      size={14}
-                      color={cashFlow.remaining >= 0 ? BRAND.green : BRAND.rose}
-                    />
-                    <Text style={[styles.balanceSignalText, { color: cashFlow.remaining >= 0 ? "#86efac" : "#fda4af" }]}>
-                      {currency(Math.abs(cashFlow.remaining))} {cashFlow.remaining >= 0 ? "left" : "short"} this month
-                    </Text>
-                  </View>
-                  <Text style={styles.savingsText}>{currency(savingsBalance)} in savings</Text>
-                </View>
-
                 <Pressable
                   nativeID="guided-tour-index"
                   accessibilityRole="button"
@@ -1571,12 +1571,6 @@ export function DesktopDashboard() {
       <View style={styles.footer}>
         <Text style={styles.footerText}>© {now.getFullYear()} FlowLedger Algo. All rights reserved.</Text>
         <View style={styles.footerLinks}>
-          <Pressable onPress={() => go("/(tabs)/more", { section: "legal", mode: "planner" })}>
-            <Text style={styles.footerMeta}>Privacy Policy</Text>
-          </Pressable>
-          <Pressable onPress={() => go("/(tabs)/more", { section: "legal", mode: "planner" })}>
-            <Text style={styles.footerMeta}>Terms of Service</Text>
-          </Pressable>
           <Pressable onPress={() => go("/(tabs)/more", { section: "help", mode: "planner" })}>
             <Text style={styles.footerMeta}>Help</Text>
           </Pressable>
@@ -1893,7 +1887,7 @@ const styles = StyleSheet.create({
   },
   accountPillText: { color: "#aab8cd", fontSize: 11, fontFamily: "Inter_700Bold" },
   connectPill: { borderColor: "rgba(56, 189, 248, 0.28)", backgroundColor: "rgba(14, 165, 233, 0.12)" },
-  accountBody: { flex: 1, flexDirection: "row", alignItems: "center", gap: 16, marginTop: 5, overflow: "hidden" },
+  accountBody: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 16, marginTop: 5, overflow: "hidden" },
   accountGlow: {
     position: "absolute",
     width: 340,
@@ -1922,8 +1916,6 @@ const styles = StyleSheet.create({
     shadowRadius: 38,
     shadowOffset: { width: 0, height: 0 },
   },
-  accountInsight: { flex: 1, alignSelf: "flex-end", paddingBottom: 5 },
-  accountInsightLabel: { color: "#71829e", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.8, marginBottom: 6 },
   balancePathWrap: {
     flex: 1,
     minWidth: 0,
@@ -1941,7 +1933,6 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: 0.7,
   },
-  savingsText: { color: "#76deb3", fontSize: 11, fontFamily: "Inter_700Bold" },
   balanceBars: {
     height: 82,
     flexDirection: "row",
@@ -1961,8 +1952,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
   },
   balancePathFooter: { marginTop: 8 },
-  balanceSignal: { flexDirection: "row", alignItems: "center", gap: 6 },
-  balanceSignalText: { fontSize: 11, fontFamily: "Inter_700Bold" },
   scoreSummary: {
     width: 170,
     alignItems: "center",

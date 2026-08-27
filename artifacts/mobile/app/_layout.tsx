@@ -14,7 +14,7 @@ import {
   useSegments,
 } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Alert,
   AppState,
@@ -32,7 +32,6 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { FloLauncher } from "@/components/FloLauncher";
 import { BiometricLockGate } from "@/components/BiometricLockGate";
 import { ConfirmActionModal } from "@/components/ConfirmActionModal";
-import { LegalAcceptanceGate } from "@/components/LegalAcceptanceGate";
 import { PwaInstallPrompt } from "@/components/PwaInstallPrompt";
 import { PlaidOAuthResume } from "@/components/PlaidOAuthResume";
 import { AppLoadingIntro } from "@/components/AppLoadingIntro";
@@ -61,6 +60,9 @@ import {
   type NativeNotificationDestination,
 } from "@/lib/nativeNotificationRoute";
 import { verifyCurrentHouseholdMembership } from "@/lib/households";
+import { ownsLegacyPersonalRows } from "@/lib/householdDataScope";
+import { apiConfigurationError } from "@/lib/api";
+import { supabaseConfigurationError } from "@/lib/supabase";
 
 SplashScreen.preventAutoHideAsync();
 SplashScreen.setOptions({ duration: 0, fade: false });
@@ -210,7 +212,6 @@ function AuthObserver() {
     const isAuthCallback = firstSegment === "auth";
     const isPasswordReset =
       isAuthCallback && String(segments[1] ?? "") === "reset-password";
-    const isPublicLegal = firstSegment === "legal";
     const isPublicSupport = firstSegment === "support";
     const isPublicDeletionRequest = firstSegment === "delete-account";
     const atRoot = !firstSegment || firstSegment === "index";
@@ -226,7 +227,6 @@ function AuthObserver() {
     if (
       !session &&
       !inAuth &&
-      !isPublicLegal &&
       !isPublicSupport &&
       !isPublicDeletionRequest &&
       !isAuthCallback
@@ -273,7 +273,6 @@ function AuthObserver() {
       !inAuth &&
       !isAuthCallback &&
       !atRoot &&
-      !isPublicLegal &&
       !isPublicSupport &&
       !isPublicDeletionRequest
     ) {
@@ -341,6 +340,8 @@ function RootNavigator({
   const {
     activeHousehold,
     loading: budgetLoading,
+    loadError: budgetLoadError,
+    retryBudgetLoad,
     refreshHouseholdsForPrivacy,
   } = useBudget();
   const { ready: biometricLockReady, locked: biometricLocked } =
@@ -358,23 +359,40 @@ function RootNavigator({
     null,
   );
   const [privacyRefreshRetry, setPrivacyRefreshRetry] = useState(0);
+  const [verifiedPrivacyScopeKey, setVerifiedPrivacyScopeKey] = useState<string | null>(null);
   const privacyRefreshGenerationRef = useRef(0);
+  const privacySessionUserIdRef = useRef(session?.user.id ?? null);
   const previousAppStateRef = useRef(AppState.currentState);
-  const webWasHiddenRef = useRef(false);
+  const webWasHiddenRef = useRef(
+    Platform.OS === "web"
+    && typeof document !== "undefined"
+    && document.visibilityState === "hidden",
+  );
   const hasRevealedPlanRef = useRef(false);
-  const verifiedPrivacyScopeRef = useRef<string | null>(null);
   const privacyScopeRef = useRef({
     userId: session?.user.id ?? null,
     householdId: activeHousehold?.householdId ?? null,
     isPersonal: activeHousehold?.isPersonal ?? true,
+    role: activeHousehold?.role ?? null,
   });
   const privacyRefreshRef = useRef(refreshHouseholdsForPrivacy);
   privacyScopeRef.current = {
     userId: session?.user.id ?? null,
     householdId: activeHousehold?.householdId ?? null,
     isPersonal: activeHousehold?.isPersonal ?? true,
+    role: activeHousehold?.role ?? null,
   };
   privacyRefreshRef.current = refreshHouseholdsForPrivacy;
+  useLayoutEffect(() => {
+    const nextUserId = session?.user.id ?? null;
+    if (privacySessionUserIdRef.current === nextUserId) return;
+    privacySessionUserIdRef.current = nextUserId;
+    privacyRefreshGenerationRef.current += 1;
+    hasRevealedPlanRef.current = false;
+    setVerifiedPrivacyScopeKey(null);
+    setPrivacyRefreshError(null);
+    setPrivacyShielded(Boolean(nextUserId));
+  }, [session?.user.id]);
   const coreReady =
     fontsReady && !authLoading && biometricLockReady && themeReady;
   // The native splash must never wait on network data. Render the app-owned
@@ -392,8 +410,22 @@ function RootNavigator({
     (session
       ? !onPlaceholderRoute && !onPendingAuthRoute
       : !onPlaceholderRoute && firstRootSegment !== "auth");
+  const currentPrivacyScopeKey = session
+    ? `${session.user.id}:${activeHousehold?.householdId ?? "personal"}`
+    : null;
+  // Child routes retain local state across provider changes. A previously
+  // revealed scope must stay covered synchronously until the replacement
+  // scope's core has committed and passive child cleanup has run.
+  const effectivePrivacyShielded = privacyShielded || Boolean(
+    currentPrivacyScopeKey
+    && verifiedPrivacyScopeKey
+    && verifiedPrivacyScopeKey !== currentPrivacyScopeKey,
+  );
+  const navigatorPrivacyKey = session
+    ? verifiedPrivacyScopeKey ?? `pending:${session.user.id}`
+    : "signed-out";
   const readyToReveal =
-    navigationReady && (!privacyShielded || !!privacyRefreshError);
+    navigationReady && (!effectivePrivacyShielded || !!privacyRefreshError);
 
   const verifySharedHousehold = useCallback((blocking: boolean) => {
     const generation = ++privacyRefreshGenerationRef.current;
@@ -434,19 +466,17 @@ function RootNavigator({
     if (authLoading) return;
     if (!session) {
       hasRevealedPlanRef.current = false;
-      verifiedPrivacyScopeRef.current = null;
+      setVerifiedPrivacyScopeKey(null);
       setPrivacyShielded(false);
       setPrivacyRefreshError(null);
       return;
     }
-    if (budgetLoading) {
+    if (budgetLoading || budgetLoadError) {
       return;
     }
 
     const scopeKey = `${session.user.id}:${activeHousehold?.householdId ?? "personal"}`;
-    if (verifiedPrivacyScopeRef.current !== scopeKey) {
-      verifiedPrivacyScopeRef.current = scopeKey;
-    }
+    setVerifiedPrivacyScopeKey(scopeKey);
     hasRevealedPlanRef.current = true;
     if (isPrivacySurfaceActive()) {
       setPrivacyShielded(false);
@@ -455,6 +485,7 @@ function RootNavigator({
   }, [
     activeHousehold?.householdId,
     authLoading,
+    budgetLoadError,
     budgetLoading,
     session?.user.id,
   ]);
@@ -477,7 +508,7 @@ function RootNavigator({
 
       const scope = privacyScopeRef.current;
       if (!scope.userId || !hasRevealedPlanRef.current) return;
-      if (scope.isPersonal) {
+      if (ownsLegacyPersonalRows(scope)) {
         setPrivacyShielded(false);
         setPrivacyRefreshError(null);
         return;
@@ -508,7 +539,7 @@ function RootNavigator({
       privacyRefreshGenerationRef.current += 1;
       setPrivacyRefreshError(null);
       const scope = privacyScopeRef.current;
-      if (scope.userId && hasRevealedPlanRef.current && !scope.isPersonal) {
+      if (scope.userId && hasRevealedPlanRef.current) {
         setPrivacyShielded(true);
       }
     };
@@ -519,7 +550,7 @@ function RootNavigator({
       webWasHiddenRef.current = false;
       const scope = privacyScopeRef.current;
       if (!scope.userId || !hasRevealedPlanRef.current) return;
-      if (scope.isPersonal) {
+      if (ownsLegacyPersonalRows(scope)) {
         setPrivacyShielded(false);
         setPrivacyRefreshError(null);
         return;
@@ -531,6 +562,10 @@ function RootNavigator({
       if (document.visibilityState === "hidden") markHidden();
       else verifyAfterReturn();
     };
+
+    // The page can mount already hidden (restored/background PWA tab). Record
+    // that transition now so its first visible event verifies and unshields.
+    if (document.visibilityState === "hidden") markHidden();
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("pagehide", markHidden);
@@ -546,7 +581,11 @@ function RootNavigator({
   useEffect(() => {
     if (privacyRefreshRetry === 0 || !isPrivacySurfaceActive()) return;
     const scope = privacyScopeRef.current;
-    if (!scope.userId || scope.isPersonal) return;
+    if (
+      !scope.userId ||
+      ownsLegacyPersonalRows(scope)
+    )
+      return;
     verifySharedHousehold(true);
   }, [privacyRefreshRetry, verifySharedHousehold]);
 
@@ -582,10 +621,10 @@ function RootNavigator({
     >
       <View
         accessibilityElementsHidden={
-          biometricLocked || privacyShielded || !readyToReveal
+          biometricLocked || effectivePrivacyShielded || !readyToReveal
         }
         importantForAccessibility={
-          biometricLocked || privacyShielded || !readyToReveal
+          biometricLocked || effectivePrivacyShielded || !readyToReveal
             ? "no-hide-descendants"
             : "auto"
         }
@@ -594,13 +633,12 @@ function RootNavigator({
         {appReady ? (
           <>
             <AuthObserver />
-            <GestureHandlerRootView style={{ flex: 1 }}>
+            <GestureHandlerRootView key={navigatorPrivacyKey} style={{ flex: 1 }}>
               <Stack screenOptions={{ headerShown: false }}>
                 <Stack.Screen name="index" />
                 <Stack.Screen name="login" />
                 <Stack.Screen name="auth/callback" />
                 <Stack.Screen name="auth/reset-password" />
-                <Stack.Screen name="legal" />
                 <Stack.Screen name="support" />
                 <Stack.Screen name="delete-account" />
                 <Stack.Screen name="setup" />
@@ -650,17 +688,51 @@ function RootNavigator({
                 <FloLauncher desktop={isDesktop} />
               ) : null}
             </GestureHandlerRootView>
-            <LegalAcceptanceGate />
           </>
         ) : null}
       </View>
       {!readyToReveal ? (
         <View style={styles.startupOverlay}>
-          <AppLoadingIntro phase="app" />
+          {effectivePrivacyShielded && budgetLoadError ? (
+            <View style={styles.privacyShieldError}>
+              <Text
+                accessibilityLiveRegion="polite"
+                style={[
+                  styles.privacyShieldMessage,
+                  { color: colors.mutedForeground },
+                ]}
+              >
+                Your newly selected plan could not be loaded. Your previous plan remains hidden.
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Try loading the selected plan again"
+                onPress={retryBudgetLoad}
+                style={({ pressed }) => [
+                  styles.privacyShieldRetry,
+                  {
+                    backgroundColor: colors.primary,
+                    opacity: pressed ? 0.82 : 1,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.privacyShieldRetryText,
+                    { color: colors.primaryForeground },
+                  ]}
+                >
+                  Try again
+                </Text>
+              </Pressable>
+            </View>
+          ) : (
+            <AppLoadingIntro phase="app" />
+          )}
         </View>
       ) : null}
       {coreReady ? <BiometricLockGate /> : null}
-      {privacyShielded && readyToReveal ? (
+      {effectivePrivacyShielded && readyToReveal ? (
         <View
           accessibilityViewIsModal
           style={[styles.privacyShield, { backgroundColor: colors.background }]}
@@ -726,6 +798,13 @@ export default function RootLayout() {
     return hideSplashPromiseRef.current;
   }, []);
 
+  const runtimeConfigurationError =
+    supabaseConfigurationError ?? apiConfigurationError();
+
+  useEffect(() => {
+    if (runtimeConfigurationError && fontsReady) void hideSplash();
+  }, [fontsReady, hideSplash, runtimeConfigurationError]);
+
   useEffect(() => {
     if (Platform.OS !== "web" || typeof document === "undefined") return;
 
@@ -740,6 +819,20 @@ export default function RootLayout() {
 
     viewport.setAttribute("content", WEB_VIEWPORT_CONTENT);
   }, []);
+
+  if (runtimeConfigurationError) {
+    return (
+      <SafeAreaProvider>
+        <View style={styles.configurationErrorScreen}>
+          <Feather name="alert-triangle" size={30} color="#FB7185" />
+          <Text style={styles.configurationErrorTitle}>App configuration needed</Text>
+          <Text style={styles.configurationErrorMessage}>
+            {runtimeConfigurationError} Install a correctly configured FlowLedger build and try again.
+          </Text>
+        </View>
+      </SafeAreaProvider>
+    );
+  }
 
   return (
     <SafeAreaProvider>
@@ -768,6 +861,28 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
+  configurationErrorScreen: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 14,
+    paddingHorizontal: 28,
+    backgroundColor: "#050816",
+  },
+  configurationErrorTitle: {
+    color: "#F8FAFC",
+    fontSize: 22,
+    fontFamily: "Inter_800ExtraBold",
+    textAlign: "center",
+  },
+  configurationErrorMessage: {
+    maxWidth: 440,
+    color: "#AAB4C8",
+    fontSize: 15,
+    lineHeight: 22,
+    fontFamily: "Inter_500Medium",
+    textAlign: "center",
+  },
   transitionRoot: {
     flex: 1,
     backgroundColor: "#050816",

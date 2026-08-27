@@ -120,6 +120,8 @@ export interface FloFacts {
     avalancheName: string | null;
     cashFlowReliefName: string | null;
     cashFlowReliefAmount: number;
+    totalMonthlyMinimum?: number;
+    currentRolloverExtra?: number;
     nextMove: string;
     status: "ready" | "hold" | "done";
     detail: string;
@@ -522,6 +524,8 @@ export function sanitizeFloFacts(facts: FloFacts): FloFacts {
       avalancheName: facts.debtPayoff.avalancheName === null ? null : String(facts.debtPayoff.avalancheName ?? "").slice(0, 80),
       cashFlowReliefName: facts.debtPayoff.cashFlowReliefName === null ? null : String(facts.debtPayoff.cashFlowReliefName ?? "").slice(0, 80),
       cashFlowReliefAmount: Math.max(0, num(facts.debtPayoff.cashFlowReliefAmount)),
+      totalMonthlyMinimum: Math.max(0, num(facts.debtPayoff.totalMonthlyMinimum)),
+      currentRolloverExtra: Math.max(0, num(facts.debtPayoff.currentRolloverExtra)),
       nextMove: String(facts.debtPayoff.nextMove ?? "").slice(0, 160),
       status: facts.debtPayoff.status === "ready" || facts.debtPayoff.status === "hold" || facts.debtPayoff.status === "done" ? facts.debtPayoff.status : "hold",
       detail: String(facts.debtPayoff.detail ?? "").slice(0, 220),
@@ -606,8 +610,8 @@ function buildLocalFloAnswer(message: string, facts: FloFacts, days: DecisionBas
       .join("; ");
     const netText = facts.todayForecast.net === 0 ? "no net change" : `${formatSignedDollars(facts.todayForecast.net)} net change`;
     return sources.length
-      ? `Today's projected close is $${facts.todayForecast.projectedClose.toFixed(2)} on ${facts.todayForecast.date}. I get there from ${netText}. Sources: ${sourceText}.`
-      : `Today's projected close is $${facts.todayForecast.projectedClose.toFixed(2)} on ${facts.todayForecast.date}. I don't see dated income, bills, transactions, debt payments, goals, or plans on today, so it is mainly carrying forward the previous day.`;
+      ? `Today's planned ending balance is $${facts.todayForecast.projectedClose.toFixed(2)} on ${facts.todayForecast.date}. I get there from ${netText}. Sources: ${sourceText}.`
+      : `Today's planned ending balance is $${facts.todayForecast.projectedClose.toFixed(2)} on ${facts.todayForecast.date}. I don't see dated income, bills, transactions, debt payments, goals, or plans on today, so it is mainly carrying forward the previous day.`;
   }
   const asksFlowScore = lower.includes("flow score") || (lower.includes("score") && (lower.includes("why") || lower.includes("improve") || lower.includes("hurt") || lower.includes("help")));
   if (asksFlowScore && facts.flowScore) {
@@ -684,7 +688,13 @@ function buildLocalFloAnswer(message: string, facts: FloFacts, days: DecisionBas
     const rolloverAnswer = localDebtRolloverAnswer(message, facts);
     if (rolloverAnswer) return rolloverAnswer;
     const hold = facts.debtPayoff.status === "hold" ? " I would hold extra payments until your Safe Cushion is protected." : "";
-    return `I’m comparing the debt plan three ways: snowball for momentum, avalanche for interest, and cash-flow relief for freeing monthly room. ${facts.debtPayoff.nextMove}${hold} Snowball target: ${facts.debtPayoff.nextDebtName ?? "none"}${facts.debtPayoff.nextDebtName ? ` ($${facts.debtPayoff.snowballBalance.toFixed(0)} balance)` : ""}. Avalanche target: ${facts.debtPayoff.avalancheName ?? "none"}. Cash-flow relief target: ${facts.debtPayoff.cashFlowReliefName ?? "none"}${facts.debtPayoff.cashFlowReliefAmount > 0 ? `, freeing about $${facts.debtPayoff.cashFlowReliefAmount.toFixed(0)}/month when closed` : ""}.`;
+    const required = (facts.debtPayoff.totalMonthlyMinimum ?? 0) > 0
+      ? ` Original lender minimums total $${facts.debtPayoff.totalMonthlyMinimum!.toFixed(0)}/month.`
+      : "";
+    const rollover = (facts.debtPayoff.currentRolloverExtra ?? 0) > 0
+      ? ` $${facts.debtPayoff.currentRolloverExtra!.toFixed(0)}/month is snowball rollover extra, so it does not change late or missing-payment status.`
+      : "";
+    return `I’m comparing the debt plan three ways: snowball for momentum, avalanche for interest, and cash-flow relief for freeing monthly room. ${facts.debtPayoff.nextMove}${hold}${required}${rollover} Snowball target: ${facts.debtPayoff.nextDebtName ?? "none"}${facts.debtPayoff.nextDebtName ? ` ($${facts.debtPayoff.snowballBalance.toFixed(0)} balance)` : ""}. Avalanche target: ${facts.debtPayoff.avalancheName ?? "none"}. Cash-flow relief target: ${facts.debtPayoff.cashFlowReliefName ?? "none"}${facts.debtPayoff.cashFlowReliefAmount > 0 ? `, freeing about $${facts.debtPayoff.cashFlowReliefAmount.toFixed(0)}/month when closed` : ""}.`;
   }
   const debtPayment = evaluateFloDebtPayment(message, facts);
   if (debtPayment) {
@@ -807,11 +817,15 @@ function localDebtRolloverAnswer(message: string, facts: FloFacts): string | nul
   if (!current) return null;
   const currentIndex = debts.findIndex(debt => debt.id === current.id);
   const next = currentIndex >= 0 ? debts[currentIndex + 1] : null;
+  const existingRollover = current.name === facts.debtPayoff?.nextDebtName
+    ? Math.max(0, facts.debtPayoff.currentRolloverExtra ?? 0)
+    : 0;
   if (!next) {
-    return `When ${current.name} is paid off, there is no next snowball debt in the current list. Its $${current.minimumPayment.toFixed(2)}/mo payment becomes cash-flow room unless you add another debt or route it to savings.`;
+    const forecastPayment = current.minimumPayment + existingRollover;
+    return `When ${current.name} is paid off, there is no next snowball debt in the current list. Its $${forecastPayment.toFixed(2)}/mo forecast payment becomes cash-flow room unless you add another debt or route it to savings. Only $${current.minimumPayment.toFixed(2)}/mo was lender-required; the rest was payoff extra.`;
   }
-  const rolledPayment = current.minimumPayment + next.minimumPayment;
-  return `When ${current.name} is paid off, its $${current.minimumPayment.toFixed(2)}/mo minimum does not disappear. FlowLedger rolls it into ${next.name}, so ${next.name}'s snowball payment becomes at least $${rolledPayment.toFixed(2)}/mo before any extra safe payment.`;
+  const rolledPayment = current.minimumPayment + next.minimumPayment + existingRollover;
+  return `When ${current.name} is paid off, its $${current.minimumPayment.toFixed(2)}/mo original minimum does not disappear. FlowLedger adds it to ${next.name}'s $${next.minimumPayment.toFixed(2)}/mo required minimum${existingRollover > 0 ? ` and the existing $${existingRollover.toFixed(2)}/mo rollover` : ""}, making a $${rolledPayment.toFixed(2)}/mo forecast payment. Only $${next.minimumPayment.toFixed(2)}/mo remains lender-required; the rest is payoff extra.`;
 }
 
 function sanitizeDebtFacts(debts?: FloDebtFact[]): FloDebtFact[] {

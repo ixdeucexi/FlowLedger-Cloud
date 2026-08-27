@@ -224,7 +224,7 @@ function MobileDashboardScreen() {
   const { user } = useAuth();
   const { isAdmin } = useMembership();
   const {
-    bills, getPaidAmount, getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, getRemainingDebtPlanForMonth, selectedYear,
+    bills, getPaidAmount, getBillMonthlyTotal, getBillOccurrencesInMonth, getDebtMonthSettlements, getMonthlyBills, getRemainingDebtPlanForMonth, selectedYear,
     getMonthlyIncome,
     goals, addGoal, updateGoal, deleteGoal,
     getCashFlow, addBill, getDailyBalances, getTransactionsForMonth, settings,
@@ -447,6 +447,7 @@ function MobileDashboardScreen() {
     getBillMonthlyTotal,
     getPaidAmount,
     getBillOccurrencesInMonth,
+    getDebtMonthSettlements,
   }), [
     accounts,
     cashFlow,
@@ -458,6 +459,7 @@ function MobileDashboardScreen() {
     forecastConfidence,
     getBillMonthlyTotal,
     getBillOccurrencesInMonth,
+    getDebtMonthSettlements,
     getDailyBalances,
     getMonthlyBills,
     getMonthlyIncome,

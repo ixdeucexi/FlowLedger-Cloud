@@ -110,7 +110,7 @@ export default function FloScreen() {
   const isDesktop = useDesktopExperience();
   const { user } = useAuth();
   const { isFeatureLocked, previewTier } = useMembership();
-  const { activeHousehold, bills, billDateMoves, transactions, decisions, settings, forecastConfidence, retryBudgetLoad, getDailyBalances, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getPaidAmount, getTransactionsForMonth, categories, incomes, goals, demoMode } = useBudget();
+  const { activeHousehold, bills, billDateMoves, transactions, decisions, settings, forecastConfidence, retryBudgetLoad, getDailyBalances, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getDebtMonthSettlements, getIncomeOccurrencesInMonth, getPaidAmount, getTransactionsForMonth, categories, incomes, goals, demoMode } = useBudget();
   const categoryBudgetScope = useMemo(() => ({
     userId: user?.id,
     householdId: activeHousehold?.householdId,
@@ -151,6 +151,11 @@ export default function FloScreen() {
   const skipConversationLoadRef = useRef<string | null>(null);
   const retryRequestRef = useRef<{ text: string; userMessageId: string; assistantMessageId: string; conversationId: string | null } | null>(null);
   const requestGenerationRef = useRef(0);
+  const floDataScopeKey = `${user?.id ?? "anonymous"}:${activeHousehold?.householdId ?? "none"}`;
+  const floDataScopeKeyRef = useRef(floDataScopeKey);
+  floDataScopeKeyRef.current = floDataScopeKey;
+  const activeConversationIdRef = useRef(activeConversationId);
+  activeConversationIdRef.current = activeConversationId;
   const now = useMemo(() => new Date(), []);
   const today = localDateString(now);
 
@@ -217,27 +222,34 @@ export default function FloScreen() {
 
   useEffect(() => {
     let cancelled = false;
+    const requestGeneration = requestGenerationRef.current;
+    const requestScopeKey = floDataScopeKey;
+    const requestIsCurrent = () => (
+      !cancelled
+      && requestGeneration === requestGenerationRef.current
+      && requestScopeKey === floDataScopeKeyRef.current
+    );
     if (!activeConversationId || floProLocked) return () => { cancelled = true; };
     if (skipConversationLoadRef.current === activeConversationId) {
       skipConversationLoadRef.current = null;
       return () => { cancelled = true; };
     }
     void listFloMessages(activeConversationId).then(page => {
-      if (cancelled) return;
+      if (!requestIsCurrent()) return;
       dispatch({ type: "hydrate", messages: page.messages.map(message => ({ id: message.id, role: message.role, text: message.text })) });
       setSourcesByMessageId(Object.fromEntries(page.messages.filter(message => message.sources.length).map(message => [message.id, message.sources])));
       setFollowUpsByMessageId(Object.fromEntries(page.messages.filter(message => message.followUps.length).map(message => [message.id, message.followUps])));
       void Promise.all(page.messages.filter(message => message.proposal?.kind === "recurring_bill_change").map(async message => {
         const authoritative = await readAuthoritativeFloProposal(message.proposal!.id);
         return floProposalMatchesAuthoritative(message.proposal!, authoritative) ? [message.id, authoritative] as const : null;
-      })).then(rows => { if (!cancelled) setProposalByMessageId(Object.fromEntries(rows.filter((row): row is readonly [string, FloReviewProposal] => Boolean(row)))); }).catch(() => { if (!cancelled) setProposalByMessageId({}); });
+      })).then(rows => { if (requestIsCurrent()) setProposalByMessageId(Object.fromEntries(rows.filter((row): row is readonly [string, FloReviewProposal] => Boolean(row)))); }).catch(() => { if (requestIsCurrent()) setProposalByMessageId({}); });
       setGroundingByMessageId(Object.fromEntries(page.messages.filter(message => message.dataAsOf || message.partial || message.coverage || message.caveat).map(message => [message.id, { dataAsOf: message.dataAsOf, partial: message.partial, coverage: describeCoverage(message.coverage), caveat: message.caveat }])));
       setOlderMessageCursor(page.nextCursor);
     }).catch(() => {
-      if (!cancelled) setChatError("This private chat could not be loaded.");
+      if (requestIsCurrent()) setChatError("This private chat could not be loaded.");
     });
     return () => { cancelled = true; };
-  }, [activeConversationId, floProLocked]);
+  }, [activeConversationId, floDataScopeKey, floProLocked]);
 
   useEffect(() => {
     let cancelled = false;
@@ -369,6 +381,7 @@ export default function FloScreen() {
       const absoluteMonth = now.getMonth() + i;
       const month = absoluteMonth % 12;
       const year = now.getFullYear() + Math.floor(absoluteMonth / 12);
+      const debtSettlements = getDebtMonthSettlements(month, year);
 
       getIncomeOccurrencesInMonth(month, year).forEach(({ income, days, effectiveAmount }) => {
         days.forEach(day => incomeEvents.push({
@@ -382,13 +395,23 @@ export default function FloScreen() {
       getMonthlyBills(month, year).filter(isBillEligibleForUpcomingPlan).forEach(bill => {
         const occurrences = getBillOccurrencesInMonth(bill, month, year);
         if (!occurrences.length) return;
-        const monthlyTotal = getBillMonthlyTotal(bill, month, year);
+        const debtSettlement = bill.is_debt ? debtSettlements.get(bill.id) : undefined;
+        const monthlyTotal = debtSettlement?.configuredObligation
+          ?? getBillMonthlyTotal(bill, month, year);
         const perOccurrence = monthlyTotal / occurrences.length;
-        let paidRemaining = getPaidAmount(bill.id, month, year);
+        let paidRemaining = debtSettlement?.paidAmount ?? getPaidAmount(bill.id, month, year);
+        const exactByDay = new Map(debtSettlement?.occurrences?.map(occurrence => [
+          Number(occurrence.occurrenceDate.slice(8, 10)),
+          occurrence,
+        ]) ?? []);
         occurrences.forEach(day => {
-          const appliedPaid = Math.min(perOccurrence, Math.max(0, paidRemaining));
-          paidRemaining = Math.max(0, paidRemaining - perOccurrence);
-          const remaining = Math.max(0, perOccurrence - appliedPaid);
+          const exact = exactByDay.get(day);
+          const required = exact?.configuredObligation ?? perOccurrence;
+          const appliedPaid = exact
+            ? Math.min(required, exact.paidAmount)
+            : Math.min(required, Math.max(0, paidRemaining));
+          if (!exact) paidRemaining = Math.max(0, paidRemaining - required);
+          const remaining = Math.max(0, required - appliedPaid);
           if (remaining > 0.005) {
             billEvents.push({
               id: bill.id,
@@ -406,7 +429,7 @@ export default function FloScreen() {
     }
 
     return buildPaycheckPlan(incomeEvents, billEvents, balanceEvents, settings.safety_floor, today);
-  }, [getBillMonthlyTotal, getBillOccurrencesInMonth, getDailyBalances, getIncomeOccurrencesInMonth, getMonthlyBills, getPaidAmount, now, settings.forecast_horizon_months, settings.safety_floor, today]);
+  }, [getBillMonthlyTotal, getBillOccurrencesInMonth, getDailyBalances, getDebtMonthSettlements, getIncomeOccurrencesInMonth, getMonthlyBills, getPaidAmount, now, settings.forecast_horizon_months, settings.safety_floor, today]);
   const facts = useMemo<FloFacts>(() => {
     const lowest = baseline.reduce(
       (best, day) => day.balance < best.balance ? day : best,
@@ -415,17 +438,24 @@ export default function FloScreen() {
     const cashFlow = getCashFlow(now.getMonth(), now.getFullYear());
     const previousMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const previousCashFlow = getCashFlow(previousMonthDate.getMonth(), previousMonthDate.getFullYear());
+    const month = now.getMonth();
+    const year = now.getFullYear();
+    const debtSettlements = getDebtMonthSettlements(month, year);
     const billSummary = summarizeMonthlyBills(
-      getMonthlyBills(now.getMonth(), now.getFullYear()).filter(isBillEligibleForUpcomingPlan),
-      bill => getBillMonthlyTotal(bill, now.getMonth(), now.getFullYear()),
-      bill => getPaidAmount(bill.id, now.getMonth(), now.getFullYear()),
+      getMonthlyBills(month, year).filter(isBillEligibleForUpcomingPlan),
+      bill => bill.is_debt
+        ? (debtSettlements.get(bill.id)?.configuredObligation
+          ?? getBillMonthlyTotal(bill, month, year))
+        : getBillMonthlyTotal(bill, month, year),
+      bill => bill.is_debt
+        ? (debtSettlements.get(bill.id)?.paidAmount
+          ?? getPaidAmount(bill.id, month, year))
+        : getPaidAmount(bill.id, month, year),
     );
     const currentMonth = today.slice(0, 7);
     const unallocatedExpenses = transactions.filter(transaction =>
       isCashFlowTransaction(transaction) && transaction.date.startsWith(currentMonth) && transaction.amount < 0 && !transaction.linked_bill_id
     );
-    const month = now.getMonth();
-    const year = now.getFullYear();
     const todayForecastDay = getDailyBalances(month, year).find(day => day.day === now.getDate());
     const todayForecastGroups = groupForecastEvents(calendarVisibleForecastEvents(todayForecastDay?.events));
     const algorithmSuite = buildAlgorithmSuite({
@@ -442,21 +472,31 @@ export default function FloScreen() {
         net: day.net,
         balance: day.balance,
       })),
-      bills: getMonthlyBills(month, year).map(bill => ({
-        id: bill.id,
-        name: bill.name,
-        amount: getBillMonthlyTotal(bill, month, year),
-        paidAmount: getPaidAmount(bill.id, month, year),
-        occurrenceDays: getBillOccurrencesInMonth(bill, month, year),
-        importance: bill.smart_priority,
-        category: bill.category || "Other",
-        due_day: bill.due_day,
-        is_debt: bill.is_debt,
-        is_recurring: bill.is_recurring,
-        includeInSnowball: bill.include_in_snowball !== false,
-        balance: bill.balance,
-        interest_rate: bill.interest_rate,
-      })),
+      bills: getMonthlyBills(month, year).map(bill => {
+        const debtSettlement = bill.is_debt ? debtSettlements.get(bill.id) : undefined;
+        return {
+          id: bill.id,
+          name: bill.name,
+          amount: debtSettlement?.configuredObligation
+            ?? getBillMonthlyTotal(bill, month, year),
+          paidAmount: debtSettlement?.paidAmount
+            ?? getPaidAmount(bill.id, month, year),
+          occurrenceDays: getBillOccurrencesInMonth(bill, month, year),
+          occurrenceSettlements: debtSettlement?.occurrences?.map(occurrence => ({
+            day: Number(occurrence.occurrenceDate.slice(8, 10)),
+            requiredAmount: occurrence.configuredObligation,
+            paidAmount: occurrence.paidAmount,
+          })),
+          importance: bill.smart_priority,
+          category: bill.category || "Other",
+          due_day: bill.due_day,
+          is_debt: bill.is_debt,
+          is_recurring: bill.is_recurring,
+          includeInSnowball: bill.include_in_snowball !== false,
+          balance: bill.balance,
+          interest_rate: bill.interest_rate,
+        };
+      }),
       transactions: getTransactionsForMonth(month, year).filter(isCashFlowTransaction).map(transaction => ({
         id: transaction.id,
         date: transaction.date,
@@ -624,6 +664,8 @@ export default function FloScreen() {
         avalancheName: algorithmSuite.debtPayoff.avalancheName,
         cashFlowReliefName: algorithmSuite.debtPayoff.cashFlowReliefName,
         cashFlowReliefAmount: algorithmSuite.debtPayoff.cashFlowReliefAmount,
+        totalMonthlyMinimum: algorithmSuite.debtPayoff.totalMonthlyMinimum,
+        currentRolloverExtra: algorithmSuite.debtPayoff.currentRolloverExtra,
         nextMove: algorithmSuite.debtPayoff.nextMove,
         status: algorithmSuite.debtPayoff.status,
         detail: algorithmSuite.debtPayoff.detail,
@@ -665,7 +707,7 @@ export default function FloScreen() {
         })),
       },
     };
-  }, [baseline, today, settings.safety_floor, getCashFlow, getDailyBalances, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getPaidAmount, getTransactionsForMonth, transactions, upcoming, decisions, forecastConfidence, categoryPlan, paycheckPlan, billDateMoves, bills, decisionHistory, decisionRiskAlerts, now, incomes, goals, decisionHubSettings]);
+  }, [baseline, today, settings.safety_floor, getCashFlow, getDailyBalances, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getDebtMonthSettlements, getPaidAmount, getTransactionsForMonth, transactions, upcoming, decisions, forecastConfidence, categoryPlan, paycheckPlan, billDateMoves, bills, decisionHistory, decisionRiskAlerts, now, incomes, goals, decisionHubSettings]);
 
   const setupPersonalization = useMemo(
     () => buildSetupPersonalization(onboardingPreferences),
@@ -817,17 +859,32 @@ export default function FloScreen() {
 
   const loadOlderMessages = async () => {
     if (!activeConversationId || !olderMessageCursor) return;
-    const page = await listFloMessages(activeConversationId, olderMessageCursor);
-    dispatch({ type: "prepend", messages: page.messages.map(message => ({ id: message.id, role: message.role, text: message.text })) });
-    setSourcesByMessageId(previous => ({ ...previous, ...Object.fromEntries(page.messages.filter(message => message.sources.length).map(message => [message.id, message.sources])) }));
-    setFollowUpsByMessageId(previous => ({ ...previous, ...Object.fromEntries(page.messages.filter(message => message.followUps.length).map(message => [message.id, message.followUps])) }));
-    const verifiedProposals = await Promise.all(page.messages.filter(message => message.proposal?.kind === "recurring_bill_change").map(async message => {
-      const authoritative = await readAuthoritativeFloProposal(message.proposal!.id);
-      return floProposalMatchesAuthoritative(message.proposal!, authoritative) ? [message.id, authoritative] as const : null;
-    }));
-    setProposalByMessageId(previous => ({ ...previous, ...Object.fromEntries(verifiedProposals.filter((row): row is readonly [string, FloReviewProposal] => Boolean(row))) }));
-    setGroundingByMessageId(previous => ({ ...previous, ...Object.fromEntries(page.messages.filter(message => message.dataAsOf || message.partial || message.coverage || message.caveat).map(message => [message.id, { dataAsOf: message.dataAsOf, partial: message.partial, coverage: describeCoverage(message.coverage), caveat: message.caveat }])) }));
-    setOlderMessageCursor(page.nextCursor);
+    const requestConversationId = activeConversationId;
+    const requestCursor = olderMessageCursor;
+    const requestGeneration = requestGenerationRef.current;
+    const requestScopeKey = floDataScopeKey;
+    const requestIsCurrent = () => (
+      requestGeneration === requestGenerationRef.current
+      && requestScopeKey === floDataScopeKeyRef.current
+      && requestConversationId === activeConversationIdRef.current
+    );
+    try {
+      const page = await listFloMessages(requestConversationId, requestCursor);
+      if (!requestIsCurrent()) return;
+      dispatch({ type: "prepend", messages: page.messages.map(message => ({ id: message.id, role: message.role, text: message.text })) });
+      setSourcesByMessageId(previous => ({ ...previous, ...Object.fromEntries(page.messages.filter(message => message.sources.length).map(message => [message.id, message.sources])) }));
+      setFollowUpsByMessageId(previous => ({ ...previous, ...Object.fromEntries(page.messages.filter(message => message.followUps.length).map(message => [message.id, message.followUps])) }));
+      setGroundingByMessageId(previous => ({ ...previous, ...Object.fromEntries(page.messages.filter(message => message.dataAsOf || message.partial || message.coverage || message.caveat).map(message => [message.id, { dataAsOf: message.dataAsOf, partial: message.partial, coverage: describeCoverage(message.coverage), caveat: message.caveat }])) }));
+      const verifiedProposals = await Promise.all(page.messages.filter(message => message.proposal?.kind === "recurring_bill_change").map(async message => {
+        const authoritative = await readAuthoritativeFloProposal(message.proposal!.id);
+        return floProposalMatchesAuthoritative(message.proposal!, authoritative) ? [message.id, authoritative] as const : null;
+      }));
+      if (!requestIsCurrent()) return;
+      setProposalByMessageId(previous => ({ ...previous, ...Object.fromEntries(verifiedProposals.filter((row): row is readonly [string, FloReviewProposal] => Boolean(row))) }));
+      setOlderMessageCursor(page.nextCursor);
+    } catch {
+      if (requestIsCurrent()) setChatError("Older messages could not be loaded.");
+    }
   };
 
   const stopStreaming = () => {
@@ -1110,9 +1167,6 @@ export default function FloScreen() {
               <View style={[styles.reviewProposalIcon, { backgroundColor: colors.primary + "18" }]}><Feather name="shield" size={21} color={colors.primary} /></View>
               <Text style={[styles.followTitle, { color: colors.foreground }]}>Use Flo with your account data?</Text>
               <Text style={[styles.aiConsentBody, { color: colors.mutedForeground }]}>Flo sends your question and only the relevant household records needed to answer it to OpenAI. FlowLedger does not send bank passwords or full account numbers. Chats are saved only when history is on.</Text>
-              <Pressable accessibilityRole="link" onPress={() => { setAiConsentPrompt(null); router.push("/legal?doc=privacy" as never); }} style={styles.aiConsentPrivacyLink}>
-                <Text style={[styles.aiConsentPrivacyText, { color: colors.primary }]}>Read the Privacy Policy</Text>
-              </Pressable>
               <Text style={[styles.reviewSafety, { color: colors.mutedForeground }]}>You can cancel and keep using FlowLedger without Flo.</Text>
               <View style={[styles.followActions, styles.aiConsentActions]}>
                 <Pressable accessibilityRole="button" onPress={() => setAiConsentPrompt(null)} style={[styles.followButton, styles.aiConsentButton, { backgroundColor: colors.muted }]}><Text style={[styles.followButtonText, { color: colors.foreground }]}>Not now</Text></Pressable>
@@ -1253,8 +1307,6 @@ const styles = StyleSheet.create({
   aiConsentCard: { width: "100%", maxHeight: "100%", borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, overflow: "hidden" },
   aiConsentContent: { padding: 20, gap: 12 },
   aiConsentBody: { fontSize: 13, lineHeight: 20, fontFamily: "Inter_400Regular", textAlign: "center" },
-  aiConsentPrivacyLink: { minHeight: 44, alignSelf: "center", justifyContent: "center", paddingHorizontal: 12 },
-  aiConsentPrivacyText: { fontSize: 13, fontFamily: "Inter_700Bold" },
   followSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, padding: 18, gap: 12 },
   sheetHandle: { alignSelf: "center", width: 48, height: 4, borderRadius: 999, opacity: 0.5, marginBottom: 4 },
   followTitle: { fontSize: 20, fontFamily: "Inter_700Bold", textAlign: "center" },

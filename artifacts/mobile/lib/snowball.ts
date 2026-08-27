@@ -13,6 +13,16 @@ export interface SnowballDebtInput {
   included: boolean;
 }
 
+/** Current-month cash controls used only by the canonical dated plan. */
+export interface DatedSnowballDebtInput extends SnowballDebtInput {
+  /** Cash currently scheduled toward the original requirement. Defaults to `minimum`. */
+  requiredPayment?: number;
+  /** Exact required cash per due date when reviewed history changed one occurrence. */
+  requiredPaymentsByDate?: ReadonlyMap<string, number>;
+  /** Exact Forecast money above the requirement, targeted to this debt. */
+  plannedExtraPayment?: number;
+}
+
 export interface SnowballAllocationResult {
   billId: string;
   billName: string;
@@ -174,10 +184,19 @@ export function effectiveDebtMinimum(baseMinimum: number, rolledMinimum: number)
   return cents(Math.max(0, baseMinimum) + Math.max(0, rolledMinimum));
 }
 
-export function monthlyDebtAmount(baseMinimum: number, rolledMinimum: number, settledAmount?: number): number {
+/**
+ * The lender-required amount for one occurrence. Snowball rollover is an
+ * optional payoff commitment and must never raise the amount used for
+ * late/missed-payment status.
+ */
+export function requiredDebtMinimum(baseMinimum: number): number {
+  return cents(Math.max(0, baseMinimum));
+}
+
+export function monthlyDebtAmount(baseMinimum: number, _rolledMinimum: number, settledAmount?: number): number {
   return settledAmount !== undefined && Number.isFinite(settledAmount)
     ? cents(Math.max(0, settledAmount))
-    : effectiveDebtMinimum(baseMinimum, rolledMinimum);
+    : requiredDebtMinimum(baseMinimum);
 }
 
 export function scheduledDebtPaymentAmount(amount: number, paymentDate: string, today: string, balance: number): number {
@@ -403,7 +422,7 @@ function splitCents(total: number, parts: number): number[] {
  * allocations, so the returned rows are the complete cash-impact schedule.
  */
 export function projectDatedSnowballMonth(options: {
-  debts: SnowballDebtInput[];
+  debts: DatedSnowballDebtInput[];
   method: DebtMethod;
   month: number;
   year: number;
@@ -438,11 +457,13 @@ export function projectDatedSnowballMonth(options: {
     interest = cents(interest + charge);
   }
 
-  type RequiredEvent = { date: string; debt: SnowballDebtInput; amount: number };
+  type RequiredEvent = { date: string; debt: DatedSnowballDebtInput; amount: number };
   type PoolEvent = {
     date: string;
     amount: number;
     kind: Exclude<DatedDebtAllocationKind, "required">;
+    targetBillId?: string;
+    cascade?: boolean;
     sourceBillId?: string;
     sourceBillName?: string;
   };
@@ -455,10 +476,25 @@ export function projectDatedSnowballMonth(options: {
     const dates = configuredDates.length
       ? [...configuredDates].sort()
       : [isoMonthDate(options.year, options.month, debt.dueDay)];
-    const amounts = splitCents(Math.max(0, debt.minimum), dates.length);
+    const amounts = debt.requiredPaymentsByDate
+      ? dates.map(date => cents(Math.max(0, debt.requiredPaymentsByDate?.get(date) ?? 0)))
+      : splitCents(
+          Math.max(0, debt.requiredPayment ?? debt.minimum),
+          dates.length,
+        );
     dates.forEach((date, index) => {
       if ((amounts[index] ?? 0) > 0.009) requiredEvents.push({ date, debt, amount: amounts[index] ?? 0 });
     });
+    const plannedExtra = cents(Math.max(0, debt.plannedExtraPayment ?? 0));
+    if (plannedExtra > 0.009) {
+      poolEvents.push({
+        date: dates[0] ?? isoMonthDate(options.year, options.month, debt.dueDay),
+        amount: plannedExtra,
+        kind: "rollover",
+        targetBillId: debt.id,
+        cascade: debt.included,
+      });
+    }
   }
 
   const firstTarget = orderDebts(
@@ -519,8 +555,12 @@ export function projectDatedSnowballMonth(options: {
 
   const applyPool = (event: PoolEvent) => {
     let remaining = cents(event.amount);
+    let preferredTargetId = event.targetBillId;
     while (remaining > 0.009) {
-      const target = orderDebts(
+      const preferred = preferredTargetId
+        ? options.debts.find(debt => debt.id === preferredTargetId && (balances.get(debt.id) ?? 0) > 0.009)
+        : undefined;
+      const target = preferred ?? orderDebts(
         options.debts
           .filter(debt => debt.included && (balances.get(debt.id) ?? 0) > 0.009)
           .map(debt => ({ ...debt, balance: balances.get(debt.id) ?? 0 })),
@@ -533,6 +573,10 @@ export function projectDatedSnowballMonth(options: {
       addAllocation(original, applied, event.date, event.kind, event.amount,
         event.sourceBillId ? options.debts.find(debt => debt.id === event.sourceBillId) : undefined);
       remaining = cents(remaining - applied);
+      if (preferredTargetId) {
+        preferredTargetId = undefined;
+        if (event.cascade === false) break;
+      }
     }
     unusedAmount = cents(unusedAmount + remaining);
   };

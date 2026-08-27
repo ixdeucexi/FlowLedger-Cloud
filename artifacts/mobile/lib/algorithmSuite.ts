@@ -27,6 +27,8 @@ export interface AlgorithmBill {
   name: string;
   amount: number;
   monthlyMinimum?: number;
+  /** Existing snowball money planned above the lender-required minimum. */
+  snowballRollover?: number;
   frequency?: "monthly" | "quarterly" | "biweekly" | "weekly";
   includeInSnowball?: boolean;
   category: string;
@@ -37,6 +39,11 @@ export interface AlgorithmBill {
   interest_rate?: number;
   paidAmount?: number;
   occurrenceDays?: number[];
+  occurrenceSettlements?: Array<{
+    day: number;
+    requiredAmount: number;
+    paidAmount: number;
+  }>;
   pendingDays?: number[];
   importance?: BillImportance;
 }
@@ -195,6 +202,7 @@ export interface AlgorithmSuiteResult {
     cashFlowReliefAmount: number;
     safeExtraAmount: number;
     rolloverAmount: number;
+    currentRolloverExtra: number;
     nextDebtNameAfterTarget: string | null;
     totalMonthlyMinimum: number;
     nextMove: string;
@@ -540,30 +548,46 @@ function buildBillScheduleStatus(bill: AlgorithmBill, todayDay: number): BillSch
     .filter(day => Number.isInteger(day) && day > 0)
     .sort((left, right) => left - right);
   const occurrences = Array.from(new Set(configuredOccurrences.length ? configuredOccurrences : [bill.due_day]));
-  const totalAmount = Math.max(0, Number(bill.amount) || 0);
-  const paidAmount = Math.max(0, Number(bill.paidAmount) || 0);
+  const exactOccurrences = (bill.occurrenceSettlements ?? [])
+    .filter(occurrence => Number.isInteger(occurrence.day) && occurrence.day > 0)
+    .sort((left, right) => left.day - right.day);
+  const totalAmount = exactOccurrences.length
+    ? roundCurrency(exactOccurrences.reduce((sum, occurrence) => sum + Math.max(0, occurrence.requiredAmount), 0))
+    : Math.max(0, Number(bill.amount) || 0);
+  const paidAmount = exactOccurrences.length
+    ? roundCurrency(exactOccurrences.reduce((sum, occurrence) => sum + Math.max(0, occurrence.paidAmount), 0))
+    : Math.max(0, Number(bill.paidAmount) || 0);
   const remainingAmount = roundCurrency(Math.max(0, totalAmount - paidAmount));
   if (occurrences.length === 0 || totalAmount <= 0.005) {
     return { dueAmount: 0, overdueAmount: 0, remainingAmount, requiredThroughToday: 0, coveredThroughToday: 0, nextOccurrenceAmount: 0, nextDueDay: null, firstOverdueDay: null, overdueOccurrenceCount: 0 };
   }
 
-  const occurrenceAmount = totalAmount / occurrences.length;
   const pendingDays = new Set((bill.pendingDays ?? []).filter(day => occurrences.includes(day)));
-  let paidRemaining = paidAmount;
+  let paidRemaining = exactOccurrences.length ? 0 : paidAmount;
+  const exactByDay = new Map(exactOccurrences.map(occurrence => [occurrence.day, occurrence]));
+  const occurrenceAmount = exactOccurrences.length ? 0 : totalAmount / occurrences.length;
   const occurrenceStatus = occurrences.map(day => {
-    const paidForOccurrence = Math.min(occurrenceAmount, paidRemaining);
-    paidRemaining = Math.max(0, paidRemaining - paidForOccurrence);
+    const exact = exactByDay.get(day);
+    const required = exact ? Math.max(0, exact.requiredAmount) : occurrenceAmount;
+    const paidForOccurrence = exact
+      ? Math.min(required, Math.max(0, exact.paidAmount))
+      : Math.min(required, paidRemaining);
+    if (!exact) paidRemaining = Math.max(0, paidRemaining - paidForOccurrence);
     return {
       day,
+      required,
       paid: paidForOccurrence,
-      remaining: Math.max(0, occurrenceAmount - paidForOccurrence),
+      remaining: Math.max(0, required - paidForOccurrence),
       pending: pendingDays.has(day),
     };
   });
   const throughToday = occurrenceStatus.filter(occurrence => occurrence.day <= todayDay);
-  const requiredThroughToday = roundCurrency(throughToday.length * occurrenceAmount);
+  const requiredThroughToday = roundCurrency(throughToday.reduce(
+    (sum, occurrence) => sum + occurrence.required,
+    0,
+  ));
   const coveredThroughToday = roundCurrency(throughToday.reduce(
-    (sum, occurrence) => sum + (occurrence.pending ? occurrenceAmount : occurrence.paid),
+    (sum, occurrence) => sum + (occurrence.pending ? occurrence.required : occurrence.paid),
     0,
   ));
   const dueAmount = roundCurrency(occurrenceStatus
@@ -852,6 +876,10 @@ function buildDebtPayoffDetails(targets: {
     .filter(debt => (debt.balance ?? 0) > 0.009)
     .sort((a, b) => (a.balance ?? 0) - (b.balance ?? 0) || a.name.localeCompare(b.name));
   const totalMonthlyMinimum = roundCurrency(orderedDebts.reduce((sum, debt) => sum + Math.max(0, debt.monthlyMinimum ?? debt.amount), 0));
+  const currentRolloverExtra = roundCurrency(orderedDebts.reduce(
+    (sum, debt) => sum + Math.max(0, debt.snowballRollover ?? 0),
+    0,
+  ));
 
   if (!targets.snowball) {
     return {
@@ -862,6 +890,7 @@ function buildDebtPayoffDetails(targets: {
       cashFlowReliefAmount: 0,
       safeExtraAmount: 0,
       rolloverAmount: 0,
+      currentRolloverExtra,
       nextDebtNameAfterTarget: null,
       totalMonthlyMinimum,
       status: "done",
@@ -870,7 +899,10 @@ function buildDebtPayoffDetails(targets: {
       whyItMatters: "Once active debts are gone, I stop pushing payoff moves and help send money toward savings and goals.",
       sourceNumbers: [
         { label: "Active debts", value: "0", tone: "safe" },
-        { label: "Minimums", value: `$${totalMonthlyMinimum.toFixed(0)}/mo`, tone: "safe" },
+        { label: "Required minimums", value: `$${totalMonthlyMinimum.toFixed(0)}/mo`, tone: "safe" },
+        ...(currentRolloverExtra > 0
+          ? [{ label: "Snowball rollover extra", value: `$${currentRolloverExtra.toFixed(0)}/mo`, tone: "info" as const }]
+          : []),
       ],
       comparison: [
         { method: "snowball", targetName: null, reason: "No active debt balance found." },
@@ -892,7 +924,7 @@ function buildDebtPayoffDetails(targets: {
       : `Hold extra debt payments until your cushion is safe, then attack ${targets.snowball.name}.`;
   const detail = `I’d attack ${targets.snowball.name} first because it has the smallest balance. Avalanche would chase ${targets.avalanche?.name ?? targets.snowball.name} for interest, and cash-flow relief would close ${targets.cashFlow?.name ?? targets.snowball.name} to free monthly room.`;
   const whyItMatters = nextDebtNameAfterTarget
-    ? `When ${targets.snowball.name} is paid off, its $${snowballMinimum.toFixed(0)}/mo minimum rolls into ${nextDebtNameAfterTarget} instead of disappearing.`
+    ? `When ${targets.snowball.name} is paid off, its $${snowballMinimum.toFixed(0)}/mo minimum rolls into ${nextDebtNameAfterTarget} as extra payoff money instead of disappearing.`
     : `When ${targets.snowball.name} is paid off, its $${snowballMinimum.toFixed(0)}/mo minimum becomes cash-flow room for the next goal.`;
 
   return {
@@ -903,6 +935,7 @@ function buildDebtPayoffDetails(targets: {
     cashFlowReliefAmount,
     safeExtraAmount,
     rolloverAmount: snowballMinimum,
+    currentRolloverExtra,
     nextDebtNameAfterTarget,
     totalMonthlyMinimum,
     status,
@@ -913,8 +946,11 @@ function buildDebtPayoffDetails(targets: {
       { label: "Current target", value: targets.snowball.name, tone: "info" },
       { label: "Target balance", value: `$${(targets.snowball.balance ?? 0).toFixed(0)}`, tone: "watch" },
       { label: "Safe extra", value: `$${safeExtraAmount.toFixed(0)}`, tone: safeExtraAmount > 0 ? "safe" : "watch" },
-      { label: "Rolling minimum", value: `$${snowballMinimum.toFixed(0)}/mo`, tone: "safe" },
-      { label: "Total minimums", value: `$${totalMonthlyMinimum.toFixed(0)}/mo`, tone: "info" },
+      { label: "Next rollover extra", value: `$${snowballMinimum.toFixed(0)}/mo`, tone: "safe" },
+      { label: "Required minimums", value: `$${totalMonthlyMinimum.toFixed(0)}/mo`, tone: "info" },
+      ...(currentRolloverExtra > 0
+        ? [{ label: "Snowball rollover extra", value: `$${currentRolloverExtra.toFixed(0)}/mo`, tone: "safe" as const }]
+        : []),
     ],
     comparison: [
       {

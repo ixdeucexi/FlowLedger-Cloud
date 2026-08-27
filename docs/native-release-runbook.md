@@ -1,6 +1,10 @@
 # FlowLedger Native Release Runbook
 
-Use this record for every preview, TestFlight, Play internal, and production release. Never release from an uncommitted worktree.
+Use this record for every preview, TestFlight, Play internal, and production release. Never release from an uncommitted worktree. `pnpm run deploy:production` is the canonical web production command and refuses a dirty source tree or an unverified rollback tag before running the full release gate. Set `FLOWLEDGER_ROLLBACK_REF` to a pushed annotated `rollback/prod-before-*` tag that points to the currently live commit and records the exact live Vercel deployment ID. The guard verifies both against production and prints the emergency `vercel rollback <deployment-id> --yes` command before deployment begins.
+
+The August 27 baseline deployment `dpl_AfWQ7KRhXzMjcegJkY3GNgf3ertr` reports `gitDirty=1`; its rollback tag therefore identifies the exact immutable Vercel artifact, not a reproducible clean build of commit `566ff37`. This is a one-time inherited baseline. Every replacement production deployment must report the release commit with `gitDirty` absent or not `1` before it is accepted.
+
+The legacy `artifacts/mobile/scripts/build.js` command produces Replit-hosted Expo Go bundles and is not part of a PWA release. The release gate uses Expo's production web export directly.
 
 ## Release record
 
@@ -19,12 +23,13 @@ Use this record for every preview, TestFlight, Play internal, and production rel
 
 - Run native commands from `artifacts/mobile`; its `app.config.js` and `eas.json` are the only Expo/EAS configuration sources. Run `pnpm run check:mobile-config` from the repository root before Expo Doctor or EAS.
 - Run `powershell -ExecutionPolicy Bypass -File scripts/test-native-release.ps1` from the repository root. It runs the config contract, API/Edge/mobile tests, typecheck, Expo Doctor, production dependency audit, diff check, and iOS/Android/web export unless `-SkipBundles` is explicitly used.
+- Before any production iOS build or submission, run the same command with `-RequireIosRelease`. That additionally fails closed unless the complete Production-only Apple server credential set and a verified `apple-app-site-association` entry for `com.flowledger.app` exist. This Apple-only gate is intentionally separate from the PWA release.
 - Confirm the repository and live Supabase migration histories match exactly.
 - Run the full unit suite, workspace typecheck, Expo Doctor, production web/native bundle, dependency audit, and `git diff --check` against the release commit.
 - Confirm production EAS variables, public API origin, Supabase public key, OAuth providers, callback allowlist, and Flo secrets without copying their values into this record.
-- Smoke login, setup, Dashboard, Bills/Debt, Activity/Review, Forecast, Simulator, Flo, Settings, support/legal pages, export, household switching, and sign-out with fictional data.
+- Smoke login, setup, Dashboard, Bills/Debt, Activity/Review, Forecast, Simulator, Flo, Settings, support, account deletion, export, household switching, and sign-out with fictional data.
 - Record physical iOS and Android results, including cold/warm deep links, background privacy, biometric unlock, offline recovery, and software keyboard layouts.
-- Confirm privacy, billing, Data Safety, App Privacy, Financial Features, and reviewer notes describe the shipped behavior.
+- Confirm billing, Data Safety, App Privacy, Financial Features, and reviewer notes describe the shipped behavior. Do not submit to a store until an accurate, owner-approved privacy policy replaces the withdrawn placeholder document.
 
 ## Provider and build configuration
 
@@ -36,17 +41,18 @@ Use this record for every preview, TestFlight, Play internal, and production rel
 - Plaid: register exact Android package `com.flowledger.app`, iOS bundle `com.flowledger.app`, and `https://flowledger-algo.com/plaid/oauth` in each release environment. Confirm existing `PLAID_CLIENT_ID`, environment secret, redirect, webhook, and encryption-key configuration without recording values here.
 - Native push: configure APNs and the separate FCM v1 service-account sender credential for the same bundle/package in EAS. Confirm project ID `80ec219d-8a12-43f9-b7cf-0dd6541e60f1`, verify `GOOGLE_SERVICES_JSON` resolves to the Firebase client config during the Android build, and record a signed-device registration/delivery/receipt test. Do not put the service-account credential in Expo public variables or the repository.
 - Server push environment: set `PUSH_APP_ENVIRONMENT=production` on the production API (preview/development on those deployments). Registration, status, and delivery reject cross-environment native tokens.
+- Vercel production database and Plaid credentials must target Production only. Preview and Development must use separate Supabase/Plaid sandbox resources or fail closed; never copy the production service-role, public production project configuration, Plaid credentials, or token-encryption key into them. As of August 27, 2026, all listed production Supabase and Plaid variables target Production only.
 
 ## Verified Founding Free evidence — August 25, 2026
 
 - EAS account `johncollinsii` owns project `80ec219d-8a12-43f9-b7cf-0dd6541e60f1`; CLI authentication was verified without recording credentials.
 - The EAS production environment contains the Supabase URL/public key, `EXPO_PUBLIC_API_ORIGIN=https://flowledger-algo.com`, `EXPO_PUBLIC_LAUNCH_MODE=free`, `EXPO_PUBLIC_APP_ENVIRONMENT=production`, and the Firebase client file secret. RevenueCat public keys remain intentionally absent for Founding Free.
 - Signed Android preview APK build `5fc02587-b936-4a3a-b423-80a249756bfc` completed successfully. It is an internal preview of commit `e50b4739bc5f67a82270de700b79fd22fbb53b0e`, not the current release candidate.
-- The preview signing certificate SHA-256 is published in `/.well-known/assetlinks.json`. Add the separate Google Play App Signing certificate fingerprint before production-track promotion; the upload/preview fingerprint is not a substitute for Play signing.
+- The preview signing certificate SHA-256 is published in `/.well-known/assetlinks.json`. Add the separate Google Play App Signing certificate fingerprint before production-track promotion; the upload/preview fingerprint is not a substitute for Play signing. Set `FLOWLEDGER_PLAY_APP_SIGNING_SHA256` to the console-verified Play value and run `scripts/test-native-release.ps1 -RequireAndroidRelease`; the gate fails unless the published association contains it.
 - Production Supabase migration history includes `measure_reconciled_flo_response_duration`, `backfill_and_lock_plaid_households`, and `remove_creator_read_after_household_exit`. Postflight checks found zero null Plaid household links, all five scope columns locked, all three enforcement triggers present, and all fifteen affected read policies household-member scoped.
 - Supabase security and performance advisors contain informational notices only after the migrations; no warning/error blocks this release candidate.
 - The deployed Flo function accepts the production origin and rejects an unapproved origin. Production telemetry contains recent completed Flo requests, confirming the configured OpenAI path without exposing secret values.
-- Public marketing, Support, Terms, Privacy, and account-deletion routes all return HTTP 200 on `https://flowledger-algo.com`.
+- Public marketing, Support, and account-deletion routes are the current unauthenticated support surfaces. The former Terms and Privacy routes were withdrawn on August 27, 2026 because their drafts contained unverified operator details.
 
 ## Fictional reviewer fixture
 
@@ -60,13 +66,13 @@ Use this record for every preview, TestFlight, Play internal, and production rel
 1. Back up or snapshot the current production database and record the prior function/deployment versions.
 2. Apply additive database migrations; run preflight/postflight integrity queries and Supabase security/performance advisors.
 3. Deploy compatible APIs and Edge Functions; smoke them before the client references new contracts.
-4. Deploy the PWA and verify the canonical domain, public support/legal URLs, console, and authenticated critical path.
+4. Deploy the PWA and verify the canonical domain, public Support and account-deletion URLs, console, and authenticated critical path. Keep store submission blocked until an accurate public privacy-policy URL exists.
 5. Build preview binaries from the exact commit and complete internal device testing.
 6. Build production binaries, submit to TestFlight and Play internal testing, and promote only after recorded approval.
 
 ## Staged release
 
-- Web/Edge: deploy to preview first, smoke authenticated flows, then promote to production.
+- Web/PWA during Founding Free: Vercel Preview is intentionally build-only and displays a configuration error because production database/provider credentials are Production-only. Run the production-equivalent web export and local checks, deploy directly to production with the verified rollback tag, then immediately smoke the canonical domain and use the printed exact-deployment rollback command if verification fails. Provision a separate sandbox Supabase project before restoring authenticated Preview promotion.
 - iOS: TestFlight internal → optional external group → phased App Store release.
 - Android: internal track → closed/open test as required → staged production percentage.
 - Monitor authentication, sync, Forecast discrepancies, Flo terminal failures, financial writes, and support requests after each stage before expanding.

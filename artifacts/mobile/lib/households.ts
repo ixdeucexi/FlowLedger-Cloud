@@ -5,6 +5,7 @@ import {
   type HouseholdRole,
   normalizeHouseholdRole,
 } from "@/lib/householdPermissions";
+import { ownsLegacyPersonalRows } from "@/lib/householdDataScope";
 import { supabase } from "@/lib/supabase";
 import {
   summarizeHouseholdActivity,
@@ -40,6 +41,15 @@ export interface HouseholdMember {
   email?: string | null;
   displayName?: string | null;
   isCurrentUser?: boolean;
+}
+
+export class HouseholdDiscoveryError extends Error {
+  readonly code = "HOUSEHOLD_DISCOVERY_FAILED";
+
+  constructor(stage: "memberships" | "households" | "budgets" | "incomplete") {
+    super(`Household discovery failed during ${stage}.`);
+    this.name = "HouseholdDiscoveryError";
+  }
 }
 
 const ACTIVE_HOUSEHOLD_KEY = "flowledger-active-household";
@@ -145,7 +155,7 @@ export async function loadHouseholdMemberships(
     .eq("user_id", userId);
 
   if (memberships.error) {
-    return [];
+    throw new HouseholdDiscoveryError("memberships");
   }
 
   const householdIds = Array.from(
@@ -168,11 +178,15 @@ export async function loadHouseholdMemberships(
       .in("household_id", householdIds),
   ]);
 
-  if (households.error) return [];
+  if (households.error) throw new HouseholdDiscoveryError("households");
+  if (budgets.error) throw new HouseholdDiscoveryError("budgets");
 
   const householdById = new Map(
     (households.data ?? []).map((row: any) => [String(row.id), row]),
   );
+  if (householdById.size !== householdIds.length) {
+    throw new HouseholdDiscoveryError("incomplete");
+  }
   const budgetByHousehold = new Map(
     (budgets.data ?? [])
       .filter((row: any) => row.is_default !== false)
@@ -184,7 +198,12 @@ export async function loadHouseholdMemberships(
       const householdId = String(membership.household_id);
       const household = householdById.get(householdId);
       if (!household) return null;
-      const isPersonal = household.is_personal === true;
+      const role = normalizeHouseholdRole(membership.role);
+      const isPersonal = ownsLegacyPersonalRows({
+        householdId,
+        isPersonal: household.is_personal === true,
+        role,
+      });
       const ownerName = isPersonal
         ? "Personal"
         : String(household.name ?? "Household");
@@ -193,7 +212,7 @@ export async function loadHouseholdMemberships(
         budgetId: budgetByHousehold.get(householdId) ?? null,
         name: ownerName,
         isPersonal,
-        role: normalizeHouseholdRole(membership.role),
+        role,
         createdAt: membership.created_at
           ? String(membership.created_at)
           : undefined,

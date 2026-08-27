@@ -18,7 +18,7 @@ test("startup stays constant until the destination screen is ready", () => {
   assert.match(layout, /const navigationReady\s*=\s*appReady\s*&&/);
   assert.match(
     layout,
-    /const readyToReveal =\s*navigationReady && \(!privacyShielded \|\| !!privacyRefreshError\)/,
+    /const readyToReveal =\s*navigationReady && \(!effectivePrivacyShielded \|\| !!privacyRefreshError\)/,
   );
   assert.doesNotMatch(layout, /const initialPlanReady/);
   assert.doesNotMatch(
@@ -84,7 +84,7 @@ test("startup plan loading fails closed instead of hanging on household discover
     budgetContext,
     /withLoadTimeout\(\s*resolveHouseholds\(uid\),\s*8000,\s*"Load households"/,
   );
-  assert.match(budgetContext, /finally \{[\s\S]*?setLoading\(false\)/);
+  assert.match(budgetContext, /finally \{[\s\S]*?shouldReleaseBudgetLoading\(\{[\s\S]*?setLoading\(false\)/);
   assert.match(
     budgetContext,
     /withLoadTimeout\(\s*verifyCurrentHouseholdMembership[\s\S]*?8000/,
@@ -98,14 +98,17 @@ test("startup plan loading fails closed instead of hanging on household discover
     /withStartupTimeout\(\s*privacyRefreshRef\.current\(\),\s*PRIVACY_REFRESH_TIMEOUT_MS/,
   );
   assert.match(layout, /if \(previous === "active"\) return/);
-  assert.match(layout, /if \(scope\.isPersonal\)/);
+  assert.match(
+    layout,
+    /if \(ownsLegacyPersonalRows\(scope\)\)/,
+  );
   assert.doesNotMatch(
     layout,
     /verificationIsFresh|SHARED_HOUSEHOLD_PRIVACY_TTL_MS/,
   );
   assert.match(
     layout,
-    /if \(scope\.isPersonal\)[\s\S]*?verifySharedHousehold\(true\)/,
+    /if \(ownsLegacyPersonalRows\(scope\)\)[\s\S]*?verifySharedHousehold\(true\)/,
   );
   assert.match(
     layout,
@@ -119,6 +122,8 @@ test("startup plan loading fails closed instead of hanging on household discover
     layout,
     /if \(\s*document\.visibilityState !== "visible" \|\|\s*!webWasHiddenRef\.current\s*\)\s*return/,
   );
+  assert.match(layout, /document\.visibilityState === "hidden"\) markHidden\(\)/);
+  assert.match(layout, /if \(scope\.userId && hasRevealedPlanRef\.current\) \{\s*setPrivacyShielded\(true\)/);
   assert.doesNotMatch(
     layout,
     /if \(budgetLoading\) \{\s*if \(!hasRevealedPlanRef\.current\) setPrivacyShielded\(true\)/,
@@ -129,5 +134,54 @@ test("startup plan loading fails closed instead of hanging on household discover
     layout,
     /withStartupTimeout\([\s\S]*?readLastAppRoute[\s\S]*?1_500/,
   );
-  assert.match(budgetContext, /if \(priorScope\.isPersonal\) return/);
+  assert.match(budgetContext, /if \(ownsLegacyPersonalRows\(priorScope\)\) return/);
+});
+
+test("scope and user transitions stay shielded, retryable, and remount route-local private state", () => {
+  const budgetContext = readFileSync("context/BudgetContext.tsx", "utf8");
+  const membership = readFileSync("context/MembershipContext.tsx", "utf8");
+  const layout = readFileSync("app/_layout.tsx", "utf8");
+  const flo = readFileSync("app/(tabs)/flo.tsx", "utf8");
+
+  assert.match(budgetContext, /useLayoutEffect\(\(\) => \{[\s\S]+financialDataUserIdRef\.current === userId/);
+  assert.match(budgetContext, /clearScopedFinancialData\(\)[\s\S]+replaceActiveHouseholdScope\(null\)/);
+  const resolveStart = budgetContext.indexOf("const resolveHouseholds");
+  const resolveEnd = budgetContext.indexOf("const markSaveStarted", resolveStart);
+  const resolution = budgetContext.slice(resolveStart, resolveEnd);
+  assert.ok(resolution.indexOf("clearScopedFinancialData()") < resolution.indexOf("replaceActiveHouseholdScope(next)"));
+  assert.match(resolution, /scopeTransitionPendingRef\.current/);
+  assert.match(budgetContext, /waitForScopeCoreLoad\(next\.householdId\)[\s\S]+setLoadRetryNonce/);
+  assert.match(budgetContext, /scopedRequestIsCurrent\(\{/);
+
+  assert.match(layout, /verifiedPrivacyScopeKey !== currentPrivacyScopeKey/);
+  assert.match(layout, /if \(budgetLoading \|\| budgetLoadError\) \{[\s\S]+return;/);
+  assert.match(
+    layout,
+    /accessibilityElementsHidden=\{\s*biometricLocked \|\| effectivePrivacyShielded \|\| !readyToReveal/,
+  );
+  assert.match(layout, /key=\{navigatorPrivacyKey\}/);
+  assert.match(layout, /Your previous plan remains hidden\./);
+  assert.match(layout, /onPress=\{retryBudgetLoad\}/);
+  assert.match(layout, /const webWasHiddenRef = useRef\([\s\S]+document\.visibilityState === "hidden"/);
+
+  assert.match(membership, /adminState\.userId === \(user\?\.id \?\? null\) && adminState\.value/);
+  assert.match(membership, /requestId === adminRequestRef\.current/);
+  assert.match(membership, /planState\.scopeKey === planScopeKey[\s\S]+mapHouseholdPlan\(null, householdId\)/);
+  assert.match(membership, /setPlanState\(\{[\s\S]+scopeKey: planScopeKey/);
+
+  assert.match(flo, /const floDataScopeKey = `\$\{user\?\.id/);
+  assert.match(flo, /requestGeneration === requestGenerationRef\.current/);
+  assert.match(flo, /requestScopeKey === floDataScopeKeyRef\.current/);
+  assert.match(flo, /\[activeConversationId, floDataScopeKey, floProLocked\]/);
+  const olderMessagesStart = flo.indexOf("const loadOlderMessages");
+  const olderMessagesEnd = flo.indexOf("const stopStreaming", olderMessagesStart);
+  const olderMessages = flo.slice(olderMessagesStart, olderMessagesEnd);
+  assert.match(olderMessages, /const requestConversationId = activeConversationId/);
+  assert.match(olderMessages, /const requestScopeKey = floDataScopeKey/);
+  assert.match(olderMessages, /requestGeneration === requestGenerationRef\.current/);
+  assert.match(olderMessages, /requestScopeKey === floDataScopeKeyRef\.current/);
+  assert.match(olderMessages, /requestConversationId === activeConversationIdRef\.current/);
+  assert.match(olderMessages, /if \(!requestIsCurrent\(\)\) return;[\s\S]+dispatch\(\{ type: "prepend"/);
+  assert.match(olderMessages, /await Promise\.all[\s\S]+if \(!requestIsCurrent\(\)\) return;[\s\S]+setProposalByMessageId/);
+  assert.match(olderMessages, /catch \{[\s\S]+if \(requestIsCurrent\(\)\) setChatError/);
 });

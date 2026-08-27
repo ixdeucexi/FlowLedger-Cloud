@@ -77,7 +77,16 @@ export function debtSourceCommitmentsFromPendingMatches(
       && Boolean(match.posted_transaction_id || match.posted_plaid_transaction_id)
       && (Boolean(match.posted_transaction_id && postedIds.has(match.posted_transaction_id))
         || Boolean(match.posted_plaid_transaction_id && postedIds.has(match.posted_plaid_transaction_id)))) {
-      return [{ sourceBillId: match.target_id, sourceBillName: match.target_name, date: match.occurrence_date, amount: 0, state: "posted" as const }];
+      return [{
+        sourceBillId: match.target_id,
+        sourceBillName: match.target_name,
+        date: match.occurrence_date,
+        // The posted transaction is already real cash even while it waits for
+        // review. Keep its amount for payoff-extra consumption math; the
+        // `posted` state still tells the projector to remove the source row.
+        amount: Math.max(0, Number(match.posted_amount) || 0),
+        state: "posted" as const,
+      }];
     }
     return [];
   });
@@ -87,8 +96,12 @@ export function debtSourceCommitmentsFromPendingMatches(
     grouped.set(key, [...(grouped.get(key) ?? []), commitment]);
   });
   return Array.from(grouped.values(), commitments => {
-    const posted = commitments.find(commitment => commitment.state === "posted");
-    if (posted) return { ...posted, amount: 0, state: "posted" as const };
+    const posted = commitments.filter(commitment => commitment.state === "posted");
+    if (posted.length) return {
+      ...posted[0]!,
+      amount: Math.round(posted.reduce((sum, commitment) => sum + Math.max(0, Number(commitment.amount) || 0), 0) * 100) / 100,
+      state: "posted" as const,
+    };
     const first = commitments[0]!;
     return {
       ...first,

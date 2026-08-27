@@ -3,6 +3,7 @@ import { BlurView } from "expo-blur";
 import { Tabs, useRouter, useSegments } from "expo-router";
 import React from "react";
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   Image,
   Platform,
@@ -31,9 +32,10 @@ import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { useEffectiveThemeMode } from "@/hooks/useEffectiveThemeMode";
 import {
   clearLearningTour,
-  LEARNING_TOUR_EVENT,
+  hydrateLearningTourState,
   LEARNING_TOUR_STEPS,
   readLearningTourState,
+  subscribeToLearningTour,
   writeLearningTourState,
 } from "@/lib/learningTour";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
@@ -47,6 +49,7 @@ import {
   buildOverdueBillOccurrences,
   groupOverdueBills,
 } from "@/lib/overdueBills";
+import { requiredDebtPlanTotal } from "@/lib/debtPaymentPlan";
 import {
   pendingOccurrenceKeySet,
   unmatchedPendingTransactions,
@@ -73,56 +76,15 @@ const DesktopChrome = React.lazy(() =>
 );
 
 const DEMO_TOUR_KEY = "flowledger_demo_tour_step";
-const DEMO_TOUR_STEPS = [
-  {
-    route: "index",
-    title: "Dashboard",
-    path: "/(tabs)",
-    nextLabel: "Open Forecast",
-    short: "Your money at a glance.",
-    detail: "See today's balance, forecast, and next move.",
-  },
-  {
-    route: "monthly",
-    title: "Forecast",
-    path: "/(tabs)/monthly",
-    nextLabel: "Open Bills",
-    short: "Your daily forecast.",
-    detail: "Tap a date to see what changes its balance.",
-  },
-  {
-    route: "bills",
-    title: "Bills",
-    path: "/(tabs)/bills",
-    nextLabel: "Open Activity",
-    short: "Bills and debt.",
-    detail: "Manage due dates, minimums, and payoff order.",
-  },
-  {
-    route: "transactions",
-    title: "Activity",
-    path: "/(tabs)/transactions",
-    nextLabel: "Open Flo",
-    short: "What actually happened.",
-    detail: "See spending, income, transfers, and payments.",
-  },
-  {
-    route: "flo",
-    title: "Flo",
-    path: "/(tabs)/flo",
-    nextLabel: "Open More",
-    short: "Ask Flo.",
-    detail: "Ask a question or preview a change.",
-  },
-  {
-    route: "more",
-    title: "More",
-    path: "/(tabs)/more",
-    nextLabel: "Finish tour",
-    short: "App controls.",
-    detail: "Manage accounts, setup, data, and preferences.",
-  },
-] as const;
+const DEMO_TOUR_STEPS = LEARNING_TOUR_STEPS.map((step, index) => ({
+  ...step,
+  nextLabel:
+    index === LEARNING_TOUR_STEPS.length - 1
+      ? "Finish tour"
+      : `Open ${LEARNING_TOUR_STEPS[index + 1].title}`,
+  short: step.focus,
+  detail: step.floSays,
+}));
 
 function BudgetLoadDelayScreen({ onRetry }: { onRetry: () => void }) {
   const colors = useColors();
@@ -342,25 +304,42 @@ function GuidedTour() {
   useBackDismiss(state.active, closeTour);
 
   React.useEffect(() => {
-    if (Platform.OS !== "web" || typeof window === "undefined") return;
-    const onStart = () => {
-      const next = readLearningTourState();
+    let mounted = true;
+    const openTour = (next: ReturnType<typeof readLearningTourState>) => {
+      if (!mounted) return;
       setState(next);
+      if (!next.active) return;
       const step =
         LEARNING_TOUR_STEPS[next.stepIndex] ?? LEARNING_TOUR_STEPS[0];
       router.push(step.path as any);
     };
-    window.addEventListener(LEARNING_TOUR_EVENT, onStart);
-    return () => window.removeEventListener(LEARNING_TOUR_EVENT, onStart);
+    const unsubscribe = subscribeToLearningTour(openTour);
+    void hydrateLearningTourState().then(openTour);
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
   }, [router]);
+
+  React.useEffect(() => {
+    if (!state.active) return;
+    AccessibilityInfo.announceForAccessibility(
+      `Guided Tour, step ${state.stepIndex + 1} of ${LEARNING_TOUR_STEPS.length}. ${activeStep.title}. ${activeStep.focus}.`,
+    );
+  }, [activeStep.focus, activeStep.title, state.active, state.stepIndex]);
 
   React.useEffect(() => {
     setTargetRect(null);
     if (!state.active || !isOnStepRoute || Platform.OS !== "web" || typeof document === "undefined") return;
     const timers: ReturnType<typeof setTimeout>[] = [];
+    let didScrollToTarget = false;
     const measure = () => {
       const element = document.getElementById(`guided-tour-${activeStep.route}`);
       if (!element) return;
+      if (!didScrollToTarget) {
+        element.scrollIntoView({ block: "center", inline: "nearest", behavior: "auto" });
+        didScrollToTarget = true;
+      }
       const rect = element.getBoundingClientRect();
       if (rect.width > 0 && rect.height > 0) {
         setTargetRect({ top: rect.top, left: rect.left, width: rect.width, height: rect.height });
@@ -429,20 +408,26 @@ function GuidedTour() {
 
   return (
     <View pointerEvents="box-none" style={styles.learningLayer}>
+      {Platform.OS === "web" ? (
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          pointerEvents="none"
+          style={[styles.learningTarget, targetPosition]}
+        >
+          <View style={styles.learningTargetRing} />
+          <Feather
+            name="mouse-pointer"
+            size={24}
+            color="#f8fafc"
+            style={styles.learningCursor}
+          />
+          <Text style={styles.learningTargetText}>Tap here</Text>
+        </View>
+      ) : null}
       <View
-        pointerEvents="none"
-        style={[styles.learningTarget, targetPosition]}
-      >
-        <View style={styles.learningTargetRing} />
-        <Feather
-          name="mouse-pointer"
-          size={24}
-          color="#f8fafc"
-          style={styles.learningCursor}
-        />
-        <Text style={styles.learningTargetText}>Tap here</Text>
-      </View>
-      <View
+        accessibilityViewIsModal
+        accessibilityLiveRegion="polite"
         style={[
           styles.learningSheet,
           collapsed && styles.learningSheetCollapsed,
@@ -461,6 +446,7 @@ function GuidedTour() {
             </Text>
           </View>
           <Pressable
+            accessibilityRole="button"
             onPress={() => setCollapsed((value) => !value)}
             style={styles.learningClose}
             hitSlop={8}
@@ -475,6 +461,7 @@ function GuidedTour() {
             />
           </Pressable>
           <Pressable
+            accessibilityRole="button"
             onPress={closeTour}
             style={styles.learningClose}
             hitSlop={8}
@@ -493,6 +480,8 @@ function GuidedTour() {
             </View>
             <View style={styles.learningActions}>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Previous guided tour step"
                 onPress={() => goToStep(state.stepIndex - 1)}
                 disabled={state.stepIndex === 0}
                 style={[
@@ -503,6 +492,12 @@ function GuidedTour() {
                 <Text style={styles.learningSecondaryText}>Back</Text>
               </Pressable>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={
+                  state.stepIndex >= LEARNING_TOUR_STEPS.length - 1
+                    ? "Finish guided tour"
+                    : "Next guided tour step"
+                }
                 onPress={next}
                 style={[
                   styles.learningPrimary,
@@ -545,6 +540,7 @@ function TabContent() {
     getMonthlyBills,
     getBillOccurrencesInMonth,
     getBillEffectiveMonthlyTotal,
+    getDebtMonthSettlements,
     getPaidAmount,
   } = useBudget();
   const { newFeedbackCount } = useFeedbackBadge();
@@ -577,15 +573,32 @@ function TabContent() {
       pendingPlanMatches,
       pendingBankTransactions,
     );
+    const debtSettlements = getDebtMonthSettlements(month, year);
     const occurrences = buildOverdueBillOccurrences(
-      getMonthlyBills(month, year).map((bill) => ({
-        billId: bill.id,
-        name: bill.name,
-        closed: bill.is_debt && bill.balance <= 0.009,
-        occurrenceDays: getBillOccurrencesInMonth(bill, month, year),
-        plannedTotal: getBillEffectiveMonthlyTotal(bill, month, year),
-        paidTotal: getPaidAmount(bill.id, month, year),
-      })),
+      getMonthlyBills(month, year).map((bill) => {
+        const occurrenceDays = getBillOccurrencesInMonth(bill, month, year);
+        const debtSettlement = bill.is_debt
+          ? debtSettlements.get(bill.id)
+          : undefined;
+        return {
+          billId: bill.id,
+          name: bill.name,
+          closed: bill.is_debt && bill.balance <= 0.009,
+          occurrenceDays,
+          plannedTotal: bill.is_debt
+            ? (debtSettlement?.configuredObligation
+              ?? requiredDebtPlanTotal(bill, occurrenceDays.length))
+            : getBillEffectiveMonthlyTotal(bill, month, year),
+          paidTotal: bill.is_debt
+            ? (debtSettlement?.paidAmount ?? getPaidAmount(bill.id, month, year))
+            : getPaidAmount(bill.id, month, year),
+          occurrences: debtSettlement?.occurrences?.map(occurrence => ({
+            day: Number(occurrence.occurrenceDate.slice(8, 10)),
+            requiredAmount: occurrence.configuredObligation,
+            paidAmount: occurrence.paidAmount,
+          })),
+        };
+      }),
       month,
       year,
       now.getDate(),
@@ -599,6 +612,7 @@ function TabContent() {
   }, [
     getBillEffectiveMonthlyTotal,
     getBillOccurrencesInMonth,
+    getDebtMonthSettlements,
     getMonthlyBills,
     getPaidAmount,
     pendingBankTransactions,
@@ -1129,9 +1143,9 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   learningClose: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(148,163,184,0.12)",
@@ -1168,7 +1182,7 @@ const styles = StyleSheet.create({
   },
   learningSecondary: {
     flex: 1,
-    minHeight: 42,
+    minHeight: 44,
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
@@ -1183,7 +1197,7 @@ const styles = StyleSheet.create({
   },
   learningPrimary: {
     flex: 1,
-    minHeight: 42,
+    minHeight: 44,
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",

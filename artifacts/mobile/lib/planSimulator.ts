@@ -77,6 +77,12 @@ export interface PlanSimulationBillReference {
 }
 
 export interface PlanSimulationDebtReference extends SnowballDebtInput {
+  /**
+   * `minimum` is the original lender minimum per occurrence. Existing
+   * rollover is a separate once-monthly payoff amount so weekly/biweekly
+   * schedules cannot multiply it.
+   */
+  monthlyRolloverExtra?: number;
   frequency?: SimulationBillFrequency;
   dayOfWeek?: number;
   nextPaymentDate?: string;
@@ -385,8 +391,10 @@ function monthKey(year: number, month: number): string {
   return `${year}-${String(month + 1).padStart(2, "0")}`;
 }
 
-function debtMinimumForMonth(debt: PlanSimulationDebtReference, month: number, year: number): number {
-  if (!debt.frequency) return Math.max(0, debt.minimum);
+export function debtPayoffCadenceForMonth(debt: PlanSimulationDebtReference, month: number, year: number): number {
+  if (!debt.frequency) {
+    return cents(Math.max(0, debt.minimum) + Math.max(0, debt.monthlyRolloverExtra ?? 0));
+  }
   const occurrences = getBillOccurrenceDays({
     frequency: debt.frequency,
     due_day: debt.dueDay,
@@ -395,7 +403,10 @@ function debtMinimumForMonth(debt: PlanSimulationDebtReference, month: number, y
     start_date: debt.startDate,
     end_date: debt.endDate,
   }, month, year).length;
-  return cents(Math.max(0, debt.minimum) * occurrences);
+  return cents(
+    Math.max(0, debt.minimum) * occurrences
+      + Math.max(0, debt.monthlyRolloverExtra ?? 0),
+  );
 }
 
 function debtSchedule(debt: PlanSimulationDebtReference) {
@@ -459,7 +470,7 @@ function comparablePayoffDate(input: {
       ...debt,
       minimum: withinCanonicalHorizon
         ? canonicalByDebt?.get(debt.id) ?? 0
-        : debtMinimumForMonth(debt, month, year),
+        : debtPayoffCadenceForMonth(debt, month, year),
     }));
     const strategyExtra = Math.max(0, Number(input.references.payoffStrategyExtrasByMonth?.[key]) || 0);
     const savedExtra = liveSavedExtras.get(key) ?? 0;

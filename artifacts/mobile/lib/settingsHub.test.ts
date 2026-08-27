@@ -25,7 +25,7 @@ test("settings hub preserves the intended group order", () => {
   assert.deepEqual(SETTINGS_GROUPS.map(group => group.sectionIds), [
     ["money", "accounts", "plaid"],
     ["appearance", "notifications", "setup"],
-    ["backup", "deleted", "security", "legal"],
+    ["backup", "deleted", "security"],
     ["membership", "help"],
     ["admin"],
   ]);
@@ -49,7 +49,6 @@ test("settings group lookups preserve the destination hierarchy", () => {
   assert.equal(settingsGroupForSection("accounts").id, "money");
   assert.equal(settingsGroupForSection("appearance").id, "preferences");
   assert.equal(settingsGroupForSection("deleted").id, "data");
-  assert.equal(settingsGroupForSection("legal").id, "data");
   assert.equal(settingsGroupForSection("admin").id, "admin");
 });
 

@@ -156,7 +156,7 @@ test("deletion prepares application cleanup before deleting Auth and finalizes i
     rpc: async name => {
       events.push(name);
       if (name === "verify_recent_account_deletion_session") return { data: true, error: null };
-      if (name === "inspect_account_deletion") return { data: { blockedHouseholds: [] }, error: null };
+      if (name === "inspect_account_deletion") return { data: { blockedHouseholds: [], billingCustomerExists: false }, error: null };
       if (name === "prepare_account_deletion") {
         return { data: { receiptId: "receipt-a", status: "data_deleted" }, error: null };
       }
@@ -181,11 +181,97 @@ test("deletion prepares application cleanup before deleting Auth and finalizes i
     authenticatedUser: async () => ({ user: { id: "user-a" } }),
     serviceSupabase: () => client,
     nowSeconds: () => 1_100,
-    revenueCatSecretApiKey: "secret",
-    fetch: async () => ({ ok: false, status: 404 }),
   });
   const res = response();
   await handler({ method: "POST", body: { confirmation: "DELETE" }, headers: { authorization: `Bearer ${token(1_000)}` } }, res);
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.receipt.status, "completed");
+});
+
+test("Founding Free deletion skips RevenueCat when no billing customer exists", async () => {
+  let billingCalls = 0;
+  const client = {
+    rpc: async name => {
+      if (name === "verify_recent_account_deletion_session") return { data: true, error: null };
+      if (name === "inspect_account_deletion") {
+        return { data: { blockedHouseholds: [], billingCustomerExists: false }, error: null };
+      }
+      if (name === "prepare_account_deletion") return { data: { receiptId: "receipt-free" }, error: null };
+      if (name === "complete_account_deletion") return { data: { receiptId: "receipt-free", status: "completed" }, error: null };
+      throw new Error(`Unexpected RPC ${name}`);
+    },
+    from: table => {
+      assert.ok(["households", "plaid_items"].includes(table));
+      return { select: () => ({ eq: async () => ({ data: [], error: null }) }) };
+    },
+    auth: { admin: { deleteUser: async () => ({ error: null }) } },
+  };
+  const handler = createAccountDeletionHandler({
+    authenticatedUser: async () => ({ user: { id: "user-free" } }),
+    serviceSupabase: () => client,
+    nowSeconds: () => 1_100,
+    revenueCatSecretApiKey: null,
+    fetch: async () => { billingCalls += 1; return { ok: true, status: 200 }; },
+  });
+  const res = response();
+  await handler({ method: "POST", body: { confirmation: "DELETE" }, headers: { authorization: `Bearer ${token(1_000)}` } }, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(billingCalls, 0);
+});
+
+test("billing deletion fails closed when a customer exists but the secret is missing", async () => {
+  let dataCleanupStarted = false;
+  const client = {
+    rpc: async name => {
+      if (name === "verify_recent_account_deletion_session") return { data: true, error: null };
+      if (name === "inspect_account_deletion") {
+        return { data: { blockedHouseholds: [], billingCustomerExists: true }, error: null };
+      }
+      dataCleanupStarted = true;
+      throw new Error(`Unexpected RPC ${name}`);
+    },
+  };
+  const handler = createAccountDeletionHandler({
+    authenticatedUser: async () => ({ user: { id: "user-billing" } }),
+    serviceSupabase: () => client,
+    nowSeconds: () => 1_100,
+    revenueCatSecretApiKey: null,
+  });
+  const res = response();
+  await handler({ method: "POST", body: { confirmation: "DELETE" }, headers: { authorization: `Bearer ${token(1_000)}` } }, res);
+  assert.equal(res.statusCode, 502);
+  assert.equal(res.body.error, "BILLING_CUSTOMER_DELETION_FAILED");
+  assert.equal(dataCleanupStarted, false);
+});
+
+test("deletion fails closed when billing inspection omits its provider-history result", async () => {
+  let dataCleanupStarted = false;
+  let appleRevocationStarted = false;
+  const client = {
+    rpc: async name => {
+      if (name === "verify_recent_account_deletion_session") return { data: true, error: null };
+      if (name === "inspect_account_deletion") {
+        return { data: { blockedHouseholds: [] }, error: null };
+      }
+      dataCleanupStarted = true;
+      throw new Error(`Unexpected RPC ${name}`);
+    },
+  };
+  const handler = createAccountDeletionHandler({
+    authenticatedUser: async () => ({
+      user: {
+        id: "user-unknown-billing",
+        app_metadata: { providers: ["apple"] },
+      },
+    }),
+    serviceSupabase: () => client,
+    nowSeconds: () => 1_100,
+    revokeAppleAuthorization: async () => { appleRevocationStarted = true; },
+  });
+  const res = response();
+  await handler({ method: "POST", body: { confirmation: "DELETE" }, headers: { authorization: `Bearer ${token(1_000)}` } }, res);
+  assert.equal(res.statusCode, 500);
+  assert.equal(res.body.error, "ACCOUNT_DELETION_FAILED");
+  assert.equal(dataCleanupStarted, false);
+  assert.equal(appleRevocationStarted, false);
 });

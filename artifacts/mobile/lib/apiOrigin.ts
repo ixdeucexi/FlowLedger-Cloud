@@ -1,10 +1,18 @@
 export const FLOWLEDGER_PRODUCTION_ORIGIN = "https://flowledger-algo.com";
+export const DISABLED_API_ORIGIN = "https://configuration.invalid";
 
 export function cleanApiOrigin(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim().replace(/\/+$/, "");
   if (!/^https?:\/\//i.test(trimmed)) return null;
   return trimmed;
+}
+
+export function resolveNativeApiOrigin(
+  environmentValue: unknown,
+  manifestValue: unknown,
+): string | null {
+  return cleanApiOrigin(environmentValue) ?? cleanApiOrigin(manifestValue);
 }
 
 export function joinApiUrl(origin: string, path: string): string {

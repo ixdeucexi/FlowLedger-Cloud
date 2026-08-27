@@ -8,6 +8,7 @@ import {
   guardedMutationFetch,
   publishNetworkStatus,
   reachableNetworkState,
+  subscribeNetworkStatus,
 } from "./networkStatus";
 
 test("native connectivity fails closed when the device or internet is unavailable", () => {
@@ -17,6 +18,17 @@ test("native connectivity fails closed when the device or internet is unavailabl
   assert.equal(reachableNetworkState({ isConnected: true, isInternetReachable: null }), null);
   assert.equal(reachableNetworkState({ isConnected: null, isInternetReachable: true }), null);
   assert.equal(reachableNetworkState({ isConnected: null, isInternetReachable: null }), null);
+});
+
+test("native consumers are notified exactly when connectivity changes", () => {
+  const observed: Array<boolean | null> = [];
+  const unsubscribe = subscribeNetworkStatus(status => observed.push(status));
+  publishNetworkStatus(false);
+  publishNetworkStatus(false);
+  publishNetworkStatus(true);
+  unsubscribe();
+  publishNetworkStatus(null);
+  assert.deepEqual(observed, [false, true]);
 });
 
 test("writes fail closed while offline or native reachability is unknown", () => {

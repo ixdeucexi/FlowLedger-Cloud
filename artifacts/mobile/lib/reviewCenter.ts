@@ -392,17 +392,40 @@ export function matchedOccurrenceAllocations(
       if (allocation.type !== type || !allocation.targetId || !allocation.occurrenceDate) return;
       const key = occurrenceKey(allocation.targetId, allocation.occurrenceDate);
       const existing = matches.get(key);
+      const allocationAmount = Math.max(0, Number(allocation.amount) || 0);
+      const allocationPlanned = Math.max(
+        allocationAmount,
+        Number(allocation.plannedAmount ?? allocation.amount) || 0,
+      );
+      const allocationClosed = allocation.settlement === "exact" || allocation.settlement === "full";
       if (!existing) {
-        matches.set(key, { ...allocation });
+        matches.set(key, {
+          ...allocation,
+          amount: allocationAmount,
+          // Exact and user-confirmed full payments define the completed
+          // occurrence at the amount actually paid. The old planned value may
+          // include a snowball target that was never lender-required.
+          plannedAmount: allocationClosed ? allocationAmount : allocationPlanned,
+        });
         return;
       }
-      const amount = Number(existing.amount || 0) + Number(allocation.amount || 0);
-      const plannedAmount = Math.max(Number(existing.plannedAmount || 0), Number(allocation.plannedAmount || 0));
+      const amount = Math.round((Number(existing.amount || 0) + allocationAmount) * 100) / 100;
+      const historicalPlannedAmount = Math.max(
+        Number(existing.plannedAmount || 0),
+        allocationPlanned,
+      );
+      const existingClosed = existing.settlement === "exact" || existing.settlement === "full";
+      const explicitlyClosed = existingClosed || allocationClosed;
+      const closedSettlement = allocationClosed ? allocation.settlement : existing.settlement;
       matches.set(key, {
         ...allocation,
         amount,
-        plannedAmount,
-        settlement: plannedAmount > 0 && amount + 0.005 < plannedAmount ? "partial" : allocation.settlement,
+        plannedAmount: explicitlyClosed ? amount : historicalPlannedAmount,
+        settlement: explicitlyClosed
+          ? closedSettlement
+          : historicalPlannedAmount > 0 && amount + 0.005 < historicalPlannedAmount
+            ? "partial"
+            : allocation.settlement,
       });
     });
   });
@@ -462,20 +485,86 @@ export function scheduledSnowballReviewTargets(
 export type ReviewedBillMonthSettlement = {
   status: "partial" | "settled";
   actualAmount: number;
+  /** Lender-required amount captured when the occurrence was reviewed. */
+  requiredAmount: number;
+  /** Number of distinct reviewed occurrences represented by this month. */
+  occurrenceCount: number;
 };
+
+export type ReviewedBillOccurrenceSettlement = {
+  billId: string;
+  occurrenceDate: string;
+  status: "partial" | "settled";
+  actualAmount: number;
+  requiredAmount: number;
+};
+
+/**
+ * Preserves the decision made for each due date. Monthly totals alone cannot
+ * describe a weekly bill whose first occurrence closed at a lower confirmed
+ * amount while later occurrences still use the current lender minimum.
+ */
+export function reviewedBillOccurrenceSettlements(
+  transactions: ReviewTransactionLike[],
+): Map<string, ReviewedBillOccurrenceSettlement> {
+  const occurrences = new Map<string, {
+    billId: string;
+    occurrenceDate: string;
+    actualAmount: number;
+    plannedAmount: number;
+    explicitlyClosed: boolean;
+  }>();
+
+  transactions.forEach(transaction => {
+    if (transaction.review_status !== "matched") return;
+    (transaction.review_allocations ?? []).forEach(allocation => {
+      if (allocation.type !== "bill" || !allocation.targetId || !allocation.occurrenceDate) return;
+      const occurrenceDate = allocation.occurrenceDate.slice(0, 10);
+      const key = occurrenceKey(allocation.targetId, occurrenceDate);
+      const existing = occurrences.get(key);
+      occurrences.set(key, {
+        billId: allocation.targetId,
+        occurrenceDate,
+        actualAmount: Math.round(((existing?.actualAmount ?? 0) + Math.max(0, Number(allocation.amount) || 0)) * 100) / 100,
+        plannedAmount: Math.max(
+          existing?.plannedAmount ?? 0,
+          Math.max(0, Number(allocation.plannedAmount ?? allocation.amount) || 0),
+        ),
+        explicitlyClosed: Boolean(existing?.explicitlyClosed
+          || allocation.settlement === "exact"
+          || allocation.settlement === "full"),
+      });
+    });
+  });
+
+  return new Map(Array.from(occurrences, ([key, occurrence]) => {
+    const requiredAmount = occurrence.explicitlyClosed
+      ? occurrence.actualAmount
+      : Math.max(occurrence.actualAmount, occurrence.plannedAmount);
+    return [key, {
+      billId: occurrence.billId,
+      occurrenceDate: occurrence.occurrenceDate,
+      status: occurrence.explicitlyClosed || occurrence.actualAmount + 0.005 >= requiredAmount
+        ? "settled" as const
+        : "partial" as const,
+      actualAmount: occurrence.actualAmount,
+      requiredAmount: Math.round(requiredAmount * 100) / 100,
+    }];
+  }));
+}
 
 export function reviewedBillMonthSettlements(
   transactions: ReviewTransactionLike[],
 ): Map<string, ReviewedBillMonthSettlement> {
   const settlements = new Map<string, ReviewedBillMonthSettlement>();
-
-  matchedOccurrenceAllocations(transactions, "bill").forEach(allocation => {
-    if (!allocation.targetId || !allocation.occurrenceDate) return;
-    const key = `${allocation.targetId}:${allocation.occurrenceDate.slice(0, 7)}`;
+  reviewedBillOccurrenceSettlements(transactions).forEach(occurrence => {
+    const key = `${occurrence.billId}:${occurrence.occurrenceDate.slice(0, 7)}`;
     const existing = settlements.get(key);
     settlements.set(key, {
-      status: existing?.status === "partial" || allocation.settlement === "partial" ? "partial" : "settled",
-      actualAmount: Math.round(((existing?.actualAmount ?? 0) + Math.max(0, Number(allocation.amount) || 0)) * 100) / 100,
+      status: existing?.status === "partial" || occurrence.status === "partial" ? "partial" : "settled",
+      actualAmount: Math.round(((existing?.actualAmount ?? 0) + occurrence.actualAmount) * 100) / 100,
+      requiredAmount: Math.round(((existing?.requiredAmount ?? 0) + occurrence.requiredAmount) * 100) / 100,
+      occurrenceCount: (existing?.occurrenceCount ?? 0) + 1,
     });
   });
 

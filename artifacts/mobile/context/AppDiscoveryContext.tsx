@@ -73,6 +73,21 @@ function validRecentTimestamp(value: string | undefined, now: Date) {
   return now.getTime() - date.getTime() <= 90 * 86_400_000 ? date.toISOString() : null;
 }
 
+async function saveNotificationCenterStateWithRetry(householdId: string, state: NotificationCenterState) {
+  const delays = [0, 250, 1_000] as const;
+  let lastError: unknown = null;
+  for (const delay of delays) {
+    if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay));
+    const { error } = await supabase.rpc("save_notification_center_state", {
+      p_household_id: householdId,
+      p_state: state,
+    });
+    if (!error) return;
+    lastError = error;
+  }
+  throw lastError ?? new Error("Notification state could not be saved.");
+}
+
 export function AppDiscoveryProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, demoMode } = useAuth();
@@ -90,6 +105,7 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
     getMonthlyBills,
     getBillOccurrencesInMonth,
     getBillMonthlyTotal,
+    getDebtMonthSettlements,
     getPaidAmount,
     setDashboardFilter,
   } = useBudget();
@@ -177,12 +193,10 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
     void updateInterfacePreferences(userId, householdId, { notifications: next });
     if (!demoMode) {
       saveQueue.current = saveQueue.current.catch(() => undefined).then(async () => {
-        const { error } = await supabase.rpc("save_notification_center_state", {
-          p_household_id: householdId,
-          p_state: next,
-        });
-        if (error) throw error;
-      }).catch(() => undefined);
+        await saveNotificationCenterStateWithRetry(householdId, next);
+      }).catch(error => {
+        console.warn("Notification state will remain on this device until server sync recovers.", error);
+      });
     }
   }, [demoMode, householdId, userId]);
 
@@ -267,6 +281,7 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
     const today = now.getDate();
     const result: InAppNotification[] = [];
     const protectedOccurrences = pendingOccurrenceKeySet(pendingPlanMatches, pendingBankTransactions);
+    const debtSettlements = getDebtMonthSettlements(month, year);
 
     buildReviewQueue(transactions, localDateString()).forEach(transaction => {
       result.push({
@@ -284,12 +299,22 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
     getMonthlyBills(month, year).filter(isBillEligibleForDueNotification).forEach(bill => {
       const days = getBillOccurrencesInMonth(bill, month, year).sort((left, right) => left - right);
       if (!days.length) return;
-      const amount = getBillMonthlyTotal(bill, month, year) / days.length;
-      let paid = getPaidAmount(bill.id, month, year);
+      const debtSettlement = bill.is_debt ? debtSettlements.get(bill.id) : undefined;
+      const amount = (debtSettlement?.configuredObligation
+        ?? getBillMonthlyTotal(bill, month, year)) / days.length;
+      let paid = debtSettlement?.paidAmount ?? getPaidAmount(bill.id, month, year);
+      const exactByDay = new Map(debtSettlement?.occurrences?.map(occurrence => [
+        Number(occurrence.occurrenceDate.slice(8, 10)),
+        occurrence,
+      ]) ?? []);
       days.forEach(day => {
-        const settled = Math.min(amount, Math.max(0, paid));
-        paid = Math.max(0, paid - settled);
-        const remaining = Math.max(0, amount - settled);
+        const exact = exactByDay.get(day);
+        const required = exact?.configuredObligation ?? amount;
+        const settled = exact
+          ? Math.min(required, exact.paidAmount)
+          : Math.min(required, Math.max(0, paid));
+        if (!exact) paid = Math.max(0, paid - settled);
+        const remaining = Math.max(0, required - settled);
         const occurrenceDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
         if (remaining <= 0.005 || protectedOccurrences.has(`${bill.id}:${occurrenceDate}`)) return;
         const daysAway = day - today;
@@ -315,7 +340,7 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
     });
 
     return result.filter(item => !Number.isNaN(new Date(item.timestamp).getTime()));
-  }, [bills, getBillOccurrencesInMonth, getBillMonthlyTotal, getDailyBalances, getMonthlyBills, getPaidAmount, goals, pendingBankTransactions, pendingPlanMatches, settings.safety_floor, transactions]);
+  }, [bills, getBillOccurrencesInMonth, getBillMonthlyTotal, getDailyBalances, getDebtMonthSettlements, getMonthlyBills, getPaidAmount, goals, pendingBankTransactions, pendingPlanMatches, settings.safety_floor, transactions]);
 
   const notifications = useMemo(
     () => visibleNotifications(generatedNotifications, notificationState),

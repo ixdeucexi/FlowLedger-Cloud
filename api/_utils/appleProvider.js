@@ -41,6 +41,14 @@ async function appleTokenRequest(parameters, dependencies = {}) {
   if (!response.ok) throw new Error(String(body.error || "APPLE_TOKEN_REQUEST_FAILED"));
   return body;
 }
+async function revokeAppleRefreshToken(refreshToken, dependencies = {}) {
+  const request = dependencies.fetch || fetch;
+  const response = await request("https://appleid.apple.com/auth/revoke", {
+    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ client_id: required("APPLE_CLIENT_ID"), client_secret: clientSecret(), token: String(refreshToken), token_type_hint: "refresh_token" }),
+  });
+  if (!response.ok && response.status !== 404) throw new Error("APPLE_REVOCATION_FAILED");
+}
 function appleSubjectForUser(user) {
   const identity = (user?.identities || []).find(candidate => candidate?.provider === "apple");
   return String(identity?.identity_data?.sub || identity?.id || "").trim() || null;
@@ -79,18 +87,29 @@ async function storeAppleAuthorization(req, res, dependencies = {}) {
   if (!auth.user) return res.status(401).json({ error: auth.error || "AUTH_REQUIRED" });
   const code = String(req.body?.authorizationCode || "").trim();
   if (!code || code.length > 2048) return res.status(400).json({ error: "APPLE_AUTHORIZATION_CODE_REQUIRED" });
+  let exchangedRefreshToken = null;
   try {
-    const tokens = await appleTokenRequest({ grant_type: "authorization_code", code }, dependencies);
-    if (!tokens.refresh_token || !tokens.id_token || !await verifyAppleIdToken(tokens.id_token, auth.user, dependencies)) {
+    const exchange = dependencies.appleTokenRequest || appleTokenRequest;
+    const tokens = await exchange({ grant_type: "authorization_code", code }, dependencies);
+    exchangedRefreshToken = tokens.refresh_token ? String(tokens.refresh_token) : null;
+    const verify = dependencies.verifyAppleIdToken || verifyAppleIdToken;
+    if (!exchangedRefreshToken || !tokens.id_token || !await verify(tokens.id_token, auth.user, dependencies)) {
       throw new Error("APPLE_TOKEN_IDENTITY_MISMATCH");
     }
     const db = (dependencies.serviceSupabase || serviceSupabase)();
+    const sealToken = dependencies.seal || seal;
     const { error } = await db.schema("private").from("apple_provider_tokens").upsert({
-      user_id: auth.user.id, refresh_token_ciphertext: seal(String(tokens.refresh_token)), revoked_at: null, updated_at: new Date().toISOString(),
+      user_id: auth.user.id, refresh_token_ciphertext: sealToken(exchangedRefreshToken), revoked_at: null, updated_at: new Date().toISOString(),
     }, { onConflict: "user_id" });
     if (error) throw error;
     return res.status(200).json({ ok: true });
   } catch (error) {
+    if (exchangedRefreshToken) {
+      const revoke = dependencies.revokeAppleRefreshToken || revokeAppleRefreshToken;
+      await revoke(exchangedRefreshToken, dependencies).catch(revocationError => {
+        console.error("Apple authorization cleanup failed", revocationError?.message || "unknown");
+      });
+    }
     console.error("Apple authorization retention failed", error?.message || "unknown");
     return res.status(502).json({ error: "APPLE_AUTHORIZATION_RETENTION_FAILED", message: "Apple sign-in could not be completed securely. Try again." });
   }
@@ -111,4 +130,4 @@ async function revokeAppleAuthorization(db, userId, dependencies = {}) {
   if (updateError) throw updateError;
 }
 
-module.exports = { appleSubjectForUser, appleTokenRequest, revokeAppleAuthorization, storeAppleAuthorization, validateAppleClaims, verifyAppleIdToken };
+module.exports = { appleSubjectForUser, appleTokenRequest, revokeAppleAuthorization, revokeAppleRefreshToken, storeAppleAuthorization, validateAppleClaims, verifyAppleIdToken };

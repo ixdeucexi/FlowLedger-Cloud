@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const { appleSubjectForUser, revokeAppleAuthorization, validateAppleClaims } = require("./appleProvider");
+const { appleSubjectForUser, revokeAppleAuthorization, storeAppleAuthorization, validateAppleClaims } = require("./appleProvider");
 
 test("Apple authorization is exchanged immediately and revoked before Auth deletion", () => {
   const apple = fs.readFileSync(path.join(__dirname, "appleProvider.js"), "utf8");
@@ -35,5 +35,66 @@ test("a completed Apple revocation is durable and retry-safe", async () => {
 
 test("fresh Apple reauthentication clears a prior revocation marker", () => {
   const source = fs.readFileSync(path.join(__dirname, "appleProvider.js"), "utf8");
-  assert.match(source, /refresh_token_ciphertext: seal\(String\(tokens\.refresh_token\)\), revoked_at: null/);
+  assert.match(source, /refresh_token_ciphertext: sealToken\(exchangedRefreshToken\), revoked_at: null/);
+});
+
+function responseRecorder() {
+  const result = { statusCode: null, body: null };
+  return {
+    result,
+    response: {
+      status(code) { result.statusCode = code; return this; },
+      json(body) { result.body = body; return body; },
+    },
+  };
+}
+
+test("a refresh token is revoked when encryption fails after exchange", async () => {
+  let revoked = null;
+  const { result, response } = responseRecorder();
+  await storeAppleAuthorization(
+    { method: "POST", body: { authorizationCode: "one-time-code" } },
+    response,
+    {
+      authenticatedUser: async () => ({ user: { id: "user-a" } }),
+      appleTokenRequest: async () => ({ refresh_token: "refresh-a", id_token: "id-a" }),
+      verifyAppleIdToken: async () => true,
+      serviceSupabase: () => ({
+        schema: () => ({
+          from: () => ({
+            upsert: async () => { throw new Error("DB_MUST_NOT_RUN"); },
+          }),
+        }),
+      }),
+      seal: () => { throw new Error("APPLE_TOKEN_ENCRYPTION_KEY_INVALID"); },
+      revokeAppleRefreshToken: async token => { revoked = token; },
+    },
+  );
+  assert.equal(result.statusCode, 502);
+  assert.equal(revoked, "refresh-a");
+});
+
+test("a refresh token is revoked when its database upsert fails", async () => {
+  let revoked = null;
+  const { result, response } = responseRecorder();
+  await storeAppleAuthorization(
+    { method: "POST", body: { authorizationCode: "one-time-code" } },
+    response,
+    {
+      authenticatedUser: async () => ({ user: { id: "user-a" } }),
+      appleTokenRequest: async () => ({ refresh_token: "refresh-b", id_token: "id-b" }),
+      verifyAppleIdToken: async () => true,
+      seal: token => `sealed:${token}`,
+      serviceSupabase: () => ({
+        schema: () => ({
+          from: () => ({
+            upsert: async () => ({ error: new Error("DB_WRITE_FAILED") }),
+          }),
+        }),
+      }),
+      revokeAppleRefreshToken: async token => { revoked = token; },
+    },
+  );
+  assert.equal(result.statusCode, 502);
+  assert.equal(revoked, "refresh-b");
 });

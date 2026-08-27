@@ -38,7 +38,6 @@ import { FloLogo } from "@/components/FloLogo";
 import { FeedbackManageModal } from "@/components/FeedbackManageModal";
 import { IncomeModal } from "@/components/IncomeModal";
 import { HouseholdMemberActionsModal } from "@/components/HouseholdMemberActionsModal";
-import { LegalDocumentModal } from "@/components/LegalDocumentModal";
 import { MembershipPanel } from "@/components/MembershipPanel";
 import { FOUNDING_FREE_LAUNCH, FOUNDING_FREE_NAME, hasAdminProAccess } from "@/lib/launchMode";
 import { isStoreCaptureMode } from "@/lib/demoMode";
@@ -113,6 +112,10 @@ import {
 } from "@/lib/settingsHub";
 import { supabase } from "@/lib/supabase";
 import { assertFinancialMutationOnline } from "@/lib/networkStatus";
+import {
+  createSubscriptionBillAtomically,
+  fundGoalAtomically,
+} from "@/lib/atomicFinancialMutations";
 import {
   applyMatchMemory,
   matchedOccurrenceAllocations,
@@ -247,7 +250,7 @@ function normalizeStorageMap<T extends string>(
 }
 
 function subscriptionKey(subscription: SubscriptionCandidate) {
-  return subscription.merchant.toLowerCase().trim();
+  return normalizeMerchant(subscription.merchant);
 }
 
 function newestTransactionDate(
@@ -261,24 +264,25 @@ function newestTransactionDate(
     .at(-1);
 }
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function isUuid(value: string | null | undefined): value is string {
-  return typeof value === "string" && UUID_RE.test(value);
-}
-
 function stableUuidFromString(seed: string) {
-  let hash = 2166136261;
+  let h1 = 1779033703;
+  let h2 = 3144134277;
+  let h3 = 1013904242;
+  let h4 = 2773480762;
   for (let i = 0; i < seed.length; i += 1) {
-    hash ^= seed.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
+    const code = seed.charCodeAt(i);
+    h1 = h2 ^ Math.imul(h1 ^ code, 597399067);
+    h2 = h3 ^ Math.imul(h2 ^ code, 2869860233);
+    h3 = h4 ^ Math.imul(h3 ^ code, 951274213);
+    h4 = h1 ^ Math.imul(h4 ^ code, 2716044179);
   }
-  const chunks = Array.from({ length: 4 }, (_, index) => {
-    hash ^= index + seed.length;
-    hash = Math.imul(hash, 16777619);
-    return (hash >>> 0).toString(16).padStart(8, "0");
-  }).join("");
+  h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067);
+  h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233);
+  h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);
+  h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
+  const chunks = [h1 ^ h2 ^ h3 ^ h4, h2 ^ h1, h3 ^ h1, h4 ^ h1]
+    .map((value) => (value >>> 0).toString(16).padStart(8, "0"))
+    .join("");
   return `${chunks.slice(0, 8)}-${chunks.slice(8, 12)}-4${chunks.slice(13, 16)}-a${chunks.slice(17, 20)}-${chunks.slice(20, 32)}`;
 }
 
@@ -447,9 +451,6 @@ export default function MoreScreen({
     updateSettings,
     accounts,
     forecastConfidence,
-    addBill,
-    addTransaction,
-    updateGoal,
     addIncome,
     updateIncome,
     deleteIncome,
@@ -481,6 +482,7 @@ export default function MoreScreen({
     getBillOccurrencesInMonth,
     getBillMonthlyTotal,
     reconcileTransaction,
+    retryBudgetLoad,
   } = useBudget();
   const { readiness: setupReadiness } = useSetupReadiness();
 
@@ -505,8 +507,6 @@ export default function MoreScreen({
   const [onboardingPreferences, setOnboardingPreferences] = useState(() =>
     readOnboardingPreferences(),
   );
-  const [legalDoc, setLegalDoc] = useState<"terms" | "privacy" | null>(null);
-  useBackDismiss(Boolean(legalDoc), () => setLegalDoc(null));
   const [activeSettingsSection, setActiveSettingsSection] =
     useState<SettingsSectionId>(() => initialSection ?? "overview");
   const requestedReviewTransactionId = Array.isArray(
@@ -586,6 +586,9 @@ export default function MoreScreen({
     Record<string, SubscriptionDecision>
   >({});
   const [subscriptionMatchBusy, setSubscriptionMatchBusy] = useState<string | null>(null);
+  const [goalContributionBusy, setGoalContributionBusy] = useState<string | null>(null);
+  const subscriptionCreateInFlightRef = useRef(false);
+  const goalContributionInFlightRef = useRef(false);
   const [subscriptionBillLinks, setSubscriptionBillLinks] = useState<Record<string, string>>({});
   const [subscriptionLinkCandidate, setSubscriptionLinkCandidate] = useState<SubscriptionCandidate | null>(null);
   const [backupExported, setBackupExported] = useState(() => {
@@ -750,7 +753,7 @@ export default function MoreScreen({
         Record<string, SubscriptionDecision>
       >((acc, row) => {
         const decision = subscriptionStatusToDecision(row.status);
-        if (decision) acc[row.merchant.toLowerCase().trim()] = decision;
+        if (decision) acc[normalizeMerchant(row.merchant)] = decision;
         return acc;
       }, {});
       setSubscriptionDecisions(mapped);
@@ -1594,7 +1597,7 @@ export default function MoreScreen({
         yearly_equivalent: subscription.yearlyEquivalent,
         confidence: subscription.confidence,
         status: subscriptionDecisionToStatus(decision),
-        source_transaction_ids: subscription.transactionIds.filter(isUuid),
+        source_transaction_ids: subscription.transactionIds,
         last_reviewed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
@@ -1606,12 +1609,22 @@ export default function MoreScreen({
   const handleCreateBillFromSubscription = async (
     subscription: SubscriptionCandidate,
   ) => {
-    const amount = Math.max(
+    const householdId = activeHousehold?.householdId;
+    const key = subscriptionKey(subscription);
+    if (!user?.id || !householdId || !canEditHousehold || subscriptionMatchBusy) {
+      return;
+    }
+    const rawAmount = Math.max(
       0,
       subscription.cadence === "annual"
         ? subscription.yearlyEquivalent / 12
         : subscription.averageAmount || subscription.lastAmount,
     );
+    const amount = Math.round((rawAmount + Number.EPSILON) * 100) / 100;
+    if (!Number.isFinite(amount) || amount <= 0) {
+      Alert.alert("Check subscription", "A finite positive bill amount is required.");
+      return;
+    }
     const latestDate =
       newestTransactionDate(subscription.transactionIds, growthTransactions) ??
       todayIso;
@@ -1624,23 +1637,45 @@ export default function MoreScreen({
       message: `I’ll add ${subscription.merchant} as a recurring bill for about $${amount.toFixed(2)} due around the ${dueDay}.`,
       confirmText: "Create bill",
       onConfirm: async () => {
+        if (subscriptionCreateInFlightRef.current) return;
+        subscriptionCreateInFlightRef.current = true;
+        const candidateId = stableUuidFromString(
+          `subscription:${householdId}:${key}`,
+        );
+        const billId = stableUuidFromString(
+          `subscription-bill:${candidateId}`,
+        );
+        setSubscriptionMatchBusy(key);
         try {
-          await addBill({
-            name: subscription.merchant.replace(/\b\w/g, (letter) =>
+          assertFinancialMutationOnline();
+          await createSubscriptionBillAtomically({
+            candidateId,
+            billId,
+            householdId,
+            merchant: subscription.merchant.replace(/\b\w/g, (letter) =>
               letter.toUpperCase(),
             ),
+            cadence: subscription.cadence,
+            averageAmount: subscription.averageAmount,
+            monthlyEquivalent: subscription.monthlyEquivalent,
+            yearlyEquivalent: subscription.yearlyEquivalent,
+            confidence: subscription.confidence,
+            sourceTransactionIds: subscription.transactionIds,
             amount,
-            category: "Subscriptions",
-            priority: bills.length + 1,
-            is_debt: false,
-            balance: 0,
-            interest_rate: 0,
-            due_day: dueDay,
-            start_date: latestDate,
-            is_recurring: true,
-            frequency: subscription.cadence === "weekly" ? "weekly" : "monthly",
+            startDate: latestDate,
+            dueDay,
+            frequency:
+              subscription.cadence === "weekly" ? "weekly" : "monthly",
           });
-          await markSubscriptionDecision(subscription, "bill_created");
+          await saveSubscriptionDecisions({
+            ...subscriptionDecisions,
+            [key]: "bill_created",
+          });
+          setSubscriptionBillLinks((current) => ({
+            ...current,
+            [key]: billId,
+          }));
+          await retryBudgetLoad();
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (error) {
           Alert.alert(
@@ -1648,6 +1683,9 @@ export default function MoreScreen({
             error instanceof Error ? error.message : "Try again.",
           );
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        } finally {
+          subscriptionCreateInFlightRef.current = false;
+          setSubscriptionMatchBusy(null);
         }
       },
     });
@@ -1743,15 +1781,19 @@ export default function MoreScreen({
   const handleAddSafeGoalContribution = (goalId: string) => {
     const plan = goalFundingPlans.find((item) => item.goalId === goalId);
     const goal = goals.find((item) => item.id === goalId);
-    if (!plan || !goal) return;
-    const contribution = Math.max(
-      0,
-      Math.min(
-        plan.safeMonthlyContribution,
-        goal.target_amount - goal.current_amount,
-      ),
-    );
-    if (contribution <= 0) {
+    if (!plan || !goal || goalContributionBusy) return;
+    const contribution = Math.floor(
+      (
+        Math.max(
+          0,
+          Math.min(
+            plan.safeMonthlyContribution,
+            goal.target_amount - goal.current_amount,
+          ),
+        ) + Number.EPSILON
+      ) * 100,
+    ) / 100;
+    if (!Number.isFinite(contribution) || contribution <= 0) {
       Alert.alert(
         "Goal funding",
         "I don’t see a safe contribution for this goal yet.",
@@ -1763,21 +1805,34 @@ export default function MoreScreen({
       message: `I’ll add $${contribution.toFixed(2)} toward ${goal.name} today and keep it inside the current safe funding plan.`,
       confirmText: "Add contribution",
       onConfirm: async () => {
+        const householdId = activeHousehold?.householdId;
+        if (!householdId) return;
+        if (goalContributionInFlightRef.current) return;
+        goalContributionInFlightRef.current = true;
+        const accountId = activeAccounts[0]?.id ?? null;
+        const transactionId = stableUuidFromString(
+          [
+            "goal-funding",
+            householdId,
+            goal.id,
+            todayIso,
+            goal.current_amount.toFixed(2),
+            contribution.toFixed(2),
+            accountId ?? "unassigned",
+          ].join(":"),
+        );
+        setGoalContributionBusy(goal.id);
         try {
-          await addTransaction({
+          assertFinancialMutationOnline();
+          await fundGoalAtomically({
+            goalId: goal.id,
+            transactionId,
+            amount: contribution,
             date: todayIso,
-            amount: -contribution,
-            category: "Savings",
-            note: `Goal funding: ${goal.name}`,
-            account_id: activeAccounts[0]?.id,
+            expectedCurrentAmount: goal.current_amount,
+            accountId,
           });
-          await updateGoal({
-            ...goal,
-            current_amount: Math.min(
-              goal.target_amount,
-              goal.current_amount + contribution,
-            ),
-          });
+          await retryBudgetLoad();
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (error) {
           Alert.alert(
@@ -1785,6 +1840,9 @@ export default function MoreScreen({
             error instanceof Error ? error.message : "Try again.",
           );
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        } finally {
+          goalContributionInFlightRef.current = false;
+          setGoalContributionBusy(null);
         }
       },
     });
@@ -2466,6 +2524,8 @@ export default function MoreScreen({
               </View>
             </View>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Review setup walkthrough"
               onPress={() => {
                 router.push("/setup" as any);
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -2485,6 +2545,8 @@ export default function MoreScreen({
               </Text>
             </Pressable>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Replay Guided Tour"
               onPress={() => {
                 startLearningTour();
                 router.push("/(tabs)" as any);
@@ -3844,7 +3906,8 @@ export default function MoreScreen({
                     style={[styles.methodDesc, { color: c.mutedForeground }]}
                   >
                     Snowball pays the smallest balances first. Freed-up minimums
-                    roll into the next debt (cascade effect).
+                    roll into the next debt as extra payoff money without changing
+                    its lender-required minimum.
                   </Text>
                   <View
                     style={[
@@ -4207,28 +4270,34 @@ export default function MoreScreen({
                             Keep
                           </Text>
                         </Pressable>
-                        <Pressable
-                          onPress={() =>
-                            void handleCreateBillFromSubscription(subscription)
-                          }
-                          style={({ pressed }) => [
-                            styles.growthPillButton,
-                            {
-                              backgroundColor: c.primary + "18",
-                              borderColor: c.primary + "44",
-                              opacity: pressed ? 0.72 : 1,
-                            },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.growthPillButtonText,
-                              { color: c.primary },
+                        {!linkedBillId ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`Create recurring bill for ${subscription.merchant}`}
+                            accessibilityState={{ disabled: matching, busy: matching }}
+                            disabled={matching}
+                            onPress={() =>
+                              void handleCreateBillFromSubscription(subscription)
+                            }
+                            style={({ pressed }) => [
+                              styles.growthPillButton,
+                              {
+                                backgroundColor: c.primary + "18",
+                                borderColor: c.primary + "44",
+                                opacity: matching ? 0.5 : pressed ? 0.72 : 1,
+                              },
                             ]}
                           >
-                            Create bill
-                          </Text>
-                        </Pressable>
+                            <Text
+                              style={[
+                                styles.growthPillButtonText,
+                                { color: c.primary },
+                              ]}
+                            >
+                              {matching ? "Creating…" : "Create bill"}
+                            </Text>
+                          </Pressable>
+                        ) : null}
                         <Pressable
                           onPress={() =>
                             handleMarkSubscription(
@@ -4493,6 +4562,13 @@ export default function MoreScreen({
                       </Text>
                       {plan.safeMonthlyContribution > 0 ? (
                         <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Add safe contribution to ${goal?.name ?? "goal"}`}
+                          accessibilityState={{
+                            disabled: Boolean(goalContributionBusy),
+                            busy: goalContributionBusy === plan.goalId,
+                          }}
+                          disabled={Boolean(goalContributionBusy)}
                           onPress={() =>
                             handleAddSafeGoalContribution(plan.goalId)
                           }
@@ -4501,7 +4577,11 @@ export default function MoreScreen({
                             {
                               backgroundColor: c.primary + "18",
                               borderColor: c.primary + "44",
-                              opacity: pressed ? 0.72 : 1,
+                              opacity: goalContributionBusy
+                                ? 0.5
+                                : pressed
+                                  ? 0.72
+                                  : 1,
                             },
                           ]}
                         >
@@ -4516,7 +4596,9 @@ export default function MoreScreen({
                               { color: c.primary },
                             ]}
                           >
-                            Add safe contribution
+                            {goalContributionBusy === plan.goalId
+                              ? "Adding…"
+                              : "Add safe contribution"}
                           </Text>
                         </Pressable>
                       ) : null}
@@ -4725,7 +4807,7 @@ export default function MoreScreen({
                 <Pressable
                   accessibilityRole="link"
                   accessibilityLabel="Open FlowLedger User Guide"
-                  accessibilityHint="Opens the illustrated user guide as a PDF"
+                  accessibilityHint="Opens the illustrated in-app user guide"
                   onPress={openUserGuide}
                   style={({ pressed }) => [
                     styles.card,
@@ -4752,7 +4834,7 @@ export default function MoreScreen({
                     <Text
                       style={[styles.dataDesc, { color: c.mutedForeground }]}
                     >
-                      Everyday steps with pictures for Dashboard, Activity,
+                      Step-by-step cards for Dashboard, Activity,
                       Forecast, debt planning, savings, and Flo.
                     </Text>
                   </View>
@@ -5457,76 +5539,6 @@ export default function MoreScreen({
           </>
         )}
 
-        {activeSettingsSection === "legal" && (
-          <>
-            <View
-              style={[
-                styles.card,
-                { backgroundColor: c.card, borderRadius: colors.radius },
-              ]}
-            >
-              {[
-                {
-                  id: "terms" as const,
-                  title: "Terms of Service",
-                  desc: "Financial disclaimers, user responsibilities, liability limits, and dispute terms.",
-                  icon: "file-text",
-                },
-                {
-                  id: "privacy" as const,
-                  title: "Privacy Policy",
-                  desc: "Financial data, Plaid, Flo, household sharing, retention, and your choices.",
-                  icon: "shield",
-                },
-              ].map((item, index) => (
-                <Pressable
-                  key={item.id}
-                  onPress={() => {
-                    setLegalDoc(item.id);
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  }}
-                  style={({ pressed }) => [
-                    styles.dataRow,
-                    {
-                      borderTopWidth: index ? 1 : 0,
-                      borderTopColor: c.border,
-                      opacity: pressed ? 0.75 : 1,
-                    },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.dataIcon,
-                      { backgroundColor: c.primary + "18" },
-                    ]}
-                  >
-                    <Feather
-                      name={item.icon as any}
-                      size={17}
-                      color={c.primary}
-                    />
-                  </View>
-                  <View style={styles.dataBody}>
-                    <Text style={[styles.dataLabel, { color: c.foreground }]}>
-                      {item.title}
-                    </Text>
-                    <Text
-                      style={[styles.dataDesc, { color: c.mutedForeground }]}
-                    >
-                      {item.desc}
-                    </Text>
-                  </View>
-                  <Feather
-                    name="chevron-right"
-                    size={16}
-                    color={c.mutedForeground}
-                  />
-                </Pressable>
-              ))}
-            </View>
-          </>
-        )}
-
         {activeSettingsSection === "security" && (
           <>
             <View style={{ marginTop: 8, marginBottom: 8 }}>
@@ -5792,11 +5804,6 @@ export default function MoreScreen({
             </Pressable>
           </Pressable>
         </Modal>
-
-        <LegalDocumentModal
-          documentId={legalDoc}
-          onClose={() => setLegalDoc(null)}
-        />
 
         <PayRaiseCelebrationModal
           visible={payRaiseNoticeVisible && Boolean(latestRaise)}

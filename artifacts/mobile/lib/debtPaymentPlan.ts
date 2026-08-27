@@ -4,6 +4,16 @@ export type DebtPaymentPlanSummary = {
   totalPlanned: number;
 };
 
+export type DebtPaymentProgress = {
+  requiredAmount: number;
+  plannedAmount: number;
+  paidAmount: number;
+  requiredRemaining: number;
+  optionalExtraRemaining: number;
+  isPaid: boolean;
+  isPartial: boolean;
+};
+
 export type RetainedDebtPaymentBreakdown = {
   alreadyPaid: number;
   minimumRequired: number;
@@ -41,6 +51,11 @@ export type RequiredDebtPaymentLike = {
   snowball_minimum_boost?: number | null;
 };
 
+export type SnowballRolloverPaymentLike = {
+  snowball_minimum_boost?: number | null;
+  include_in_snowball?: boolean | null;
+};
+
 function money(value: number) {
   return Math.round(Math.max(0, Number(value) || 0) * 100) / 100;
 }
@@ -54,6 +69,29 @@ export function buildDebtPaymentPlanSummary(requiredMinimum: number, extraPaymen
     extraPayment: extra,
     requiredMinimum: minimum,
     totalPlanned: money(minimum + extra),
+  };
+}
+
+/** Status follows the lender minimum while optional payoff money stays visible. */
+export function debtPaymentProgress(
+  requiredAmount: number,
+  plannedAmount: number,
+  paidAmount: number,
+): DebtPaymentProgress {
+  const required = money(requiredAmount);
+  const planned = money(plannedAmount);
+  const paid = money(paidAmount);
+  const requiredRemaining = money(required - paid);
+  const optionalExtraRemaining = money(planned - Math.max(required, paid));
+  const isPaid = required > 0.005 && requiredRemaining <= 0.005;
+  return {
+    requiredAmount: required,
+    plannedAmount: planned,
+    paidAmount: paid,
+    requiredRemaining,
+    optionalExtraRemaining,
+    isPaid,
+    isPartial: paid > 0.005 && !isPaid,
   };
 }
 
@@ -135,6 +173,17 @@ export function requiredDebtPlanTotal(
 ): number {
   const requiredPerOccurrence = Math.max(0, Number(debt.amount) || 0);
   return money(requiredPerOccurrence * Math.max(0, occurrenceCount));
+}
+
+/** Existing freed minimums form one monthly extra pool, never one per occurrence. */
+export function snowballRolloverPlanTotal(
+  debts: readonly SnowballRolloverPaymentLike[],
+): number {
+  return money(debts.reduce((total, debt) => (
+    debt.include_in_snowball === false
+      ? total
+      : total + Math.max(0, Number(debt.snowball_minimum_boost) || 0)
+  ), 0));
 }
 
 export function upsertSnowballPlanById<T extends { id: string }>(plans: T[], nextPlan: T): T[] {

@@ -23,7 +23,7 @@ import {
 import type { Bill } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { orderActiveDebtsForStrategy } from "@/lib/debtOrder";
-import { effectiveDebtMinimum } from "@/lib/snowball";
+import { requiredDebtPlanTotal } from "@/lib/debtPaymentPlan";
 import type { BillEditableBaseline, BillEditableField } from "@/lib/billEditPersistence";
 
 const MONTHS = [
@@ -823,6 +823,15 @@ function DebtsDesktop({
   const forecastPaymentByDebtId = new Map(
     datedPlan?.payments.map(payment => [payment.billId, payment.totalPayment]) ?? [],
   );
+  const forecastExtraByDebtId = new Map<string, number>();
+  datedPlan?.allocations
+    .filter(allocation => allocation.kind !== "required")
+    .forEach(allocation => {
+      forecastExtraByDebtId.set(
+        allocation.targetBillId,
+        (forecastExtraByDebtId.get(allocation.targetBillId) ?? 0) + allocation.amount,
+      );
+    });
   const categories = Array.from(
     new Set(active.map((bill) => bill.category)),
   ).map((category, index) => ({
@@ -854,7 +863,7 @@ function DebtsDesktop({
     : 0;
   return (
     <DesktopPage style={styles.pageReset}>
-      <View nativeID="guided-tour-bills">
+      <View>
         <PageHeader
           title="Debts"
           description={`${active.length} debt${active.length === 1 ? "" : "s"} · $${total.toLocaleString(undefined, { maximumFractionDigits: 0 })} total`}
@@ -863,7 +872,7 @@ function DebtsDesktop({
         <DataFreshnessLabel compact />
       </View>
       <View style={styles.debtOverviewRow}>
-        <DesktopCard style={styles.debtOverviewCard}>
+        <DesktopCard nativeID="guided-tour-bills" style={styles.debtOverviewCard}>
           <CardHeader
             title="Debt Payoff Progress"
             action={
@@ -972,6 +981,10 @@ function DebtsDesktop({
           filtered.map((bill) => {
             const next = nextOccurrenceFor(bill, getOccurrences, now);
             const position = rank.get(bill.id);
+            const occurrenceCount = getOccurrences(bill, now.getMonth(), now.getFullYear()).length;
+            const requiredMinimum = requiredDebtPlanTotal(bill, occurrenceCount);
+            const forecastPayment = forecastPaymentByDebtId.get(bill.id) ?? requiredMinimum;
+            const forecastExtra = forecastExtraByDebtId.get(bill.id) ?? 0;
             return (
               <Pressable
                 key={bill.id}
@@ -1013,10 +1026,13 @@ function DebtsDesktop({
                 <Text style={[table.cellText, styles.debtColApr]}>
                   {bill.interest_rate.toFixed(2)}%
                 </Text>
-                <Text style={[table.cellStrong, styles.debtColMinimum]}>
-                  {money(forecastPaymentByDebtId.get(bill.id)
-                    ?? effectiveDebtMinimum(bill.amount, bill.snowball_minimum_boost ?? 0))}
-                </Text>
+                <View style={styles.debtColMinimum}>
+                  <Text style={table.cellStrong}>{money(forecastPayment)}</Text>
+                  <Text style={styles.rowMuted}>{money(requiredMinimum)} required</Text>
+                  {forecastExtra > 0.005 ? (
+                    <Text style={styles.debtExtraText}>{money(forecastExtra)} snowball extra</Text>
+                  ) : null}
+                </View>
                 <Text style={[table.cellText, styles.debtColDue]}>
                   {next ? displayDate(next.year, next.month, next.day) : "—"}
                 </Text>
@@ -1271,6 +1287,7 @@ const styles = StyleSheet.create({
   debtColBalance: { flex: 1.05, minWidth: 90 },
   debtColApr: { flex: 0.8, minWidth: 66 },
   debtColMinimum: { flex: 0.95, minWidth: 80 },
+  debtExtraText: { color: palette.green, fontSize: 11, marginTop: 2 },
   debtColDue: { flex: 0.95, minWidth: 82 },
   debtColStatus: { flex: 0.9, minWidth: 76 },
   debtNameCell: { flexDirection: "row", alignItems: "center", gap: 9 },

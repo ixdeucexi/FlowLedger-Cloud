@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/context/AuthContext";
 import { useBudget } from "@/context/BudgetContext";
@@ -30,12 +30,6 @@ interface MembershipContextValue {
   resetPreview: () => Promise<void>;
 }
 
-const FALLBACK_PLAN: HouseholdPlan = {
-  householdId: "local",
-  tier: "free",
-  source: "default",
-};
-
 const MembershipContext = createContext<MembershipContextValue | undefined>(undefined);
 
 function previewStorageKey(userId: string, householdId: string) {
@@ -45,15 +39,41 @@ function previewStorageKey(userId: string, householdId: string) {
 export function MembershipProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const { activeHousehold, demoMode } = useBudget();
-  const [actualPlan, setActualPlan] = useState<HouseholdPlan>(FALLBACK_PLAN);
+  const householdId = activeHousehold?.householdId ?? "local";
+  const planScopeKey = `${user?.id ?? "anonymous"}:${householdId}`;
+  const [planState, setPlanState] = useState<{
+    scopeKey: string;
+    plan: HouseholdPlan;
+  }>({ scopeKey: planScopeKey, plan: mapHouseholdPlan(null, householdId) });
   const [previewTier, setPreviewTierState] = useState<PlanTier | null>(null);
   const [bypassedFeatures, setBypassedFeatures] = useState<PlanFeature[]>([]);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminState, setAdminState] = useState<{ userId: string | null; value: boolean }>({
+    userId: user?.id ?? null,
+    value: false,
+  });
   const [loading, setLoading] = useState(true);
   const planRequestRef = useRef(0);
+  const adminRequestRef = useRef(0);
 
-  const householdId = activeHousehold?.householdId ?? "local";
   const storageKey = user?.id ? previewStorageKey(user.id, householdId) : null;
+  // Never expose a prior user's admin state during an authenticated A→B
+  // transition or while B's authoritative lookup is retrying/failing.
+  const isAdmin = adminState.userId === (user?.id ?? null) && adminState.value;
+  const actualPlan = planState.scopeKey === planScopeKey
+    ? planState.plan
+    : mapHouseholdPlan(null, householdId);
+
+  useLayoutEffect(() => {
+    adminRequestRef.current += 1;
+    setAdminState({ userId: user?.id ?? null, value: false });
+  }, [user?.id]);
+
+  useLayoutEffect(() => {
+    planRequestRef.current += 1;
+    setLoading(true);
+    setPreviewTierState(null);
+    setBypassedFeatures([]);
+  }, [planScopeKey]);
 
   useEffect(() => {
     if (FOUNDING_FREE_LAUNCH || !user?.id || demoMode) {
@@ -68,20 +88,35 @@ export function MembershipProvider({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     let cancelled = false;
+    const requestId = ++adminRequestRef.current;
     if (!user?.id) {
-      setIsAdmin(false);
       return () => { cancelled = true; };
     }
     void (async () => {
-      try {
-        const { data } = await supabase
-          .from("feedback_admins")
-          .select("user_id")
-          .eq("user_id", user.id)
-          .maybeSingle();
-        if (!cancelled) setIsAdmin(Boolean(data));
-      } catch {
-        if (!cancelled) setIsAdmin(false);
+      const retryDelays = [0, 300, 1_200] as const;
+      for (const delay of retryDelays) {
+        if (delay > 0) {
+          await new Promise(resolve => setTimeout(resolve, delay));
+          if (cancelled) return;
+        }
+        try {
+          const { data, error } = await supabase
+            .from("feedback_admins")
+            .select("user_id")
+            .eq("user_id", user.id)
+            .maybeSingle();
+          if (error) throw error;
+          if (!cancelled && requestId === adminRequestRef.current) {
+            setAdminState({ userId: user.id, value: Boolean(data) });
+          }
+          return;
+        } catch {
+          // A token-refresh race must not permanently hide tester/admin tools.
+          // Keep the last authoritative value and retry before giving up.
+        }
+      }
+      if (!cancelled && requestId === adminRequestRef.current) {
+        setAdminState({ userId: user.id, value: false });
       }
     })();
     return () => { cancelled = true; };
@@ -92,16 +127,19 @@ export function MembershipProvider({ children }: { children: React.ReactNode }) 
     setLoading(true);
     if (demoMode) {
       if (requestId === planRequestRef.current) {
-        setActualPlan(isStoreCaptureMode()
-          ? mapHouseholdPlan({ tier: "free", source: "default" }, householdId)
-          : mapHouseholdPlan({ tier: "pro", source: "admin" }, householdId, "pro"));
+        setPlanState({
+          scopeKey: planScopeKey,
+          plan: isStoreCaptureMode()
+            ? mapHouseholdPlan({ tier: "free", source: "default" }, householdId)
+            : mapHouseholdPlan({ tier: "pro", source: "admin" }, householdId, "pro"),
+        });
         setLoading(false);
       }
       return;
     }
     if (!activeHousehold?.householdId) {
       if (requestId === planRequestRef.current) {
-        setActualPlan(FALLBACK_PLAN);
+        setPlanState({ scopeKey: planScopeKey, plan: mapHouseholdPlan(null, householdId) });
         setLoading(false);
       }
       return;
@@ -118,13 +156,23 @@ export function MembershipProvider({ children }: { children: React.ReactNode }) 
         .select("household_id,tier,source,grandfathered_at,created_at,updated_at")
         .eq("household_id", activeHousehold.householdId)
         .maybeSingle();
-      if (requestId === planRequestRef.current) setActualPlan(mapHouseholdPlan(data as Record<string, unknown> | null, activeHousehold.householdId));
+      if (requestId === planRequestRef.current) {
+        setPlanState({
+          scopeKey: planScopeKey,
+          plan: mapHouseholdPlan(data as Record<string, unknown> | null, activeHousehold.householdId),
+        });
+      }
     } catch {
-      if (requestId === planRequestRef.current) setActualPlan(mapHouseholdPlan(null, activeHousehold.householdId));
+      if (requestId === planRequestRef.current) {
+        setPlanState({
+          scopeKey: planScopeKey,
+          plan: mapHouseholdPlan(null, activeHousehold.householdId),
+        });
+      }
     } finally {
       if (requestId === planRequestRef.current) setLoading(false);
     }
-  }, [activeHousehold?.householdId, activeHousehold?.role, demoMode, householdId, user?.id]);
+  }, [activeHousehold?.householdId, activeHousehold?.role, demoMode, householdId, planScopeKey, user?.id]);
 
   useEffect(() => {
     void refreshPlan();

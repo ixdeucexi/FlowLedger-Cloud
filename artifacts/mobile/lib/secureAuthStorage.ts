@@ -4,6 +4,7 @@ import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
 import { parseSecureAuthManifest, splitSecureAuthValue, type SecureAuthManifest } from "@/lib/secureAuthStorageCodec";
+import { selectAuthStorageBackend } from "@/lib/secureAuthStoragePolicy";
 
 const secureOptions: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
@@ -55,9 +56,12 @@ async function writeNativeValue(key: string, value: string): Promise<void> {
 
 export const authStorage = {
   async getItem(key: string): Promise<string | null> {
-    if (Platform.OS === "web" || !(await nativeSecureStoreAvailable())) {
-      return AsyncStorage.getItem(key);
-    }
+    const backend = selectAuthStorageBackend(
+      Platform.OS,
+      Platform.OS !== "web" && await nativeSecureStoreAvailable(),
+    );
+    if (backend === "web") return AsyncStorage.getItem(key);
+    if (backend === "unavailable") return null;
     const secured = await readNativeValue(key);
     if (secured !== null) return secured;
 
@@ -72,21 +76,35 @@ export const authStorage = {
   },
 
   async setItem(key: string, value: string): Promise<void> {
-    if (Platform.OS === "web" || !(await nativeSecureStoreAvailable())) {
+    const backend = selectAuthStorageBackend(
+      Platform.OS,
+      Platform.OS !== "web" && await nativeSecureStoreAvailable(),
+    );
+    if (backend === "web") {
       await AsyncStorage.setItem(key, value);
       return;
+    }
+    if (backend === "unavailable") {
+      throw new Error("Secure session storage is unavailable on this device.");
     }
     await writeNativeValue(key, value);
     await AsyncStorage.removeItem(key).catch(() => undefined);
   },
 
   async removeItem(key: string): Promise<void> {
-    if (Platform.OS !== "web" && await nativeSecureStoreAvailable()) {
+    const backend = selectAuthStorageBackend(
+      Platform.OS,
+      Platform.OS !== "web" && await nativeSecureStoreAvailable(),
+    );
+    if (backend === "secure") {
       const manifest = parseSecureAuthManifest(await SecureStore.getItemAsync(manifestKey(key), secureOptions).catch(() => null));
       await deleteNativeGeneration(key, manifest);
       await SecureStore.deleteItemAsync(manifestKey(key), secureOptions).catch(() => undefined);
       await SecureStore.deleteItemAsync(key, secureOptions).catch(() => undefined);
     }
+    // Clear a pre-encryption legacy copy on every path. Native never reads or
+    // writes this fallback unless SecureStore was first confirmed available
+    // and the value is being migrated into encrypted storage.
     await AsyncStorage.removeItem(key).catch(() => undefined);
   },
 };

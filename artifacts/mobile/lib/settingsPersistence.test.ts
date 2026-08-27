@@ -134,6 +134,86 @@ test("database settings bootstrap and account anchor writes are atomic and scope
   assert.match(migration, /function public\.add_manual_account_with_anchor/i);
   assert.match(migration, /insert into public\.accounts[\s\S]+insert into public\.account_balances[\s\S]+update public\.household_settings/i);
   assert.match(migration, /get diagnostics v_inserted_count = row_count/i);
+
+  const coherentAnchorMigration = readFileSync(
+    "../../supabase/migrations/20260827122031_require_coherent_manual_operating_anchor.sql",
+    "utf8",
+  );
+  assert.match(coherentAnchorMigration, /min\(account\.balance_as_of\)/i);
+  assert.match(coherentAnchorMigration, /max\(account\.balance_as_of\)/i);
+  assert.match(
+    coherentAnchorMigration,
+    /if v_account\.is_active and v_account\.account_type in \('checking', 'cash'\) then[\s\S]+v_anchor_min_date is distinct from v_anchor_max_date/i,
+  );
+  assert.match(coherentAnchorMigration, /v_anchor_min_date is distinct from v_anchor_max_date/i);
+  assert.ok(
+    coherentAnchorMigration.indexOf("v_anchor_min_date is distinct from v_anchor_max_date")
+      < coherentAnchorMigration.indexOf("update public.household_settings set"),
+  );
+  assert.match(coherentAnchorMigration, /add column if not exists last_mutation_id text/i);
+  assert.match(coherentAnchorMigration, /add column if not exists last_mutation_intent jsonb/i);
+  assert.match(coherentAnchorMigration, /create table if not exists private\.manual_account_mutation_receipts/i);
+  assert.match(coherentAnchorMigration, /mutation_id text primary key/i);
+  const receiptTable = coherentAnchorMigration.slice(
+    coherentAnchorMigration.indexOf("create table if not exists private.manual_account_mutation_receipts"),
+    coherentAnchorMigration.indexOf("revoke all on table private.manual_account_mutation_receipts"),
+  );
+  assert.doesNotMatch(receiptTable, /actor_id/i);
+  assert.match(receiptTable, /manual_account_mutation_receipts_household_idx[\s\S]+\(household_id\)/i);
+  assert.match(receiptTable, /manual_account_mutation_receipts_budget_idx[\s\S]+\(budget_id\)/i);
+  assert.match(coherentAnchorMigration, /revoke all on table private\.manual_account_mutation_receipts[\s\S]+authenticated, service_role/i);
+  assert.match(coherentAnchorMigration, /function private\.sync_manual_operating_anchor\(\)/i);
+  assert.match(coherentAnchorMigration, /function private\.update_manual_account_with_anchor/i);
+  assert.match(coherentAnchorMigration, /function public\.update_manual_account_with_anchor/i);
+  assert.match(coherentAnchorMigration, /pg_advisory_xact_lock[\s\S]+order by id[\s\S]+for update/i);
+  assert.match(coherentAnchorMigration, /flowledger-account-mutation:[\s\S]+where mutation_id = p_mutation_id[\s\S]+for update/i);
+  assert.match(coherentAnchorMigration, /v_receipt\.intent is distinct from v_intent/i);
+  assert.match(coherentAnchorMigration, /insert into private\.manual_account_mutation_receipts/i);
+  assert.match(coherentAnchorMigration, /if not v_retry then[\s\S]+insert into public\.account_balances/i);
+  assert.match(coherentAnchorMigration, /where id = p_balance_id[\s\S]+for update/i);
+  const privateMutation = coherentAnchorMigration.slice(
+    coherentAnchorMigration.indexOf("create or replace function private.update_manual_account_with_anchor"),
+    coherentAnchorMigration.indexOf("create or replace function public.update_manual_account_with_anchor"),
+  );
+  assert.doesNotMatch(privateMutation, /insert into public\.account_balances[\s\S]{0,500}on conflict/i);
+  assert.match(coherentAnchorMigration, /'checking', 'savings', 'cash', 'credit_card'/i);
+  assert.match(coherentAnchorMigration, /legacy credit-card row may be preserved or archived/i);
+  assert.match(coherentAnchorMigration, /manual_account_acl_audit/i);
+
+  const compatibilityTrigger = coherentAnchorMigration.slice(
+    coherentAnchorMigration.indexOf("create or replace function private.sync_manual_operating_anchor"),
+    coherentAnchorMigration.indexOf("create or replace function private.update_manual_account_with_anchor"),
+  );
+  assert.match(compatibilityTrigger, /if tg_op = 'INSERT'[\s\S]+v_anchor_min_date is distinct from v_anchor_max_date[\s\S]+raise exception/i);
+  assert.match(compatibilityTrigger, /if v_anchor_max_date is not null[\s\S]+v_anchor_min_date is not distinct from v_anchor_max_date[\s\S]+update public\.household_settings/i);
+  assert.doesNotMatch(compatibilityTrigger, /if tg_op = 'UPDATE'[\s\S]{0,240}raise exception/i);
+  assert.doesNotMatch(compatibilityTrigger, /pg_advisory_xact_lock/i);
+  assert.match(compatibilityTrigger, /from public\.household_settings[\s\S]+for update/i);
+  assert.match(compatibilityTrigger, /order by affected\.household_id/i);
+  assert.match(compatibilityTrigger, /after update of household_id, budget_id, is_active, account_type/i);
+  assert.match(compatibilityTrigger, /after delete on public\.accounts/i);
+
+  const context = readFileSync("context/BudgetContext.tsx", "utf8");
+  const accountStart = context.indexOf("const addAccount");
+  const accountEnd = context.indexOf("const updateAccount", accountStart);
+  const accountCreation = context.slice(accountStart, accountEnd);
+  assert.match(
+    accountCreation,
+    /const updatesOperatingAnchor = accountUpdatesOperatingAnchor\(toAccountSnapshot\(account\)\)/,
+  );
+  assert.match(accountCreation, /const accountAnchor = updatesOperatingAnchor[\s\S]+: null/);
+  assert.match(accountCreation, /if \(updatesOperatingAnchor && !accountAnchor\)/);
+
+  const saveStart = context.indexOf("const saveManualAccountChange");
+  const saveEnd = context.indexOf("const updateAccount", saveStart);
+  const accountMutation = context.slice(saveStart, saveEnd);
+  assert.match(accountMutation, /const coherentAnchor = touchesOperatingAnchor/);
+  assert.match(accountMutation, /const anchorPatch: SettingsPatch = coherentAnchor \? \{/);
+  assert.match(accountMutation, /Keep Forecast on the last coherent settings anchor/);
+  assert.doesNotMatch(accountMutation, /starting_balance:\s*0/);
+  assert.match(accountMutation, /updateManualAccountWithAnchorAtomically\(\{/);
+  assert.doesNotMatch(accountMutation, /from\("accounts"\)\.update/);
+  assert.doesNotMatch(accountMutation, /from\("account_balances"\)\.upsert/);
 });
 
 test("account creation uses one RPC and bill deletion has no client compatibility fallback", () => {

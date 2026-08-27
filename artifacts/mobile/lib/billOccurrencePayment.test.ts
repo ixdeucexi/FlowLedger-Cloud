@@ -44,6 +44,21 @@ test("an exact reviewed match settles only the matching weekly occurrence", () =
   assert.equal(future.remainingAmount, 150);
 });
 
+test("an explicit completed review is not reopened by an obsolete larger plan", () => {
+  assert.deepEqual(resolveBillOccurrencePayment({
+    occurrenceDate: "2026-08-04",
+    scheduledAmount: 1500,
+    frequency: "monthly",
+    match: { amount: 1467.13, plannedAmount: 1467.13, settlement: "full" },
+  }), {
+    scheduledAmount: 1467.13,
+    paidAmount: 1467.13,
+    remainingAmount: 0,
+    isPaid: true,
+    isPartial: false,
+  });
+});
+
 test("partial matches remain partial for every supported schedule", () => {
   for (const frequency of ["monthly", "biweekly", "weekly", "quarterly"]) {
     const view = resolveBillOccurrencePayment({
@@ -57,4 +72,19 @@ test("partial matches remain partial for every supported schedule", () => {
     assert.equal(view.isPaid, false, frequency);
     assert.equal(view.isPartial, true, frequency);
   }
+});
+
+test("a partial review keeps its original requirement after a future minimum edit", () => {
+  assert.deepEqual(resolveBillOccurrencePayment({
+    occurrenceDate: "2026-08-04",
+    scheduledAmount: 800,
+    frequency: "monthly",
+    match: { amount: 1000, plannedAmount: 1500, settlement: "partial" },
+  }), {
+    scheduledAmount: 1500,
+    paidAmount: 1000,
+    remainingAmount: 500,
+    isPaid: false,
+    isPartial: true,
+  });
 });

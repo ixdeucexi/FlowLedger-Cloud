@@ -3,6 +3,7 @@
     "target": "ES2022",
     "module": "CommonJS",
     "moduleResolution": "Node",
+    "resolveJsonModule": true,
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -121,8 +122,6 @@
     ,"lib/webViewport.test.ts"
     ,"lib/zeroBudgetLab.ts"
     ,"lib/zeroBudgetLab.test.ts"
-    ,"lib/legalDocuments.ts"
-    ,"lib/legalDocuments.test.ts"
     ,"lib/ledgerEngine.ts"
     ,"lib/ledgerEngine.test.ts"
     ,"lib/desktopExperience.ts"
@@ -144,8 +143,11 @@
     ,"lib/navigationMemory.test.ts"
     ,"lib/activityRange.ts"
     ,"lib/activityRange.test.ts"
+    ,"lib/activityUi.test.ts"
     ,"lib/activityCsv.ts"
     ,"lib/activityCsv.test.ts"
+    ,"lib/desktopActivity.ts"
+    ,"lib/desktopActivity.test.ts"
     ,"lib/dashboardCustomization.ts"
     ,"lib/dashboardCustomization.test.ts"
     ,"lib/todaysDecisions.ts"
@@ -190,10 +192,14 @@
     ,"lib/overdueBills.test.ts"
     ,"lib/secureAuthStorageCodec.ts"
     ,"lib/secureAuthStorageCodec.test.ts"
+    ,"lib/secureAuthStoragePolicy.ts"
+    ,"lib/secureAuthStoragePolicy.test.ts"
     ,"lib/floAiConsent.ts"
     ,"lib/floAiConsent.test.ts"
     ,"lib/accountDeletionPolicy.ts"
     ,"lib/accountDeletion.test.ts"
+    ,"lib/authCompletion.ts"
+    ,"lib/authCompletion.test.ts"
     ,"lib/billingIdentityPolicy.ts"
     ,"lib/billingIdentityPolicy.test.ts"
     ,"lib/nativeNotificationRoute.ts"
@@ -210,5 +216,16 @@
     ,"lib/settingsPersistence.ts"
     ,"lib/settingsPersistence.test.ts"
     ,"lib/categoryMutationAtomicity.test.ts"
+    ,"lib/householdDataScope.ts"
+    ,"lib/householdDataScope.test.ts"
+    ,"lib/pagedQuery.ts"
+    ,"lib/pagedQuery.test.ts"
+    ,"lib/goalAffordability.ts"
+    ,"lib/goalAffordability.test.ts"
+    ,"lib/billMatchCandidates.ts"
+    ,"lib/billMatchCandidates.test.ts"
+    ,"lib/atomicFinancialMutations.test.ts"
+    ,"lib/supabaseRuntimeConfig.ts"
+    ,"lib/supabaseRuntimeConfig.test.ts"
   ]
 }

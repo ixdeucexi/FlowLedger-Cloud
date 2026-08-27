@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeMatchOccurrenceDates, getIncomeOccurrenceDays, getLatestIncomeChange, getLatestRecordedIncomeAmount, incomeAmountToMonthly, isBillActiveForMonth, isValidDateInMonth, moveSettledBillOverrideDate, normalizeIncomeExcludedDates, resolveFinalizedBillOccurrenceDays, resolveIncomeMatchOccurrenceDate } from "./schedule";
+import { applyBillDateMovesToOccurrenceDays, getBillMatchOccurrenceDates, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeMatchOccurrenceDates, getIncomeOccurrenceDays, getLatestIncomeChange, getLatestRecordedIncomeAmount, getUpcomingIncomeOccurrenceDates, incomeAmountToMonthly, isBillActiveForMonth, isValidDateInMonth, moveSettledBillOverrideDate, normalizeIncomeExcludedDates, resolveFinalizedBillOccurrenceDays, resolveIncomeMatchOccurrenceDate } from "./schedule";
 
 describe("bill scheduling", () => {
   it("validates a selected calendar date inside the intended month", () => {
@@ -74,6 +74,25 @@ describe("bill scheduling", () => {
     const bill = { frequency: "biweekly" as const, due_day: 1, next_payment_date: "2026-06-05" };
     assert.deepEqual(getBillOccurrenceDays(bill, 5, 2026), [5, 19]);
     assert.deepEqual(getBillOccurrenceDays(bill, 6, 2026), [3, 17, 31]);
+    assert.deepEqual(
+      getBillOccurrenceDays({ ...bill, next_payment_date: "2026-07-31" }, 5, 2026),
+      [5, 19],
+    );
+  });
+
+  it("finds a prior-month bill occurrence for an early next-month posting", () => {
+    const bill = { id: "card", frequency: "monthly" as const, due_day: 31 };
+    assert.deepEqual(getBillMatchOccurrenceDates(bill, "2026-08-01", 4), [
+      "2026-07-31",
+    ]);
+  });
+
+  it("finds adjacent bill occurrences across a year boundary", () => {
+    const bill = { id: "rent", frequency: "monthly" as const, due_day: 1 };
+    assert.deepEqual(getBillMatchOccurrenceDates(bill, "2025-12-31", 3), [
+      "2026-01-01",
+      "2025-12-01",
+    ].filter((date) => Math.abs(Date.parse(`${date}T00:00:00Z`) - Date.parse("2025-12-31T00:00:00Z")) / 86_400_000 <= 3));
   });
 
   it("moves a bill occurrence to the new day without leaving it on the old day", () => {
@@ -142,6 +161,38 @@ describe("income scheduling", () => {
   it("projects weekly and biweekly pay dates from their anchor", () => {
     assert.deepEqual(getIncomeOccurrenceDays({ amount: 500, frequency: "weekly", next_payment_date: "2026-06-05" }, 5, 2026), [5, 12, 19, 26]);
     assert.deepEqual(getIncomeOccurrenceDays({ amount: 1_000, frequency: "biweekly", next_payment_date: "2026-05-29" }, 5, 2026), [12, 26]);
+  });
+
+  it("keeps recurring paydays on their calendar weekday across DST changes", () => {
+    const weekly = { amount: 500, frequency: "weekly" as const, next_payment_date: "2026-10-30" };
+    assert.deepEqual(getIncomeOccurrenceDays(weekly, 10, 2026), [6, 13, 20, 27]);
+    assert.deepEqual(getUpcomingIncomeOccurrenceDates(weekly, "2026-10-31"), [
+      "2026-11-06",
+      "2026-11-13",
+      "2026-11-20",
+      "2026-11-27",
+    ]);
+
+    const spring = { amount: 1_000, frequency: "biweekly" as const, next_payment_date: "2026-03-06" };
+    assert.deepEqual(getIncomeOccurrenceDays(spring, 2, 2026), [6, 20]);
+  });
+
+  it("aligns historical months from a later remembered payday without previewing before the first payday", () => {
+    const weekly = {
+      amount: 500,
+      frequency: "weekly" as const,
+      start_date: "2026-01-02",
+      next_payment_date: "2026-11-06",
+    };
+    assert.deepEqual(getIncomeOccurrenceDays(weekly, 9, 2026), [2, 9, 16, 23, 30]);
+    assert.deepEqual(
+      getUpcomingIncomeOccurrenceDates(
+        { amount: 500, frequency: "weekly", next_payment_date: "2026-11-06" },
+        "2026-10-01",
+        2,
+      ),
+      ["2026-11-06", "2026-11-13"],
+    );
   });
 
   it("uses the start date for monthly income and day one only when no date exists", () => {

@@ -2,6 +2,7 @@ import { makeRedirectUri } from "expo-auth-session";
 import * as QueryParams from "expo-auth-session/build/QueryParams";
 
 import { supabase } from "@/lib/supabase";
+import { coalesceAuthCompletion } from "@/lib/authCompletion";
 
 export const nativeAuthRedirectUri = makeRedirectUri({
   scheme: "flowledger",
@@ -19,18 +20,22 @@ export async function completeSupabaseAuthUrl(url: string) {
 
   const code = typeof params.code === "string" ? params.code : null;
   if (code) {
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-    if (error) throw error;
-    return data.session;
+    return coalesceAuthCompletion(`pkce:${code}`, async () => {
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+      if (error) throw error;
+      return data.session;
+    });
   }
 
   const accessToken = typeof params.access_token === "string" ? params.access_token : null;
   const refreshToken = typeof params.refresh_token === "string" ? params.refresh_token : null;
   if (!accessToken || !refreshToken) return null;
-  const { data, error } = await supabase.auth.setSession({
-    access_token: accessToken,
-    refresh_token: refreshToken,
+  return coalesceAuthCompletion(`implicit:${accessToken}`, async () => {
+    const { data, error } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
+    if (error) throw error;
+    return data.session;
   });
-  if (error) throw error;
-  return data.session;
 }

@@ -22,6 +22,7 @@ import {
 
 import { useColors } from "@/hooks/useColors";
 import { flowLedgerUserGuidePageFromOffset } from "@/lib/userGuide";
+import guideSlidesContent from "@/lib/userGuideContent.json";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 
@@ -42,471 +43,16 @@ interface GuideSlide {
   intro: string;
   icon: FeatherName;
   accent: string;
-  image?: number;
-  imageLabel?: string;
-  imageCaption?: string;
   sections: readonly GuideSection[];
   callout: { title: string; body: string };
 }
 
-const GUIDE_SLIDES: readonly GuideSlide[] = [
-  {
-    eyebrow: "EVERYDAY MONEY PLANNING",
-    title: "FlowLedger User Guide",
-    intro:
-      "A clear daily routine for your Dashboard, Activity, Forecast, debt plan, savings, and Flo.",
-    icon: "compass",
-    accent: "#9B5CFF",
-    sections: [
-      {
-        title: "Your everyday path",
-        items: [
-          {
-            title: "Dashboard",
-            body: "See where your money stands now.",
-            icon: "home",
-          },
-          {
-            title: "Today's Decisions",
-            body: "Handle one useful next step at a time.",
-            icon: "sun",
-          },
-          {
-            title: "Activity",
-            body: "Review what changed in your accounts.",
-            icon: "repeat",
-          },
-          {
-            title: "Forecast",
-            body: "Confirm what should happen next.",
-            icon: "calendar",
-          },
-        ],
-      },
-    ],
-    callout: {
-      title: "FlowLedger plans—it does not send payments",
-      body: "Continue paying bills and debts through your bank or provider.",
-    },
-  },
-  {
-    eyebrow: "STEP 1",
-    title: "Start with a complete plan",
-    intro: "Set up recurring money once, then review it whenever life changes.",
-    icon: "check-circle",
-    accent: "#22C7D6",
-    image: require("../assets/images/user-guide/stability-sample.png"),
-    imageLabel: "Example FlowLedger dashboard plan",
-    imageCaption: "Fictional sample plan—your household will be different.",
-    sections: [
-      {
-        title: "Setup checklist",
-        items: [
-          {
-            title: "Checking",
-            body: "Add or connect the account used for everyday cash flow.",
-            icon: "credit-card",
-          },
-          {
-            title: "Income",
-            body: "Add recurring income and confirm each expected payday.",
-            icon: "trending-up",
-          },
-          {
-            title: "Bills",
-            body: "Confirm amount, next date, and weekly, monthly, quarterly, or other frequency.",
-            icon: "file-text",
-          },
-          {
-            title: "Debts",
-            body: "Enter the current balance, minimum payment, APR, and due date.",
-            icon: "bar-chart-2",
-          },
-          {
-            title: "Savings",
-            body: "Add each account and give it a clear purpose name.",
-            icon: "shield",
-          },
-          {
-            title: "Forecast",
-            body: "Make sure the next two weeks look like real life.",
-            icon: "calendar",
-          },
-        ],
-      },
-    ],
-    callout: {
-      title: "One shared plan",
-      body: "Phone and website use the same household data and calculations. Only the layout changes.",
-    },
-  },
-  {
-    eyebrow: "STEP 2",
-    title: "Your daily 3-minute routine",
-    intro:
-      "Use the same short path each day. Go deeper only when something changed or needs review.",
-    icon: "clock",
-    accent: "#25D39B",
-    image: require("../assets/images/user-guide/dashboard-sample.png"),
-    imageLabel: "FlowLedger Dashboard and Today's Decisions",
-    imageCaption:
-      "Fictional sample data. Start on Dashboard, then follow the items that need attention.",
-    sections: [
-      {
-        title: "Check these four places",
-        items: [
-          {
-            title: "1. Dashboard",
-            body: "Check balance, pending outflows, available money, and Flow Score.",
-            icon: "home",
-          },
-          {
-            title: "2. Today's Decisions",
-            body: "Handle the few bills, debts, or choices that matter now.",
-            icon: "sun",
-          },
-          {
-            title: "3. Activity",
-            body: "Review new transactions, matches, and anything needing attention.",
-            icon: "repeat",
-          },
-          {
-            title: "4. Forecast",
-            body: "Scan upcoming days and confirm each closing balance makes sense.",
-            icon: "calendar",
-          },
-        ],
-      },
-    ],
-    callout: {
-      title: "If the day looks normal, you are done",
-      body: "If something looks unfamiliar, open the related item before changing the plan.",
-    },
-  },
-  {
-    eyebrow: "STEP 3",
-    title: "Bills, debts, and planned payments",
-    intro:
-      "Use Bills for recurring obligations. Switch to Debt to manage balances, minimums, or payoff order.",
-    icon: "file-text",
-    accent: "#F5B82E",
-    image: require("../assets/images/user-guide/bills-debt-sample.png"),
-    imageLabel: "FlowLedger Debt view and payoff planner",
-    imageCaption:
-      "Fictional sample data showing payoff order, rollover, and the planner entry.",
-    sections: [
-      {
-        title: "Bills",
-        items: [
-          {
-            title: "Keep the schedule current",
-            body: "Edit amount, next date, and frequency when they change.",
-            icon: "edit-3",
-          },
-          {
-            title: "Record manual payments",
-            body: "Mark a bill paid when it was paid outside a connected account.",
-            icon: "check",
-          },
-          {
-            title: "Close finished items",
-            body: "Inactive bills should stop creating reminders and occurrences.",
-            icon: "x-circle",
-          },
-        ],
-      },
-      {
-        title: "Debt Payoff Planner",
-        items: [
-          {
-            title: "Review the order",
-            body: "See required payments and the current snowball or avalanche target.",
-            icon: "list",
-          },
-          {
-            title: "Check rollover",
-            body: "Unused payoff money can move to the next debt in the plan.",
-            icon: "corner-down-right",
-          },
-          {
-            title: "Edit planned payments",
-            body: "Change an amount or date when it no longer fits real life.",
-            icon: "sliders",
-          },
-        ],
-      },
-    ],
-    callout: {
-      title: "Matched pending payments appear once",
-      body: "A planned item matched to pending bank activity should show one Payment Pending item—not two charges.",
-    },
-  },
-  {
-    eyebrow: "STEP 4",
-    title: "Forecast and Plan Simulator",
-    intro:
-      "Forecast shows when money should move and what each day's closing balance will be.",
-    icon: "calendar",
-    accent: "#5CA6FF",
-    image: require("../assets/images/user-guide/forecast-sample.png"),
-    imageLabel: "FlowLedger Forecast calendar",
-    imageCaption:
-      "Fictional sample calendar. Open a day to review its closing balance.",
-    sections: [
-      {
-        title: "Read the calendar",
-        items: [
-          {
-            title: "Inflows and outflows",
-            body: "Calendar colors separate money coming in from bills and debts going out.",
-            icon: "shuffle",
-          },
-          {
-            title: "Open the day",
-            body: "Tap a date to see every item behind its closing balance.",
-            icon: "search",
-          },
-          {
-            title: "Verify status",
-            body: "Matched pending payments should appear once with their current status.",
-            icon: "check-square",
-          },
-          {
-            title: "Ignore sync as an event",
-            body: "Bank sync updates data; it is not itself a calendar cash event.",
-            icon: "refresh-cw",
-          },
-        ],
-      },
-      {
-        title: "Try a what-if",
-        items: [
-          {
-            title: "Open Simulator",
-            body: "Test income or expense changes without editing live data.",
-            icon: "sliders",
-          },
-          {
-            title: "Compare results",
-            body: "Review the real plan beside the simulated outcome.",
-            icon: "columns",
-          },
-          {
-            title: "Leave safely",
-            body: "Exit the simulator to return to the unchanged Forecast.",
-            icon: "log-out",
-          },
-        ],
-      },
-    ],
-    callout: {
-      title: "Best daily habit",
-      body: "Before the day ends, confirm the next few closing balances match what you expect.",
-    },
-  },
-  {
-    eyebrow: "STEP 5",
-    title: "Savings and Flo",
-    intro:
-      "Use savings for purpose-based balances. Use Flo for explanations and guided next steps.",
-    icon: "message-circle",
-    accent: "#A76DFF",
-    image: require("../assets/images/user-guide/flo-sample.png"),
-    imageLabel: "Ask Flo conversation screen",
-    imageCaption: "Fictional example of asking Flo about a household plan.",
-    sections: [
-      {
-        title: "Savings",
-        items: [
-          {
-            title: "Flip the full card",
-            body: "Tap Savings on Dashboard to switch from checking to savings.",
-            icon: "repeat",
-          },
-          {
-            title: "Review accounts separately",
-            body: "Each connected or manual savings balance appears on its own.",
-            icon: "layers",
-          },
-          {
-            title: "Name the purpose",
-            body: "Use names like Emergency Fund, Vacation, Taxes, or Car Repair.",
-            icon: "tag",
-          },
-        ],
-      },
-      {
-        title: "Ask Flo",
-        items: [
-          {
-            title: "Ask about the plan",
-            body: "Check upcoming bills, recent changes, and items needing review.",
-            icon: "help-circle",
-          },
-          {
-            title: "Check sources",
-            body: "Use freshness and source details when Flo provides them.",
-            icon: "link",
-          },
-          {
-            title: "Review before confirming",
-            body: "Inspect every proposed plan change before applying it.",
-            icon: "eye",
-          },
-          {
-            title: "Hide when needed",
-            body: "Press and hold the Flo icon to dismiss it for the current session.",
-            icon: "eye-off",
-          },
-        ],
-      },
-    ],
-    callout: {
-      title: "Naming stays inside FlowLedger",
-      body: "Renaming a savings account here does not rename the account at your bank.",
-    },
-  },
-  {
-    eyebrow: "STEP 6",
-    title: "Notifications and in-app guidance",
-    intro:
-      "Use reminders to catch upcoming items and How It Works for a quick refresher.",
-    icon: "bell",
-    accent: "#FF9D4D",
-    image: require("../assets/images/user-guide/notifications-sample.png"),
-    imageLabel: "FlowLedger notifications panel",
-    imageCaption: "Fictional reminders show how upcoming items are grouped.",
-    sections: [
-      {
-        title: "Keep reminders useful",
-        items: [
-          {
-            title: "Open the related item",
-            body: "A reminder should take you directly to the bill or debt to review.",
-            icon: "external-link",
-          },
-          {
-            title: "Dismiss finished work",
-            body: "Remove a reminder when it is complete.",
-            icon: "x",
-          },
-          {
-            title: "Close inactive items",
-            body: "Paid-off or closed debts should stop creating future reminders.",
-            icon: "archive",
-          },
-        ],
-      },
-      {
-        title: "How It Works",
-        items: [
-          {
-            title: "Start at Step 1",
-            body: "The guide begins at the first section every time you open it fresh.",
-            icon: "play",
-          },
-          {
-            title: "Follow the highlighted step",
-            body: "Next and Previous keep the selected tab and page in sync.",
-            icon: "navigation",
-          },
-          {
-            title: "Start at the top",
-            body: "Every new guide page begins at the top of its content.",
-            icon: "arrow-up",
-          },
-        ],
-      },
-    ],
-    callout: {
-      title: "Keep reminders accurate",
-      body: "If a bill or debt is finished, update it so future reminders stop.",
-    },
-  },
-  {
-    eyebrow: "STEP 7",
-    title: "When a number does not look right",
-    intro:
-      "Most differences come from status, recurrence, unmatched activity, or stale connected data.",
-    icon: "tool",
-    accent: "#FF6F91",
-    sections: [
-      {
-        title: "Check in this order",
-        items: [
-          {
-            title: "1. Refresh",
-            body: "Refresh the app and allow connected accounts time to sync.",
-            icon: "refresh-cw",
-          },
-          {
-            title: "2. Check status",
-            body: "See whether activity is pending, posted, matched, or needs review.",
-            icon: "activity",
-          },
-          {
-            title: "3. Check recurrence",
-            body: "Confirm amount, next date, and the weekly, monthly, quarterly, or other frequency.",
-            icon: "repeat",
-          },
-          {
-            title: "4. Check active state",
-            body: "Make sure the bill or debt is active—and close it if finished.",
-            icon: "toggle-right",
-          },
-          {
-            title: "5. Review Activity",
-            body: "Look for unmatched or duplicate-looking items before changing a balance.",
-            icon: "search",
-          },
-          {
-            title: "6. Verify debt details",
-            body: "Confirm balance and minimum payment when the bank did not provide them.",
-            icon: "credit-card",
-          },
-          {
-            title: "7. Recheck Forecast",
-            body: "Open the affected day and verify the closing balance after correcting data.",
-            icon: "calendar",
-          },
-        ],
-      },
-      {
-        title: "Quick glossary",
-        items: [
-          {
-            title: "Pending",
-            body: "Expected activity that has not fully posted or settled.",
-            icon: "clock",
-          },
-          {
-            title: "Available",
-            body: "The balance after relevant pending outflows.",
-            icon: "dollar-sign",
-          },
-          {
-            title: "Flow Score",
-            body: "A health signal based on the current FlowLedger plan.",
-            icon: "bar-chart",
-          },
-          {
-            title: "Closing balance",
-            body: "The expected balance at the end of a Forecast day.",
-            icon: "flag",
-          },
-        ],
-      },
-    ],
-    callout: {
-      title: "Remember the routine",
-      body: "Dashboard → Today's Decisions → Activity → Forecast. If those look right, your daily review is complete.",
-    },
-  },
-] as const;
+const GUIDE_SLIDES = guideSlidesContent as readonly GuideSlide[];
 
 const GUIDE_SLIDE_INDEXES = GUIDE_SLIDES.map((_, index) => index);
 
 interface GuideSlidePageProps {
+  active: boolean;
   index: number;
   pageWidth: number;
   pageHeight: number;
@@ -514,6 +60,7 @@ interface GuideSlidePageProps {
 }
 
 const GuideSlidePage = memo(function GuideSlidePage({
+  active,
   index,
   pageWidth,
   pageHeight,
@@ -524,9 +71,11 @@ const GuideSlidePage = memo(function GuideSlidePage({
 
   return (
     <ScrollView
+      accessibilityElementsHidden={!active}
       accessibilityLabel={`Guide page ${index + 1} of ${GUIDE_SLIDES.length}: ${slide.title}`}
       directionalLockEnabled
       nestedScrollEnabled
+      importantForAccessibility={active ? "auto" : "no-hide-descendants"}
       showsVerticalScrollIndicator={false}
       style={{ width: pageWidth, height: pageHeight }}
       contentContainerStyle={styles.slideScrollContent}
@@ -571,6 +120,7 @@ const GuideSlidePage = memo(function GuideSlidePage({
             {slide.eyebrow}
           </Text>
           <Text
+            accessibilityRole="header"
             style={[
               styles.slideTitle,
               !isCover ? styles.compactSlideTitle : null,
@@ -590,36 +140,12 @@ const GuideSlidePage = memo(function GuideSlidePage({
           </Text>
         </View>
 
-        {slide.image ? (
-          <View
-            style={[
-              styles.previewCard,
-              { backgroundColor: colors.card, borderColor: colors.border },
-            ]}
-          >
-            <Image
-              accessibilityLabel={slide.imageLabel}
-              source={slide.image}
-              contentFit="contain"
-              transition={140}
-              style={[
-                styles.previewImage,
-                {
-                  height: Math.min(540, Math.max(430, pageWidth * 1.15)),
-                },
-              ]}
-            />
-            <Text
-              style={[styles.previewCaption, { color: colors.mutedForeground }]}
-            >
-              {slide.imageCaption}
-            </Text>
-          </View>
-        ) : null}
-
         {slide.sections.map((section) => (
           <View key={section.title} style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+            <Text
+              accessibilityRole="header"
+              style={[styles.sectionTitle, { color: colors.foreground }]}
+            >
               {section.title}
             </Text>
             <View style={styles.itemList}>
@@ -757,13 +283,14 @@ export default function UserGuideScreen() {
   const renderSlide = useCallback(
     ({ item: index }: ListRenderItemInfo<number>) => (
       <GuideSlidePage
+        active={index === currentPage}
         index={index}
         pageWidth={pageWidth}
         pageHeight={pageHeight}
         colors={colors}
       />
     ),
-    [colors, pageHeight, pageWidth],
+    [colors, currentPage, pageHeight, pageWidth],
   );
 
   return (
@@ -776,7 +303,10 @@ export default function UserGuideScreen() {
           <Text style={[styles.headerEyebrow, { color: colors.primary }]}>
             GUIDE
           </Text>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+          <Text
+            accessibilityRole="header"
+            style={[styles.headerTitle, { color: colors.foreground }]}
+          >
             How to use FlowLedger
           </Text>
           <Text style={[styles.headerHint, { color: colors.mutedForeground }]}>
@@ -812,6 +342,7 @@ export default function UserGuideScreen() {
           index,
         })}
         horizontal
+        extraData={currentPage}
         initialNumToRender={2}
         keyExtractor={(index) => String(index)}
         maxToRenderPerBatch={2}
@@ -827,7 +358,11 @@ export default function UserGuideScreen() {
 
       <View style={[styles.footer, { borderTopColor: colors.border }]}>
         <View style={styles.progressRow}>
-          <Text style={[styles.pageCount, { color: colors.mutedForeground }]}>
+          <Text
+            accessibilityLabel={`Guide page ${currentPage + 1} of ${GUIDE_SLIDES.length}: ${GUIDE_SLIDES[currentPage]?.title ?? ""}`}
+            accessibilityLiveRegion="polite"
+            style={[styles.pageCount, { color: colors.mutedForeground }]}
+          >
             Page {currentPage + 1} of {GUIDE_SLIDES.length}
           </Text>
           <View accessibilityElementsHidden style={styles.dots}>
@@ -986,20 +521,6 @@ const styles = StyleSheet.create({
     maxWidth: 600,
   },
   compactIntro: { fontSize: 13, lineHeight: 19, marginTop: 6 },
-  previewCard: {
-    borderWidth: 1,
-    borderRadius: 24,
-    padding: 10,
-    alignItems: "center",
-  },
-  previewImage: { width: "100%", borderRadius: 14 },
-  previewCaption: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 11,
-    lineHeight: 16,
-    textAlign: "center",
-    marginTop: 8,
-  },
   section: { gap: 9 },
   sectionTitle: { fontFamily: "Inter_800ExtraBold", fontSize: 18 },
   itemList: { gap: 8 },

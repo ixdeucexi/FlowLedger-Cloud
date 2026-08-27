@@ -5,6 +5,10 @@
       "schedule": "24 22 * * *"
     },
     {
+      "path": "/api/plaid/daily-close",
+      "schedule": "55 5 * * *"
+    },
+    {
       "path": "/api/notifications/overdue-bills",
       "schedule": "15 14 * * *"
     },
@@ -108,7 +112,16 @@
       ]
     },
     {
-      "source": "/_expo/:path*",
+      "source": "/_expo/static/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/FlowLedger-User-Guide.pdf",
       "headers": [
         {
           "key": "Cache-Control",
@@ -126,7 +139,16 @@
       ]
     },
     {
-      "source": "/:page(login|legal|setup|bills|monthly|flo|transactions|more)",
+      "source": "/:page(login|setup|accounts|add|bills|category-budget|flo|how-flowledger-works|monthly|more|reports|review|transactions|zero-budget-lab|delete-account|plan-simulator|planned-debt-payment|snowball-plan|support|user-guide|legal)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/auth/:page(callback|reset-password)",
       "headers": [
         {
           "key": "Cache-Control",

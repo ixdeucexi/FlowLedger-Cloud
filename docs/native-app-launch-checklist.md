@@ -46,8 +46,8 @@ Release FlowLedger as a signed iOS and Android app while keeping the existing PW
 - [x] Keep the large 200dp branded “Loading Plan...” screen visible without shrinking, resizing, or swapping until the signed-in household plan finishes loading
 - [x] Use a real browser opacity transition to fade in the complete fixed-size startup brand over 1.2 seconds, hold it briefly, and fade it out over 700ms without replaying or blinking; reduced motion remains immediate
 - [x] Route navigation, save, confirmation, and picker haptics through one device-level preference with an on-by-default Settings toggle
-- [x] Settings uses one responsive mobile/PWA structure organized by Money & household, App preferences, Data & privacy, and Account & support; full app tools stay in their primary screens instead of duplicating the Settings hub
-- [x] In-app Terms of Service and Privacy Policy screens
+- [x] Settings uses one responsive mobile/PWA structure organized by Money & household, App preferences, Data & security, and Account & support; full app tools stay in their primary screens instead of duplicating the Settings hub
+- [ ] Restore accurate, owner-approved privacy disclosures before store submission; the unverified Terms and Privacy drafts were removed on 2026-08-27
 - [x] Financial calculation and regression test coverage
 - [x] Flow Score uses three understandable measures: plan coverage through payday, Must Pay dollars due through today, and Protected Days; Forecast confidence is shown separately
 - [x] Expo Doctor passes all 18 checks
@@ -68,7 +68,7 @@ Release FlowLedger as a signed iOS and Android app while keeping the existing PW
 - [x] Add Android intent filters/App Links for `flowledger-algo.com`
 - [ ] Host and verify Apple `apple-app-site-association`
 - [x] Host and verify Android `assetlinks.json` for the EAS preview signing certificate
-- [ ] Add and verify the separate Google Play App Signing certificate fingerprint before production-track promotion
+- [ ] Add and verify the separate Google Play App Signing certificate fingerprint before production-track promotion, then pass `scripts/test-native-release.ps1 -RequireAndroidRelease` with `FLOWLEDGER_PLAY_APP_SIGNING_SHA256` set to the console value
 - [x] Add native routes for sign-in, password recovery, and email-verification callbacks
 - [ ] Add and physically test Plaid return, notification-tap, and record deep links
 - [ ] Add every native callback URL to the Supabase Auth redirect allowlist
@@ -86,7 +86,7 @@ Official reference: [Expo iOS submission requirements](https://docs.expo.dev/sub
 - [x] Exchange the OAuth callback for a Supabase session on native
 - [x] Implement native password-reset callback handling
 - [x] Implement native email-confirmation callback handling
-- [x] Preserve legal acceptance through native OAuth completion
+- [x] Remove the withdrawn legal-acceptance requirement from email and OAuth sign-in
 - [x] Implement the native Sign in with Apple code path, capability, and App Store-compliant system button
 - [ ] Enable/configure the Apple provider in Supabase and the Apple Developer account, then set `EXPO_PUBLIC_APPLE_AUTH_ENABLED=true` in EAS
 - [ ] Test login cancellation, expired links, duplicate callbacks, background return, sign-out, and account switching
@@ -182,11 +182,11 @@ Current implementation evidence: `artifacts/mobile/app/delete-account.tsx`, the 
 
 ### BLOCKER — store declarations
 
-- [x] Publish a stable public Privacy Policy URL (`https://flowledger-algo.com/legal?doc=privacy`, verified HTTP 200 on 2026-08-15)
-- [x] Publish a stable public Terms of Service URL (`https://flowledger-algo.com/legal?doc=terms`, verified HTTP 200 on 2026-08-15)
+- [ ] Publish an accurate owner-approved Privacy Policy URL before store submission (the prior placeholder-backed document was withdrawn on 2026-08-27)
+- [ ] Decide whether to publish Terms of Service after the real operator details are available; do not restore the withdrawn placeholder draft
 - [x] Add a stable public `/support` route with working contact information and safe recovery guidance
-- [x] Keep support, Terms, and Privacy routes available without signing in
-- [x] Ensure the policy lists Supabase, Vercel, Plaid, OpenAI/Flo, Apple/Google notification services, and any crash/analytics provider that is actually enabled
+- [x] Keep Support and account deletion available without signing in
+- [ ] Before store submission, ensure the replacement privacy policy lists Supabase, Vercel, Plaid, OpenAI/Flo, Apple/Google notification services, and any crash/analytics provider that is actually enabled
 - [x] Explain collection, use, sharing, protection, retention, deletion, and consent withdrawal
 - [x] Add explicit Flo/third-party AI disclosure and consent before financial data is sent for AI processing, with a Settings control that withdraws access and requires consent again
 - [ ] Complete Apple App Privacy answers for email, user ID, financial information, user content, diagnostics, and other collected data
@@ -313,7 +313,7 @@ Current native network-status hook uses NetInfo and exposes offline/reconnected 
 - [ ] Capture Play Store phone screenshots using fictional data only
 - [x] Create and deterministically verify the Google Play 1024×500 feature graphic from fictional brand-only assets
 - [x] Draft app name, subtitle/short description, long description, keywords, Finance category positioning, and version 1 release notes
-- [x] Add and live-verify public support email, support URL, privacy URL, deletion URL, and marketing URL
+- [ ] Add and live-verify an accurate owner-approved privacy URL before store submission; support email, support URL, deletion URL, and marketing URL remain available
 - [ ] Ensure screenshots represent the current app and identify Pro-only features accurately
 - [x] Prepare review notes explaining Flo, Forecast calculations, Plaid, Pro gating, simulator, and demo/reviewer access
 

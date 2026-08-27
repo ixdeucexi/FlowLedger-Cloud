@@ -2,7 +2,6 @@ import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,7 +14,6 @@ import { BiometricLockSettings } from "@/components/BiometricLockSettings";
 import { HouseholdSwitcher } from "@/components/HouseholdSwitcher";
 import { AdminMembershipTools } from "@/components/AdminMembershipTools";
 import { AdminMoneyHealth } from "@/components/AdminMoneyHealth";
-import { LegalDocumentModal } from "@/components/LegalDocumentModal";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { PlaidLinkButton } from "@/components/PlaidLinkButton";
 import {
@@ -37,7 +35,6 @@ import {
   useThemeMode,
 } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
-import { flowLedgerUserGuideTarget } from "@/lib/userGuide";
 import { FOUNDING_FREE_LAUNCH, hasAdminProAccess } from "@/lib/launchMode";
 import * as Haptics from "@/lib/haptics";
 
@@ -46,9 +43,9 @@ export type DesktopSettingsSection =
   | "Appearance & feedback"
   | "Notifications"
   | "Accounts & connections"
-  | "Data & privacy"
+  | "Data & security"
   | "Membership"
-  | "Help & legal"
+  | "Help & support"
   | "Admin";
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 
@@ -78,8 +75,8 @@ const SECTIONS: Array<{
     icon: "link",
   },
   {
-    label: "Data & privacy",
-    description: "Security, export, and privacy",
+    label: "Data & security",
+    description: "Security and data export",
     icon: "lock",
   },
   {
@@ -87,7 +84,7 @@ const SECTIONS: Array<{
     description: "Plan information",
     icon: "credit-card",
   },
-  { label: "Help & legal", description: "Guide, support, terms, and privacy", icon: "help-circle" },
+  { label: "Help & support", description: "Guide, support, and feedback", icon: "help-circle" },
   { label: "Admin", description: "Authorized administration", icon: "shield" },
 ];
 
@@ -153,7 +150,6 @@ export function DesktopSettingsPage({
   const [fullName, setFullName] = useState(() => nameFor(user));
   const [savingName, setSavingName] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [legalDoc, setLegalDoc] = useState<"terms" | "privacy" | null>(null);
   const [syncing, setSyncing] = useState(false);
   const timezone = useMemo(
     () =>
@@ -193,12 +189,7 @@ export function DesktopSettingsPage({
   };
 
   const openUserGuide = () => {
-    const target = flowLedgerUserGuideTarget("website");
-    void Linking.openURL(target.href).catch(() => {
-      setMessage(
-        "The FlowLedger User Guide could not be opened. Please try again.",
-      );
-    });
+    router.push("/user-guide" as never);
   };
 
   return (
@@ -330,14 +321,14 @@ export function DesktopSettingsPage({
                     onPress={() => setSection("Notifications")}
                   />
                   <SettingsPreview
-                    title="Data & privacy"
+                    title="Data & security"
                     rows={[
                       "Biometric app lock",
                       "Export your FlowLedger data",
-                      "Review privacy terms",
+                      "Manage sign-in security",
                     ]}
                     action="Manage data"
-                    onPress={() => setSection("Data & privacy")}
+                    onPress={() => setSection("Data & security")}
                   />
                   <SettingsPreview
                     title="Membership"
@@ -440,7 +431,7 @@ export function DesktopSettingsPage({
             {section === "Notifications" ? (
               <NotificationSettings appearance="desktop" />
             ) : null}
-            {section === "Data & privacy" ? (
+            {section === "Data & security" ? (
               <>
                 <BiometricLockSettings appearance="desktop" />
                 <DesktopCard>
@@ -455,9 +446,9 @@ export function DesktopSettingsPage({
               </>
             ) : null}
 
-            {section === "Data & privacy" ? (
+            {section === "Data & security" ? (
               <DesktopCard>
-                <CardHeader title="Data & Privacy" />
+                <CardHeader title="Data & Security" />
                 <View style={styles.sectionBody}>
                   <SettingsLine
                     icon="download"
@@ -471,30 +462,6 @@ export function DesktopSettingsPage({
                       />
                     }
                   />
-                  <SettingsLine
-                    icon="shield"
-                    title="Privacy Policy"
-                    description="Read how FlowLedger handles your financial data"
-                    action={
-                      <SecondaryButton
-                        label="Open"
-                        icon="arrow-up-right"
-                        onPress={() => setLegalDoc("privacy")}
-                      />
-                    }
-                  />
-                  <SettingsLine
-                    icon="file-text"
-                    title="Terms of Service"
-                    description="Review FlowLedger terms and financial disclaimers"
-                    action={
-                      <SecondaryButton
-                        label="Open"
-                        icon="arrow-up-right"
-                        onPress={() => setLegalDoc("terms")}
-                      />
-                    }
-                  />
                 </View>
               </DesktopCard>
             ) : null}
@@ -505,7 +472,7 @@ export function DesktopSettingsPage({
                   <CardHeader title="Bank Connections" />
                   <View style={styles.connectionActions}>
                     {FOUNDING_FREE_LAUNCH && !adminProAccess ? (
-                      <Text style={styles.supportNote}>Bank sync is planned for Pro in 2027. Manual accounts and activity are available during the Founding Free launch.</Text>
+                      <Text style={styles.supportNote}>Bank sync is planned for a later Pro release. Manual accounts and activity are available during the Founding Free launch.</Text>
                     ) : (
                       <>
                         <PlaidLinkButton colors={desktopColors as never} onConnected={onSync} />
@@ -601,7 +568,7 @@ export function DesktopSettingsPage({
               </DesktopCard>
             ) : null}
 
-            {section === "Help & legal" ? (
+            {section === "Help & support" ? (
               <DesktopCard>
                 <CardHeader title="About FlowLedger Algo" />
                 <View style={styles.sectionBody}>
@@ -613,34 +580,23 @@ export function DesktopSettingsPage({
                   <SettingsLine
                     icon="book-open"
                     title="FlowLedger User Guide"
-                    description="Everyday steps with pictures for Dashboard, Activity, Forecast, debt planning, savings, and Flo"
+                    description="Step-by-step cards for Dashboard, Activity, Forecast, debt planning, savings, and Flo"
                     action={
                       <SecondaryButton
                         label="Open Guide"
-                        icon="external-link"
+                        icon="book-open"
                         onPress={openUserGuide}
                       />
                     }
                   />
                   <SettingsLine
-                    icon="shield"
-                    title="Privacy Policy"
-                    description="How your information is handled"
+                    icon="life-buoy"
+                    title="Support"
+                    description="Get help with your FlowLedger account or plan"
                     action={
                       <SecondaryButton
-                        label="Read"
-                        onPress={() => setLegalDoc("privacy")}
-                      />
-                    }
-                  />
-                  <SettingsLine
-                    icon="file-text"
-                    title="Terms of Service"
-                    description="Terms and financial disclaimers"
-                    action={
-                      <SecondaryButton
-                        label="Read"
-                        onPress={() => setLegalDoc("terms")}
+                        label="Open Support"
+                        onPress={() => router.push("/support" as never)}
                       />
                     }
                   />
@@ -710,10 +666,6 @@ export function DesktopSettingsPage({
           </View>
         </View>
       </ScrollView>
-      <LegalDocumentModal
-        documentId={legalDoc}
-        onClose={() => setLegalDoc(null)}
-      />
     </DesktopPage>
   );
 }

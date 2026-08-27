@@ -1,4 +1,8 @@
-param([switch]$SkipBundles)
+param(
+  [switch]$SkipBundles,
+  [switch]$RequireAndroidRelease,
+  [switch]$RequireIosRelease
+)
 $ErrorActionPreference = "Stop"
 $workspace = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $mobile = Join-Path $workspace "artifacts/mobile"
@@ -7,8 +11,18 @@ if (-not $output.StartsWith($mobile, [System.StringComparison]::OrdinalIgnoreCas
 
 Push-Location $workspace
 try {
+  if ($RequireAndroidRelease) {
+    pnpm run release:native-android-check
+    if ($LASTEXITCODE -ne 0) { throw "Native Android App Links readiness failed." }
+  }
+  if ($RequireIosRelease) {
+    pnpm run release:native-ios-check
+    if ($LASTEXITCODE -ne 0) { throw "Native iOS provider readiness failed." }
+  }
   pnpm run check:mobile-config
   if ($LASTEXITCODE -ne 0) { throw "Mobile config assertion failed." }
+  pnpm run release:guide-check
+  if ($LASTEXITCODE -ne 0) { throw "User-guide PDF drift check failed." }
   pnpm run test
   if ($LASTEXITCODE -ne 0) { throw "Automated tests failed." }
   pnpm run typecheck

@@ -1,0 +1,273 @@
+[
+  {
+    "eyebrow": "EVERYDAY MONEY PLANNING",
+    "title": "FlowLedger User Guide",
+    "intro": "A clear daily routine for your Dashboard, Activity, Forecast, debt plan, savings, and Flo.",
+    "icon": "compass",
+    "accent": "#9B5CFF",
+    "sections": [
+      {
+        "title": "Your everyday path",
+        "items": [
+          { "title": "Dashboard", "body": "See where your money stands now.", "icon": "home" },
+          { "title": "Next up", "body": "Handle one useful next step at a time.", "icon": "sun" },
+          { "title": "Activity", "body": "Review what changed in your accounts.", "icon": "repeat" },
+          { "title": "Forecast", "body": "Confirm what should happen next.", "icon": "calendar" }
+        ]
+      }
+    ],
+    "callout": {
+      "title": "FlowLedger plans—it does not send payments",
+      "body": "Continue paying bills and debts through your bank or provider."
+    }
+  },
+  {
+    "eyebrow": "STEP 1",
+    "title": "Start with a complete plan",
+    "intro": "Set up recurring money once, then review it whenever life changes.",
+    "icon": "check-circle",
+    "accent": "#22C7D6",
+    "sections": [
+      {
+        "title": "Setup checklist",
+        "items": [
+          { "title": "Checking", "body": "Add the account used for everyday cash flow and enter its current balance.", "icon": "credit-card" },
+          { "title": "Income", "body": "Add recurring income and confirm each expected payday.", "icon": "trending-up" },
+          { "title": "Bills", "body": "Confirm amount, next date, and weekly, monthly, quarterly, or other frequency.", "icon": "file-text" },
+          { "title": "Debts", "body": "Enter the current balance, minimum payment, APR, and due date.", "icon": "bar-chart-2" },
+          { "title": "Savings", "body": "Add each account and give it a clear purpose name.", "icon": "shield" },
+          { "title": "Forecast", "body": "Make sure the next two weeks look like real life.", "icon": "calendar" }
+        ]
+      }
+    ],
+    "callout": {
+      "title": "One shared plan",
+      "body": "Phone and website use the same household data and calculations. Only the layout changes."
+    }
+  },
+  {
+    "eyebrow": "STEP 2",
+    "title": "Your daily 3-minute routine",
+    "intro": "Use the same short path each day. Go deeper only when something changed or needs review.",
+    "icon": "clock",
+    "accent": "#25D39B",
+    "sections": [
+      {
+        "title": "Check these four places",
+        "items": [
+          { "title": "1. Dashboard", "body": "Check balance, pending outflows, available money, and Flow Score.", "icon": "home" },
+          { "title": "2. Next up", "body": "Handle the few bills, debts, or choices that matter now.", "icon": "sun" },
+          { "title": "3. Activity", "body": "Review new transactions, matches, and anything needing attention.", "icon": "repeat" },
+          { "title": "4. Forecast", "body": "Scan upcoming days and confirm each closing balance makes sense.", "icon": "calendar" }
+        ]
+      }
+    ],
+    "callout": {
+      "title": "If the day looks normal, you are done",
+      "body": "If something looks unfamiliar, open the related item before changing the plan."
+    }
+  },
+  {
+    "eyebrow": "STEP 3",
+    "title": "Review Activity and match what happened",
+    "intro": "Activity is the history of what really happened. Review new items before changing bills, balances, or the Forecast.",
+    "icon": "repeat",
+    "accent": "#38BDF8",
+    "sections": [
+      {
+        "title": "Work from newest to oldest",
+        "items": [
+          { "title": "Check pending and posted", "body": "When bank sync is available, pending activity may change before it posts. Posted activity is part of your account history.", "icon": "clock" },
+          { "title": "Match planned money", "body": "When imported activity is available, match it to the correct bill, debt payment, or income occurrence so it is counted once.", "icon": "link" },
+          { "title": "Resolve needs review", "body": "Confirm the category, transfer, duplicate, or forgotten plan item before dismissing it.", "icon": "check-square" },
+          { "title": "Use full amounts", "body": "Activity shows the full money amount. Open an item for its date, account, status, and history.", "icon": "dollar-sign" }
+        ]
+      }
+    ],
+    "callout": {
+      "title": "One real event should appear once",
+      "body": "When bank sync is available, match a payment that is both planned and pending instead of creating a second bill or transaction."
+    }
+  },
+  {
+    "eyebrow": "STEP 4",
+    "title": "Bills, debts, and planned payments",
+    "intro": "Use Bills for recurring obligations. Switch to Debt to manage balances, minimums, or payoff order.",
+    "icon": "file-text",
+    "accent": "#F5B82E",
+    "sections": [
+      {
+        "title": "Bills",
+        "items": [
+          { "title": "Keep the schedule current", "body": "Edit amount, next date, and frequency when they change.", "icon": "edit-3" },
+          { "title": "Record manual payments", "body": "Mark a bill paid after you pay it outside FlowLedger.", "icon": "check" },
+          { "title": "Close finished items", "body": "Inactive bills should stop creating reminders and occurrences.", "icon": "x-circle" }
+        ]
+      },
+      {
+        "title": "Debt Payoff Planner",
+        "items": [
+          { "title": "Review the order", "body": "See each lender’s original required minimum and the current snowball or avalanche target.", "icon": "list" },
+          { "title": "Check rollover", "body": "Rollover moves to the next debt as extra payoff money. It stays in Forecast but never makes the lender minimum larger or creates a false missed-payment alert.", "icon": "corner-down-right" },
+          { "title": "Edit planned payments", "body": "Change an amount or date when it no longer fits real life.", "icon": "sliders" }
+        ]
+      }
+    ],
+    "callout": {
+      "title": "Matched activity appears once",
+      "body": "When bank sync is available, a planned item matched to pending bank activity should show one Payment Pending item—not two charges."
+    }
+  },
+  {
+    "eyebrow": "STEP 5",
+    "title": "Forecast and Plan Simulator",
+    "intro": "Forecast shows when money should move and what each day's closing balance will be.",
+    "icon": "calendar",
+    "accent": "#5CA6FF",
+    "sections": [
+      {
+        "title": "Read the calendar",
+        "items": [
+          { "title": "Inflows and outflows", "body": "Calendar colors separate money coming in from bills and debts going out.", "icon": "shuffle" },
+          { "title": "Open the day", "body": "Tap a date to see every item behind its closing balance.", "icon": "search" },
+          { "title": "Verify status", "body": "When bank sync is available, matched pending payments should appear once with their current status.", "icon": "check-square" },
+          { "title": "Sync is not cash activity", "body": "When bank sync is available, a refresh updates data but is not itself a calendar cash event.", "icon": "refresh-cw" }
+        ]
+      },
+      {
+        "title": "Try a what-if",
+        "items": [
+          { "title": "Open Simulator", "body": "Test income or expense changes without editing live data.", "icon": "sliders" },
+          { "title": "Compare results", "body": "Review the real plan beside the simulated outcome.", "icon": "columns" },
+          { "title": "Leave safely", "body": "Exit the simulator to return to the unchanged Forecast.", "icon": "log-out" }
+        ]
+      }
+    ],
+    "callout": {
+      "title": "Best daily habit",
+      "body": "Before the day ends, confirm the next few closing balances match what you expect."
+    }
+  },
+  {
+    "eyebrow": "STEP 6",
+    "title": "Savings and Flo",
+    "intro": "Use savings for purpose-based balances. Use Flo for explanations and guided next steps.",
+    "icon": "message-circle",
+    "accent": "#A76DFF",
+    "sections": [
+      {
+        "title": "Savings",
+        "items": [
+          { "title": "Flip the full card", "body": "Tap Savings on Dashboard to switch from checking to savings.", "icon": "repeat" },
+          { "title": "Review accounts separately", "body": "Each manual savings balance appears on its own during Founding Free.", "icon": "layers" },
+          { "title": "Name the purpose", "body": "Use names like Emergency Fund, Vacation, Taxes, or Car Repair.", "icon": "tag" }
+        ]
+      },
+      {
+        "title": "Ask Flo",
+        "items": [
+          { "title": "Ask about the plan", "body": "Check upcoming bills, recent changes, and items needing review.", "icon": "help-circle" },
+          { "title": "Check sources", "body": "Use freshness and source details when Flo provides them.", "icon": "link" },
+          { "title": "Review before confirming", "body": "Inspect every proposed plan change before applying it.", "icon": "eye" },
+          { "title": "Hide when needed", "body": "Press and hold the Flo icon to dismiss it for the current session.", "icon": "eye-off" }
+        ]
+      }
+    ],
+    "callout": {
+      "title": "Naming stays inside FlowLedger",
+      "body": "Renaming a savings account here does not rename the account at your bank."
+    }
+  },
+  {
+    "eyebrow": "STEP 7",
+    "title": "Notifications and in-app guidance",
+    "intro": "Use reminders to catch upcoming items and the Guided Tour for a quick refresher.",
+    "icon": "bell",
+    "accent": "#FF9D4D",
+    "sections": [
+      {
+        "title": "Keep reminders useful",
+        "items": [
+          { "title": "Open the related item", "body": "A reminder should take you directly to the bill or debt to review.", "icon": "external-link" },
+          { "title": "Dismiss finished work", "body": "Remove a reminder when it is complete.", "icon": "x" },
+          { "title": "Close inactive items", "body": "Paid-off or closed debts should stop creating future reminders.", "icon": "archive" }
+        ]
+      },
+      {
+        "title": "Guided Tour",
+        "items": [
+          { "title": "Start at Step 1", "body": "The guide begins at the first section every time you open it fresh.", "icon": "play" },
+          { "title": "Follow the highlighted step", "body": "Next and Previous keep the selected tab and page in sync.", "icon": "navigation" },
+          { "title": "Start at the top", "body": "Every new guide page begins at the top of its content.", "icon": "arrow-up" }
+        ]
+      }
+    ],
+    "callout": {
+      "title": "Keep reminders accurate",
+      "body": "If a bill or debt is finished, update it so future reminders stop."
+    }
+  },
+  {
+    "eyebrow": "STEP 8",
+    "title": "Settings, setup, and Founding Free",
+    "intro": "Open Settings to manage the active household, manual accounts, reminders, appearance, security, setup, and support.",
+    "icon": "settings",
+    "accent": "#A78BFA",
+    "sections": [
+      {
+        "title": "Keep the workspace current",
+        "items": [
+          { "title": "Household & accounts", "body": "Choose the active household, confirm member access, and keep each manual account balance current.", "icon": "users" },
+          { "title": "Setup & walkthrough", "body": "Run setup again after a major change or replay the Guided Tour from its first step.", "icon": "compass" },
+          { "title": "Notifications and security", "body": "Choose useful reminders and turn on the available device sign-in protections.", "icon": "shield" },
+          { "title": "Help & user guide", "body": "Open this guide again or use Support when an account or plan needs help.", "icon": "book-open" }
+        ]
+      },
+      {
+        "title": "Current public plan",
+        "items": [
+          { "title": "Founding Free", "body": "No subscription or trial is required during the public launch. Forecast, bills, debt payoff, Activity, spending buckets, reports, and Flo are available.", "icon": "gift" },
+          { "title": "Pro is planned for a later release", "body": "Bank sync and advanced automation stay unavailable until their production approval and testing are complete.", "icon": "clock" }
+        ]
+      }
+    ],
+    "callout": {
+      "title": "Settings apply to the active household",
+      "body": "Check the household name before changing account, member, or plan information."
+    }
+  },
+  {
+    "eyebrow": "STEP 9",
+    "title": "When a number does not look right",
+    "intro": "Most differences come from status, recurrence, unmatched activity, or an outdated balance.",
+    "icon": "tool",
+    "accent": "#FF6F91",
+    "sections": [
+      {
+        "title": "Check in this order",
+        "items": [
+          { "title": "1. Refresh", "body": "Refresh the app, then confirm the manual balance and Activity are current.", "icon": "refresh-cw" },
+          { "title": "2. Check status", "body": "See whether activity is pending, posted, matched, or needs review.", "icon": "activity" },
+          { "title": "3. Check recurrence", "body": "Confirm amount, next date, and the weekly, monthly, quarterly, or other frequency.", "icon": "repeat" },
+          { "title": "4. Check active state", "body": "Make sure the bill or debt is active—and close it if finished.", "icon": "toggle-right" },
+          { "title": "5. Review Activity", "body": "Look for unmatched or duplicate-looking items before changing a balance.", "icon": "search" },
+          { "title": "6. Verify debt details", "body": "Confirm the current balance and original minimum payment.", "icon": "credit-card" },
+          { "title": "7. Recheck Forecast", "body": "Open the affected day and verify the closing balance after correcting data.", "icon": "calendar" }
+        ]
+      },
+      {
+        "title": "Quick glossary",
+        "items": [
+          { "title": "Pending", "body": "Expected activity that has not fully posted or settled.", "icon": "clock" },
+          { "title": "Available", "body": "The balance after relevant pending outflows.", "icon": "dollar-sign" },
+          { "title": "Flow Score", "body": "A health signal based on the current FlowLedger plan.", "icon": "bar-chart" },
+          { "title": "Closing balance", "body": "For a completed day, the saved real closing balance from the latest verified account data. For a future day, the balance after scheduled activity.", "icon": "flag" }
+        ]
+      }
+    ],
+    "callout": {
+      "title": "Remember the routine",
+      "body": "Dashboard → Next up → Activity → Forecast. If those look right, your daily review is complete."
+    }
+  }
+]

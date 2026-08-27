@@ -14,7 +14,7 @@
       "file": "02-forecast.png",
       "screen": "Forecast",
       "headline": "Know what is coming every day",
-      "caption": "See bills, income, and projected daily closes."
+      "caption": "See bills, income, and each day’s closing balance."
     },
     {
       "slot": 3,
@@ -49,7 +49,7 @@
       "file": "07-settings.png",
       "screen": "Settings",
       "headline": "Your data. Your control.",
-      "caption": "Manage privacy, notifications, security, and household access."
+      "caption": "Manage notifications, security, data access, and household members."
     }
   ]
 }

@@ -3,7 +3,7 @@
   "assetClass": "FlowLedger Founding Free PWA screenshot drafts",
   "submissionReady": false,
   "disclosure": "These images are fictional-data PWA drafts for composition and copy review. They must be recaptured from the signed native release candidate before App Store or Google Play submission.",
-  "generatedAt": "2026-08-25T08:07:58.114Z",
+  "generatedAt": "2026-08-27T13:38:11.954Z",
   "generatedBy": "scripts/build-store-screenshot-drafts.mjs",
   "fixture": "Local-only reviewer capture mode: artifacts/mobile/context/BudgetContext.tsx#createDemoBudgetData",
   "copy": "screenshots/draft-pwa/copy.json",
@@ -20,7 +20,7 @@
       "file": "02-forecast.png",
       "screen": "Forecast",
       "headline": "Know what is coming every day",
-      "caption": "See bills, income, and projected daily closes."
+      "caption": "See bills, income, and each day’s closing balance."
     },
     {
       "slot": 3,
@@ -55,7 +55,7 @@
       "file": "07-settings.png",
       "screen": "Settings",
       "headline": "Your data. Your control.",
-      "caption": "Manage privacy, notifications, security, and household access."
+      "caption": "Manage notifications, security, data access, and household members."
     }
   ],
   "platforms": {
@@ -99,7 +99,7 @@
           "slot": 2,
           "screen": "Forecast",
           "headline": "Know what is coming every day",
-          "caption": "See bills, income, and projected daily closes.",
+          "caption": "See bills, income, and each day’s closing balance.",
           "raw": {
             "file": "screenshots/draft-pwa/android-phone/raw/02-forecast.png",
             "width": 450,
@@ -234,7 +234,7 @@
           "slot": 7,
           "screen": "Settings",
           "headline": "Your data. Your control.",
-          "caption": "Manage privacy, notifications, security, and household access.",
+          "caption": "Manage notifications, security, data access, and household members.",
           "raw": {
             "file": "screenshots/draft-pwa/android-phone/raw/07-settings.png",
             "width": 450,
@@ -243,9 +243,9 @@
             "channels": 3,
             "hasAlpha": false,
             "colorSpace": "srgb",
-            "sha256": "E6C95453019C66E06D19F1B6C5D7101B9EB7704E6DF4A5AF4E8015DDBA8A2BA2"
+            "sha256": "F9024860CEE9E04147D4ED1CF7336A625AE12B6FF4A6CEC18DD15046ACF07904"
           },
-          "captureNormalization": null,
+          "captureNormalization": "Chrome screenshot transport returned JPEG bytes; normalized to opaque PNG without changing UI content.",
           "store": {
             "file": "screenshots/draft-pwa/android-phone/store/07-settings.png",
             "width": 1350,
@@ -254,7 +254,7 @@
             "channels": 3,
             "hasAlpha": false,
             "colorSpace": "srgb",
-            "sha256": "2C86CDD3F84012D4098B37B9B64C746F06F16625DF72E2A010237685FD131F14"
+            "sha256": "FE8B2ED996EAD62BEDDD5B7B6E6460EA5CCF31F2DFF5E7161C99896493ECD733"
           }
         }
       ],
@@ -266,7 +266,7 @@
         "channels": 3,
         "hasAlpha": false,
         "colorSpace": "srgb",
-        "sha256": "8D062D485DAD55E27E8F1A4CF468339588DC81507B00653552E02D12442A99CC"
+        "sha256": "F3B403D8FBAFED091F8D81D6236ED4565ED4F9839E278F1CFA162B1D9A897E24"
       }
     },
     "ios-6.9": {
@@ -309,7 +309,7 @@
           "slot": 2,
           "screen": "Forecast",
           "headline": "Know what is coming every day",
-          "caption": "See bills, income, and projected daily closes.",
+          "caption": "See bills, income, and each day’s closing balance.",
           "raw": {
             "file": "screenshots/draft-pwa/ios-6.9/raw/02-forecast.png",
             "width": 430,
@@ -444,7 +444,7 @@
           "slot": 7,
           "screen": "Settings",
           "headline": "Your data. Your control.",
-          "caption": "Manage privacy, notifications, security, and household access.",
+          "caption": "Manage notifications, security, data access, and household members.",
           "raw": {
             "file": "screenshots/draft-pwa/ios-6.9/raw/07-settings.png",
             "width": 430,
@@ -453,9 +453,9 @@
             "channels": 3,
             "hasAlpha": false,
             "colorSpace": "srgb",
-            "sha256": "6A7CCC3E2EECA993483C77F5E09F236DF9BA0E9C191ABA5B5103BEC30214F60A"
+            "sha256": "00F355C3E8E8031DE02CF2CB8ED40A0CE4DFBE89FEDB52891F65413F9E80FECD"
           },
-          "captureNormalization": null,
+          "captureNormalization": "Chrome screenshot transport returned JPEG bytes; normalized to opaque PNG without changing UI content.",
           "store": {
             "file": "screenshots/draft-pwa/ios-6.9/store/07-settings.png",
             "width": 1290,
@@ -464,7 +464,7 @@
             "channels": 3,
             "hasAlpha": false,
             "colorSpace": "srgb",
-            "sha256": "733124F9280AA449A9696C70AD62C25B259A9DC28EC415419DCD9A08690D3D27"
+            "sha256": "FEA7E65D36FD55C1083930C2B9E723CD026EB3037E429C7672E1D3C90C72FE47"
           }
         }
       ],
@@ -476,7 +476,7 @@
         "channels": 3,
         "hasAlpha": false,
         "colorSpace": "srgb",
-        "sha256": "755A409D6A79C7C3482EA57620D8B3F11C6CA80F4F50A0CC92FDC1C55F9091F3"
+        "sha256": "11C3F8C0BB01B2F37716BE2AF7A59A987F072156F982C1FAB27B9FC5FE32C64D"
       }
     }
   },
@@ -488,7 +488,7 @@
     "channels": 3,
     "hasAlpha": false,
     "colorSpace": "srgb",
-    "sha256": "8D062D485DAD55E27E8F1A4CF468339588DC81507B00653552E02D12442A99CC"
+    "sha256": "F3B403D8FBAFED091F8D81D6236ED4565ED4F9839E278F1CFA162B1D9A897E24"
   },
   "approvalGate": {
     "nativeRecaptureRequired": true,

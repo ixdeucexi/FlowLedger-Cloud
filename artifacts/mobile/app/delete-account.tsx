@@ -12,7 +12,7 @@ import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { clearDeletedAccountStorage, deleteFlowLedgerAccount } from "@/lib/accountDeletion";
-import { LEGAL_EMAIL } from "@/lib/legalDocuments";
+import { SUPPORT_EMAIL } from "@/lib/support";
 import { supabase } from "@/lib/supabase";
 import { openStoreSubscriptionSettings, resetBillingIdentityAfterDeletion } from "@/lib/nativeBilling";
 import { purgeLocalPushNotifications } from "@/lib/pushNotifications";
@@ -34,7 +34,7 @@ export default function DeleteAccountScreen() {
   const [oauthAccessToken, setOauthAccessToken] = useState<string | null>(null);
   const [deletionSubjectId, setDeletionSubjectId] = useState<string | null>(() => user?.id ?? null);
   const oauthReauthKey = deletionSubjectId ? `${OAUTH_REAUTH_STARTED_KEY}:${deletionSubjectId}` : null;
-  const requestUrl = `mailto:${LEGAL_EMAIL}?subject=${encodeURIComponent(REQUEST_SUBJECT)}&body=${encodeURIComponent("Please help with my FlowLedger account deletion. My deletion receipt, if one was issued, is: ")}`;
+  const requestUrl = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(REQUEST_SUBJECT)}&body=${encodeURIComponent("Please help with my FlowLedger account deletion. My deletion receipt, if one was issued, is: ")}`;
 
   const providers = Array.isArray(user?.app_metadata?.providers)
     ? user.app_metadata.providers.map(String)
@@ -63,8 +63,8 @@ export default function DeleteAccountScreen() {
     if (!deletionSubjectId || !oauthReauthKey) { setError("Return to this screen from the account you want to delete."); setBusy(false); return; }
     await AsyncStorage.setItem(oauthReauthKey, String(Date.now()));
     const reauthError = oauthProvider === "apple"
-      ? await signInWithApple(false)
-      : await signInWithGoogle(false);
+      ? await signInWithApple()
+      : await signInWithGoogle();
     if (reauthError) {
       await AsyncStorage.removeItem(oauthReauthKey).catch(() => undefined);
       setError(reauthError);
@@ -144,7 +144,7 @@ export default function DeleteAccountScreen() {
         <View style={styles.header}>
           <AccessibleIconButton accessibilityLabel="Go back" icon="arrow-left" size={22} color={colors.foreground} onPress={() => router.canGoBack() ? router.back() : router.replace("/login" as never)} style={[styles.backButton, { borderColor: colors.border, backgroundColor: colors.card }]} />
           <View style={styles.headerText}>
-            <Text style={[styles.eyebrow, { color: colors.primary }]}>DATA & PRIVACY</Text>
+            <Text style={[styles.eyebrow, { color: colors.primary }]}>ACCOUNT CONTROL</Text>
             <Text style={[styles.title, { color: colors.foreground }]}>Delete my account</Text>
           </View>
         </View>

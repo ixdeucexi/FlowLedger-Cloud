@@ -8,11 +8,11 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { AppState, Platform } from "react-native";
 
 import { DEV_DEMO_USER_ID, disableDevDemoMode, enableDevDemoMode, isDevDemoMode } from "@/lib/demoMode";
-import { LEGAL_VERSION, legalAcceptanceMetadata } from "@/lib/legalDocuments";
 import { clearLastAppRoute } from "@/lib/navigationMemory";
 import { detachPushNotifications } from "@/lib/pushNotifications";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 import { planSimulationStoragePrefix } from "@/lib/planSimulator";
+import { clearLearningTourForAccountChange } from "@/lib/learningTour";
 import { supabase } from "@/lib/supabase";
 import { completeSupabaseAuthUrl, nativeAuthRedirectUri, nativePasswordResetRedirectUri } from "@/lib/authLinks";
 import { deactivateBillingIdentity } from "@/lib/nativeBilling";
@@ -20,11 +20,14 @@ import { apiFetch } from "@/lib/api";
 
 WebBrowser.maybeCompleteAuthSession();
 
-function friendlyAuthError(message?: string | null): string | null {
+function friendlyAuthError(
+  message?: string | null,
+  provider?: "Google" | "Apple",
+): string | null {
   if (!message) return null;
   const normalized = message.toLowerCase();
-  if (normalized.includes("provider") || normalized.includes("oauth") || normalized.includes("redirect")) {
-    return "Google sign-in is almost ready, but the Google provider or redirect URL still needs to be configured in Supabase.";
+  if (provider && (normalized.includes("provider") || normalized.includes("oauth") || normalized.includes("redirect"))) {
+    return `${provider} sign-in is not available yet. Its provider or redirect configuration still needs attention.`;
   }
   return message;
 }
@@ -40,9 +43,9 @@ interface AuthContextType {
   user:     User | null;
   loading:  boolean;
   signIn:   (email: string, password: string) => Promise<string | null>;
-  signUp:   (email: string, password: string, legalAccepted: boolean) => Promise<string | null>;
-  signInWithGoogle: (legalAccepted?: boolean) => Promise<string | null>;
-  signInWithApple: (legalAccepted?: boolean) => Promise<string | null>;
+  signUp:   (email: string, password: string) => Promise<string | null>;
+  signInWithGoogle: () => Promise<string | null>;
+  signInWithApple: () => Promise<string | null>;
   requestPasswordReset: (email: string) => Promise<string | null>;
   updatePassword: (password: string) => Promise<string | null>;
   signOut:  () => Promise<void>;
@@ -53,50 +56,6 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-const PENDING_LEGAL_ACCEPTANCE_KEY = "flowledger_pending_legal_acceptance";
-
-async function queueOAuthLegalAcceptance() {
-  const value = JSON.stringify({
-      version: LEGAL_VERSION,
-      acceptedAt: new Date().toISOString(),
-    });
-  try {
-    if (Platform.OS === "web" && typeof window !== "undefined") {
-      window.localStorage.setItem(PENDING_LEGAL_ACCEPTANCE_KEY, value);
-    } else {
-      await AsyncStorage.setItem(PENDING_LEGAL_ACCEPTANCE_KEY, value);
-    }
-  } catch {
-    // The in-app acceptance gate remains the fallback when local storage is unavailable.
-  }
-}
-
-async function applyPendingOAuthLegalAcceptance() {
-  const raw = Platform.OS === "web" && typeof window !== "undefined"
-    ? window.localStorage.getItem(PENDING_LEGAL_ACCEPTANCE_KEY)
-    : await AsyncStorage.getItem(PENDING_LEGAL_ACCEPTANCE_KEY).catch(() => null);
-  if (!raw) return;
-  try {
-    const pending = JSON.parse(raw) as { version?: string; acceptedAt?: string };
-    const acceptedAt = pending.acceptedAt ? new Date(pending.acceptedAt) : null;
-    const isRecent = acceptedAt && Number.isFinite(acceptedAt.getTime()) && Date.now() - acceptedAt.getTime() < 60 * 60 * 1000;
-    if (pending.version === LEGAL_VERSION && isRecent) {
-      const { error } = await supabase.auth.updateUser({ data: legalAcceptanceMetadata(acceptedAt.toISOString()) });
-      if (error) throw error;
-    }
-  } catch (error) {
-    console.warn("Could not restore pending legal acceptance", error);
-  } finally {
-    try {
-      if (Platform.OS === "web" && typeof window !== "undefined") {
-        window.localStorage.removeItem(PENDING_LEGAL_ACCEPTANCE_KEY);
-      } else {
-        await AsyncStorage.removeItem(PENDING_LEGAL_ACCEPTANCE_KEY);
-      }
-    } catch {}
-  }
-}
-
 function isAuthCallbackUrl(url?: string | null) {
   return Boolean(url && (
     /^flowledger:\/\/auth\/(?:callback|reset-password)/i.test(url)
@@ -187,20 +146,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const finishInitialAuth = async () => {
+      let shouldCleanWebAuthUrl = false;
       if (Platform.OS === "web" && typeof window !== "undefined") {
         const params = new URLSearchParams(window.location.search);
-        const code = params.get("code");
-        const hasOAuthTokens = window.location.hash.includes("access_token=");
-
-        if (code) {
-          const { error } = await withTimeout(supabase.auth.exchangeCodeForSession(code), 8000, "Google sign-in callback");
-          const cleanUrl = `${window.location.origin}${window.location.pathname}`;
-          window.history.replaceState({}, document.title, cleanUrl);
-          if (error) console.warn("Google sign-in callback failed", error.message);
-        } else if (hasOAuthTokens) {
-          const cleanUrl = `${window.location.origin}${window.location.pathname}`;
-          window.history.replaceState({}, document.title, cleanUrl);
-        }
+        shouldCleanWebAuthUrl = params.has("code")
+          || params.has("error")
+          || params.has("error_description")
+          || window.location.hash.includes("access_token=")
+          || window.location.hash.includes("error=");
       }
 
       if (Platform.OS !== "web") {
@@ -211,12 +164,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (isAuthCallbackUrl(initialUrl)) await completeSupabaseAuthUrl(initialUrl!);
       }
 
-      let { data } = await withTimeout(supabase.auth.getSession(), 8000, "Session check");
-      if (data.session) {
-        await withTimeout(applyPendingOAuthLegalAcceptance(), 8000, "Pending legal acceptance").catch(error => {
-          console.warn("Pending legal acceptance restore skipped", error);
-        });
-        data = (await withTimeout(supabase.auth.getSession(), 8000, "Session refresh after legal acceptance")).data;
+      const { data } = await withTimeout(supabase.auth.getSession(), 8000, "Session check");
+      // auth-js owns detectSessionInUrl and completes the browser PKCE exchange
+      // during client initialization. Clean the callback only after getSession
+      // has awaited that initialization; a second manual exchange consumes the
+      // one-time code twice and creates false callback failures.
+      if (shouldCleanWebAuthUrl && typeof window !== "undefined") {
+        const cleanUrl = `${window.location.origin}${window.location.pathname}`;
+        window.history.replaceState({}, document.title, cleanUrl);
       }
       if (!mounted) return;
       setSession(data.session);
@@ -234,7 +189,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(current => sessionsMateriallyEqual(current, nextSession) ? current : nextSession);
     };
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === "SIGNED_OUT") void clearLearningTourForAccountChange();
       applySession(s);
       setLoading(false);
     });
@@ -268,10 +224,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const linkingSubscription = Platform.OS === "web" ? null : Linking.addEventListener("url", event => {
       if (!isAuthCallbackUrl(event.url)) return;
       void completeSupabaseAuthUrl(event.url)
-        .then(async nextSession => {
+        .then(nextSession => {
           if (!mounted || !nextSession) return;
-          await applyPendingOAuthLegalAcceptance();
-          setSession((await supabase.auth.getSession()).data.session);
+          setSession(nextSession);
           setLoading(false);
         })
         .catch(error => console.warn("Native auth callback failed", error));
@@ -299,19 +254,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return friendlyAuthError(error?.message);
   };
 
-  const signUp = async (email: string, password: string, legalAccepted: boolean): Promise<string | null> => {
-    if (!legalAccepted) return "Please agree to the Terms of Service and acknowledge the Privacy Policy.";
+  const signUp = async (email: string, password: string): Promise<string | null> => {
     if (demoMode) {
       disableDevDemoMode();
       setDemoMode(false);
       setSession(null);
       setLoading(true);
     }
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: legalAcceptanceMetadata() },
-    });
+    const { data, error } = await supabase.auth.signUp({ email, password });
     if (!error && data.session) {
       setSession(data.session);
       setLoading(false);
@@ -334,8 +284,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return friendlyAuthError(error?.message);
   };
 
-  const signInWithGoogle = async (legalAccepted = false): Promise<string | null> => {
-    if (legalAccepted) await queueOAuthLegalAcceptance();
+  const signInWithGoogle = async (): Promise<string | null> => {
     if (demoMode) {
       disableDevDemoMode();
       setDemoMode(false);
@@ -359,10 +308,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         scopes: "https://www.googleapis.com/auth/userinfo.email",
       },
     });
-    if (error && Platform.OS === "web" && typeof window !== "undefined") {
-      window.localStorage.removeItem(PENDING_LEGAL_ACCEPTANCE_KEY);
-    }
-    if (error) return friendlyAuthError(error.message);
+    if (error) return friendlyAuthError(error.message, "Google");
     if (Platform.OS === "web") return null;
     if (!data.url) return "Google sign-in could not be started.";
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
@@ -375,13 +321,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const nextSession = await completeSupabaseAuthUrl(result.url);
       if (!nextSession) return "Google sign-in returned without a session.";
-      await applyPendingOAuthLegalAcceptance();
-      setSession((await supabase.auth.getSession()).data.session);
+      setSession(nextSession);
       setLoading(false);
       return null;
     } catch (nativeError) {
       setLoading(false);
-      return friendlyAuthError(nativeError instanceof Error ? nativeError.message : "Google sign-in could not be completed.");
+      return friendlyAuthError(nativeError instanceof Error ? nativeError.message : "Google sign-in could not be completed.", "Google");
     }
   };
 
@@ -395,19 +340,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return friendlyAuthError(error?.message);
   };
 
-  const signInWithApple = async (legalAccepted = false): Promise<string | null> => {
+  const signInWithApple = async (): Promise<string | null> => {
     if (Platform.OS !== "ios") return "Apple sign-in is available on iPhone and iPad.";
-    if (legalAccepted) await queueOAuthLegalAcceptance();
+    if (process.env.EXPO_PUBLIC_APPLE_AUTH_ENABLED !== "true") {
+      return "Apple sign-in is not available in this release.";
+    }
     if (demoMode) {
       disableDevDemoMode();
       setDemoMode(false);
       setSession(null);
       setLoading(true);
     }
+    let appleSessionCreated = false;
     try {
       const nonce = Crypto.randomUUID();
-      const credential = await AppleAuthentication.signInAsync({
+      const hashedNonce = await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
         nonce,
+      );
+      const credential = await AppleAuthentication.signInAsync({
+        nonce: hashedNonce,
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
@@ -420,6 +372,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         nonce,
       });
       if (error) throw error;
+      appleSessionCreated = Boolean(data.session);
       if (!credential.authorizationCode || !data.session?.access_token) throw new Error("Apple sign-in returned without a revocable authorization.");
       const retention = await apiFetch("/api/account/apple-authorization", {
         method: "POST",
@@ -427,7 +380,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ authorizationCode: credential.authorizationCode }),
       });
       if (!retention.ok) {
-        await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
         throw new Error("Apple sign-in could not be completed securely. Try again.");
       }
       const givenName = credential.fullName?.givenName?.trim() || null;
@@ -436,15 +388,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (fullName) {
         await supabase.auth.updateUser({ data: { full_name: fullName, given_name: givenName, family_name: familyName } });
       }
-      await applyPendingOAuthLegalAcceptance();
       setSession((await supabase.auth.getSession()).data.session ?? data.session);
       setLoading(false);
       return null;
     } catch (appleError) {
+      if (appleSessionCreated) {
+        setSession(null);
+        await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+      }
       setLoading(false);
       const code = typeof appleError === "object" && appleError && "code" in appleError ? String(appleError.code) : "";
       if (code === "ERR_REQUEST_CANCELED") return "Apple sign-in was canceled.";
-      return friendlyAuthError(appleError instanceof Error ? appleError.message : "Apple sign-in could not be completed.");
+      return friendlyAuthError(appleError instanceof Error ? appleError.message : "Apple sign-in could not be completed.", "Apple");
     }
   };
 
@@ -464,6 +419,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const signedOutUserId = session?.user.id;
     setSession(null);
     await clearLastAppRoute(signedOutUserId);
+    await clearLearningTourForAccountChange();
     if (signedOutUserId) {
       const prefix = planSimulationStoragePrefix(signedOutUserId);
       const simulatorDraftKeys = await AsyncStorage.getAllKeys()

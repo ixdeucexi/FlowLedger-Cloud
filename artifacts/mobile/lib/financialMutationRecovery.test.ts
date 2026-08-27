@@ -628,7 +628,6 @@ test("scope-changing household paths invalidate retries before exposing another 
   for (const [startToken, endToken] of [
     ["const acceptHouseholdInvite", "const updateHouseholdMemberRole"],
     ["const leaveActiveHousehold", "// ── Load from Supabase"],
-    ["const refreshHouseholdsForPrivacy", "const refreshHouseholdActivity"],
   ] as const) {
     const start = context.indexOf(startToken);
     const end = context.indexOf(endToken, start);
@@ -645,6 +644,18 @@ test("scope-changing household paths invalidate retries before exposing another 
       `${startToken} must revoke the active scope`,
     );
   }
+  const privacyStart = context.indexOf("const refreshHouseholdsForPrivacy");
+  const privacyEnd = context.indexOf("const refreshHouseholdActivity", privacyStart);
+  const privacyRefresh = context.slice(privacyStart, privacyEnd);
+  assert.match(privacyRefresh, /resetSaveLifecycle\(\)/);
+  assert.match(privacyRefresh, /clearScopedFinancialData\(\)/);
+  assert.match(privacyRefresh, /resolveHouseholds\(userId\)/);
+  assert.match(privacyRefresh, /waitForScopeCoreLoad\(next\.householdId\)/);
+  assert.ok(
+    privacyRefresh.indexOf("clearScopedFinancialData()")
+      < privacyRefresh.indexOf("resolveHouseholds(userId)"),
+    "revoked data must clear before selecting its replacement",
+  );
 });
 
 test("lost-response destructive retries are idempotent and debt direct edits fail closed", () => {
@@ -763,7 +774,7 @@ test("monthly payment and account retries keep stable write identities", () => {
     /runTrackedFinancialMutation/,
   );
 
-  const accountStart = context.indexOf("const updateAccount");
+  const accountStart = context.indexOf("const saveManualAccountChange");
   const accountEnd = context.indexOf(
     "const updateConnectedBankAccountDisplayName",
     accountStart,
@@ -771,13 +782,31 @@ test("monthly payment and account retries keep stable write identities", () => {
   const accountUpdate = context.slice(accountStart, accountEnd);
   assert.match(
     accountUpdate,
-    /accountEditTokensRef\.current\.set\(account\.id, editToken\)/,
+    /accountEditTokensRef\.current\.set\(intendedAccount\.id, editToken\)/,
   );
   assert.match(
     accountUpdate,
-    /accountEditTokensRef\.current\.get\(account\.id\) === editToken/,
+    /accountEditTokensRef\.current\.get\(intendedAccount\.id\) !== editToken/,
   );
-  assert.match(accountUpdate, /onConflict: "id"/);
+  assert.match(accountUpdate, /const mutationId = genId\(\)/);
+  assert.match(accountUpdate, /const balanceHistoryId = genId\(\)/);
+  assert.match(accountUpdate, /updateManualAccountWithAnchorAtomically\(\{/);
+  assert.match(accountUpdate, /mutationId,[\s\S]+balanceId: balanceHistoryId/);
+  assert.doesNotMatch(accountUpdate, /from\("accounts"\)\.update/);
+  assert.doesNotMatch(accountUpdate, /from\("account_balances"\)\.upsert/);
+
+  const atomicAccountContract = readFileSync(
+    "lib/atomicFinancialMutations.ts",
+    "utf8",
+  );
+  assert.match(
+    atomicAccountContract,
+    /"checking" \| "savings" \| "cash" \| "credit_card"/,
+  );
+  assert.match(
+    atomicAccountContract,
+    /existing row must remain renameable\/reconcilable[\s\S]+archivable/,
+  );
 });
 
 test("core updates verify an affected row before they can be shown as saved", () => {
@@ -801,6 +830,13 @@ test("core updates verify an affected row before they can be shown as saved", ()
     if (startToken === "const updateBill") {
       assert.match(source, /update_bill_with_override_intents/);
       assert.match(source, /savedResult\.error \|\| !savedResult\.data/);
+    } else if (startToken === "const updateAccount" || startToken === "const reconcileAccount") {
+      assert.match(source, /saveManualAccountChange\(/);
+      const helperStart = context.indexOf("const saveManualAccountChange");
+      const helperEnd = context.indexOf("const updateAccount", helperStart);
+      const helper = context.slice(helperStart, helperEnd);
+      assert.match(helper, /updateManualAccountWithAnchorAtomically\(\{/);
+      assert.match(helper, /normalizeAccountRow\(result\.account\)/);
     } else {
       assert.match(
         source,

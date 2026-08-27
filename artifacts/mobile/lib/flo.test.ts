@@ -228,7 +228,7 @@ test("Flo treats medium-confidence money guidance as an estimate", () => {
 
 test("Flo explains today's dashboard balance from verified forecast sources", () => {
   const answer = localFloAnswer("Why is my available today number this?", facts, days) ?? "";
-  assert.match(answer, /Today's projected close is \$1000\.00/);
+  assert.match(answer, /Today's planned ending balance is \$1000\.00/);
   assert.match(answer, /Income: Paycheck \+\$1500\.00/);
   assert.match(answer, /Bills: Utilities -\$350\.00/);
   assert.match(answer, /Transactions: Groceries -\$140\.00/);
@@ -274,11 +274,29 @@ test("Flo explains Debt Payoff from deterministic facts", () => {
 });
 
 test("Flo explains snowball rollover after a debt is paid off", () => {
-  const answer = localFloAnswer("What happens after Camera is paid off?", facts, days) ?? "";
+  const answer = localFloAnswer("What happens after Camera is paid off?", {
+    ...facts,
+    debtPayoff: { ...facts.debtPayoff!, currentRolloverExtra: 29 },
+  }, days) ?? "";
   assert.match(answer, /Camera is paid off/);
   assert.match(answer, /does not disappear/);
   assert.match(answer, /Concert/);
-  assert.match(answer, /\$73\.68\/mo/);
+  assert.match(answer, /\$102\.68\/mo forecast payment/);
+  assert.match(answer, /Only \$35\.41\/mo remains lender-required/);
+});
+
+test("Flo includes existing rollover when the final snowball debt becomes cash-flow room", () => {
+  const answer = localFloAnswer("What happens after Camera is paid off?", {
+    ...facts,
+    debts: [facts.debts![0]],
+    debtPayoff: {
+      ...facts.debtPayoff!,
+      nextDebtName: "Camera",
+      currentRolloverExtra: 29,
+    },
+  }, days) ?? "";
+  assert.match(answer, /\$67\.27\/mo forecast payment becomes cash-flow room/);
+  assert.match(answer, /Only \$38\.27\/mo was lender-required/);
 });
 
 test("Flo explains the clean Algorithm Suite from deterministic facts", () => {

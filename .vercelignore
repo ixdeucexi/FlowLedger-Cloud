@@ -1,5 +1,6 @@
 .git
 .vercel
+**/.vercel
 .env
 .env.*
 .cache
@@ -14,6 +15,8 @@ static-build
 **/static-build
 .test-dist
 **/.test-dist
+**/.tmp-tests
+**/.release-dist*/**
 coverage
 tmp
 project.tar.gz

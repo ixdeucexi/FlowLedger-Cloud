@@ -13,7 +13,7 @@ import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { DESKTOP_MODAL_HANDLE, DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR } from "@/lib/desktopModal";
 import type { ConfirmActionOptions } from "@/lib/confirmAction";
 import { MONTH_NAMES } from "@/lib/dateLabels";
-import { getLatestRecordedIncomeAmount, normalizeIncomeExcludedDates } from "@/lib/schedule";
+import { getLatestRecordedIncomeAmount, getUpcomingIncomeOccurrenceDates, normalizeIncomeExcludedDates } from "@/lib/schedule";
 
 const FREQUENCIES: { key: IncomeItem["frequency"]; label: string; desc: string }[] = [
   { key: "monthly",  label: "Monthly",  desc: "×1/mo"   },
@@ -186,20 +186,19 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
   // Preview: compute next few pay dates from firstPayDate
   const payDatePreview = (() => {
     if (!isRecurring || !firstPayDate.trim()) return null;
-    const [y, m, d] = firstPayDate.split("-").map(Number);
-    if (!y || !m || !d) return null;
-    const intervalDays = frequency === "biweekly" ? 14 : 7;
-    const anchor = new Date(y, m - 1, d);
-    const dates: string[] = [];
-    let cur = new Date(anchor.getTime());
-    // Walk forward to get the next 4 occurrences from today
     const today = new Date();
-    while (cur < today) cur = new Date(cur.getTime() + intervalDays * 86400000);
-    for (let i = 0; i < 4; i++) {
-      dates.push(`${MONTH_NAMES[cur.getMonth()]} ${cur.getDate()}`);
-      cur = new Date(cur.getTime() + intervalDays * 86400000);
-    }
-    return dates;
+    const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const dates = getUpcomingIncomeOccurrenceDates({
+      amount: parseFloat(amount) || 0,
+      frequency,
+      next_payment_date: firstPayDate.trim(),
+    }, todayDate);
+    return dates.length
+      ? dates.map((date) => {
+          const [, month, day] = date.split("-").map(Number);
+          return `${MONTH_NAMES[month - 1]} ${day}`;
+        })
+      : null;
   })();
 
   return (

@@ -27,9 +27,15 @@ function currency(value: number | undefined): number {
 
 /** Resolve one bill occurrence without leaking a month paid total to every date. */
 export function resolveBillOccurrencePayment(input: BillOccurrencePaymentInput): BillOccurrencePaymentView {
-  const scheduledAmount = currency(input.scheduledAmount);
   const matchedPaid = currency(input.match?.amount);
   const hasExactMatch = Boolean(input.match);
+  const matchClosesOccurrence = input.match?.settlement === "exact" || input.match?.settlement === "full";
+  const reviewedPlanned = currency(input.match?.plannedAmount);
+  const scheduledAmount = matchClosesOccurrence
+    ? matchedPaid
+    : input.match?.settlement === "partial" && reviewedPlanned > 0.005
+      ? reviewedPlanned
+      : currency(input.scheduledAmount);
   const isMultiOccurrence = input.frequency === "weekly" || input.frequency === "biweekly";
   const legacyPaid = !hasExactMatch && input.monthlyPaidDate === input.occurrenceDate
     ? currency(input.monthlyPaidAmount)

@@ -16,6 +16,31 @@ const assetLinksPath = path.join(mobile, "public", ".well-known", "assetlinks.js
 assert.equal(fs.existsSync(configPath), true, "Missing artifacts/mobile/app.config.js");
 assert.equal(fs.existsSync(easPath), true, "Missing artifacts/mobile/eas.json");
 assert.equal(fs.existsSync(assetLinksPath), true, "Missing Android Digital Asset Links statement.");
+assert.equal(
+  fs.existsSync(path.join(root, "scripts", "assert-native-ios-readiness.cjs")),
+  true,
+  "Missing the fail-closed native iOS provider readiness gate.",
+);
+assert.equal(
+  fs.existsSync(path.join(root, "scripts", "assert-native-android-readiness.cjs")),
+  true,
+  "Missing the fail-closed native Android App Links readiness gate.",
+);
+assert.equal(
+  fs.existsSync(path.join(root, "scripts", "assert-user-guide-current.cjs")),
+  true,
+  "Missing the public user-guide drift gate.",
+);
+assert.equal(
+  fs.existsSync(path.join(root, "scripts", "assert-release-artifact-copy.cjs")),
+  true,
+  "Missing the final exported release-copy scanner.",
+);
+assert.equal(
+  fs.existsSync(path.join(root, "scripts", "assert-production-postflight.cjs")),
+  true,
+  "Missing the clean-provenance production postflight.",
+);
 
 const config = fs.readFileSync(configPath, "utf8");
 assert.match(config, /bundleIdentifier:\s*"com\.flowledger\.app"/);
@@ -78,6 +103,23 @@ function productionConfig(overrides) {
   });
 }
 
+function previewConfig(overrides) {
+  return spawnSync(process.execPath, ["-e", "require('./artifacts/mobile/app.config.js')"], {
+    cwd: root,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      EAS_BUILD_PROFILE: "preview",
+      EAS_BUILD_PLATFORM: "android",
+      EXPO_PUBLIC_SUPABASE_URL: "https://sandbox.supabase.co",
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: "sandbox-public-key",
+      EXPO_PUBLIC_API_ORIGIN: "https://sandbox.example.com",
+      EXPO_PUBLIC_APP_ENVIRONMENT: "preview",
+      ...overrides,
+    },
+  });
+}
+
 for (const badOrigin of ["http://flowledger-algo.com", "https://preview.flowledger-algo.com", "https://flowledger-algo.com/api", "https://user@flowledger-algo.com"]) {
   assert.notEqual(productionConfig({ EXPO_PUBLIC_API_ORIGIN: badOrigin }).status, 0, `Production must reject API origin ${badOrigin}`);
 }
@@ -103,6 +145,17 @@ assert.notEqual(productionConfig({
   EXPO_PUBLIC_LAUNCH_MODE: "paid",
   EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY: "",
 }).status, 0, "Paid production must fail without store billing credentials.");
+assert.equal(previewConfig({}).status, 0, "A preview with explicit sandbox values must load.");
+assert.notEqual(
+  previewConfig({ EXPO_PUBLIC_API_ORIGIN: "" }).status,
+  0,
+  "Preview must fail closed when the API origin is missing.",
+);
+assert.notEqual(
+  previewConfig({ EXPO_PUBLIC_API_ORIGIN: "https://flowledger-algo.com" }).status,
+  0,
+  "Preview must not target the production API origin.",
+);
 
 const mobilePackage = JSON.parse(fs.readFileSync(path.join(mobile, "package.json"), "utf8"));
 assert.equal(mobilePackage.dependencies?.["react-native-purchases"], "10.7.2");
@@ -142,6 +195,35 @@ assert.equal(storeManifest.featureGraphic.logo, "../../artifacts/mobile/assets/i
 assert.equal(crypto.createHash("sha256").update(featureGraphic).digest("hex").toUpperCase(), storeManifest.featureGraphic.sha256);
 const featureLogo = fs.readFileSync(path.join(mobile, "assets", "images", "startup_f_transparent.png"));
 assert.equal(crypto.createHash("sha256").update(featureLogo).digest("hex").toUpperCase(), storeManifest.featureGraphic.logoSha256);
+
+const vercelConfig = JSON.parse(fs.readFileSync(path.join(root, "vercel.json"), "utf8"));
+const expoStaticHeaders = vercelConfig.headers?.find(entry => entry.source === "/_expo/static/:path*")?.headers || [];
+assert.equal(
+  expoStaticHeaders.find(header => header.key === "Cache-Control")?.value,
+  "public, max-age=31536000, immutable",
+  "Content-hashed Expo bundles must be immutable so PWA reopen does not download the app again.",
+);
+const guideHeaders = vercelConfig.headers?.find(entry => entry.source === "/FlowLedger-User-Guide.pdf")?.headers || [];
+assert.equal(
+  guideHeaders.find(header => header.key === "Cache-Control")?.value,
+  "no-cache, no-store, must-revalidate",
+  "The public guide must not retain a withdrawn or stale release copy.",
+);
+const spaNoStoreSource = vercelConfig.headers?.find(entry => entry.source.startsWith("/:page("))?.source || "";
+for (const route of ["support", "delete-account", "user-guide", "legal", "plan-simulator", "snowball-plan"]) {
+  assert.match(spaNoStoreSource, new RegExp(`(?:\\||\\()${route}(?:\\||\\))`), `${route} must receive fresh SPA HTML.`);
+}
+const authNoStore = vercelConfig.headers?.find(entry => entry.source === "/auth/:page(callback|reset-password)")?.headers || [];
+assert.equal(
+  authNoStore.find(header => header.key === "Cache-Control")?.value,
+  "no-cache, no-store, must-revalidate",
+  "Auth callback HTML must never be cached.",
+);
+assert.equal(
+  vercelConfig.headers?.some(entry => entry.source === "/_expo/:path*"),
+  false,
+  "A broad no-store Expo header would override hashed-asset caching.",
+);
 
 const eas = JSON.parse(fs.readFileSync(easPath, "utf8"));
 assert.equal(eas.cli?.version, "20.0.0");

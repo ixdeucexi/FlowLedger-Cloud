@@ -47,6 +47,7 @@ import { isValidDateInMonth } from "@/lib/schedule";
 import type { ConfirmActionOptions } from "@/lib/confirmAction";
 import {
   buildDebtPaymentPlanSummary,
+  debtPaymentProgress,
   isScheduledSnowballPlanTransaction,
   isSnowballPaymentTransaction,
   requiredDebtPlanTotal,
@@ -390,7 +391,7 @@ export default function MonthlyScreen() {
     selectedYear, setSelectedYear, dashboardFilter, setDashboardFilter,
     getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill, deleteBill, updateIncome,
     getCashFlow, getMonthlyIncome, getDailyBalances, getCalendarDailyBalances, getIncomeOccurrencesInMonth,
-    previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, finalizeBillPayment, getExtraPayment, getDebtPlanForMonth, getRemainingDebtPlanForMonth, setPlannedDebtAmount, canEditHousehold,
+    previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, finalizeBillPayment, getExtraPayment, getDebtMonthSettlements, getDebtPlanForMonth, getRemainingDebtPlanForMonth, setPlannedDebtAmount, canEditHousehold,
     updateDecision, deleteDecision, updateGoal, deleteGoal, activeHousehold,
   } = useBudget();
 
@@ -624,6 +625,10 @@ export default function MonthlyScreen() {
   }, [debtPaymentNotice, dueDayPickerBill, editPlan, fullPaymentPrompt, incomeDatePicker, selectedDate, showSnowballResults, snowballModalVisible, snowballPreview, surplusPrompt, txModalVisible]);
 
   const monthBills = useMemo(() => getMonthlyBills(month, selectedYear), [getMonthlyBills, month, selectedYear]);
+  const debtMonthSettlements = useMemo(
+    () => getDebtMonthSettlements(month, selectedYear),
+    [getDebtMonthSettlements, month, selectedYear],
+  );
 
   const billsWithData = useMemo(() => {
     return monthBills.map(b => {
@@ -632,10 +637,29 @@ export default function MonthlyScreen() {
       const monthlyAmount = getBillMonthlyTotal(b, month, selectedYear);
       const perOccurrence = getAmount(b, month, selectedYear);
       const paid = getPaidAmount(b.id, month, selectedYear);
-      const effectivePaid = getEffectivePaidAmount(b, month, selectedYear);
-      const isPaid = monthlyAmount > 0 && effectivePaid >= monthlyAmount - 0.005;
-      const isPartial = effectivePaid > 0 && !isPaid;
-      return { bill: b, amount: monthlyAmount, perOccurrence, paid, effectivePaid, isPaid, isPartial };
+      const debtSettlement = b.is_debt ? debtMonthSettlements.get(b.id) : undefined;
+      const effectivePaid = b.is_debt
+        ? Math.max(
+            getEffectivePaidAmount(b, month, selectedYear),
+            debtSettlement?.paidAmount ?? 0,
+          )
+        : getEffectivePaidAmount(b, month, selectedYear);
+      const requiredAmount = b.is_debt
+        ? (debtSettlement?.configuredObligation
+          ?? requiredDebtPlanTotal(b, getBillOccurrencesInMonth(b, month, selectedYear).length))
+        : monthlyAmount;
+      const progress = debtPaymentProgress(requiredAmount, monthlyAmount, effectivePaid);
+      const canonicalProgress = debtSettlement?.status === "settled"
+        ? { ...progress, requiredRemaining: 0, isPaid: true, isPartial: false }
+        : progress;
+      return {
+        bill: b,
+        amount: monthlyAmount,
+        perOccurrence,
+        paid,
+        effectivePaid,
+        ...canonicalProgress,
+      };
     })
     .filter(x => {
       if (billFilter === "paid") return x.isPaid;
@@ -643,13 +667,21 @@ export default function MonthlyScreen() {
       return true;
     })
     .sort((a, b) => a.bill.due_day - b.bill.due_day);
-  }, [monthBills, getAmount, getPaidAmount, getEffectivePaidAmount, month, selectedYear, billFilter]);
+  }, [billFilter, debtMonthSettlements, getAmount, getEffectivePaidAmount, getBillOccurrencesInMonth, getPaidAmount, month, monthBills, selectedYear]);
 
   const billSummary = useMemo(() => summarizeMonthlyBills(
     monthBills,
-    bill => getBillMonthlyTotal(bill, month, selectedYear),
-    bill => getEffectivePaidAmount(bill, month, selectedYear),
-  ), [monthBills, getEffectivePaidAmount, getBillMonthlyTotal, month, selectedYear]);
+    bill => bill.is_debt
+      ? (debtMonthSettlements.get(bill.id)?.configuredObligation
+        ?? getBillMonthlyTotal(bill, month, selectedYear))
+      : getBillMonthlyTotal(bill, month, selectedYear),
+    bill => bill.is_debt
+      ? Math.max(
+          getEffectivePaidAmount(bill, month, selectedYear),
+          debtMonthSettlements.get(bill.id)?.paidAmount ?? 0,
+        )
+      : getEffectivePaidAmount(bill, month, selectedYear),
+  ), [debtMonthSettlements, monthBills, getEffectivePaidAmount, getBillMonthlyTotal, month, selectedYear]);
   const totalDue = billSummary.totalDue;
   const totalPaid = billSummary.totalPaid;
 
@@ -687,14 +719,30 @@ export default function MonthlyScreen() {
         ? now.getDate()
         : 0;
     const occurrences = buildOverdueBillOccurrences(
-      monthBills.map(bill => ({
-        billId: bill.id,
-        name: bill.name,
-        closed: bill.is_debt && bill.balance <= 0.009,
-        occurrenceDays: getBillOccurrencesInMonth(bill, month, selectedYear),
-        plannedTotal: getBillMonthlyTotal(bill, month, selectedYear),
-        paidTotal: getEffectivePaidAmount(bill, month, selectedYear),
-      })),
+      monthBills.map(bill => {
+        const occurrenceDays = getBillOccurrencesInMonth(bill, month, selectedYear);
+        return {
+          billId: bill.id,
+          name: bill.name,
+          closed: bill.is_debt && bill.balance <= 0.009,
+          occurrenceDays,
+          plannedTotal: bill.is_debt
+            ? (debtMonthSettlements.get(bill.id)?.configuredObligation
+              ?? requiredDebtPlanTotal(bill, occurrenceDays.length))
+            : getBillMonthlyTotal(bill, month, selectedYear),
+          paidTotal: bill.is_debt
+            ? Math.max(
+                getEffectivePaidAmount(bill, month, selectedYear),
+                debtMonthSettlements.get(bill.id)?.paidAmount ?? 0,
+              )
+            : getEffectivePaidAmount(bill, month, selectedYear),
+          occurrences: debtMonthSettlements.get(bill.id)?.occurrences?.map(occurrence => ({
+            day: Number(occurrence.occurrenceDate.slice(8, 10)),
+            requiredAmount: occurrence.configuredObligation,
+            paidAmount: occurrence.paidAmount,
+          })),
+        };
+      }),
       month,
       selectedYear,
       overdueCutoffDay,
@@ -705,6 +753,7 @@ export default function MonthlyScreen() {
     getBillMonthlyTotal,
     getBillOccurrencesInMonth,
     getEffectivePaidAmount,
+    debtMonthSettlements,
     month,
     monthBills,
     pendingBillOccurrenceKeys,
@@ -1677,6 +1726,7 @@ export default function MonthlyScreen() {
           stackForecastHeader && styles.stackedHeaderActions,
         ]}>
           <Pressable
+            nativeID="guided-tour-monthly"
             onPress={() => router.push("/plan-simulator")}
             accessibilityRole="button"
             accessibilityLabel={`${isFeatureLocked("plan_simulator") ? "Locked Pro " : ""}Plan Simulator`}
@@ -1741,7 +1791,6 @@ export default function MonthlyScreen() {
           <Feather name="chevron-left" size={24} color={c.mutedForeground} />
         </Pressable>
         <Pressable
-          nativeID="guided-tour-monthly"
           onPress={openMonthSearch}
           accessibilityRole="button"
           accessibilityLabel={`Search months. Current month is ${MONTH_FULL[month]} ${selectedYear}`}
@@ -1897,7 +1946,7 @@ export default function MonthlyScreen() {
                 </View>
               </>
             }
-            renderItem={({ item: { bill, amount, perOccurrence, paid, effectivePaid, isPaid, isPartial } }) => {
+            renderItem={({ item: { bill, amount, perOccurrence, paid, isPaid, isPartial, requiredRemaining, optionalExtraRemaining } }) => {
               const borderColor = isPaid ? c.success : isPartial ? c.warning : c.destructive;
               const amtKey = `${bill.id}-${month}-${selectedYear}-amt`;
               const paidKey = `${bill.id}-${month}-${selectedYear}-paid`;
@@ -1907,7 +1956,7 @@ export default function MonthlyScreen() {
               const editableAmt = isWeekly ? perOccurrence : amount;
               const showAmt = editingAmounts[amtKey] !== undefined ? editingAmounts[amtKey] : editableAmt.toFixed(2);
               const showPaid = editingPaid[paidKey] !== undefined ? editingPaid[paidKey] : paid > 0 ? paid.toFixed(2) : "";
-              const remaining = Math.max(0, amount - effectivePaid);
+              const remaining = requiredRemaining;
               const customDay = getCustomDueDay(bill.id, month, selectedYear);
               const effectiveDueDay = customDay ?? bill.due_day;
               const WEEKDAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
@@ -1957,7 +2006,7 @@ export default function MonthlyScreen() {
                         return (
                           <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 4 }}>
                             <Text style={[styles.fieldLabel, { color: hasCustomAmt ? c.primary : c.mutedForeground, marginBottom: 0 }]}>
-                              {isWeekly ? "Per Week" : "Amount"}{hasCustomAmt ? " ✎" : ""}
+                              {bill.is_debt ? "Forecast" : isWeekly ? "Per Week" : "Amount"}{hasCustomAmt ? " ✎" : ""}
                             </Text>
                             {hasCustomAmt && (
                               <Pressable
@@ -2019,7 +2068,7 @@ export default function MonthlyScreen() {
                       )}
                     </View>
                     <View style={styles.amtField}>
-                      <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>Left</Text>
+                      <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>{bill.is_debt ? "Required left" : "Left"}</Text>
                       <View style={[styles.leftBox, { backgroundColor: remaining > 0 ? c.destructive + "15" : c.success + "15" }]}>
                         <Text style={[styles.leftText, { color: remaining > 0 ? c.destructive : c.success }]}>${remaining.toFixed(2)}</Text>
                       </View>
@@ -2074,6 +2123,7 @@ export default function MonthlyScreen() {
                         Debt balance: <Text style={{ color: c.destructive, fontFamily: "Inter_600SemiBold" }}>${bill.balance.toFixed(2)}</Text>
                         {bill.interest_rate > 0 ? ` · ${bill.interest_rate}% APR` : ""}
                         {` · Payoff priority #${bill.priority}`}
+                        {optionalExtraRemaining > 0.005 ? ` · $${optionalExtraRemaining.toFixed(2)} optional payoff extra left` : ""}
                       </Text>
                     </View>
                   )}
@@ -2141,7 +2191,7 @@ export default function MonthlyScreen() {
                         </Text>
                         <Text style={[styles.dayOverlaySub, { color: c.mutedForeground }]}>
                           {selectedDayItemCount} item{selectedDayItemCount === 1 ? "" : "s"}
-                          {selectedForecastDay ? ` · ${selectedForecastDay.balanceSource === "actual_close" ? "actual bank close" : "closing balance"} $${selectedForecastDay.balance.toFixed(2)}` : ""}
+                          {selectedForecastDay ? ` · $${selectedForecastDay.balance.toFixed(2)}` : ""}
                         </Text>
                       </View>
                     </View>
@@ -2155,9 +2205,7 @@ export default function MonthlyScreen() {
                       <View style={[styles.dayOverlayRisk, { backgroundColor: selectedForecastDay.balance < 0 ? c.destructive + "14" : c.warning + "16", borderColor: selectedForecastDay.balance < 0 ? c.destructive + "70" : c.warning + "70" }]}>
                         <Feather name="alert-triangle" size={16} color={selectedForecastDay.balance < 0 ? c.destructive : c.warning} />
                         <Text style={[styles.dayOverlayRiskText, { color: c.foreground }]}>
-                          {selectedForecastDay.balanceSource === "actual_close"
-                            ? `Actual bank close was below your $${settings.safety_floor.toFixed(0)} safety floor.`
-                            : `Below your $${settings.safety_floor.toFixed(0)} safety floor.`}
+                          {`Below your $${settings.safety_floor.toFixed(0)} safety floor.`}
                         </Text>
                       </View>
                     ) : null}
@@ -2216,20 +2264,35 @@ export default function MonthlyScreen() {
                           );
                           const overdueOccurrence = overdueBillOccurrenceMap.get(occurrenceKey(bill.id, occurrenceDate));
                           const amount = getAmount(bill, month, selectedYear);
+                          const debtOccurrence = bill.is_debt
+                            ? debtMonthSettlements.get(bill.id)?.occurrences?.find(
+                                occurrence => occurrence.occurrenceDate === occurrenceDate,
+                              )
+                            : undefined;
+                          const requiredAmount = bill.is_debt
+                            ? (debtOccurrence?.configuredObligation ?? Math.max(0, Number(bill.amount) || 0))
+                            : amount;
                           const exactMatch = billOccurrenceMatches.get(occurrenceKey(bill.id, occurrenceDate));
                           const monthlyOverride = overrides.find(item => item.bill_id === bill.id && item.month === month && item.year === selectedYear);
                           const occurrencePayment = resolveBillOccurrencePayment({
                             occurrenceDate,
-                            scheduledAmount: amount,
+                            scheduledAmount: requiredAmount,
                             frequency: bill.frequency,
                             match: exactMatch,
                             monthlyPaidAmount: getPaidAmount(bill.id, month, selectedYear),
                             monthlyPaidDate: monthlyOverride?.paid_date,
                           });
-                          const paid = occurrencePayment.paidAmount;
-                          const isPaid = occurrencePayment.isPaid;
-                          const isPartial = occurrencePayment.isPartial;
-                          const remaining = occurrencePayment.remainingAmount;
+                          const paid = debtOccurrence?.paidAmount ?? occurrencePayment.paidAmount;
+                          const isPaid = debtOccurrence
+                            ? debtOccurrence.status === "settled"
+                            : occurrencePayment.isPaid;
+                          const isPartial = debtOccurrence
+                            ? debtOccurrence.status === "partial"
+                            : occurrencePayment.isPartial;
+                          const remaining = debtOccurrence?.remainingRequired ?? occurrencePayment.remainingAmount;
+                          const optionalExtraRemaining = bill.is_debt
+                            ? debtPaymentProgress(requiredAmount, amount, paid).optionalExtraRemaining
+                            : 0;
                           const movedIn = movedInByBillId.get(bill.id);
                           const canReschedule = bill.frequency === "monthly" || bill.frequency === "quarterly";
                           const amtKey = `${bill.id}-${occurrenceDate}-overlay-amount`;
@@ -2268,7 +2331,7 @@ export default function MonthlyScreen() {
                               </View>
                               <View style={styles.dayBillNumbers}>
                                 <View style={[styles.dayBillNumberTile, styles.dayBillPaidTile, { backgroundColor: c.background + "66", borderColor: amountEditing ? c.primary + "80" : c.border }]}>
-                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Amount</Text>
+                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>{bill.is_debt ? "Forecast" : "Amount"}</Text>
                                   <View style={styles.dayBillPaidInputRow}>
                                     <Text style={[styles.dayBillPaidDollar, { color: c.foreground }]}>$</Text>
                                     <TextInput
@@ -2343,10 +2406,13 @@ export default function MonthlyScreen() {
                                   )}
                                 </View>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
-                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Left</Text>
+                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>{bill.is_debt ? "Required left" : "Left"}</Text>
                                   <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: remaining > 0 ? c.destructive : c.success }]}>${remaining.toFixed(2)}</Text>
                                 </View>
                               </View>
+                              {optionalExtraRemaining > 0.005 ? (
+                                <Text style={[styles.dayBillMeta, { color: c.primary, marginTop: 6 }]}>${optionalExtraRemaining.toFixed(2)} optional payoff extra remains</Text>
+                              ) : null}
                               <View style={styles.dayBillActions}>
                                 <Pressable
                                   accessibilityRole="button"

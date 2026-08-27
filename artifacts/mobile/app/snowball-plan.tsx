@@ -66,9 +66,9 @@ function readableMonth(value: string | null) {
 }
 
 function allocationLabel(kind: "required" | "rollover" | "extra") {
-  if (kind === "rollover") return "ROLLOVER";
+  if (kind === "rollover") return "ROLLOVER EXTRA";
   if (kind === "extra") return "SAFE EXTRA";
-  return "SCHEDULED";
+  return "TOWARD REQUIRED";
 }
 
 function SnowballPlanScreen() {
@@ -452,8 +452,8 @@ function SnowballPlanScreen() {
                           <Text style={[styles.debtStatValue, { color: row.settlement.status === "settled" ? c.success : c.foreground }]}>{moneyOrDash(row.settlement.status === "scheduled" ? row.settlement.configuredObligation : row.settlement.paidAmount)}</Text>
                         </View>
                         <View style={styles.debtStat}>
-                          <Text style={[styles.debtStatLabel, { color: c.mutedForeground }]}>{row.settlement.status === "settled" ? "REMAINING REQUIRED" : row.settlement.status === "partial" ? "REMAINING SCHEDULED" : "PLANNED TO DEBT"}</Text>
-                          <Text style={[styles.debtStatValue, { color: c.primary }]}>{moneyOrDash(row.plannedToDebt)}</Text>
+                          <Text style={[styles.debtStatLabel, { color: c.mutedForeground }]}>{row.paymentStatusLabel}</Text>
+                          <Text style={[styles.debtStatValue, { color: c.primary }]}>{moneyOrDash(row.paymentStatusAmount)}</Text>
                         </View>
                         <View style={styles.debtStat}>
                           <Text style={[styles.debtStatLabel, { color: c.mutedForeground }]}>EST. MONTH-END</Text>
@@ -465,6 +465,9 @@ function SnowballPlanScreen() {
                       ) : null}
                       {row.forecastPayment > 0.009 ? (
                         <Text style={[styles.sourceOutflow, { color: c.mutedForeground }]}>Forecast source outflow: {money(row.forecastPayment)}</Text>
+                      ) : null}
+                      {row.payoffExtraRemaining > 0.009 ? (
+                        <Text style={[styles.sourceOutflow, { color: c.primary }]}>Optional payoff extra remaining: {money(row.payoffExtraRemaining)}</Text>
                       ) : null}
                       {row.settlement.plannedDebtAmount !== undefined ? (
                         <Pressable
@@ -539,8 +542,10 @@ function SnowballPlanScreen() {
                           <View style={styles.flexOne}>
                             <Text style={[styles.allocationName, { color: c.foreground }]}>{allocation.targetBillName}</Text>
                             <Text style={[styles.allocationDetail, { color: c.mutedForeground }]}>
-                              {allocation.kind === "rollover" && allocation.sourceBillName
-                                ? `Unused payment from ${allocation.sourceBillName}`
+                              {allocation.kind === "rollover"
+                                ? allocation.sourceBillName
+                                  ? `Unused payment from ${allocation.sourceBillName}`
+                                  : "Planned payoff extra above the lender minimum"
                                 : allocation.kind === "extra"
                                   ? "Separate safe extra payment"
                                   : allocation.paidOff

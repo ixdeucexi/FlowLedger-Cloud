@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { useColors } from "@/hooks/useColors";
-import { LEGAL_EMAIL } from "@/lib/legalDocuments";
+import { SUPPORT_EMAIL } from "@/lib/support";
 
 const SUPPORT_STEPS = [
   { icon: "refresh-cw" as const, title: "Plan not refreshed", body: "Check your connection, reopen FlowLedger, then use Retry. A failed refresh never confirms a money change as saved." },
@@ -39,9 +39,9 @@ export default function SupportScreen() {
           <View style={[styles.heroIcon, { backgroundColor: `${colors.primary}1f` }]}><Feather name="message-circle" size={26} color={colors.primary} /></View>
           <Text style={[styles.heroTitle, { color: colors.foreground }]}>Talk to a real person</Text>
           <Text style={[styles.heroBody, { color: colors.mutedForeground }]}>Include the screen, item name, and date. Do not email passwords, full account numbers, or Social Security numbers.</Text>
-          <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(`mailto:${LEGAL_EMAIL}?subject=FlowLedger%20Support`)} style={[styles.emailButton, { backgroundColor: colors.primary }]}>
+          <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=FlowLedger%20Support`)} style={[styles.emailButton, { backgroundColor: colors.primary }]}>
             <Feather name="mail" size={18} color={colors.primaryForeground} />
-            <Text style={[styles.emailText, { color: colors.primaryForeground }]}>Email {LEGAL_EMAIL}</Text>
+            <Text style={[styles.emailText, { color: colors.primaryForeground }]}>Email {SUPPORT_EMAIL}</Text>
           </Pressable>
         </View>
 

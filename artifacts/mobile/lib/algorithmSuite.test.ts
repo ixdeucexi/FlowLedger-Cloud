@@ -291,6 +291,38 @@ test("Flow Score counts partial and matched pending Must Pay money by occurrence
   assert.equal(pending.flowScore.breakdownItems.find(item => item.label === "Must Pay current")?.value, "30/30");
 });
 
+test("AlgorithmSuite uses exact debt occurrences instead of redistributing a lower completed payment", () => {
+  const suite = buildAlgorithmSuite(baseInput({
+    todayDay: 6,
+    bills: [{
+      id: "weekly-debt",
+      name: "Weekly debt",
+      amount: 390,
+      balance: 2_000,
+      frequency: "weekly",
+      category: "Debt",
+      due_day: 5,
+      occurrenceDays: [5, 12, 19, 26],
+      occurrenceSettlements: [
+        { day: 5, requiredAmount: 90, paidAmount: 90 },
+        { day: 12, requiredAmount: 100, paidAmount: 0 },
+        { day: 19, requiredAmount: 100, paidAmount: 0 },
+        { day: 26, requiredAmount: 100, paidAmount: 0 },
+      ],
+      is_debt: true,
+      is_recurring: true,
+      paidAmount: 90,
+    }],
+  }));
+
+  assert.equal(suite.flowScore.requiredAmountDue, 90);
+  assert.equal(suite.flowScore.requiredAmountCovered, 90);
+  assert.equal(suite.flowScore.breakdownItems.find(item => item.label === "Must Pay current")?.value, "30/30");
+  assert.equal(suite.billPriority.nextBill?.dueDay, 12);
+  assert.equal(suite.billPriority.nextBill?.amount, 100);
+  assert.doesNotMatch(suite.stability.headline, /\$7\.50|Weekly debt/);
+});
+
 test("forecast confidence and optional category budgeting stay outside the Flow Score", () => {
   const high = buildAlgorithmSuite(baseInput());
   const low = buildAlgorithmSuite(baseInput({

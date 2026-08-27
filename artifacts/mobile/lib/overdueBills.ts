@@ -5,6 +5,11 @@ export interface OverdueBillInput {
   occurrenceDays: number[];
   plannedTotal: number;
   paidTotal: number;
+  occurrences?: Array<{
+    day: number;
+    requiredAmount: number;
+    paidAmount: number;
+  }>;
 }
 
 export interface OverdueBillOccurrence {
@@ -33,6 +38,27 @@ export function buildOverdueBillOccurrences(
 
   return bills.flatMap(bill => {
     if (bill.closed) return [];
+    const exactOccurrences = (bill.occurrences ?? [])
+      .filter(occurrence => Number.isInteger(occurrence.day) && occurrence.day > 0)
+      .sort((left, right) => left.day - right.day);
+    if (exactOccurrences.length) {
+      return exactOccurrences.flatMap(occurrence => {
+        const remainingAmount = roundCurrency(Math.max(
+          0,
+          Number(occurrence.requiredAmount) - Number(occurrence.paidAmount),
+        ));
+        if (occurrence.day >= todayDay || remainingAmount <= 0.005) return [];
+        const occurrenceDate = isoDate(year, month, occurrence.day);
+        const occurrenceTime = new Date(year, month, occurrence.day, 12);
+        return [{
+          billId: bill.billId,
+          name: bill.name,
+          occurrenceDate,
+          remainingAmount,
+          daysPastDue: Math.max(1, Math.round((today.getTime() - occurrenceTime.getTime()) / 86_400_000)),
+        }];
+      });
+    }
     const occurrences = Array.from(new Set(
       bill.occurrenceDays.filter(day => Number.isInteger(day) && day > 0),
     )).sort((left, right) => left - right);

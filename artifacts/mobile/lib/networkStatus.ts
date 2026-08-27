@@ -1,6 +1,7 @@
 let currentNetworkStatus: boolean | null = typeof navigator !== "undefined" && typeof navigator.onLine === "boolean"
   ? navigator.onLine
   : null;
+const networkStatusListeners = new Set<(status: boolean | null) => void>();
 
 export class OfflineMutationError extends Error {
   readonly code = "OFFLINE_MUTATION_BLOCKED";
@@ -18,11 +19,18 @@ export function reachableNetworkState(state: { isConnected: boolean | null; isIn
 }
 
 export function publishNetworkStatus(status: boolean | null): void {
+  if (currentNetworkStatus === status) return;
   currentNetworkStatus = status;
+  networkStatusListeners.forEach(listener => listener(status));
 }
 
 export function knownNetworkStatus(): boolean | null {
   return currentNetworkStatus;
+}
+
+export function subscribeNetworkStatus(listener: (status: boolean | null) => void): () => void {
+  networkStatusListeners.add(listener);
+  return () => networkStatusListeners.delete(listener);
 }
 
 export function isMutationRequest(input: RequestInfo | URL, init?: RequestInit): boolean {

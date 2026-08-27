@@ -3,12 +3,14 @@ import { describe, it } from "node:test";
 
 import {
   buildDebtPaymentPlanSummary,
+  debtPaymentProgress,
   isScheduledSnowballPlanTransaction,
   isSnowballPaymentTransaction,
   replacementSnowballSafeMaximum,
   requiredDebtPlanTotal,
   retainedDebtPaymentBreakdown,
   SNOWBALL_PLAN_SOURCE,
+  snowballRolloverPlanTotal,
   snowballPaymentName,
   snowballPlanTotalThroughDate,
   snowballTransactionEditDraft,
@@ -128,6 +130,36 @@ describe("snowball transaction recognition", () => {
       amount: 38.27,
       snowball_minimum_boost: 29,
     }), 38.27);
+    assert.equal(snowballRolloverPlanTotal([{
+      snowball_minimum_boost: 29,
+    }]), 29);
+    assert.equal(snowballRolloverPlanTotal([{
+      snowball_minimum_boost: 29,
+    }, {
+      snowball_minimum_boost: 29,
+      include_in_snowball: false,
+    }]), 29);
+  });
+
+  it("marks the original minimum paid while keeping rollover visibly optional", () => {
+    assert.deepEqual(debtPaymentProgress(85, 114, 85), {
+      requiredAmount: 85,
+      plannedAmount: 114,
+      paidAmount: 85,
+      requiredRemaining: 0,
+      optionalExtraRemaining: 29,
+      isPaid: true,
+      isPartial: false,
+    });
+    assert.deepEqual(debtPaymentProgress(85, 114, 50), {
+      requiredAmount: 85,
+      plannedAmount: 114,
+      paidAmount: 50,
+      requiredRemaining: 35,
+      optionalExtraRemaining: 29,
+      isPaid: false,
+      isPartial: true,
+    });
   });
 
   it("keeps scheduled plan transactions separate from paid debt", () => {

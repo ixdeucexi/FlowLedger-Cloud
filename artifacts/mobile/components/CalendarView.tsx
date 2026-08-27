@@ -226,7 +226,6 @@ export function CalendarView({
           const ungroupedCalendarGoals = calendarGoals.filter(goal => !groupedPlannedExpenseIds.has(goal.id));
 
           const decisionAmount = isBeforeStart ? 0 : (decisionsByDay[day] ?? 0);
-          const isActualClose = db?.balanceSource === "actual_close";
           const isLowRiskDay = Boolean(db && db.balance < safetyFloor);
           const chips: { label: string; kind: ChipKind }[] = [];
 
@@ -263,7 +262,7 @@ export function CalendarView({
             kind: goal.goal_type === "planned_expense" ? "plan" : "goal",
           }));
           if (decisionAmount > 0) chips.push({ label: `Plan $${fmt(decisionAmount)}`, kind: "plan" });
-          if (isLowRiskDay) chips.push({ label: isActualClose ? "Closed below floor" : "Build cushion", kind: "risk" });
+          if (isLowRiskDay) chips.push({ label: "Build cushion", kind: "risk" });
 
           const visibleChips = chips.slice(0, 3);
           const hiddenCount = chips.length - visibleChips.length;
@@ -274,7 +273,7 @@ export function CalendarView({
               disabled={isBeforeStart}
               onPress={() => onDayPress(ds)}
               accessibilityRole="button"
-              accessibilityLabel={`${ds}. ${db ? `${isActualClose ? "Actual bank close" : "Closing balance"} ${formatCalendarBalance(db.balance)}.` : "No forecast available."}`}
+              accessibilityLabel={`${ds}. ${db ? `Balance ${formatCalendarBalance(db.balance)}.` : "No forecast available."}`}
               accessibilityState={{ disabled: isBeforeStart, selected: isSelected }}
               style={({ pressed }) => [
                 styles.cellOuter,
@@ -323,19 +322,12 @@ export function CalendarView({
                         isDesktop && styles.desktopBalanceText,
                         { color: db.balance >= safetyFloor ? calendarTheme.green : db.balance < 0 ? calendarTheme.red : calendarTheme.amber },
                       ]}
-                      accessibilityLabel={`${isActualClose ? "Actual bank close" : "Closing balance"} ${formatCalendarBalance(db.balance)}`}
+                      accessibilityLabel={`Balance ${formatCalendarBalance(db.balance)}`}
                       numberOfLines={1}
                       adjustsFontSizeToFit
                       minimumFontScale={0.55}
                     >
                       {formatCalendarBalance(db.balance)}
-                    </Text>
-                  ) : null}
-                  {isActualClose ? (
-                    <Text
-                      style={[styles.balanceSourceText, { color: calendarTheme.muted }]}
-                    >
-                      Actual close
                     </Text>
                   ) : null}
                 </View>
@@ -422,7 +414,6 @@ const styles = StyleSheet.create({
   todayCircle: { minWidth: 22, height: 22, borderRadius: 7, alignItems: "center", justifyContent: "center", paddingHorizontal: 6, backgroundColor: CALENDAR.today },
   dayNum: { fontSize: 15 },
   balanceText: { maxWidth: "100%", flexShrink: 1, fontSize: 9, fontFamily: "Inter_800ExtraBold" },
-  balanceSourceText: { maxWidth: "100%", fontSize: 7, fontFamily: "Inter_600SemiBold" },
   desktopBalanceText: { fontSize: 10 },
   eventStack: { marginTop: 4, gap: 2 },
   eventChip: {

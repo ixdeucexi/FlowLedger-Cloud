@@ -3,6 +3,7 @@ const { optional } = require("../env");
 const { buildOverdueOccurrences, suppressPendingMatchedOccurrences } = require("../overdueBills");
 const { queueOverdueBillNotifications } = require("../push");
 const { safeError, serviceSupabase } = require("../supabase");
+const { localDateTimeParts } = require("../timeZone");
 
 function unique(values) {
   return [...new Set((values || []).filter(Boolean))];
@@ -17,9 +18,7 @@ module.exports = async function overdueBillNotifications(req, res) {
 
   try {
     const db = serviceSupabase();
-    const today = new Date().toISOString().slice(0, 10);
-    const [year, monthNumber] = today.split("-").map(Number);
-    const month = monthNumber - 1;
+    const now = new Date();
     const [{ data: subscriptions, error: subscriptionError }, { data: nativeDevices, error: nativeDeviceError }] = await Promise.all([
       db.from("push_subscriptions").select("user_id"),
       db.from("native_push_devices").select("user_id").eq("status", "active"),
@@ -35,6 +34,26 @@ module.exports = async function overdueBillNotifications(req, res) {
       .in("user_id", subscribedUserIds);
     if (membershipError) throw membershipError;
     const householdIds = unique((memberships || []).map(row => row.household_id));
+    const householdSettingsRequest = householdIds.length
+      ? db.from("household_settings").select("household_id,time_zone").in("household_id", householdIds)
+      : Promise.resolve({ data: [], error: null });
+    const householdsRequest = householdIds.length
+      ? db.from("households").select("id,created_by,is_personal").in("id", householdIds)
+      : Promise.resolve({ data: [], error: null });
+    const [
+      { data: householdSettings, error: householdSettingsError },
+      { data: households, error: householdsError },
+    ] = await Promise.all([householdSettingsRequest, householdsRequest]);
+    if (householdSettingsError) throw householdSettingsError;
+    if (householdsError) throw householdsError;
+    const timeZoneByHousehold = new Map(
+      (householdSettings || []).map(row => [row.household_id, row.time_zone || "UTC"]),
+    );
+    const personalHouseholdByOwner = new Map(
+      (households || [])
+        .filter(row => row.is_personal)
+        .map(row => [row.created_by, row.id]),
+    );
 
     const billSelect = "id,user_id,household_id,name,amount,balance,due_day,day_of_week,next_payment_date,start_date,end_date,is_debt,is_recurring,frequency,snowball_minimum_boost";
     const householdBillsRequest = householdIds.length
@@ -52,28 +71,41 @@ module.exports = async function overdueBillNotifications(req, res) {
     if (!bills.length) return res.status(200).json({ ok: true, users: subscribedUserIds.length, overdue: 0, delivered: 0 });
 
     const billIds = bills.map(bill => bill.id);
+    const billsByToday = new Map();
+    bills.forEach(bill => {
+      const timeZoneHouseholdId = bill.household_id
+        || personalHouseholdByOwner.get(bill.user_id);
+      const timeZone = timeZoneByHousehold.get(timeZoneHouseholdId) || "UTC";
+      const today = localDateTimeParts(now, timeZone).date;
+      billsByToday.set(today, [...(billsByToday.get(today) || []), bill]);
+    });
+    const overdueGroups = Array.from(billsByToday, ([today, groupBills]) => ({
+      today,
+      bills: groupBills,
+      billIds: groupBills.map(bill => bill.id),
+    }));
     const pendingMatchesRequest = householdIds.length
       ? db.from("pending_plan_matches")
         .select("household_id,pending_plaid_transaction_id,target_type,target_id,occurrence_date,status")
         .in("household_id", householdIds)
         .in("status", ["active", "ready_review"])
       : Promise.resolve({ data: [], error: null });
-    const [
-      { data: overrides, error: overrideError },
-      { data: moves, error: moveError },
-      { data: pendingMatches, error: pendingMatchesError },
-    ] = await Promise.all([
-      db.from("monthly_overrides")
-        .select("bill_id,custom_amount,custom_due_day,paid_amount,actual_amount,paid_date")
-        .eq("month", month)
-        .eq("year", year)
-        .in("bill_id", billIds),
+    const [overrideResults, { data: moves, error: moveError }, { data: pendingMatches, error: pendingMatchesError }] = await Promise.all([
+      Promise.all(overdueGroups.map(group => {
+        const [year, monthNumber] = group.today.split("-").map(Number);
+        return db.from("monthly_overrides")
+          .select("bill_id,custom_amount,custom_due_day,paid_amount,actual_amount,paid_date")
+          .eq("month", monthNumber - 1)
+          .eq("year", year)
+          .in("bill_id", group.billIds);
+      })),
       db.from("bill_date_moves")
         .select("bill_id,from_date,to_date,created_at,updated_at")
         .in("bill_id", billIds),
       pendingMatchesRequest,
     ]);
-    if (overrideError) throw overrideError;
+    const failedOverride = overrideResults.find(result => result.error);
+    if (failedOverride?.error) throw failedOverride.error;
     if (moveError) throw moveError;
     if (pendingMatchesError) throw pendingMatchesError;
 
@@ -91,8 +123,16 @@ module.exports = async function overdueBillNotifications(req, res) {
     const { data: livePendingTransactions, error: livePendingError } = await livePendingRequest;
     if (livePendingError) throw livePendingError;
 
+    const overdueCandidates = overdueGroups.flatMap((group, index) => (
+      buildOverdueOccurrences({
+        bills: group.bills,
+        overrides: overrideResults[index]?.data || [],
+        moves,
+        today: group.today,
+      })
+    ));
     const overdue = suppressPendingMatchedOccurrences(
-      buildOverdueOccurrences({ bills, overrides, moves, today }),
+      overdueCandidates,
       pendingMatches,
       livePendingTransactions,
     );

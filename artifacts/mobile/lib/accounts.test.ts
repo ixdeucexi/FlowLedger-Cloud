@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { bankBalanceAdjustment, connectedCheckingAnchor, connectedCheckingBalance, connectedCheckingObservedAnchor, evaluateForecastConfidence, historicalMonthOpeningBalance, operatingAccountAnchor, parseStatementCsv, totalForecastBalance, type AccountSnapshot } from "./accounts";
+import { accountUpdatesOperatingAnchor, bankBalanceAdjustment, connectedCheckingAnchor, connectedCheckingBalance, connectedCheckingObservedAnchor, evaluateForecastConfidence, historicalMonthOpeningBalance, operatingAccountAnchor, parseStatementCsv, totalForecastBalance, type AccountSnapshot } from "./accounts";
 
 const accounts: AccountSnapshot[] = [
   { id: "checking", name: "Checking", type: "checking", currentBalance: 1200, balanceAsOf: "2026-06-23", lastReconciledAt: "2026-06-23", active: true },
@@ -26,6 +26,45 @@ test("connected checking uses the same balance for dashboard and calendar", () =
   ];
   assert.equal(connectedCheckingBalance(connected), 1000);
   assert.deepEqual(connectedCheckingAnchor(connected, "2026-07-17"), { balance: 1000, date: "2026-07-17" });
+});
+test("calendar anchor fails closed when manual operating balances have different observation dates", () => {
+  const cash: AccountSnapshot = { id: "cash", name: "Wallet", type: "cash", currentBalance: 45, balanceAsOf: "2026-06-24", active: true };
+  assert.equal(operatingAccountAnchor([accounts[0], cash]), null);
+});
+test("calendar anchor combines manual operating balances observed on the same date", () => {
+  const cash: AccountSnapshot = { id: "cash", name: "Wallet", type: "cash", currentBalance: 45, balanceAsOf: "2026-06-23", active: true };
+  assert.deepEqual(operatingAccountAnchor([accounts[0], cash]), { balance: 1245, date: "2026-06-23" });
+});
+
+test("one account refresh keeps the last coherent Forecast anchor without relabeling untouched money", () => {
+  const lastCoherentForecast = { balance: 1500, date: "2026-08-26" };
+  const untouchedCash: AccountSnapshot = {
+    id: "cash",
+    name: "Wallet",
+    type: "cash",
+    currentBalance: 500,
+    balanceAsOf: "2026-08-26",
+    active: true,
+  };
+  const refreshedChecking: AccountSnapshot = {
+    id: "checking",
+    name: "Checking",
+    type: "checking",
+    currentBalance: 950,
+    balanceAsOf: "2026-08-27",
+    active: true,
+  };
+  const currentAggregate = operatingAccountAnchor([refreshedChecking, untouchedCash]);
+  assert.equal(currentAggregate, null);
+  assert.equal(untouchedCash.balanceAsOf, "2026-08-26");
+  assert.deepEqual(currentAggregate ?? lastCoherentForecast, lastCoherentForecast);
+});
+
+test("only a newly active operating account is allowed to rewrite the dated anchor", () => {
+  assert.equal(accountUpdatesOperatingAnchor(accounts[0]), true);
+  assert.equal(accountUpdatesOperatingAnchor({ ...accounts[0], type: "cash" }), true);
+  assert.equal(accountUpdatesOperatingAnchor(accounts[1]), false);
+  assert.equal(accountUpdatesOperatingAnchor({ ...accounts[0], active: false }), false);
 });
 
 test("an unavailable connected checking balance is not treated as a verified zero", () => {

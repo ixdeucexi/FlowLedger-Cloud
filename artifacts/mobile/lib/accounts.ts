@@ -88,13 +88,15 @@ export function operatingAccountAnchor(accounts: AccountSnapshot[]): { balance: 
   if (!active.length) return null;
   const operating = active.filter(account => account.type === "checking" || account.type === "cash");
   if (!operating.length) return null;
-  const date = operating
-    .map(account => account.balanceAsOf)
-    .filter(Boolean)
-    .sort()
-    .at(-1);
-  if (!date) return null;
-  return { balance: totalForecastBalance(operating), date };
+  const dates = operating.map(account => account.balanceAsOf);
+  if (dates.some(date => !/^\d{4}-\d{2}-\d{2}$/.test(date))) return null;
+  const uniqueDates = new Set(dates);
+  if (uniqueDates.size !== 1) return null;
+  return { balance: totalForecastBalance(operating), date: dates[0] };
+}
+
+export function accountUpdatesOperatingAnchor(account: AccountSnapshot): boolean {
+  return account.active && (account.type === "checking" || account.type === "cash");
 }
 
 export function bankBalanceAdjustment(

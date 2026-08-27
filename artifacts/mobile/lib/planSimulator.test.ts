@@ -6,6 +6,7 @@ import test from "node:test";
 import type { FinancialEvent } from "./forecast";
 import {
   buildCanonicalPlanSimulationBaseline,
+  debtPayoffCadenceForMonth,
   decodePlanSimulationChanges,
   normalizePlanSimulationRow,
   planSimulationStorageKey,
@@ -137,6 +138,21 @@ test("extra debt uses the debt remaining after earlier canonical payments and ke
   assert.equal(result.debtExtraApplied, 60.19);
   assert.deepEqual(result.debtAllocations.map(item => [item.billId, item.amount]), [["concert", 60.19]]);
   assert.equal(result.days.find(day => day.date === "2026-08-14")?.outflow, 60.19);
+});
+
+test("payoff cadence applies rollover once per month instead of once per occurrence", () => {
+  assert.equal(debtPayoffCadenceForMonth({
+    id: "weekly-card",
+    name: "Weekly card",
+    balance: 1_000,
+    minimum: 10,
+    monthlyRolloverExtra: 29,
+    apr: 0,
+    dueDay: 2,
+    dayOfWeek: 0,
+    frequency: "weekly",
+    included: true,
+  }, 7, 2026), 79);
 });
 
 test("targeted payoff closes only the selected open debt at its remaining balance", () => {
@@ -444,6 +460,7 @@ test("migration enforces Pro household RLS, editor writes, immutable audit field
 
 test("Plan Simulator is a direct Pro route launched only from mobile and desktop Forecast", () => {
   const route = readFileSync(path.resolve(process.cwd(), "app/plan-simulator.tsx"), "utf8");
+  const dashboardModel = readFileSync(path.resolve(process.cwd(), "lib/dashboardFinancialModel.ts"), "utf8");
   const forecast = readFileSync(path.resolve(process.cwd(), "app/(tabs)/monthly.tsx"), "utf8");
   const desktopForecast = readFileSync(path.resolve(process.cwd(), "components/desktop/DesktopCalendarPage.tsx"), "utf8");
   const rootLayout = readFileSync(path.resolve(process.cwd(), "app/_layout.tsx"), "utf8");
@@ -460,6 +477,10 @@ test("Plan Simulator is a direct Pro route launched only from mobile and desktop
   assert.match(route, /DatePickerField value=\{date\}/);
   assert.match(route, /label: "Pay off a debt"/);
   assert.match(route, /type: "debt_payoff"/);
+  assert.match(route, /minimum:\s*Math\.max\(0, bill\.amount\)/);
+  assert.match(route, /monthlyRolloverExtra:\s*Math\.max\(0, Number\(bill\.snowball_minimum_boost/);
+  assert.match(dashboardModel, /monthlyMinimum:\s*bill\.is_debt \? requiredAmount/);
+  assert.match(dashboardModel, /requiredDebtPlanTotal\(bill, occurrenceDays\.length\)/);
   assert.doesNotMatch(route, /label=["']Apply["']/);
   assert.match(forecast, /router\.push\("\/plan-simulator"\)/);
   assert.match(desktopForecast, /Plan Simulator/);

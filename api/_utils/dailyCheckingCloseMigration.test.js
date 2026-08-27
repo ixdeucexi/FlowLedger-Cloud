@@ -10,6 +10,8 @@ const migration = fs.readFileSync(path.resolve(
 const manualSync = fs.readFileSync(path.resolve(__dirname, "../plaid/sync.js"), "utf8");
 const automaticSync = fs.readFileSync(path.resolve(__dirname, "../plaid/automatic-sync.js"), "utf8");
 const webhook = fs.readFileSync(path.resolve(__dirname, "../plaid/webhook.js"), "utf8");
+const closeDispatcher = fs.readFileSync(path.resolve(__dirname, "../plaid/daily-close.js"), "utf8");
+const vercel = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../../vercel.json"), "utf8"));
 
 test("daily checking closes are household-scoped read-only client data", () => {
   assert.match(migration, /household_id uuid not null references public\.households\(id\) on delete cascade/i);
@@ -75,4 +77,16 @@ test("manual, automatic, and webhook refreshes include credentialed needs-repair
   assert.match(manualSync, /encrypted_access_token\.not\.is\.null,access_token_ciphertext\.not\.is\.null/);
   assert.match(webhook, /encrypted_access_token\.not\.is\.null,access_token_ciphertext\.not\.is\.null/);
   assert.match(automaticSync, /item\.encrypted_access_token \|\| item\.access_token_ciphertext/);
+});
+
+test("a Hobby-compatible daily dispatcher saves the latest coherent known balance near Chicago midnight", () => {
+  assert.ok(vercel.crons.some(cron => (
+    cron.path === "/api/plaid/daily-close" && cron.schedule === "55 5 * * *"
+  )));
+  assert.match(closeDispatcher, /isAuthorizedCron\(req, secret\)/);
+  assert.match(closeDispatcher, /isLocalCloseWindow\(now, timeZone, \[23, 0\]\)/);
+  assert.match(closeDispatcher, /Vercel Hobby permits only a once-daily cron/);
+  assert.match(closeDispatcher, /accounts_observed_at/);
+  assert.match(closeDispatcher, /recordHouseholdDailyCheckingClose/);
+  assert.doesNotMatch(closeDispatcher, /plaid\(\)|syncItem/);
 });

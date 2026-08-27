@@ -30,7 +30,7 @@ import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { confirmAction } from "@/lib/confirmAction";
 import type { BillEditableBaseline, BillEditableField } from "@/lib/billEditPersistence";
 import { effectiveDebtMinimum } from "@/lib/snowball";
-import { buildDebtPaymentPlanSummary } from "@/lib/debtPaymentPlan";
+import { buildDebtPaymentPlanSummary, requiredDebtPlanTotal, snowballRolloverPlanTotal } from "@/lib/debtPaymentPlan";
 import {
   orderActiveDebtsForStrategy,
   sortDebtsWithPaidLast,
@@ -122,6 +122,7 @@ export default function BillsScreen() {
     getBillOccurrencesInMonth,
     getBillMonthlyTotal,
     getBillEffectiveMonthlyTotal,
+    getDebtMonthSettlements,
     getDebtPlanForMonth,
     getPaidAmount,
     activeHousehold,
@@ -321,26 +322,47 @@ export default function BillsScreen() {
     () => pendingOccurrenceKeySet(pendingPlanMatches, pendingBankTransactions),
     [pendingBankTransactions, pendingPlanMatches],
   );
+  const currentDebtSettlements = useMemo(
+    () => getDebtMonthSettlements(currentMonth, currentYear),
+    [currentMonth, currentYear, getDebtMonthSettlements],
+  );
   const overdueBills = useMemo(
     () =>
       groupOverdueBills(
         buildOverdueBillOccurrences(
-          getMonthlyBills(currentMonth, currentYear).map((bill) => ({
-            billId: bill.id,
-            name: bill.name,
-            closed: bill.is_debt && bill.balance <= 0.009,
-            occurrenceDays: getBillOccurrencesInMonth(
+          getMonthlyBills(currentMonth, currentYear).map((bill) => {
+            const occurrenceDays = getBillOccurrencesInMonth(
               bill,
               currentMonth,
               currentYear,
-            ),
-            plannedTotal: getBillEffectiveMonthlyTotal(
-              bill,
-              currentMonth,
-              currentYear,
-            ),
-            paidTotal: getPaidAmount(bill.id, currentMonth, currentYear),
-          })),
+            );
+            const debtSettlement = bill.is_debt
+              ? currentDebtSettlements.get(bill.id)
+              : undefined;
+            return {
+              billId: bill.id,
+              name: bill.name,
+              closed: bill.is_debt && bill.balance <= 0.009,
+              occurrenceDays,
+              plannedTotal: bill.is_debt
+                ? (debtSettlement?.configuredObligation
+                  ?? requiredDebtPlanTotal(bill, occurrenceDays.length))
+                : getBillEffectiveMonthlyTotal(
+                    bill,
+                    currentMonth,
+                    currentYear,
+                  ),
+              paidTotal: bill.is_debt
+                ? (debtSettlement?.paidAmount
+                  ?? getPaidAmount(bill.id, currentMonth, currentYear))
+                : getPaidAmount(bill.id, currentMonth, currentYear),
+              occurrences: debtSettlement?.occurrences?.map(occurrence => ({
+                day: Number(occurrence.occurrenceDate.slice(8, 10)),
+                requiredAmount: occurrence.configuredObligation,
+                paidAmount: occurrence.paidAmount,
+              })),
+            };
+          }),
           currentMonth,
           currentYear,
           currentDay,
@@ -354,6 +376,7 @@ export default function BillsScreen() {
     [
       currentDay,
       currentMonth,
+      currentDebtSettlements,
       currentYear,
       getBillEffectiveMonthlyTotal,
       getBillOccurrencesInMonth,
@@ -491,10 +514,7 @@ export default function BillsScreen() {
     (sum, debt) => sum + debtRequiredMinimum(debt),
     0,
   );
-  const rolledSnowballPayments = planDebts.reduce(
-    (sum, debt) => sum + Math.max(0, Number(debt.snowball_minimum_boost ?? 0)),
-    0,
-  );
+  const rolledSnowballPayments = snowballRolloverPlanTotal(planDebts);
   const debtPaymentPlan = buildDebtPaymentPlanSummary(
     totalMinPayments,
     rolledSnowballPayments + (existingSnowball?.amount ?? 0),
@@ -507,9 +527,6 @@ export default function BillsScreen() {
     : cashFlowSafeSnowballAmount;
   const snowballTarget = snowballOrder[0] ?? null;
   const activeDebtTarget = snowballTarget;
-  const activeDebtMinimum = activeDebtTarget
-    ? debtMonthlyMinimum(activeDebtTarget)
-    : 0;
   const nextStrategyTarget = strategyOrder[1] ?? null;
   const activeDebtRollover =
     activeDebtTarget && datedDebtPlan
@@ -1762,17 +1779,23 @@ export default function BillsScreen() {
                                 ]}
                                 numberOfLines={2}
                               >
-                                {forecastPayment !== undefined
-                                  ? `$${forecastPayment.toFixed(2)} forecast payment`
-                                  : `$${requiredMinimum.toFixed(2)}/mo required`}
+                                ${requiredMinimum.toFixed(2)}/mo required
                               </Text>
                             )}
+                            {!isPaidOff && forecastPayment !== undefined ? (
+                              <Text
+                                style={[styles.metaText, { color: c.primary }]}
+                                numberOfLines={2}
+                              >
+                                ${forecastPayment.toFixed(2)} total forecast
+                              </Text>
+                            ) : null}
                             {!isPaidOff && forecastRollover > 0.005 && (
                               <Text
                                 style={[styles.metaText, { color: c.success }]}
                                 numberOfLines={2}
                               >
-                                Includes ${forecastRollover.toFixed(2)} rollover
+                                +${forecastRollover.toFixed(2)} snowball rollover · extra
                               </Text>
                             )}
                           </View>
@@ -1926,7 +1949,7 @@ export default function BillsScreen() {
             ) : null}
             <View style={styles.debtInfoSteps}>
               <Text style={[styles.debtInfoStep, { color: c.foreground }]}>
-                1. Pay every minimum.
+                1. Pay every original lender minimum.
               </Text>
               <Text style={[styles.debtInfoStep, { color: c.foreground }]}>
                 2. Send extra to the smallest balance.
@@ -1950,8 +1973,11 @@ export default function BillsScreen() {
                   style={[styles.debtInfoRolloverText, { color: c.foreground }]}
                 >
                   After {activeDebtTarget.name} is paid off, its $
-                  {activeDebtMinimum.toFixed(2)}/month rolls into{" "}
-                  {nextStrategyTarget.name}.
+                  {debtRequiredMinimum(activeDebtTarget).toFixed(2)} original
+                  minimum{Number(activeDebtTarget.snowball_minimum_boost ?? 0) > 0.005
+                    ? ` plus $${Number(activeDebtTarget.snowball_minimum_boost).toFixed(2)} already rolling`
+                    : ""} continues to {nextStrategyTarget.name} as extra payoff
+                  money, not a new required minimum.
                 </Text>
               </View>
             ) : null}

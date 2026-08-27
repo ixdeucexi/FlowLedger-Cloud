@@ -19,7 +19,10 @@ export type ActivityDateRange = {
   endDate?: string;
 };
 
-export const ACTIVITY_DATE_RANGE_OPTIONS: ReadonlyArray<{ id: ActivityRangeId; label: string }> = [
+export const ACTIVITY_DATE_RANGE_OPTIONS: ReadonlyArray<{
+  id: ActivityRangeId;
+  label: string;
+}> = [
   { id: "today", label: "Today" },
   { id: "this_week", label: "This Week" },
   { id: "this_month", label: "This Month" },
@@ -43,7 +46,11 @@ export function dateOnly(value: Date) {
 }
 
 function addDays(value: Date, amount: number) {
-  const next = localDate(value.getFullYear(), value.getMonth(), value.getDate());
+  const next = localDate(
+    value.getFullYear(),
+    value.getMonth(),
+    value.getDate(),
+  );
   next.setDate(next.getDate() + amount);
   return next;
 }
@@ -60,7 +67,11 @@ function validDateOnly(value?: string) {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
   const [year, month, day] = value.split("-").map(Number);
   const parsed = localDate(year, month - 1, day);
-  return parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day ? value : undefined;
+  return parsed.getFullYear() === year &&
+    parsed.getMonth() === month - 1 &&
+    parsed.getDate() === day
+    ? value
+    : undefined;
 }
 
 export function resolveActivityDateRange(
@@ -69,8 +80,14 @@ export function resolveActivityDateRange(
   customStart?: string,
   customEnd?: string,
 ): ActivityDateRange {
-  const current = localDate(today.getFullYear(), today.getMonth(), today.getDate());
-  const label = ACTIVITY_DATE_RANGE_OPTIONS.find(option => option.id === id)?.label ?? "This Month";
+  const current = localDate(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate(),
+  );
+  const label =
+    ACTIVITY_DATE_RANGE_OPTIONS.find((option) => option.id === id)?.label ??
+    "This Month";
   if (id === "all_time") return { id, label };
   if (id === "custom") {
     const startDate = validDateOnly(customStart);
@@ -82,28 +99,89 @@ export function resolveActivityDateRange(
       ...(endDate ? { endDate } : {}),
     };
   }
-  if (id === "today") return { id, label, startDate: dateOnly(current), endDate: dateOnly(current) };
+  if (id === "today")
+    return {
+      id,
+      label,
+      startDate: dateOnly(current),
+      endDate: dateOnly(current),
+    };
   if (id === "this_week") {
     const start = addDays(current, -current.getDay());
-    return { id, label, startDate: dateOnly(start), endDate: dateOnly(addDays(start, 6)) };
+    return {
+      id,
+      label,
+      startDate: dateOnly(start),
+      endDate: dateOnly(addDays(start, 6)),
+    };
   }
-  if (id === "this_month") return { id, label, startDate: dateOnly(startOfMonth(current)), endDate: dateOnly(endOfMonth(current)) };
-  if (id === "last_month") return { id, label, startDate: dateOnly(startOfMonth(current, -1)), endDate: dateOnly(endOfMonth(current, -1)) };
-  if (id === "last_30_days") return { id, label, startDate: dateOnly(addDays(current, -29)), endDate: dateOnly(current) };
-  if (id === "last_90_days") return { id, label, startDate: dateOnly(addDays(current, -89)), endDate: dateOnly(current) };
-  if (id === "last_3_months") return { id, label, startDate: dateOnly(startOfMonth(current, -2)), endDate: dateOnly(current) };
-  if (id === "last_6_months") return { id, label, startDate: dateOnly(startOfMonth(current, -5)), endDate: dateOnly(current) };
-  if (id === "this_year") return { id, label, startDate: `${current.getFullYear()}-01-01`, endDate: `${current.getFullYear()}-12-31` };
-  return { id, label, startDate: `${current.getFullYear() - 1}-01-01`, endDate: `${current.getFullYear() - 1}-12-31` };
+  if (id === "this_month")
+    return {
+      id,
+      label,
+      startDate: dateOnly(startOfMonth(current)),
+      endDate: dateOnly(endOfMonth(current)),
+    };
+  if (id === "last_month")
+    return {
+      id,
+      label,
+      startDate: dateOnly(startOfMonth(current, -1)),
+      endDate: dateOnly(endOfMonth(current, -1)),
+    };
+  if (id === "last_30_days")
+    return {
+      id,
+      label,
+      startDate: dateOnly(addDays(current, -29)),
+      endDate: dateOnly(current),
+    };
+  if (id === "last_90_days")
+    return {
+      id,
+      label,
+      startDate: dateOnly(addDays(current, -89)),
+      endDate: dateOnly(current),
+    };
+  if (id === "last_3_months")
+    return {
+      id,
+      label,
+      startDate: dateOnly(startOfMonth(current, -2)),
+      endDate: dateOnly(current),
+    };
+  if (id === "last_6_months")
+    return {
+      id,
+      label,
+      startDate: dateOnly(startOfMonth(current, -5)),
+      endDate: dateOnly(current),
+    };
+  if (id === "this_year")
+    return {
+      id,
+      label,
+      startDate: `${current.getFullYear()}-01-01`,
+      endDate: `${current.getFullYear()}-12-31`,
+    };
+  return {
+    id,
+    label,
+    startDate: `${current.getFullYear() - 1}-01-01`,
+    endDate: `${current.getFullYear() - 1}-12-31`,
+  };
 }
 
 export function dateIsInActivityRange(date: string, range: ActivityDateRange) {
   const day = date.slice(0, 10);
-  return (!range.startDate || day >= range.startDate) && (!range.endDate || day <= range.endDate);
+  return (
+    (!range.startDate || day >= range.startDate) &&
+    (!range.endDate || day <= range.endDate)
+  );
 }
 
 export function isActivityRangeId(value: unknown): value is ActivityRangeId {
-  return ACTIVITY_DATE_RANGE_OPTIONS.some(option => option.id === value);
+  return ACTIVITY_DATE_RANGE_OPTIONS.some((option) => option.id === value);
 }
 
 export function summarizeActivityRange(
@@ -134,4 +212,90 @@ export function summarizeActivitySnapshot(
     out: plannedMonth.out,
     net: plannedMonth.net,
   };
+}
+
+export function activityRunningBalances(
+  currentBalance: number | null,
+  ledgerRows: Array<{ id: string; date: string; amount: number }>,
+) {
+  const balances = new Map<string, number>();
+  if (currentBalance === null || !Number.isFinite(currentBalance))
+    return balances;
+
+  const rowsByDate = new Map<
+    string,
+    Array<{ id: string; date: string; amount: number }>
+  >();
+  [...ledgerRows]
+    .filter((row) => Number.isFinite(row.amount))
+    .sort((left, right) => right.date.localeCompare(left.date))
+    .forEach((row) => {
+      const date = row.date.slice(0, 10);
+      rowsByDate.set(date, [...(rowsByDate.get(date) ?? []), row]);
+    });
+
+  let balance = currentBalance;
+  rowsByDate.forEach((rows) => {
+    // A date-only ledger cannot prove the order of two same-day transactions.
+    // Show a per-row balance only when that day's ending balance is unambiguous.
+    if (rows.length === 1) balances.set(rows[0].id, balance);
+    balance -= rows.reduce((sum, row) => sum + row.amount, 0);
+  });
+  return balances;
+}
+
+export function activityRunningBalancesFromDatedAnchor(
+  anchor: { balance: number; date: string } | null,
+  ledgerRows: Array<{ id: string; date: string; amount: number }>,
+) {
+  if (
+    !anchor ||
+    !Number.isFinite(anchor.balance) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(anchor.date)
+  )
+    return new Map<string, number>();
+
+  // Only rows after the observation date are provably outside the saved
+  // balance. Same-date rows have no timestamp, so assigning a balance to them
+  // would invent ordering relative to the observation.
+  const rowsAfterAnchor = ledgerRows.filter(
+    (row) => row.date.slice(0, 10) > anchor.date,
+  );
+  const latestBalance = rowsAfterAnchor.reduce(
+    (balance, row) =>
+      Number.isFinite(row.amount) ? balance + row.amount : balance,
+    anchor.balance,
+  );
+  return activityRunningBalances(latestBalance, rowsAfterAnchor);
+}
+
+export function activityManualAccountAllowsChecking(
+  transaction: { source?: string | null; account_id?: string | null },
+  manualAccounts: readonly {
+    id: string;
+    account_type?: string | null;
+    is_active?: boolean | null;
+  }[],
+): boolean {
+  if (transaction.source === "plaid" || !transaction.account_id) return true;
+  const account = manualAccounts.find(
+    (candidate) => candidate.id === transaction.account_id,
+  );
+  if (!account || account.is_active === false) return false;
+  return String(account.account_type ?? "").trim().toLowerCase() === "checking";
+}
+
+export function activityTransactionUsesCheckingLedger(
+  transaction: { source?: string | null; account_id?: string | null },
+  manualAccounts: readonly {
+    id: string;
+    account_type?: string | null;
+    is_active?: boolean | null;
+  }[],
+  defaultCheckingClassification: boolean,
+): boolean {
+  if (transaction.source === "plaid") return defaultCheckingClassification;
+  if (transaction.account_id)
+    return activityManualAccountAllowsChecking(transaction, manualAccounts);
+  return defaultCheckingClassification;
 }

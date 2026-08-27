@@ -15,6 +15,9 @@ export type SnowballPlannerRow = SnowballPlannerDebt & {
   rank: number;
   forecastPayment: number;
   plannedToDebt: number;
+  paymentStatusLabel: "PLANNED TO DEBT" | "REMAINING REQUIRED";
+  paymentStatusAmount: number;
+  payoffExtraRemaining: number;
   rolloverReceived: number;
   rolloverSent: number;
   rolloverTargets: string[];
@@ -70,6 +73,9 @@ export function buildSnowballPlannerRows(
     });
     const rolloversSent = sourcedAllocations.filter(allocation => allocation.kind === "rollover");
     const plannedToDebt = cents(allocations.reduce((sum, allocation) => sum + allocation.amount, 0));
+    const payoffExtraRemaining = cents(allocations
+      .filter(allocation => allocation.kind === "rollover" || allocation.kind === "extra")
+      .reduce((sum, allocation) => sum + allocation.amount, 0));
     const projectedMonthEnd = cents(Math.max(0, debt.balance - plannedToDebt));
     const rolloverEvents = new Map<string, typeof rolloversSent>();
     rolloversSent.forEach(allocation => {
@@ -80,6 +86,9 @@ export function buildSnowballPlannerRows(
       rank: index + 1,
       forecastPayment: cents(Array.from(sourcePayments.values()).reduce((sum, amount) => sum + amount, 0)),
       plannedToDebt,
+      paymentStatusLabel: settlement.status === "scheduled" ? "PLANNED TO DEBT" : "REMAINING REQUIRED",
+      paymentStatusAmount: settlement.status === "scheduled" ? plannedToDebt : settlement.remainingRequired,
+      payoffExtraRemaining,
       rolloverReceived: cents(allocations
         .filter(allocation => allocation.kind === "rollover")
         .reduce((sum, allocation) => sum + allocation.amount, 0)),

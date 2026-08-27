@@ -379,6 +379,8 @@ test("settled bill months stay settled when a later debt rollover changes the re
   assert.deepEqual(reviewedBillMonthSettlement(transactions, "camera", "2026-07"), {
     status: "settled",
     actualAmount: 20,
+    requiredAmount: 20,
+    occurrenceCount: 1,
   });
   assert.deepEqual(reviewedBillMonthSettlement(transactions, "camera", "2026-08"), {
     status: "none",
@@ -393,7 +395,55 @@ test("partial bill months remain open for the rest of the planned payment", () =
     ] },
   ];
 
-  assert.equal(reviewedBillMonthSettlement(transactions, "camera", "2026-07").status, "partial");
+  assert.deepEqual(reviewedBillMonthSettlement(transactions, "camera", "2026-07"), {
+    status: "partial",
+    actualAmount: 20,
+    requiredAmount: 38.27,
+    occurrenceCount: 1,
+  });
+});
+
+test("a later exact payment closes one occurrence after an earlier partial", () => {
+  const transactions = [
+    { id: "discover-partial", date: "2026-08-13", amount: -57, category: "Debt", note: "Discover", review_status: "matched", review_allocations: [
+      { type: "bill" as const, targetId: "discover", occurrenceDate: "2026-08-22", amount: 57, plannedAmount: 113, settlement: "partial" as const },
+    ] },
+    { id: "discover-final", date: "2026-08-24", amount: -28, category: "Debt", note: "Discover", review_status: "matched", review_allocations: [
+      { type: "bill" as const, targetId: "discover", occurrenceDate: "2026-08-22", amount: 28, plannedAmount: 28, settlement: "exact" as const },
+    ] },
+  ];
+
+  assert.deepEqual(reviewedBillMonthSettlement(transactions, "discover", "2026-08"), {
+    status: "settled",
+    actualAmount: 85,
+    requiredAmount: 85,
+    occurrenceCount: 1,
+  });
+  assert.deepEqual(matchedOccurrenceAllocations(transactions, "bill").get(
+    occurrenceKey("discover", "2026-08-22"),
+  ), {
+    type: "bill",
+    targetId: "discover",
+    occurrenceDate: "2026-08-22",
+    amount: 85,
+    plannedAmount: 85,
+    settlement: "exact",
+  });
+});
+
+test("review history preserves the original required amount after a later minimum edit", () => {
+  const transactions = [
+    { id: "capital-one", date: "2026-08-10", amount: -127, category: "Debt", note: "Capital One", review_status: "matched", review_allocations: [
+      { type: "bill" as const, targetId: "capital-one", occurrenceDate: "2026-08-18", amount: 127, plannedAmount: 127, settlement: "exact" as const },
+    ] },
+  ];
+
+  assert.deepEqual(reviewedBillMonthSettlement(transactions, "capital-one", "2026-08"), {
+    status: "settled",
+    actualAmount: 127,
+    requiredAmount: 127,
+    occurrenceCount: 1,
+  });
 });
 
 test("split reporting keeps one cash event but assigns both categories", () => {

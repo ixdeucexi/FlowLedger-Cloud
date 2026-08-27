@@ -8,6 +8,7 @@ import {
   changedBillEditableFields,
   type BillEditableField,
 } from "./billEditPersistence";
+import { monthlyOverridePatchDbPayload } from "./financialMutationRecovery";
 
 type EditableBill = Record<BillEditableField, unknown>;
 
@@ -102,4 +103,30 @@ test("database contract rejects duplicate monthly override occurrences", () => {
   assert.match(migration, /v_override_expected[\s\S]+for update[\s\S]+is distinct from/i);
   assert.match(migration, /foreign key \(household_id\)[\s\S]+on delete cascade/i);
   assert.match(migration, /perform public\.recalculate_debt_minimum_boosts/i);
+});
+
+test("manual debt finalization persists an immutable required amount snapshot", () => {
+  assert.deepEqual(monthlyOverridePatchDbPayload({
+    actual_amount: 1000,
+    paid_amount: 1000,
+    paid_date: "2026-08-04",
+    required_debt_amount: 1500,
+  }), {
+    actual_amount: 1000,
+    paid_amount: 1000,
+    paid_date: "2026-08-04",
+    required_debt_amount: 1500,
+  });
+
+  const context = readFileSync("context/BudgetContext.tsx", "utf8");
+  const finalizationStart = context.indexOf("const finalizeBillPayment");
+  const finalizationEnd = context.indexOf("// ─── Transactions", finalizationStart);
+  const finalization = context.slice(finalizationStart, finalizationEnd);
+  assert.ok(finalizationStart >= 0 && finalizationEnd > finalizationStart);
+  assert.match(finalization, /const requiredDebtAmount = bill\.is_debt[\s\S]+getDebtMonthSettlements/);
+  assert.match(finalization, /await upsertOverride\([\s\S]+required_debt_amount: requiredDebtAmount/);
+
+  const migration = readFileSync("../../supabase/migrations/20260827040341_debt_required_amount_snapshot.sql", "utf8");
+  assert.match(migration, /add column if not exists required_debt_amount numeric/i);
+  assert.match(migration, /check \(required_debt_amount is null or required_debt_amount >= 0\)/i);
 });

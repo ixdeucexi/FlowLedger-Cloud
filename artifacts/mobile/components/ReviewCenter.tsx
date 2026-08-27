@@ -11,12 +11,15 @@ import { UnplannedChargeModal } from "@/components/UnplannedChargeModal";
 import type { Bill, Goal, ReconcileTransactionInput, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
-import { manualActivityMatchCandidates } from "@/lib/billMatching";
+import { manualActivityMatchCandidates, resolveMatchedBillBudget } from "@/lib/billMatching";
+import { adjacentBillMatchCandidates } from "@/lib/billMatchCandidates";
 import { nextPlannedDebtPayment } from "@/lib/billSurplusRouting";
 import { confirmAction } from "@/lib/confirmAction";
 import { FOUNDING_FREE_LAUNCH } from "@/lib/launchMode";
 import { applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupReviewTargets, incomeReviewTargets, matchedOccurrenceAllocations, occurrenceKey, prioritizeReviewTransaction, prioritizeSavedBillTarget, rankReviewTargets, reviewQueueAfterSkips, scheduledSnowballReviewTargets, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
 import { subscriptionLinkKeys } from "@/lib/competitiveGrowth";
+import { createForgottenBillAndReconcile } from "@/lib/atomicFinancialMutations";
+import { assertFinancialMutationOnline } from "@/lib/networkStatus";
 import { prioritizePendingPlanTarget } from "@/lib/pendingPlanMatches";
 import { bucketEffectiveRouteDate, isEligibleSpendingBucketMatch, spendingBucketSummary } from "@/lib/spendingBuckets";
 import { removeBucketRemainderFundingSource, replaceBucketRemainderFundingSource } from "@/lib/snowballFunding";
@@ -69,6 +72,15 @@ function isValidDateInMonth(value: string, month: number, year: number) {
   return dateYear === year && dateMonth === month + 1 && dateDay >= 1 && dateDay <= new Date(year, month + 1, 0).getDate();
 }
 
+function dateOnlyDistanceDays(left: string, right: string) {
+  const [leftYear, leftMonth, leftDay] = left.slice(0, 10).split("-").map(Number);
+  const [rightYear, rightMonth, rightDay] = right.slice(0, 10).split("-").map(Number);
+  return Math.abs(
+    Date.UTC(leftYear, leftMonth - 1, leftDay) -
+      Date.UTC(rightYear, rightMonth - 1, rightDay),
+  ) / 86_400_000;
+}
+
 type ReviewCenterProps = {
   focusTransactionId?: string;
   initialFilter?: "all" | "expense" | "income";
@@ -88,9 +100,9 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all", onMana
   const {
     transactions, incomes, goals, decisions, extraPayments, categories, canEditHousehold, settings, pendingPlanMatches,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal,
-    addBill, createSpendingBucketForTransaction, updateGoal, deleteGoal, closeSpendingBucket, closeSpendingBucketAndRouteRemainder, reopenSpendingBucket,
+    createSpendingBucketForTransaction, updateGoal, deleteGoal, closeSpendingBucket, closeSpendingBucketAndRouteRemainder, reopenSpendingBucket,
     archiveSpendingBucket, restoreArchivedSpendingBucket,
-    deleteBillMistake, reconcileTransaction, undoTransactionReconciliation, refreshBankData,
+    reconcileTransaction, undoTransactionReconciliation, refreshBankData, retryBudgetLoad,
     getExtraPayment, getRemainingDebtPlanForMonth, previewDebtSnowball, applyDebtSnowballPayment, removeReviewSurplusFunding,
   } = useBudget();
   useEffect(() => {
@@ -147,18 +159,53 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all", onMana
     const snowballMatches = matchedOccurrenceAllocations(transactions, "extra_principal", "snowball");
     if (current.amount < 0) {
       const snowballTargets = new Map<string, ReviewTarget>();
-      getMonthlyBills(month, year).forEach(bill => {
-        const days = getBillOccurrencesInMonth(bill, month, year);
-        const monthlyTotal = getBillMonthlyTotal(bill, month, year);
-        const plannedAmount = days.length ? monthlyTotal / days.length : bill.amount;
-        days.forEach(day => {
-          const occurrenceDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-          const previous = billMatches.get(occurrenceKey(bill.id, occurrenceDate));
-          const remaining = Math.max(0, plannedAmount - Number(previous?.amount || 0));
-          if (remaining <= 0.005) return;
-          candidates.push({ type: "bill", id: bill.id, name: bill.name, category: bill.category || "Other",
-            plannedAmount: remaining, occurrenceDate, isDebt: bill.is_debt });
-        });
+      adjacentBillMatchCandidates(
+        current.date,
+        getMonthlyBills,
+        getBillOccurrencesInMonth,
+        getBillMonthlyTotal,
+      ).forEach((candidate) => {
+        candidate.occurrenceDates
+          .filter((occurrenceDate) => dateOnlyDistanceDays(occurrenceDate, current.date) <= 14)
+          .forEach((occurrenceDate) => {
+            const [occurrenceYear, occurrenceMonthNumber] = occurrenceDate
+              .split("-")
+              .map(Number);
+            const occurrenceMonth = occurrenceMonthNumber - 1;
+            const bill = getMonthlyBills(occurrenceMonth, occurrenceYear).find(
+              (item) => item.id === candidate.billId,
+            );
+            if (!bill) return;
+            const days = getBillOccurrencesInMonth(
+              bill,
+              occurrenceMonth,
+              occurrenceYear,
+            );
+            const plannedAmount = resolveMatchedBillBudget(
+              days.length
+                ? getBillMonthlyTotal(bill, occurrenceMonth, occurrenceYear) /
+                    days.length
+                : bill.amount,
+              bill.amount,
+            );
+            const previous = billMatches.get(
+              occurrenceKey(bill.id, occurrenceDate),
+            );
+            const remaining = Math.max(
+              0,
+              plannedAmount - Number(previous?.amount || 0),
+            );
+            if (remaining <= 0.005) return;
+            candidates.push({
+              type: "bill",
+              id: bill.id,
+              name: bill.name,
+              category: bill.category || "Other",
+              plannedAmount: remaining,
+              occurrenceDate,
+              isDebt: bill.is_debt,
+            });
+          });
       });
       extraPayments
         .filter(payment => payment.month === month && payment.year === year)
@@ -540,26 +587,44 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all", onMana
   };
 
   const saveForgottenBill = async (data: Omit<Bill, "id" | "created_at"> | Bill) => {
-    if (!current) throw new Error("This bank charge is no longer available.");
+    if (!current || saving || reviewInFlightRef.current) {
+      throw new Error("This bank charge is no longer available.");
+    }
     const reviewed = current;
     const billData = data as Omit<Bill, "id" | "created_at">;
-    const billId = await addBill(billData);
+    reviewInFlightRef.current = true;
+    setSaving(true);
     try {
-      await completeReview({
+      assertFinancialMutationOnline();
+      const result = await createForgottenBillAndReconcile(
+        reviewed.id,
+        billData,
+      );
+      const billId = result.billId;
+      const input: ReconcileTransactionInput = {
         transactionId: reviewed.id,
         resolution: "bill",
         targetId: billId,
         occurrenceDate: reviewed.date,
         plannedAmount: billData.amount,
         settlement: forgottenBillSettlement(reviewed.amount, billData.amount),
-      }, `${billData.name} added as a bill and paid`);
-    } catch (error) {
-      try {
-        await deleteBillMistake(billId);
-      } catch {
-        // Keep the original reconciliation error; the new bill remains removable from Bills.
-      }
-      throw error;
+      };
+      await retryBudgetLoad();
+      setLastCompleted({
+        input,
+        label: `${billData.name} added as a bill and paid`,
+      });
+      setRedoAction(null);
+      setCompletedThisVisit((value) => value + 1);
+      setVariance(null);
+      setSplitCategory(null);
+      setUnplannedChargeVisible(false);
+      setForgottenBillVisible(false);
+      setSpendingBucketVisible(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } finally {
+      reviewInFlightRef.current = false;
+      setSaving(false);
     }
   };
 

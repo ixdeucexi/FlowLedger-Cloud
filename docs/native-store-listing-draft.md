@@ -1,19 +1,17 @@
 # FlowLedger native store listing draft
 
-Last reviewed: August 24, 2026
+Last reviewed: August 27, 2026
 
-This copy is ready to paste into App Store Connect and Google Play Console after the developer accounts, app records, and screenshots are finalized. Version 1 launches as Founding Free without in-app purchases or bank connection controls.
+This copy is a working draft. Version 1 launches as Founding Free without in-app purchases or bank connection controls. Store submission is intentionally blocked until the operator restores an accurate, owner-approved public privacy policy.
 
-## Verified public contact and policy URLs
+## Verified public contact URLs
 
 - Marketing website: https://flowledger-algo.com
 - Support URL: https://flowledger-algo.com/support
 - Support email: Flowledger-algo@gmail.com
-- Privacy Policy: https://flowledger-algo.com/legal?doc=privacy
-- Terms of Service: https://flowledger-algo.com/legal?doc=terms
 - Account deletion: https://flowledger-algo.com/delete-account
 
-All five public web routes returned HTTP 200 on August 25, 2026. Console forms must use these exact canonical URLs.
+Terms and privacy documents were removed on August 27, 2026 because the prior drafts named an unverified legal entity and placeholder mailing address. Do not submit either store listing until accurate operator details and an owner-approved privacy-policy URL are available.
 
 ## Shared positioning
 
@@ -40,7 +38,7 @@ budget,cash flow,bills,debt,snowball,forecast,savings,money planner,household
 
 FlowLedger brings your household money plan into one encouraging view.
 
-See your checking and savings balances, recurring inflows and outflows, upcoming bills, debt payments, and projected daily closes. Review what needs attention today, then use Forecast to understand what is coming next.
+See your checking and savings balances, recurring inflows and outflows, upcoming bills, debt payments, and each day’s closing balance. Review what needs attention today, then use Forecast to understand what is coming next.
 
 Plan with confidence:
 
@@ -53,13 +51,9 @@ Plan with confidence:
 - Ask Flo account-aware questions after giving explicit permission
 - Share a household plan with role-based access
 
-FlowLedger does not move money or make payments. Continue paying bills and debts through your bank or provider. Connected-account information may be delayed or incomplete, so review important amounts before acting.
+FlowLedger does not move money or make payments. Continue paying bills and debts through your bank or provider, and review important manually entered amounts before acting.
 
 Version 1 is Founding Free. No subscription or trial is required. Bank sync and advanced automation are planned for a later Pro release after production approval and testing are complete.
-
-Privacy Policy: https://flowledger-algo.com/legal?doc=privacy
-
-Terms of Service: https://flowledger-algo.com/legal?doc=terms
 
 Support: https://flowledger-algo.com/support
 
@@ -83,7 +77,7 @@ Review checking and savings balances, pending activity, recurring inflows and ou
 
 DAILY FORECAST
 
-See upcoming bills, income, debt payments, and projected daily closes on one calendar. Weekly, biweekly, monthly, and quarterly schedules stay tied to their individual occurrences.
+See upcoming bills, income, debt payments, and each day’s closing balance on one calendar. Weekly, biweekly, monthly, and quarterly schedules stay tied to their individual occurrences.
 
 DEBT PAYOFF PLANNING
 
@@ -111,10 +105,10 @@ Version 1 is Founding Free. No subscription or trial is required. Bank sync and 
 2. The supplied account is fully onboarded with fictional manual data and requires no financial-account connection.
 3. FlowLedger does not initiate bank transfers or creditor payments. “Planned payment” means a Forecast entry only.
 4. Version 1 does not expose new bank-connection controls. Users can build a complete plan with manual accounts and activity.
-5. Flo is an account-aware assistant. The first account question presents explicit OpenAI disclosure and consent. Settings → Data & privacy can withdraw that permission. Flo uses verified records, cannot move money, and requires a separate review/confirm screen for supported plan changes.
+5. Flo is an account-aware assistant. The first account question presents explicit OpenAI disclosure and consent. Settings lets the reviewer withdraw that permission. Flo uses verified records, cannot move money, and requires a separate review/confirm screen for supported plan changes.
 6. The Plan Simulator is read-only and does not mutate the household plan.
 7. Version 1 is Founding Free and contains no purchasable subscription or paywall.
-8. Terms, Privacy Policy, and Support are accessible without authentication.
+8. Support and account deletion are accessible without authentication. Terms and privacy links are intentionally absent until accurate owner-approved documents replace the withdrawn drafts.
 9. Biometric lock is device-specific and optional. A device passcode/password fallback remains available.
 10. EAS Update is disabled for version 1; native dependency and configuration changes ship only in reviewed store builds.
 11. Pro billing and production bank sync are planned for a later reviewed release and are not advertised as currently available.
@@ -122,6 +116,7 @@ Version 1 is Founding Free. No subscription or trial is required. Bank sync and 
 ## Required owner/console inputs before submission
 
 - Apple/Google organization and developer contact details
+- Accurate operator details and an owner-approved public privacy policy (required before store submission)
 - Enter the verified public account-deletion URL above in Google Play Data Safety
 - Final reviewer username/password entered only in the private review portal
 - Approved fictional screenshots and Google Play feature graphic

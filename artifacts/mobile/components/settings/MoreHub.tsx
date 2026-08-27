@@ -97,6 +97,7 @@ export function MoreHub({
               return (
                 <Pressable
                   key={section.id}
+                  nativeID={section.id === "setup" ? "guided-tour-more" : undefined}
                   accessibilityRole="button"
                   accessibilityLabel={status ? `${section.label}, ${status.label}` : section.label}
                   accessibilityHint={section.description}

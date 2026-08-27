@@ -1,6 +1,7 @@
 {
   "name": "workspace",
   "version": "0.0.0",
+  "packageManager": "pnpm@11.19.0",
   "license": "MIT",
   "scripts": {
     "preinstall": "node scripts/enforce-pnpm.cjs",
@@ -13,7 +14,17 @@
     "build": "pnpm run check:mobile-config && pnpm run test && pnpm run typecheck && pnpm -r --if-present run build",
     "build:store-screenshots": "node scripts/build-store-screenshot-drafts.mjs",
     "check:mobile-config": "node scripts/assert-mobile-config.cjs",
-    "verify": "pnpm run build && pnpm audit --prod --audit-level high",
+    "verify": "pnpm run check:mobile-config && pnpm run release:guide-check && pnpm run test && pnpm run typecheck && pnpm --filter @workspace/mobile exec expo export --platform web && pnpm run release:artifact-check && pnpm audit --prod --audit-level high",
+    "release:source-check": "node scripts/assert-clean-release.cjs",
+    "release:rollback-check": "node scripts/assert-release-rollback.cjs",
+    "release:env-check": "node scripts/assert-production-env-scope.cjs",
+    "release:artifact-check": "node scripts/assert-release-artifact-copy.cjs",
+    "release:guide-check": "node scripts/assert-user-guide-current.cjs",
+    "release:native-android-check": "node scripts/assert-native-android-readiness.cjs",
+    "release:native-ios-check": "node scripts/assert-native-ios-readiness.cjs",
+    "release:postflight": "node scripts/assert-production-postflight.cjs",
+    "release:preflight": "pnpm run release:source-check && pnpm run verify && pnpm exec expo-doctor artifacts/mobile",
+    "deploy:production": "pnpm run release:rollback-check && pnpm run release:env-check && pnpm run release:preflight && pnpm run release:rollback-check && vercel --prod && pnpm run release:postflight",
     "typecheck:libs": "tsc --build --force",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },

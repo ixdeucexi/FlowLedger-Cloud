@@ -1,9 +1,10 @@
 const PRODUCTION_ORIGIN = "https://flowledger-algo.com";
 const isProductionEasBuild = process.env.EAS_BUILD_PROFILE === "production";
+const isEasBuild = Boolean(process.env.EAS_BUILD_PROFILE);
 const isIosEasBuild = process.env.EAS_BUILD_PLATFORM === "ios";
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-const apiOrigin = process.env.EXPO_PUBLIC_API_ORIGIN || PRODUCTION_ORIGIN;
+const apiOrigin = process.env.EXPO_PUBLIC_API_ORIGIN;
 const appleAuthEnabled = process.env.EXPO_PUBLIC_APPLE_AUTH_ENABLED === "true";
 const revenueCatIosApiKey = process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY;
 const revenueCatAndroidApiKey = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY;
@@ -13,6 +14,20 @@ const paidLaunch = launchMode === "paid";
 const configuredAppEnvironment = process.env.EXPO_PUBLIC_APP_ENVIRONMENT;
 const googleServicesFile = process.env.GOOGLE_SERVICES_JSON;
 const appEnvironment = configuredAppEnvironment || "development";
+
+if (isEasBuild) {
+  const missingRuntimeValues = [
+    ["EXPO_PUBLIC_SUPABASE_URL", supabaseUrl],
+    ["EXPO_PUBLIC_SUPABASE_ANON_KEY", supabaseAnonKey],
+    ["EXPO_PUBLIC_API_ORIGIN", apiOrigin],
+  ].filter(([, value]) => !value);
+  if (missingRuntimeValues.length) {
+    throw new Error(`EAS builds require explicit runtime configuration: ${missingRuntimeValues.map(([name]) => name).join(", ")}`);
+  }
+  if (!isProductionEasBuild && apiOrigin === PRODUCTION_ORIGIN) {
+    throw new Error("Preview EAS builds cannot target the production API origin.");
+  }
+}
 
 if (isProductionEasBuild) {
   const invalid = [

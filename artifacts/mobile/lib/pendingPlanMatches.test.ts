@@ -70,6 +70,24 @@ test("a reviewed posted replacement stops suppressing the remaining debt obligat
   );
 });
 
+test("a posted replacement keeps its real amount while waiting for review", () => {
+  const ready = match({
+    status: "ready_review",
+    posted_transaction_id: "posted-1",
+    posted_amount: 114,
+  });
+  assert.deepEqual(
+    debtSourceCommitmentsFromPendingMatches([ready], [], [{ id: "posted-1", review_status: "needs_review" }]),
+    [{
+      sourceBillId: "bill-1",
+      sourceBillName: "Electric",
+      date: "2026-07-29",
+      amount: 114,
+      state: "posted",
+    }],
+  );
+});
+
 test("same-occurrence pending matches aggregate and a posted replacement wins deterministically", () => {
   const pending = [{ plaid_transaction_id: "pending-1" }, { plaid_transaction_id: "pending-2" }];
   const first = match({ id: "first", pending_amount: 20 });

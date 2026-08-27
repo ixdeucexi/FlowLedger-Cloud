@@ -12,7 +12,7 @@ import {
 } from "./pendingPlanMatches";
 import { canonicalConnectedAccounts, summarizePendingCheckingActivity } from "./plaidActivity";
 import { transactionCategoryParts, type ReviewTransactionLike } from "./reviewCenter";
-import { effectiveDebtMinimum } from "./snowball";
+import { requiredDebtPlanTotal } from "./debtPaymentPlan";
 
 export interface DashboardAccount {
   id: string;
@@ -162,6 +162,15 @@ export interface DashboardFinancialModelInput {
   getBillMonthlyTotal: (bill: DashboardBill, month: number, year: number) => number;
   getPaidAmount: (billId: string, month: number, year: number) => number;
   getBillOccurrencesInMonth: (bill: DashboardBill, month: number, year: number) => number[];
+  getDebtMonthSettlements?: (month: number, year: number) => ReadonlyMap<string, {
+    configuredObligation: number;
+    paidAmount: number;
+    occurrences?: Array<{
+      occurrenceDate: string;
+      configuredObligation: number;
+      paidAmount: number;
+    }>;
+  }>;
 }
 
 function localDateLabel(date: string): string {
@@ -340,6 +349,7 @@ export function buildDashboardFinancialModel(input: DashboardFinancialModelInput
       }
     : null;
 
+  const currentDebtSettlements = input.getDebtMonthSettlements?.(currentMonth, selectedYear);
   const algorithmSuite = buildAlgorithmSuite({
     month: currentMonth,
     year: selectedYear,
@@ -361,16 +371,36 @@ export function buildDashboardFinancialModel(input: DashboardFinancialModelInput
       income: day.income,
     })),
     nextPaycheckForecast,
-    bills: monthlyBills.map((bill) => ({
+    bills: monthlyBills.map((bill) => {
+      const occurrenceDays = getBillOccurrencesInMonth(bill, currentMonth, selectedYear);
+      const debtSettlement = bill.is_debt
+        ? currentDebtSettlements?.get(bill.id)
+        : undefined;
+      const requiredAmount = bill.is_debt
+        ? (debtSettlement?.configuredObligation
+          ?? requiredDebtPlanTotal(bill, occurrenceDays.length))
+        : getBillMonthlyTotal(bill, currentMonth, selectedYear);
+      return {
       id: bill.id,
       name: bill.name,
-      amount: getBillMonthlyTotal(bill, currentMonth, selectedYear),
-      monthlyMinimum: bill.is_debt
-        ? effectiveDebtMinimum(bill.amount, Number(bill.snowball_minimum_boost ?? 0))
+      amount: requiredAmount,
+      monthlyMinimum: bill.is_debt ? requiredAmount : undefined,
+      snowballRollover: bill.is_debt
+        ? Math.max(0, Number(bill.snowball_minimum_boost ?? 0))
         : undefined,
       frequency: bill.frequency,
-      paidAmount: getPaidAmount(bill.id, currentMonth, selectedYear),
-      occurrenceDays: getBillOccurrencesInMonth(bill, currentMonth, selectedYear),
+      paidAmount: bill.is_debt
+        ? Math.max(
+            getPaidAmount(bill.id, currentMonth, selectedYear),
+            debtSettlement?.paidAmount ?? 0,
+          )
+        : getPaidAmount(bill.id, currentMonth, selectedYear),
+      occurrenceDays,
+      occurrenceSettlements: debtSettlement?.occurrences?.map(occurrence => ({
+        day: Number(occurrence.occurrenceDate.slice(8, 10)),
+        requiredAmount: occurrence.configuredObligation,
+        paidAmount: occurrence.paidAmount,
+      })),
       pendingDays: activePendingMatches
         .filter(
           (match) => match.target_type === "bill" && match.target_id === bill.id
@@ -388,7 +418,8 @@ export function buildDashboardFinancialModel(input: DashboardFinancialModelInput
       includeInSnowball: bill.include_in_snowball !== false,
       balance: bill.balance,
       interest_rate: bill.interest_rate,
-    })),
+      };
+    }),
     transactions: monthTransactions
       .filter(transaction => isCashFlowTransaction(transaction) && (
         transaction.amount < 0
@@ -444,17 +475,23 @@ export function buildDashboardFinancialModel(input: DashboardFinancialModelInput
   const goalPercent = goalTotals.target > 0
     ? Math.min(100, (goalTotals.current / goalTotals.target) * 100)
     : 0;
-  const unpaidTotal = monthlyBills.reduce(
-    (sum, bill) => sum + Math.max(
-      0,
-      getBillMonthlyTotal(bill, currentMonth, selectedYear)
-        - getPaidAmount(bill.id, currentMonth, selectedYear),
-    ),
+  const requiredAndPaid = monthlyBills.map((bill) => {
+    const settlement = bill.is_debt ? currentDebtSettlements?.get(bill.id) : undefined;
+    return {
+      required: settlement?.configuredObligation
+        ?? getBillMonthlyTotal(bill, currentMonth, selectedYear),
+      paid: Math.max(
+        getPaidAmount(bill.id, currentMonth, selectedYear),
+        settlement?.paidAmount ?? 0,
+      ),
+    };
+  });
+  const unpaidTotal = requiredAndPaid.reduce(
+    (sum, item) => sum + Math.max(0, item.required - item.paid),
     0,
   );
-  const unpaidCount = monthlyBills.filter(
-    (bill) => getPaidAmount(bill.id, currentMonth, selectedYear) + 0.005
-      < getBillMonthlyTotal(bill, currentMonth, selectedYear),
+  const unpaidCount = requiredAndPaid.filter(
+    (item) => item.paid + 0.005 < item.required,
   ).length;
 
   return {

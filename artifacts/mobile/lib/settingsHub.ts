@@ -15,7 +15,6 @@ export type SettingsSectionId =
   | "backup"
   | "deleted"
   | "security"
-  | "legal"
   | "admin";
 
 export type SettingsDestinationId = Exclude<SettingsSectionId, "overview">;
@@ -55,7 +54,6 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
   { id: "membership", label: "Membership", description: "Plan and pricing", icon: "award" },
   { id: "security", label: "Security & sign-in", description: "App lock, identity, and sign-out controls", icon: "shield" },
   { id: "help", label: "Help & user guide", description: "Illustrated guidance, support, and feedback", icon: "book-open" },
-  { id: "legal", label: "Privacy & legal", description: "Privacy policy, terms, and disclosures", icon: "file-text" },
   { id: "admin", label: "Admin", description: "Testing and tester management", icon: "shield" },
 ] as const;
 
@@ -74,9 +72,9 @@ export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
   },
   {
     id: "data",
-    label: "Data & privacy",
-    description: "Control your data, security, and privacy",
-    sectionIds: ["backup", "deleted", "security", "legal"],
+    label: "Data & security",
+    description: "Control your data, backups, and sign-in security",
+    sectionIds: ["backup", "deleted", "security"],
   },
   {
     id: "account",

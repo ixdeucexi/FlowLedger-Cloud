@@ -171,12 +171,14 @@ export function SecondaryButton({
 
 export function DesktopCard({
   children,
+  nativeID,
   style,
 }: {
   children: React.ReactNode;
+  nativeID?: string;
   style?: ViewStyle;
 }) {
-  return <View style={[styles.card, style]}>{children}</View>;
+  return <View nativeID={nativeID} style={[styles.card, style]}>{children}</View>;
 }
 
 export function SummaryMetricCard({

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -40,4 +41,12 @@ test("notification center deduplicates events and preserves dismissed ids", () =
 test("mark all reads every currently visible notification", () => {
   const next = markAllNotificationsRead({ readIds: [], dismissedIds: [] }, notifications);
   assert.equal(unreadNotificationCount(notifications, next), 0);
+});
+
+test("notification state persistence retries transient server failures", () => {
+  const discovery = readFileSync("context/AppDiscoveryContext.tsx", "utf8");
+
+  assert.match(discovery, /const delays = \[0, 250, 1_000\]/);
+  assert.match(discovery, /saveNotificationCenterStateWithRetry\(householdId, next\)/);
+  assert.match(discovery, /Notification state will remain on this device until server sync recovers/);
 });

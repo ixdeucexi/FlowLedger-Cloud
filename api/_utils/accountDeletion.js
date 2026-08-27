@@ -46,7 +46,10 @@ function isAlreadyRemovedPlaidItem(error) {
 
 async function deleteRevenueCatCustomer(userId, dependencies = {}) {
   const request = dependencies.fetch || fetch;
-  const apiKey = dependencies.revenueCatSecretApiKey || required("REVENUECAT_SECRET_API_KEY");
+  const apiKey = Object.prototype.hasOwnProperty.call(dependencies, "revenueCatSecretApiKey")
+    ? String(dependencies.revenueCatSecretApiKey || "").trim()
+    : required("REVENUECAT_SECRET_API_KEY");
+  if (!apiKey) throw new Error("REVENUECAT_SECRET_API_KEY_MISSING");
   const response = await request(`https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(userId)}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -151,6 +154,9 @@ function createAccountDeletionHandler(dependencies = {}) {
           households: blocked.map(item => ({ name: String(item?.name || "Shared household"), memberCount: Number(item?.memberCount || 0) })),
         });
       }
+      if (typeof inspection?.billingCustomerExists !== "boolean") {
+        throw new Error("ACCOUNT_BILLING_INSPECTION_UNAVAILABLE");
+      }
 
       if (userUsesApple(auth.user)) {
         try {
@@ -160,11 +166,13 @@ function createAccountDeletionHandler(dependencies = {}) {
           return res.status(502).json({ error: "APPLE_REVOCATION_FAILED", message: "Apple sign-in access could not be revoked. No financial records were deleted; try again." });
         }
       }
-      try {
-        await deleteRevenueCatCustomer(auth.user.id, dependencies);
-      } catch (error) {
-        console.error("Account deletion RevenueCat cleanup failed", error?.message || "unknown");
-        return res.status(502).json({ error: "BILLING_CUSTOMER_DELETION_FAILED", message: "Store subscription history could not be removed from the billing processor. No financial records were deleted; try again." });
+      if (inspection.billingCustomerExists) {
+        try {
+          await deleteRevenueCatCustomer(auth.user.id, dependencies);
+        } catch (error) {
+          console.error("Account deletion RevenueCat cleanup failed", error?.message || "unknown");
+          return res.status(502).json({ error: "BILLING_CUSTOMER_DELETION_FAILED", message: "Store subscription history could not be removed from the billing processor. No financial records were deleted; try again." });
+        }
       }
 
       let plaidItemsRevoked;

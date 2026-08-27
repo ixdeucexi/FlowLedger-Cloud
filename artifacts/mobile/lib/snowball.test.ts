@@ -20,7 +20,7 @@ describe("debt ordering and allocation", () => {
     assert.equal(effectiveDebtMinimum(75, 25), 100);
   });
   it("starts a new rollover on unpaid months without reopening a settled month", () => {
-    assert.equal(monthlyDebtAmount(20, 29), 49);
+    assert.equal(monthlyDebtAmount(20, 29), 20);
     assert.equal(monthlyDebtAmount(20, 29, 20), 20);
   });
   it("does not reduce debt until a scheduled transaction date arrives", () => {

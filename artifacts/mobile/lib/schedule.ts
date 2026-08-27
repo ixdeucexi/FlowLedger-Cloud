@@ -33,6 +33,36 @@ export interface SettledBillOverride {
   paid_date?: string;
 }
 
+const DAY_MS = 86_400_000;
+
+type CalendarDateParts = { year: number; month: number; day: number };
+
+function parseCalendarDate(value: string | undefined): CalendarDateParts | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value ?? "").slice(0, 10));
+  if (!match) return null;
+  const parts = { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) };
+  const parsed = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+  if (
+    parsed.getUTCFullYear() !== parts.year
+    || parsed.getUTCMonth() !== parts.month - 1
+    || parsed.getUTCDate() !== parts.day
+  ) return null;
+  return parts;
+}
+
+function calendarDayNumber(parts: CalendarDateParts) {
+  return Math.floor(Date.UTC(parts.year, parts.month - 1, parts.day) / DAY_MS);
+}
+
+function calendarDateFromDayNumber(dayNumber: number) {
+  const date = new Date(dayNumber * DAY_MS);
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+}
+
+function firstOccurrenceOnOrAfter(anchorDay: number, targetDay: number, intervalDays: number) {
+  return anchorDay + Math.ceil((targetDay - anchorDay) / intervalDays) * intervalDays;
+}
+
 function moveFreshness(move: ScheduledBillDateMove): number {
   const parsed = Date.parse(move.updated_at ?? move.created_at ?? "");
   return Number.isFinite(parsed) ? parsed : 0;
@@ -100,7 +130,7 @@ export function getBillOccurrenceDays(bill: ScheduledBill, month: number, year: 
     const days: number[] = [];
     const dayOfWeek = bill.day_of_week ?? dateDayOfWeek(bill.next_payment_date ?? bill.start_date) ?? 0;
     for (let day = 1; day <= daysInMonth; day++) {
-      if (new Date(year, month, day).getDay() === dayOfWeek && withinActiveDates(day)) days.push(day);
+      if (new Date(Date.UTC(year, month, day)).getUTCDay() === dayOfWeek && withinActiveDates(day)) days.push(day);
     }
     return days;
   }
@@ -179,17 +209,43 @@ export function getIncomeOccurrenceDays(income: ScheduledIncome, month: number, 
   }
   const intervalDays = income.frequency === "biweekly" ? 14 : 7;
   if (!income.next_payment_date) return [];
-  const [nextYear, nextMonth, nextDay] = income.next_payment_date.split("-").map(Number);
-  let cursor = new Date(nextYear, nextMonth - 1, nextDay);
-  const target = new Date(year, month, 1);
-  while (cursor > target) cursor = new Date(cursor.getTime() - intervalDays * 86_400_000);
-  while (cursor < target) cursor = new Date(cursor.getTime() + intervalDays * 86_400_000);
+  const anchor = parseCalendarDate(income.next_payment_date);
+  if (!anchor) return [];
+  const monthStart = calendarDayNumber({ year, month: month + 1, day: 1 });
+  const nextMonthStart = calendarDayNumber(
+    month === 11
+      ? { year: year + 1, month: 1, day: 1 }
+      : { year, month: month + 2, day: 1 },
+  );
+  let cursor = firstOccurrenceOnOrAfter(calendarDayNumber(anchor), monthStart, intervalDays);
   const days: number[] = [];
-  while (cursor.getMonth() === month && cursor.getFullYear() === year) {
-    days.push(cursor.getDate());
-    cursor = new Date(cursor.getTime() + intervalDays * 86_400_000);
+  while (cursor < nextMonthStart) {
+    days.push(new Date(cursor * DAY_MS).getUTCDate());
+    cursor += intervalDays;
   }
   return days.filter(day => onOrAfterStart(day) && isIncluded(day));
+}
+
+export function getUpcomingIncomeOccurrenceDates(
+  income: ScheduledIncome,
+  fromDate: string,
+  count = 4,
+): string[] {
+  if (income.frequency === "monthly" || !income.next_payment_date) return [];
+  const anchor = parseCalendarDate(income.next_payment_date);
+  const from = parseCalendarDate(fromDate);
+  if (!anchor || !from || !Number.isSafeInteger(count) || count < 1) return [];
+  const intervalDays = income.frequency === "biweekly" ? 14 : 7;
+  let cursor = firstOccurrenceOnOrAfter(
+    calendarDayNumber(anchor),
+    Math.max(calendarDayNumber(anchor), calendarDayNumber(from)),
+    intervalDays,
+  );
+  return Array.from({ length: Math.min(count, 52) }, () => {
+    const occurrence = calendarDateFromDayNumber(cursor);
+    cursor += intervalDays;
+    return occurrence;
+  });
 }
 
 /**
@@ -246,6 +302,41 @@ export function getIncomeMatchOccurrenceDates(
     .map(candidate => candidate.date);
 }
 
+export function getBillMatchOccurrenceDates(
+  bill: ScheduledBill & { id?: string },
+  transactionDate: string,
+  maxDistanceDays = 14,
+  moves: ScheduledBillDateMove[] = [],
+): string[] {
+  const reference = parseCalendarDate(transactionDate);
+  if (!reference) return [];
+  const referenceDay = calendarDayNumber(reference);
+  const maximumDistance = Number.isFinite(maxDistanceDays) ? Math.max(0, maxDistanceDays) : 14;
+  const candidates: string[] = [];
+
+  for (let offset = -1; offset <= 1; offset += 1) {
+    const monthCursor = new Date(Date.UTC(reference.year, reference.month - 1 + offset, 1));
+    const year = monthCursor.getUTCFullYear();
+    const month = monthCursor.getUTCMonth();
+    const originalDays = getBillOccurrenceDays(bill, month, year);
+    const days = bill.id
+      ? applyBillDateMovesToOccurrenceDays(bill.id, month, year, originalDays, moves)
+      : originalDays;
+    days.forEach((day) => {
+      candidates.push(`${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
+    });
+  }
+
+  return Array.from(new Set(candidates))
+    .map((date) => {
+      const parts = parseCalendarDate(date)!;
+      return { date, distance: Math.abs(calendarDayNumber(parts) - referenceDay) };
+    })
+    .filter((candidate) => candidate.distance <= maximumDistance)
+    .sort((left, right) => left.distance - right.distance || left.date.localeCompare(right.date))
+    .map((candidate) => candidate.date);
+}
+
 export function normalizeIncomeExcludedDates(dates: unknown): string[] {
   if (!Array.isArray(dates)) return [];
   return Array.from(new Set(
@@ -257,28 +348,29 @@ export function normalizeIncomeExcludedDates(dates: unknown): string[] {
 }
 
 function dateDayOfWeek(date?: string): number | null {
-  if (!date) return null;
-  const [year, month, day] = date.split("-").map(Number);
-  if (![year, month, day].every(Number.isFinite)) return null;
-  return new Date(year, month - 1, day).getDay();
+  const parts = parseCalendarDate(date);
+  if (!parts) return null;
+  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay();
 }
 
 function occurrenceDaysFromAnchor(anchorDate: string | undefined, fallbackDay: number, month: number, year: number, intervalDays: number): number[] {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const fallback = Math.min(Math.max(1, fallbackDay || 1), daysInMonth);
   const anchor = anchorDate ?? `${year}-${String(month + 1).padStart(2, "0")}-${String(fallback).padStart(2, "0")}`;
-  const [anchorYear, anchorMonth, anchorDay] = anchor.split("-").map(Number);
-  if (![anchorYear, anchorMonth, anchorDay].every(Number.isFinite)) return [fallback];
-
-  let cursor = new Date(anchorYear, anchorMonth - 1, anchorDay);
-  const target = new Date(year, month, 1);
-  while (cursor > target) cursor = new Date(cursor.getTime() - intervalDays * 86_400_000);
-  while (cursor < target) cursor = new Date(cursor.getTime() + intervalDays * 86_400_000);
+  const anchorParts = parseCalendarDate(anchor);
+  if (!anchorParts) return [fallback];
+  const monthStart = calendarDayNumber({ year, month: month + 1, day: 1 });
+  const nextMonthStart = calendarDayNumber(
+    month === 11
+      ? { year: year + 1, month: 1, day: 1 }
+      : { year, month: month + 2, day: 1 },
+  );
+  let cursor = firstOccurrenceOnOrAfter(calendarDayNumber(anchorParts), monthStart, intervalDays);
 
   const days: number[] = [];
-  while (cursor.getMonth() === month && cursor.getFullYear() === year) {
-    days.push(cursor.getDate());
-    cursor = new Date(cursor.getTime() + intervalDays * 86_400_000);
+  while (cursor < nextMonthStart) {
+    days.push(new Date(cursor * DAY_MS).getUTCDate());
+    cursor += intervalDays;
   }
   return days;
 }
