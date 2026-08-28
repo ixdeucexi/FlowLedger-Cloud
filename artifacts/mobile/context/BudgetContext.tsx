@@ -90,7 +90,7 @@ import {
 } from "@/lib/households";
 import { canEditHouseholdPlan, canManageHouseholdMembers } from "@/lib/householdPermissions";
 import { isActiveTransaction, isConfirmedBillMatch, isDeletedTransaction, plaidTransactionAccountKind } from "@/lib/billMatching";
-import { countReviewQueue, occurrenceKey, reviewedBillMonthSettlements, reviewedBillOccurrenceSettlements } from "@/lib/reviewCenter";
+import { countReviewQueue, occurrenceKey } from "@/lib/reviewCenter";
 import { normalizePlanningTools } from "@/lib/planningMode";
 import { canonicalDebtPaymentMethod } from "@/lib/debtOrder";
 import { localDateString } from "@/lib/dateLabels";
@@ -158,7 +158,6 @@ import {
   financialProjectionPreparationMonths,
   financialProjectionMonthCacheKey,
   getOrComputeRevisionValue,
-  indexRecordsByDate,
   indexRecordsByMonth,
   reuseStructurallyEqualFinancialValue,
   startCancellableStageQueue,
@@ -3621,14 +3620,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     [overridesByBillMonth]
   );
 
-  const reviewedBillSettlements = useMemo(
-    () => reviewedBillMonthSettlements(transactions),
+  const matchedAllocationIndexes = useMemo(
+    () => buildMatchedFinancialAllocationIndexes(transactions),
     [transactions],
   );
-  const reviewedBillOccurrences = useMemo(
-    () => reviewedBillOccurrenceSettlements(transactions),
-    [transactions],
-  );
+  const reviewedBillSettlements =
+    matchedAllocationIndexes.reviewedBillSettlements;
+  const reviewedBillOccurrences =
+    matchedAllocationIndexes.reviewedBillOccurrences;
   const debtSourceCommitments = useMemo(() => debtSourceCommitmentsForDebts(
     pendingPlanMatches,
     pendingBankTransactions,
@@ -4096,10 +4095,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     [extraPayments]
   );
 
-  const matchedAllocationIndexes = useMemo(
-    () => buildMatchedFinancialAllocationIndexes(transactions),
-    [transactions],
-  );
   const debtSourceCommitmentsByMonth = useMemo(
     () => indexRecordsByMonth(debtSourceCommitments),
     [debtSourceCommitments],
@@ -5889,15 +5884,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     ),
     [transactions, deletedTransactions, transactionAccountIdentities],
   );
-  const forecastLedgerTransactions = transactionLedger.cashTransactions;
-  const forecastTransactionsByMonth = useMemo(
-    () => indexRecordsByMonth(forecastLedgerTransactions),
-    [forecastLedgerTransactions],
-  );
-  const visibleCheckingTransactionsByDate = useMemo(
-    () => indexRecordsByDate(transactionLedger.visibleCheckingTransactions),
-    [transactionLedger.visibleCheckingTransactions],
-  );
+  const forecastTransactionsByMonth = transactionLedger.cashTransactionsByMonth;
+  const visibleCheckingTransactionsByDate =
+    transactionLedger.visibleCheckingTransactionsByDate;
   const visibleTransactionIds = useMemo(
     () => new Set(transactionLedger.visibleTransactions.map(transaction => transaction.id)),
     [transactionLedger.visibleTransactions],

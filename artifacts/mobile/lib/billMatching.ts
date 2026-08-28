@@ -285,7 +285,7 @@ export interface CheckingLedgerTransaction {
 
 function connectedTransactionAccount(
   transaction: CheckingLedgerTransaction,
-  connectedAccounts: ConnectedTransactionAccount[],
+  connectedAccounts: readonly ConnectedTransactionAccount[],
 ): ConnectedTransactionAccount | undefined {
   if (transaction.source !== "plaid" || !transaction.plaid_account_id) return undefined;
   return connectedAccounts.find(account =>
@@ -303,6 +303,13 @@ function isCheckingConnectedAccount(sourceAccount?: ConnectedTransactionAccount)
 
 export type PlaidTransactionAccountKind = "checking" | "non_cash" | "unknown" | "not_plaid";
 
+export interface CheckingLedgerTransactionClassification {
+  accountKind: PlaidTransactionAccountKind;
+  active: boolean;
+  checkingBalance: boolean;
+  checkingForecast: boolean;
+}
+
 /**
  * Plaid rows are classified against every retained account identity, including
  * inactive/reconnected accounts. Unknown Plaid identities fail closed so card
@@ -313,9 +320,56 @@ export function plaidTransactionAccountKind(
   connectedAccounts: readonly ConnectedTransactionAccount[],
 ): PlaidTransactionAccountKind {
   if (transaction.source !== "plaid") return "not_plaid";
-  const sourceAccount = connectedTransactionAccount(transaction, [...connectedAccounts]);
+  const sourceAccount = connectedTransactionAccount(transaction, connectedAccounts);
   if (!sourceAccount) return "unknown";
   return isCheckingConnectedAccount(sourceAccount) ? "checking" : "non_cash";
+}
+
+/** Build one immutable account-identity lookup for whole-ledger classification. */
+export function createPlaidTransactionAccountKindClassifier(
+  connectedAccounts: readonly ConnectedTransactionAccount[],
+): (transaction: CheckingLedgerTransaction) => PlaidTransactionAccountKind {
+  const kindByIdentity = new Map<string, PlaidTransactionAccountKind>();
+  connectedAccounts.forEach(account => {
+    const kind = isCheckingConnectedAccount(account) ? "checking" : "non_cash";
+    [account.plaid_account_id, account.id].forEach(identity => {
+      if (identity && !kindByIdentity.has(identity)) kindByIdentity.set(identity, kind);
+    });
+  });
+  return transaction => {
+    if (transaction.source !== "plaid") return "not_plaid";
+    if (!transaction.plaid_account_id) return "unknown";
+    return kindByIdentity.get(transaction.plaid_account_id) ?? "unknown";
+  };
+}
+
+/** Compute the shared cash/visibility classification once for ledger builders. */
+export function classifyCheckingLedgerTransaction(
+  transaction: CheckingLedgerTransaction,
+  connectedAccounts: readonly ConnectedTransactionAccount[],
+  preparedAccountKind?: PlaidTransactionAccountKind,
+): CheckingLedgerTransactionClassification {
+  const accountKind = preparedAccountKind
+    ?? plaidTransactionAccountKind(transaction, connectedAccounts);
+  const active = isActiveTransaction(transaction);
+  const checkingBalance = active && (
+    transaction.source === "plaid"
+      ? accountKind === "checking"
+      : transaction.review_status !== "transfer"
+  );
+  const isPostedBankRow = (transaction.source === "plaid" || Boolean(transaction.import_hash))
+    && !transaction.removed_at
+    && transaction.pending !== true;
+  const checkingForecast = checkingBalance || Boolean(
+    transaction.deleted_at
+    && isPostedBankRow
+    && (
+      transaction.source === "plaid"
+        ? accountKind === "checking"
+        : transaction.review_status !== "transfer"
+    ),
+  );
+  return { accountKind, active, checkingBalance, checkingForecast };
 }
 
 /**
@@ -326,14 +380,10 @@ export function plaidTransactionAccountKind(
  */
 export function isCheckingBalanceTransaction(
   transaction: CheckingLedgerTransaction,
-  connectedAccounts: ConnectedTransactionAccount[],
+  connectedAccounts: readonly ConnectedTransactionAccount[],
 ): boolean {
-  if (!isActiveTransaction(transaction)) return false;
-  if (transaction.source === "plaid") {
-    return plaidTransactionAccountKind(transaction, connectedAccounts) === "checking";
-  }
-  if (transaction.review_status !== "transfer") return true;
-  return false;
+  return classifyCheckingLedgerTransaction(transaction, connectedAccounts)
+    .checkingBalance;
 }
 
 /**
@@ -342,16 +392,8 @@ export function isCheckingBalanceTransaction(
  */
 export function isCheckingForecastLedgerTransaction(
   transaction: CheckingLedgerTransaction,
-  connectedAccounts: ConnectedTransactionAccount[],
+  connectedAccounts: readonly ConnectedTransactionAccount[],
 ): boolean {
-  if (isCheckingBalanceTransaction(transaction, connectedAccounts)) return true;
-  const isPostedBankRow = (transaction.source === "plaid" || Boolean(transaction.import_hash))
-    && !transaction.removed_at
-    && transaction.pending !== true;
-  if (!transaction.deleted_at || !isPostedBankRow) return false;
-  if (transaction.source === "plaid") {
-    return plaidTransactionAccountKind(transaction, connectedAccounts) === "checking";
-  }
-  if (transaction.review_status !== "transfer") return true;
-  return false;
+  return classifyCheckingLedgerTransaction(transaction, connectedAccounts)
+    .checkingForecast;
 }

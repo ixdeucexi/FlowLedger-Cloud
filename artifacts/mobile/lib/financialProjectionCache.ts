@@ -1,7 +1,10 @@
 import {
   occurrenceKey,
+  reviewedBillMonthSettlementsFromOccurrences,
   type ReviewAllocationLike,
   type ReviewTransactionLike,
+  type ReviewedBillMonthSettlement,
+  type ReviewedBillOccurrenceSettlement,
 } from "./reviewCenter";
 
 export interface FinancialDateRecord {
@@ -72,6 +75,8 @@ export interface MatchedFinancialAllocationIndexes {
   snowball: Map<string, ReviewAllocationLike>;
   reviewedBillIdsByMonth: Map<string, Set<string>>;
   paidBillAmountByMonth: Map<string, number>;
+  reviewedBillOccurrences: Map<string, ReviewedBillOccurrenceSettlement>;
+  reviewedBillSettlements: Map<string, ReviewedBillMonthSettlement>;
 }
 
 /**
@@ -86,6 +91,13 @@ export function buildMatchedFinancialAllocationIndexes(
   const snowball = new Map<string, ReviewAllocationLike>();
   const reviewedBillIdsByMonth = new Map<string, Set<string>>();
   const paidBillAmountByMonth = new Map<string, number>();
+  const reviewedOccurrenceAggregates = new Map<string, {
+    billId: string;
+    occurrenceDate: string;
+    actualAmount: number;
+    plannedAmount: number;
+    explicitlyClosed: boolean;
+  }>();
 
   const merge = (
     matches: Map<string, ReviewAllocationLike>,
@@ -134,7 +146,34 @@ export function buildMatchedFinancialAllocationIndexes(
   transactions.forEach(transaction => {
     if (transaction.review_status !== "matched") return;
     (transaction.review_allocations ?? []).forEach(allocation => {
-      if (allocation.type === "bill") merge(bill, allocation);
+      if (allocation.type === "bill") {
+        merge(bill, allocation);
+        if (allocation.targetId && allocation.occurrenceDate) {
+          const occurrenceDate = allocation.occurrenceDate.slice(0, 10);
+          const key = occurrenceKey(allocation.targetId, occurrenceDate);
+          const existing = reviewedOccurrenceAggregates.get(key);
+          reviewedOccurrenceAggregates.set(key, {
+            billId: allocation.targetId,
+            occurrenceDate,
+            actualAmount: Math.round((
+              (existing?.actualAmount ?? 0)
+              + Math.max(0, Number(allocation.amount) || 0)
+            ) * 100) / 100,
+            plannedAmount: Math.max(
+              existing?.plannedAmount ?? 0,
+              Math.max(
+                0,
+                Number(allocation.plannedAmount ?? allocation.amount) || 0,
+              ),
+            ),
+            explicitlyClosed: Boolean(
+              existing?.explicitlyClosed
+              || allocation.settlement === "exact"
+              || allocation.settlement === "full"
+            ),
+          });
+        }
+      }
       else if (allocation.type === "income") merge(income, allocation);
       else if (
         allocation.type === "extra_principal"
@@ -154,12 +193,33 @@ export function buildMatchedFinancialAllocationIndexes(
       + Math.max(0, Number(match.amount) || 0));
   });
 
+  const reviewedBillOccurrences = new Map<string, ReviewedBillOccurrenceSettlement>();
+  reviewedOccurrenceAggregates.forEach((occurrence, key) => {
+    const requiredAmount = occurrence.explicitlyClosed
+      ? occurrence.actualAmount
+      : Math.max(occurrence.actualAmount, occurrence.plannedAmount);
+    reviewedBillOccurrences.set(key, {
+      billId: occurrence.billId,
+      occurrenceDate: occurrence.occurrenceDate,
+      status: occurrence.explicitlyClosed
+        || occurrence.actualAmount + 0.005 >= requiredAmount
+        ? "settled"
+        : "partial",
+      actualAmount: occurrence.actualAmount,
+      requiredAmount: Math.round(requiredAmount * 100) / 100,
+    });
+  });
+  const reviewedBillSettlements =
+    reviewedBillMonthSettlementsFromOccurrences(reviewedBillOccurrences);
+
   return {
     bill,
     income,
     snowball,
     reviewedBillIdsByMonth,
     paidBillAmountByMonth,
+    reviewedBillOccurrences,
+    reviewedBillSettlements,
   };
 }
 
@@ -294,23 +354,37 @@ export function financialProjectionPreparationMonths(input: {
 function structuralFinancialEqual(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) return true;
   if (Array.isArray(left) || Array.isArray(right)) {
-    return Array.isArray(left)
-      && Array.isArray(right)
-      && left.length === right.length
-      && left.every((value, index) => structuralFinancialEqual(value, right[index]));
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+      return false;
+    }
+    for (let index = 0; index < left.length; index += 1) {
+      if (!structuralFinancialEqual(left[index], right[index])) return false;
+    }
+    return true;
   }
   if (!left || !right || typeof left !== "object" || typeof right !== "object") {
     return false;
   }
   const leftRecord = left as Record<string, unknown>;
   const rightRecord = right as Record<string, unknown>;
-  const leftKeys = Object.keys(leftRecord).filter(key => leftRecord[key] !== undefined);
-  const rightKeys = Object.keys(rightRecord).filter(key => rightRecord[key] !== undefined);
-  return leftKeys.length === rightKeys.length
-    && leftKeys.every(key => (
+  let leftKeyCount = 0;
+  let rightKeyCount = 0;
+  for (const key in leftRecord) {
+    if (!Object.prototype.hasOwnProperty.call(leftRecord, key)) continue;
+    if (leftRecord[key] === undefined) continue;
+    leftKeyCount += 1;
+    if (
+      !Object.prototype.hasOwnProperty.call(rightRecord, key)
+      || !structuralFinancialEqual(leftRecord[key], rightRecord[key])
+    ) return false;
+  }
+  for (const key in rightRecord) {
+    if (
       Object.prototype.hasOwnProperty.call(rightRecord, key)
-      && structuralFinancialEqual(leftRecord[key], rightRecord[key])
-    ));
+      && rightRecord[key] !== undefined
+    ) rightKeyCount += 1;
+  }
+  return leftKeyCount === rightKeyCount;
 }
 
 function financialRowIdentity(value: unknown): string | null {
@@ -330,14 +404,16 @@ function financialRowIdentity(value: unknown): string | null {
 export function reuseStructurallyEqualFinancialValue<T>(current: T, next: T): T {
   if (Object.is(current, next)) return current;
   if (Array.isArray(current) && Array.isArray(next) && current.length === next.length) {
-    // JSON's native implementation is substantially faster for the common
-    // cache-hydrate -> equivalent normalized live payload. It also deliberately
-    // ignores undefined fields, matching the structural fallback below.
-    try {
-      if (JSON.stringify(current) === JSON.stringify(next)) return current;
-    } catch {
-      // Non-serializable mutation inputs fall through to the safe comparator.
+    // The warm-cache path normally preserves order. Compare that path directly
+    // without allocating two ledger-sized JSON strings or key arrays.
+    let sameOrder = true;
+    for (let index = 0; index < current.length; index += 1) {
+      if (!structuralFinancialEqual(current[index], next[index])) {
+        sameOrder = false;
+        break;
+      }
     }
+    if (sameOrder) return current;
     const currentByIdentity = new Map<string, unknown>();
     let identityComparable = current.length > 0;
     current.forEach(value => {

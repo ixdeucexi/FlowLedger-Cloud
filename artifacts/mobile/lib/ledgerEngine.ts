@@ -1,8 +1,6 @@
 import {
-  isActiveTransaction,
-  isCheckingBalanceTransaction,
-  isCheckingForecastLedgerTransaction,
-  plaidTransactionAccountKind,
+  classifyCheckingLedgerTransaction,
+  createPlaidTransactionAccountKindClassifier,
 } from "./billMatching";
 
 export interface LedgerAllocationLike {
@@ -47,6 +45,8 @@ export interface TransactionLedgerSnapshot<T extends LedgerTransactionLike> {
   visibleTransactions: T[];
   /** Active checking rows used by day cards and activity summaries. */
   visibleCheckingTransactions: T[];
+  cashTransactionsByMonth: ReadonlyMap<string, T[]>;
+  visibleCheckingTransactionsByDate: ReadonlyMap<string, T[]>;
   cashByDate: ReadonlyMap<string, number>;
   issues: LedgerIssue[];
 }
@@ -65,8 +65,11 @@ export function selectFlowLedgerTransactions<T extends LedgerTransactionLike>(
   transactions: readonly T[],
   connectedAccounts: readonly LedgerConnectedAccountLike[],
 ): AccountAwareTransactionSelection<T> {
+  const classifyAccountKind = createPlaidTransactionAccountKindClassifier(
+    connectedAccounts,
+  );
   return transactions.reduce<AccountAwareTransactionSelection<T>>((result, transaction) => {
-    const kind = plaidTransactionAccountKind(transaction, connectedAccounts);
+    const kind = classifyAccountKind(transaction);
     if (kind === "checking" || kind === "not_plaid") result.included.push(transaction);
     else if (kind === "unknown") result.unknownPlaid.push(transaction);
     else result.excludedNonCash.push(transaction);
@@ -134,35 +137,71 @@ export function buildTransactionLedger<T extends LedgerTransactionLike>(
     }
   });
 
-  const uniqueTransactions = [...uniqueById.values()];
-  const accountSelection = selectFlowLedgerTransactions(uniqueTransactions, connectedAccounts);
-  accountSelection.unknownPlaid.forEach(transaction => {
-    issues.push({
-      code: "unknown_plaid_account",
-      transactionId: transaction.id,
-      detail: "Plaid transaction account identity is unavailable; cash impact was excluded.",
-    });
-  });
-  const cashTransactions = uniqueTransactions.filter(transaction =>
-    isCheckingForecastLedgerTransaction(transaction, [...connectedAccounts])
+  const visibleIds = new Set<string>();
+  visibleTransactions.forEach(transaction => visibleIds.add(transaction.id));
+  const classifyAccountKind = createPlaidTransactionAccountKindClassifier(
+    connectedAccounts,
   );
-  const visibleIds = new Set(visibleTransactions.map(transaction => transaction.id));
-  const includedIds = new Set(accountSelection.included.map(transaction => transaction.id));
-  const visible = uniqueTransactions.filter(transaction =>
-    includedIds.has(transaction.id) && visibleIds.has(transaction.id) && isActiveTransaction(transaction)
-  );
-  const visibleChecking = visible.filter(transaction =>
-    isCheckingBalanceTransaction(transaction, [...connectedAccounts])
-  );
+  const cashTransactions: T[] = [];
+  const visible: T[] = [];
+  const visibleChecking: T[] = [];
+  const cashTransactionsByMonth = new Map<string, T[]>();
+  const visibleCheckingTransactionsByDate = new Map<string, T[]>();
   const cashByDate = new Map<string, number>();
-  cashTransactions.forEach(transaction => {
-    cashByDate.set(transaction.date, (cashByDate.get(transaction.date) ?? 0) + Number(transaction.amount || 0));
+  const pushIndexed = (
+    index: Map<string, T[]>,
+    key: string,
+    transaction: T,
+  ) => {
+    const bucket = index.get(key);
+    if (bucket) bucket.push(transaction);
+    else index.set(key, [transaction]);
+  };
+  uniqueById.forEach(transaction => {
+    const classification = classifyCheckingLedgerTransaction(
+      transaction,
+      connectedAccounts,
+      classifyAccountKind(transaction),
+    );
+    if (classification.accountKind === "unknown") {
+      issues.push({
+        code: "unknown_plaid_account",
+        transactionId: transaction.id,
+        detail: "Plaid transaction account identity is unavailable; cash impact was excluded.",
+      });
+    }
+    if (classification.checkingForecast) {
+      cashTransactions.push(transaction);
+      pushIndexed(
+        cashTransactionsByMonth,
+        transaction.date.slice(0, 7),
+        transaction,
+      );
+      cashByDate.set(
+        transaction.date,
+        (cashByDate.get(transaction.date) ?? 0) + Number(transaction.amount || 0),
+      );
+    }
+    const included = classification.accountKind === "checking"
+      || classification.accountKind === "not_plaid";
+    if (!included || !classification.active || !visibleIds.has(transaction.id)) return;
+    visible.push(transaction);
+    if (classification.checkingBalance) {
+      visibleChecking.push(transaction);
+      pushIndexed(
+        visibleCheckingTransactionsByDate,
+        transaction.date.slice(0, 10),
+        transaction,
+      );
+    }
   });
 
   return {
     cashTransactions,
     visibleTransactions: visible,
     visibleCheckingTransactions: visibleChecking,
+    cashTransactionsByMonth,
+    visibleCheckingTransactionsByDate,
     cashByDate,
     issues,
   };

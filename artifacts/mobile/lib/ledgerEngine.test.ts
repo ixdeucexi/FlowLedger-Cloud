@@ -185,3 +185,50 @@ test("duplicate bank IDs and unbalanced splits are reported without double-count
     new Set(["duplicate_transaction_id", "duplicate_plaid_transaction_id", "allocation_mismatch"]),
   );
 });
+
+test("the fused ledger pass preserves mixed cash, visibility, and diagnostic ordering", () => {
+  const accounts = [
+    ...checking,
+    { plaid_account_id: "card-1", account_type: "credit", account_subtype: "credit card", is_active: true },
+  ];
+  const rows = [
+    { id: "active", date: "2026-08-01", amount: -10, source: "plaid", plaid_account_id: "checking-1", plaid_transaction_id: "p1" },
+    { id: "deleted", date: "2026-08-02", amount: -20, source: "plaid", plaid_account_id: "checking-1", plaid_transaction_id: "p2", deleted_at: "2026-08-03" },
+    { id: "card", date: "2026-08-03", amount: -30, source: "plaid", plaid_account_id: "card-1" },
+    { id: "unknown", date: "2026-08-04", amount: -40, source: "plaid", plaid_account_id: "missing" },
+    { id: "hidden-import", date: "2026-08-05", amount: -5, source: "statement", import_hash: "row-5", deleted_at: "2026-08-06" },
+    { id: "transfer", date: "2026-08-06", amount: -6, review_status: "transfer" },
+    { id: "pending", date: "2026-08-07", amount: -7, source: "plaid", plaid_account_id: "checking-1", pending: true },
+    { id: "removed", date: "2026-08-08", amount: -8, source: "plaid", plaid_account_id: "checking-1", removed_at: "2026-08-09" },
+    { id: "mismatch", date: "2026-08-09", amount: -8, source: "plaid", plaid_account_id: "checking-1", plaid_transaction_id: "duplicate-bank", review_status: "matched", review_allocations: [{ amount: 3 }] },
+    { id: "duplicate-bank-row", date: "2026-08-10", amount: -4, source: "plaid", plaid_account_id: "checking-1", plaid_transaction_id: "duplicate-bank" },
+  ];
+  const allRows = [...rows, rows[0]];
+  const ledger = buildTransactionLedger(allRows, rows, accounts);
+
+  assert.deepEqual(
+    ledger.cashTransactions.map(transaction => transaction.id),
+    ["active", "deleted", "hidden-import", "mismatch", "duplicate-bank-row"],
+  );
+  assert.deepEqual(
+    ledger.visibleTransactions.map(transaction => transaction.id),
+    ["active", "transfer", "mismatch", "duplicate-bank-row"],
+  );
+  assert.deepEqual(
+    ledger.visibleCheckingTransactions.map(transaction => transaction.id),
+    ["active", "mismatch", "duplicate-bank-row"],
+  );
+  assert.deepEqual(
+    ledger.issues.map(issue => issue.code),
+    [
+      "allocation_mismatch",
+      "duplicate_plaid_transaction_id",
+      "duplicate_transaction_id",
+      "unknown_plaid_account",
+    ],
+  );
+  assert.equal(
+    [...ledger.cashByDate.values()].reduce((sum, amount) => sum + amount, 0),
+    -47,
+  );
+});

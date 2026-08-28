@@ -17,7 +17,7 @@
     "build": "node scripts/build.js",
     "serve": "node server/serve.js",
     "pretest": "node -e \"require('fs').rmSync('.test-dist',{recursive:true,force:true})\"",
-    "test": "tsc -p tsconfig.tests.json && node --test .test-dist/*.test.js",
+    "test": "tsc -p tsconfig.tests.json && node --test .test-dist/*.test.js && node --test --test-concurrency=1 .test-dist/financialProjectionPerformance.benchmark.js",
     "phase0:check": "pnpm run test && pnpm run typecheck",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

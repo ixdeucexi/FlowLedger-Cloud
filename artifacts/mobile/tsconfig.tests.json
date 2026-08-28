@@ -134,6 +134,8 @@
     ,"lib/dashboardFinancialModel.test.ts"
     ,"lib/financialProjectionCache.ts"
     ,"lib/financialProjectionCache.test.ts"
+    ,"lib/financialProjectionPerformance.benchmark.ts"
+    ,"lib/performanceGateContract.test.ts"
     ,"lib/dashboardSnapshotSelection.ts"
     ,"lib/dashboardSnapshotSelection.test.ts"
     ,"lib/householdDateEpoch.ts"

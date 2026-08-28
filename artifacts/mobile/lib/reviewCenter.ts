@@ -596,8 +596,16 @@ export function reviewedBillOccurrenceSettlements(
 export function reviewedBillMonthSettlements(
   transactions: ReviewTransactionLike[],
 ): Map<string, ReviewedBillMonthSettlement> {
+  return reviewedBillMonthSettlementsFromOccurrences(
+    reviewedBillOccurrenceSettlements(transactions),
+  );
+}
+
+export function reviewedBillMonthSettlementsFromOccurrences(
+  occurrences: ReadonlyMap<string, ReviewedBillOccurrenceSettlement>,
+): Map<string, ReviewedBillMonthSettlement> {
   const settlements = new Map<string, ReviewedBillMonthSettlement>();
-  reviewedBillOccurrenceSettlements(transactions).forEach(occurrence => {
+  occurrences.forEach(occurrence => {
     const key = `${occurrence.billId}:${occurrence.occurrenceDate.slice(0, 7)}`;
     const existing = settlements.get(key);
     settlements.set(key, {
