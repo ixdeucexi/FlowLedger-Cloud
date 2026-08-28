@@ -66,7 +66,17 @@ import { recordDiagnostic } from "@/lib/diagnostics";
 import { isDevDemoMode } from "@/lib/demoMode";
 import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, getLatestRecordedIncomeAmount, isBillActiveForMonth, isIncomeActiveForMonth, moveSettledBillOverrideDate, resolveFinalizedBillOccurrenceDays, resolveIncomeMatchOccurrenceDate } from "@/lib/schedule";
 import { accountUpdatesOperatingAnchor, bankBalanceAdjustment, connectedCheckingObservedAnchor, evaluateForecastConfidence, historicalMonthOpeningBalance, operatingAccountAnchor, type AccountSnapshot, type AccountType, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
-import { loadAllDailyCheckingCloses, localDateInTimeZone, overlayCompletedDailyCheckingCloses, shouldApplyDailyCheckingCloseLoad, type DailyBalanceSource, type DailyCheckingCloseLoadStatus, type DailyCheckingCloseSnapshot } from "@/lib/dailyCheckingClose";
+import {
+  loadAllDailyCheckingCloses,
+  localDateInTimeZone,
+  overlayCompletedDailyCheckingCloses,
+  reuseDailyCheckingCloseLoadState,
+  reuseDailyCheckingCloseSnapshots,
+  shouldApplyDailyCheckingCloseLoad,
+  type DailyBalanceSource,
+  type DailyCheckingCloseLoadState,
+  type DailyCheckingCloseSnapshot,
+} from "@/lib/dailyCheckingClose";
 import { scenarioDates, type DecisionResult, type DecisionScenario, type DecisionType } from "@/lib/decisions";
 import {
   acceptHouseholdInviteCode,
@@ -112,6 +122,7 @@ import { goalAffordabilityFromProjectedBalance } from "@/lib/goalAffordability";
 import { updateManualAccountWithAnchorAtomically } from "@/lib/atomicFinancialMutations";
 import {
   budgetPlanCacheCanHydrateBeforeMembership,
+  budgetPlanCacheWriteMatchesHydratedRecord,
   clearBudgetPlanCachesForUser,
   readBudgetPlanCache,
   writeBudgetPlanCache,
@@ -162,6 +173,10 @@ import {
   reuseStructurallyEqualFinancialValue,
   startCancellableStageQueue,
 } from "@/lib/financialProjectionCache";
+import {
+  currentWebStartupCoverGeneration,
+  scheduleWebStartupBackgroundWork,
+} from "@/lib/webStartupCover";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1203,6 +1218,18 @@ function safeLocalDateInTimeZone(date: Date, timeZone: string): string {
   }
 }
 
+function scheduleBudgetBackgroundWork(
+  work: () => void,
+  delayMs: number,
+): () => void {
+  if (Platform.OS === "web") {
+    const coverGeneration = currentWebStartupCoverGeneration();
+    return scheduleWebStartupBackgroundWork(work, delayMs, coverGeneration);
+  }
+  const timer = setTimeout(work, delayMs);
+  return () => clearTimeout(timer);
+}
+
 function useRevisionedState<T>(
   initialValue: T | (() => T),
 ) {
@@ -1260,10 +1287,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [accounts,      setAccounts,      accountsRevision] = useRevisionedState<Account[]>([]);
   const [connectedBankAccounts, setConnectedBankAccounts, connectedBankAccountsRevision] = useRevisionedState<ConnectedBankAccount[]>([]);
   const [dailyCheckingCloses, setDailyCheckingCloses] = useState<DailyCheckingCloseSnapshot[]>([]);
-  const [dailyCheckingCloseLoad, setDailyCheckingCloseLoad] = useState<{
-    scopeKey: string | null;
-    status: DailyCheckingCloseLoadStatus;
-  }>({ scopeKey: null, status: "loading" });
+  const [dailyCheckingCloseLoad, setDailyCheckingCloseLoad] = useState<DailyCheckingCloseLoadState>({
+    scopeKey: null,
+    status: "loading",
+  });
   const [householdTimeZone, setHouseholdTimeZone, householdTimeZoneRevision] = useRevisionedState("UTC");
   const [transactionAccountIdentities, setTransactionAccountIdentities, transactionAccountIdentitiesRevision] = useRevisionedState<ConnectedBankAccount[]>([]);
   const [decisions,     setDecisions,     decisionsRevision] = useRevisionedState<DecisionRecord[]>([]);
@@ -1327,9 +1354,18 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const householdResolutionRequestRef = useRef(0);
   const householdDetailsRequestRef = useRef(0);
   const householdActivityRequestRef = useRef(0);
-  const postCoreSecondaryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const postCoreDebtTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const planCacheWriteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const postCoreSecondaryCancelRef = useRef<(() => void) | null>(null);
+  const postCoreDebtCancelRef = useRef<(() => void) | null>(null);
+  const planCacheWriteCancelRef = useRef<(() => void) | null>(null);
+  const dailyCheckingClosePublishCancelRef = useRef<(() => void) | null>(null);
+  const planCacheHydrationWriteSkipRef = useRef<{
+    scopeKey: string;
+    dataUpdatedAt: string;
+    activeHousehold: HouseholdMembership;
+    households: HouseholdMembership[];
+    categories: string[];
+    dailyCheckingCloses: DailyCheckingCloseSnapshot[];
+  } | null>(null);
   const authoritativeFreshnessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dashboardDataRevisionRef = useRef("none");
   const pendingAuthoritativeFreshnessRef = useRef<{
@@ -1356,9 +1392,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { transactionAccountIdentitiesRef.current = transactionAccountIdentities; }, [transactionAccountIdentities]);
   useEffect(() => { householdsRef.current = households; }, [households]);
   useEffect(() => () => {
-    if (postCoreSecondaryTimerRef.current) clearTimeout(postCoreSecondaryTimerRef.current);
-    if (postCoreDebtTimerRef.current) clearTimeout(postCoreDebtTimerRef.current);
-    if (planCacheWriteTimerRef.current) clearTimeout(planCacheWriteTimerRef.current);
+    postCoreSecondaryCancelRef.current?.();
+    postCoreDebtCancelRef.current?.();
+    planCacheWriteCancelRef.current?.();
+    dailyCheckingClosePublishCancelRef.current?.();
     if (authoritativeFreshnessTimerRef.current) {
       clearTimeout(authoritativeFreshnessTimerRef.current);
     }
@@ -1370,14 +1407,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const clearScopedFinancialData = useCallback(() => {
-    if (postCoreSecondaryTimerRef.current) {
-      clearTimeout(postCoreSecondaryTimerRef.current);
-      postCoreSecondaryTimerRef.current = null;
-    }
-    if (postCoreDebtTimerRef.current) {
-      clearTimeout(postCoreDebtTimerRef.current);
-      postCoreDebtTimerRef.current = null;
-    }
+    postCoreSecondaryCancelRef.current?.();
+    postCoreSecondaryCancelRef.current = null;
+    postCoreDebtCancelRef.current?.();
+    postCoreDebtCancelRef.current = null;
+    dailyCheckingClosePublishCancelRef.current?.();
+    dailyCheckingClosePublishCancelRef.current = null;
+    planCacheWriteCancelRef.current?.();
+    planCacheWriteCancelRef.current = null;
+    planCacheHydrationWriteSkipRef.current = null;
     householdDetailsRequestRef.current += 1;
     householdActivityRequestRef.current += 1;
     setHouseholdDetailsReadyScopeKey(null);
@@ -1507,10 +1545,22 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         (cache.data.settings as Partial<Settings>).paymentMethod,
       ),
     } as Settings;
-
+    const cachedCategories = fallbackCategoryList(cache.data.categories);
+    const cachedCloses = normalizeDailyCheckingCloseRows(cache.data.dailyCheckingCloses);
     const nextHouseholds = authoritativeHouseholds ?? cache.households;
+    planCacheHydrationWriteSkipRef.current = {
+      scopeKey: `${cache.userId}:${nextHousehold.householdId}`,
+      dataUpdatedAt: cache.dataUpdatedAt,
+      // Compare against what is actually durable, not an authoritative
+      // membership supplied beside hydration. A changed role/name/list must
+      // rewrite the record even when financial freshness is unchanged.
+      activeHousehold: cache.household,
+      households: cache.households,
+      categories: cachedCategories,
+      dailyCheckingCloses: cachedCloses,
+    };
     householdsRef.current = nextHouseholds;
-    setHouseholds(nextHouseholds);
+    setHouseholds(current => reuseStructurallyEqualFinancialValue(current, nextHouseholds));
     replaceActiveHouseholdScope(nextHousehold);
     setBills(reorderDebtPriorities(cache.data.bills.map(normalizeBillRow)));
     const cachedOverrides = cache.data.overrides.map(normalizeMonthlyOverrideRow);
@@ -1530,7 +1580,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     })));
     setGoals(cache.data.goals.map(normalizeGoalRow));
     setExtraPayments(cache.data.extraPayments.map(normalizeExtraPaymentRow).filter(isValidExtraPaymentPlan));
-    setCategories(fallbackCategoryList(cache.data.categories));
+    setCategories(cachedCategories);
     setCategoriesReadyScopeKey(`${cache.userId}:${nextHousehold.householdId}`);
     setAccounts(cachedAccounts);
     accountsRef.current = cachedAccounts;
@@ -1544,7 +1594,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     connectedBankAccountsRef.current = canonicalBankAccounts;
     setTransactionAccountIdentities(cachedIdentities);
     transactionAccountIdentitiesRef.current = cachedIdentities;
-    const cachedCloses = normalizeDailyCheckingCloseRows(cache.data.dailyCheckingCloses);
     setDailyCheckingCloses(cachedCloses);
     setDailyCheckingCloseLoad({
       scopeKey: `${cache.userId}:${nextHousehold.householdId}`,
@@ -1589,7 +1638,40 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       || !loaded.current
       || !categoriesReady
     ) return;
-    if (planCacheWriteTimerRef.current) clearTimeout(planCacheWriteTimerRef.current);
+    planCacheWriteCancelRef.current?.();
+    planCacheWriteCancelRef.current = null;
+    const scopeKey = `${userId}:${activeHousehold.householdId}`;
+    const hydratedWrite = planCacheHydrationWriteSkipRef.current;
+    const hydratedContentUnchanged = Boolean(
+      hydratedWrite
+      && reuseStructurallyEqualFinancialValue(
+        hydratedWrite.activeHousehold,
+        activeHousehold,
+      ) === hydratedWrite.activeHousehold
+      && reuseStructurallyEqualFinancialValue(
+        hydratedWrite.households,
+        households,
+      ) === hydratedWrite.households
+      && reuseStructurallyEqualFinancialValue(
+        hydratedWrite.categories,
+        categories,
+      ) === hydratedWrite.categories
+      && reuseDailyCheckingCloseSnapshots(
+        hydratedWrite.dailyCheckingCloses,
+        dailyCheckingCloses,
+      ) === hydratedWrite.dailyCheckingCloses
+    );
+    if (budgetPlanCacheWriteMatchesHydratedRecord(
+      hydratedWrite,
+      { scopeKey, dataUpdatedAt },
+      hydratedContentUnchanged,
+    )) {
+      // The exact saved record is already durable. Do not stringify and write
+      // the same multi-megabyte graph merely because it was just hydrated.
+      planCacheHydrationWriteSkipRef.current = null;
+      return;
+    }
+    if (hydratedWrite) planCacheHydrationWriteSkipRef.current = null;
     const cache: BudgetPlanCacheRecord = {
       version: 1,
       userId,
@@ -1618,17 +1700,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         settings: settings as unknown as Record<string, unknown>,
       },
     };
-    planCacheWriteTimerRef.current = setTimeout(() => {
-      planCacheWriteTimerRef.current = null;
+    planCacheWriteCancelRef.current = scheduleBudgetBackgroundWork(() => {
+      planCacheWriteCancelRef.current = null;
       void writeBudgetPlanCache(cache).then(written => {
         if (!written) console.warn("Verified plan cache could not be updated.");
       });
     }, 250);
     return () => {
-      if (planCacheWriteTimerRef.current) {
-        clearTimeout(planCacheWriteTimerRef.current);
-        planCacheWriteTimerRef.current = null;
-      }
+      planCacheWriteCancelRef.current?.();
+      planCacheWriteCancelRef.current = null;
     };
   }, [
     accounts,
@@ -1717,11 +1797,29 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const scopeKey = scope?.householdId
       ? `${financialDataUserIdRef.current ?? "signed-out"}:${scope.householdId}`
       : null;
-    setDailyCheckingCloseLoad(current => (
-      current.scopeKey === scopeKey && current.status === "ready"
-        ? current
-        : { scopeKey, status: "loading" }
-    ));
+    const publish = (commit: () => void) => {
+      if (Platform.OS !== "web") {
+        commit();
+        return;
+      }
+      dailyCheckingClosePublishCancelRef.current?.();
+      dailyCheckingClosePublishCancelRef.current = scheduleBudgetBackgroundWork(() => {
+        dailyCheckingClosePublishCancelRef.current = null;
+        if (!shouldApplyDailyCheckingCloseLoad(
+          requestGeneration,
+          dailyCheckingCloseRequestRef.current,
+          isCurrent(),
+        )) return;
+        React.startTransition(commit);
+      }, 0);
+    };
+    publish(() => {
+      setDailyCheckingCloseLoad(current => (
+        current.scopeKey === scopeKey && current.status === "ready"
+          ? current
+          : reuseDailyCheckingCloseLoadState(current, { scopeKey, status: "loading" })
+      ));
+    });
     // Recorded closes are display-only. Start them beside the financial load,
     // but never make startup/resume or data freshness wait for paged history.
     void loadDailyCheckingCloses(scope).then(result => {
@@ -1732,11 +1830,13 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           dailyCheckingCloseRequestRef.current,
           isCurrent(),
         )) {
-          setDailyCheckingCloseLoad(current => (
-            current.scopeKey === scopeKey && current.status === "ready"
-              ? current
-              : { scopeKey, status: "error" }
-          ));
+          publish(() => {
+            setDailyCheckingCloseLoad(current => (
+              current.scopeKey === scopeKey && current.status === "ready"
+                ? current
+                : reuseDailyCheckingCloseLoadState(current, { scopeKey, status: "error" })
+            ));
+          });
         }
         return;
       }
@@ -1745,8 +1845,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         dailyCheckingCloseRequestRef.current,
         isCurrent(),
       )) return;
-      setDailyCheckingCloses(normalizeDailyCheckingCloseRows(result.data ?? []));
-      setDailyCheckingCloseLoad({ scopeKey, status: "ready" });
+      publish(() => {
+        const nextRows = normalizeDailyCheckingCloseRows(result.data ?? []);
+        setDailyCheckingCloses(current => reuseDailyCheckingCloseSnapshots(current, nextRows));
+        setDailyCheckingCloseLoad(current => reuseDailyCheckingCloseLoadState(
+          current,
+          { scopeKey, status: "ready" },
+        ));
+      });
     }).catch(error => {
       // Retain the last successful same-scope history. After a scope clear,
       // past balances stay unavailable until a guarded history load succeeds.
@@ -1756,11 +1862,13 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         dailyCheckingCloseRequestRef.current,
         isCurrent(),
       )) {
-        setDailyCheckingCloseLoad(current => (
-          current.scopeKey === scopeKey && current.status === "ready"
-            ? current
-            : { scopeKey, status: "error" }
-        ));
+        publish(() => {
+          setDailyCheckingCloseLoad(current => (
+            current.scopeKey === scopeKey && current.status === "ready"
+              ? current
+              : reuseDailyCheckingCloseLoadState(current, { scopeKey, status: "error" })
+          ));
+        });
       }
     });
   }, [loadDailyCheckingCloses]);
@@ -1918,7 +2026,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     // financial arrays are cleared in the same render before the new label can
     // be exposed; the new scope stays loading until its core query commits.
     householdsRef.current = memberships;
-    setHouseholds(memberships);
+    setHouseholds(current => reuseStructurallyEqualFinancialValue(current, memberships));
     if (!next) {
       replaceActiveHouseholdScope(null);
       setHouseholdMembers([]);
@@ -2625,9 +2733,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         // Household members/activity and custom category labels do not affect
         // the financial core. Start them after the loading barrier can release
         // so their requests and JSON work cannot delay the first real screen.
-        if (postCoreSecondaryTimerRef.current) clearTimeout(postCoreSecondaryTimerRef.current);
-        postCoreSecondaryTimerRef.current = setTimeout(() => {
-          postCoreSecondaryTimerRef.current = null;
+        postCoreSecondaryCancelRef.current?.();
+        postCoreSecondaryCancelRef.current = scheduleBudgetBackgroundWork(() => {
+          postCoreSecondaryCancelRef.current = null;
           if (
             requestId !== loadRequestRef.current
             || scope?.householdId !== householdScopeRef.current?.householdId
@@ -2647,8 +2755,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
               return;
             }
             const cats = (categoryResult.data ?? []).map((category: any) => category.name as string);
-            setCategories(cats.length > 0 ? fallbackCategoryList(cats) : DEFAULT_CATEGORIES);
-            setCategoriesReadyScopeKey(scope?.householdId ? `${uid}:${scope.householdId}` : null);
+            const commitCategories = () => {
+              setCategories(cats.length > 0 ? fallbackCategoryList(cats) : DEFAULT_CATEGORIES);
+              setCategoriesReadyScopeKey(scope?.householdId ? `${uid}:${scope.householdId}` : null);
+            };
+            if (Platform.OS === "web") React.startTransition(commitCategories);
+            else commitCategories();
           }).catch(error => {
             if (
               requestId === loadRequestRef.current
@@ -2661,9 +2773,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         // the saved plan. Give the first screen time to paint, then refetch the
         // large ledger only when the RPC reports a real persisted change.
         if (scope?.role !== "viewer") {
-          if (postCoreDebtTimerRef.current) clearTimeout(postCoreDebtTimerRef.current);
-          postCoreDebtTimerRef.current = setTimeout(() => {
-            postCoreDebtTimerRef.current = null;
+          postCoreDebtCancelRef.current?.();
+          postCoreDebtCancelRef.current = scheduleBudgetBackgroundWork(() => {
+            postCoreDebtCancelRef.current = null;
             if (
               requestId !== loadRequestRef.current
               || scope?.householdId !== householdScopeRef.current?.householdId
@@ -2694,13 +2806,17 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
                   }
                   return;
                 }
-                setBills(reorderDebtPriorities((billRows.data ?? []).map(normalizeBillRow)));
                 const refreshedCollections = accountAwareTransactionCollections(
                   transactionRows.data ?? [],
                   transactionAccountIdentitiesRef.current,
                 );
-                setTransactions(refreshedCollections.active);
-                setDeletedTransactions(refreshedCollections.deleted);
+                const commitDebtRows = () => {
+                  setBills(reorderDebtPriorities((billRows.data ?? []).map(normalizeBillRow)));
+                  setTransactions(refreshedCollections.active);
+                  setDeletedTransactions(refreshedCollections.deleted);
+                };
+                if (Platform.OS === "web") React.startTransition(commitDebtRows);
+                else commitDebtRows();
               };
 
               if (synced.error) {
@@ -2738,23 +2854,27 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
               }
 
               const refreshedBills = (billRows.data ?? []).map(normalizeBillRow);
-              setBills(current => reorderDebtPriorities(
-                replaceRowsById(current, refreshPlan.billIds, refreshedBills),
-              ));
               const refreshedCollections = accountAwareTransactionCollections(
                 transactionRows.data ?? [],
                 transactionAccountIdentitiesRef.current,
               );
-              setTransactions(current => replaceRowsById(
-                current,
-                refreshPlan.transactionIds,
-                refreshedCollections.active,
-              ).sort((left, right) => right.date.localeCompare(left.date)));
-              setDeletedTransactions(current => replaceRowsById(
-                current,
-                refreshPlan.transactionIds,
-                refreshedCollections.deleted,
-              ).sort((left, right) => String(right.deleted_at ?? "").localeCompare(String(left.deleted_at ?? ""))));
+              const commitDebtRows = () => {
+                setBills(current => reorderDebtPriorities(
+                  replaceRowsById(current, refreshPlan.billIds, refreshedBills),
+                ));
+                setTransactions(current => replaceRowsById(
+                  current,
+                  refreshPlan.transactionIds,
+                  refreshedCollections.active,
+                ).sort((left, right) => right.date.localeCompare(left.date)));
+                setDeletedTransactions(current => replaceRowsById(
+                  current,
+                  refreshPlan.transactionIds,
+                  refreshedCollections.deleted,
+                ).sort((left, right) => String(right.deleted_at ?? "").localeCompare(String(left.deleted_at ?? ""))));
+              };
+              if (Platform.OS === "web") React.startTransition(commitDebtRows);
+              else commitDebtRows();
             })().catch(error => console.warn("Scheduled debt sync skipped", error));
           }, 900);
         }

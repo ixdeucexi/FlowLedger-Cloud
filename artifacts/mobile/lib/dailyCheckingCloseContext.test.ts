@@ -113,8 +113,40 @@ test("optional close-history failures retain cached state and cannot update data
   assert.match(refreshHelper, /setDailyCheckingCloses/);
   assert.match(refreshHelper, /financialDataUserIdRef\.current[\s\S]*scope\.householdId/);
   assert.match(refreshHelper, /current\.scopeKey === scopeKey && current\.status === "ready"[\s\S]*\? current/);
-  assert.match(refreshHelper, /setDailyCheckingCloseLoad\(\{ scopeKey, status: "ready" \}\)/);
+  assert.match(refreshHelper, /reuseDailyCheckingCloseLoadState\([\s\S]+\{ scopeKey, status: "ready" \}/);
   assert.doesNotMatch(refreshHelper, /setDailyCheckingCloses\(\[\]\)|setDataUpdatedAt|setLoading/);
+});
+
+test("web close-history publication is post-cover, idle, guarded, and identity preserving", () => {
+  const refreshHelper = budgetContext.slice(
+    budgetContext.indexOf("const refreshDailyCheckingCloses = useCallback"),
+    budgetContext.indexOf("const deleteRowIdempotently = useCallback"),
+  );
+  assert.match(refreshHelper, /scheduleBudgetBackgroundWork\(\(\) => \{/);
+  assert.match(refreshHelper, /shouldApplyDailyCheckingCloseLoad\([\s\S]+React\.startTransition\(commit\)/);
+  assert.match(refreshHelper, /reuseDailyCheckingCloseSnapshots\(current, nextRows\)/);
+  assert.match(refreshHelper, /reuseDailyCheckingCloseLoadState/);
+  assert.match(
+    refreshHelper,
+    /publish\(\(\) => \{[\s\S]+normalizeDailyCheckingCloseRows\(result\.data \?\? \[\]\)/,
+  );
+  assert.doesNotMatch(refreshHelper, /await loadDailyCheckingCloses/);
+});
+
+test("web secondary and debt maintenance cannot begin before the startup release gate", () => {
+  const backgroundSection = budgetContext.slice(
+    budgetContext.indexOf("// Household members/activity and custom category labels"),
+    budgetContext.indexOf("} catch (error)", budgetContext.indexOf("// Household members/activity and custom category labels")),
+  );
+  assert.equal(
+    (backgroundSection.match(/scheduleBudgetBackgroundWork\(\(\) => \{/g) ?? []).length,
+    2,
+  );
+  assert.match(backgroundSection, /scheduleBudgetBackgroundWork\([\s\S]+\}, 300\)/);
+  assert.match(backgroundSection, /scheduleBudgetBackgroundWork\([\s\S]+\}, 900\)/);
+  assert.doesNotMatch(backgroundSection, /postCoreSecondaryTimerRef|postCoreDebtTimerRef/);
+  assert.match(backgroundSection, /React\.startTransition\(commitCategories\)/);
+  assert.match(backgroundSection, /React\.startTransition\(commitDebtRows\)/);
 });
 
 test("nullable Plaid balances keep an explicit unavailable bit before forecasting", () => {

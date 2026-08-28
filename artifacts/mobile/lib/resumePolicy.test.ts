@@ -301,8 +301,13 @@ test("household discovery fails before any background scope or plan commit", () 
   const resolveStart = context.indexOf("const resolveHouseholds");
   const resolveEnd = context.indexOf("const markSaveStarted", resolveStart);
   const resolution = context.slice(resolveStart, resolveEnd);
-  assert.ok(resolution.indexOf("loadResolvedHouseholdSelection") < resolution.indexOf("setHouseholds(memberships)"));
-  assert.ok(resolution.indexOf("householdResolutionIsCurrent") < resolution.indexOf("setHouseholds(memberships)"));
+  const householdCommit = resolution.indexOf("setHouseholds(");
+  assert.ok(resolution.indexOf("loadResolvedHouseholdSelection") < householdCommit);
+  assert.ok(resolution.indexOf("householdResolutionIsCurrent") < householdCommit);
+  assert.match(
+    resolution,
+    /setHouseholds\(current => reuseStructurallyEqualFinancialValue\(current, memberships\)\)/,
+  );
   assert.match(resolution, /currentUserId: financialDataUserIdRef\.current/);
   assert.match(resolution, /uid !== userScopeIdRef\.current/);
   assert.match(resolution, /Commit only after membership, household, budget, and selection reads all/);

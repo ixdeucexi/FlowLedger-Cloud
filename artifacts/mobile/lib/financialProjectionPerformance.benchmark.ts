@@ -21,6 +21,10 @@ import {
 } from "./financialProjectionCache";
 import { buildTransactionLedger } from "./ledgerEngine";
 import { countReviewQueue } from "./reviewCenter";
+import {
+  serializeBudgetPlanCache,
+  type BudgetPlanCacheRecord,
+} from "./budgetPlanCache";
 
 const PERFORMANCE_BUDGET_MS = 50;
 const REPETITIONS = 5;
@@ -77,6 +81,46 @@ function productionShapedLedger(size = 20_000): DashboardTransaction[] {
       }] : undefined,
     };
   });
+}
+
+function maximumPlanCacheFixture(): BudgetPlanCacheRecord {
+  const household = {
+    householdId: "household-a",
+    budgetId: "budget-a",
+    name: "Personal",
+    isPersonal: true,
+    role: "owner" as const,
+  };
+  return {
+    version: 1,
+    userId: "user-a",
+    household,
+    households: [household],
+    savedAt: "2026-08-28T02:00:00.000Z",
+    dataUpdatedAt: "2026-08-28T01:59:59.000Z",
+    data: {
+      bills: [],
+      overrides: [],
+      billDateMoves: [],
+      transactions: [],
+      deletedTransactions: [],
+      pendingBankTransactions: [],
+      pendingPlanMatches: [],
+      incomes: [],
+      goals: [],
+      extraPayments: [],
+      categories: [],
+      accounts: [],
+      connectedBankAccounts: [],
+      dailyCheckingCloses: [],
+      householdTimeZone: "America/Chicago",
+      transactionAccountIdentities: [],
+      decisions: [],
+      // Exercise the writer near its 4.5 MB hard bound without making the
+      // benchmark depend on the exact shape of any one financial collection.
+      settings: { padding: "x".repeat(4_250_000) },
+    },
+  };
 }
 
 function snapshotInput(
@@ -300,5 +344,26 @@ test("isolated dense Dashboard stages each stay below one input task", context =
   });
   context.diagnostic(
     `isolated dense 20k cold/repeated-max: review=${reviewTiming.cold.toFixed(1)}/${reviewTiming.repeatedMax.toFixed(1)}ms, posted=${postedTiming.cold.toFixed(1)}/${postedTiming.repeatedMax.toFixed(1)}ms, recent=${recentTiming.cold.toFixed(1)}/${recentTiming.repeatedMax.toFixed(1)}ms, publish=${publishTiming.cold.toFixed(1)}/${publishTiming.repeatedMax.toFixed(1)}ms`,
+  );
+});
+
+test("isolated maximum plan-cache serialization stays below one input task", context => {
+  const cache = maximumPlanCacheFixture();
+  const coldStartedAt = performance.now();
+  const serialized = serializeBudgetPlanCache(cache);
+  const cold = performance.now() - coldStartedAt;
+  const repeatedMax = measureMax(() => {
+    serializeBudgetPlanCache(cache);
+  });
+  const timing = { cold, repeatedMax, max: Math.max(cold, repeatedMax) };
+
+  assert.ok(serialized);
+  assert.ok(serialized.length > 4_000_000, `fixture was only ${serialized.length} bytes`);
+  assert.ok(
+    timing.max < PERFORMANCE_BUDGET_MS,
+    `maximum plan-cache serialization took ${timing.cold.toFixed(1)}ms cold/${timing.repeatedMax.toFixed(1)}ms max-of-${REPETITIONS}`,
+  );
+  context.diagnostic(
+    `isolated maximum plan-cache serialization cold=${timing.cold.toFixed(1)}ms, repeated-max=${timing.repeatedMax.toFixed(1)}ms`,
   );
 });

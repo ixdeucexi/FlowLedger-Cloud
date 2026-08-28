@@ -60,17 +60,13 @@
         pointer-events: auto;
       }
 
-      #flowledger-web-startup-cover[data-state="hidden"] {
+      #flowledger-web-startup-cover[data-state="hidden"],
+      #flowledger-web-startup-cover[hidden] {
+        display: none !important;
         opacity: 0;
         visibility: hidden;
         pointer-events: none;
-        transition: opacity 90ms ease-out, visibility 0s linear 90ms;
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        #flowledger-web-startup-cover[data-state="hidden"] {
-          transition: none;
-        }
+        transition: none;
       }
 
       .flowledger-web-startup-brand {
@@ -142,12 +138,13 @@
           const generation = Number.isSafeInteger(parsedGeneration) && parsedGeneration >= 0
             ? parsedGeneration + 1
             : 1;
+          root.setAttribute("inert", "");
+          root.setAttribute("aria-hidden", "true");
+          cover.hidden = false;
           cover.dataset.generation = String(generation);
           cover.dataset.state = "visible";
           cover.dataset.reason = reason;
           cover.removeAttribute("aria-hidden");
-          root.setAttribute("inert", "");
-          root.setAttribute("aria-hidden", "true");
           document.documentElement.removeAttribute("data-flowledger-ready");
           window.dispatchEvent(new CustomEvent("flowledger:startup-cover-armed", {
             detail: { generation, reason },

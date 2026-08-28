@@ -43,6 +43,11 @@ export interface BudgetPlanCacheRecord {
   data: BudgetPlanCacheData;
 }
 
+export interface BudgetPlanCacheWriteIdentity {
+  scopeKey: string;
+  dataUpdatedAt: string;
+}
+
 interface CacheStorage {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
@@ -57,6 +62,16 @@ function cleanScopePart(value: string) {
 
 export function budgetPlanCacheKey(userId: string, householdId: string) {
   return `${CACHE_PREFIX}:${cleanScopePart(userId)}:${cleanScopePart(householdId)}`;
+}
+
+export function budgetPlanCacheWriteMatchesHydratedRecord(
+  hydrated: BudgetPlanCacheWriteIdentity | null,
+  current: BudgetPlanCacheWriteIdentity,
+  hydratedContentUnchanged = true,
+): boolean {
+  return hydratedContentUnchanged
+    && hydrated?.scopeKey === current.scopeKey
+    && hydrated.dataUpdatedAt === current.dataUpdatedAt;
 }
 
 function validHousehold(value: unknown): value is CachedHouseholdMembership {
@@ -161,8 +176,8 @@ export async function writeBudgetPlanCache(
   cache: BudgetPlanCacheRecord,
   storage: CacheStorage = AsyncStorage,
 ): Promise<boolean> {
-  const raw = JSON.stringify(cache);
-  if (raw.length > MAX_CACHE_BYTES) return false;
+  const raw = serializeBudgetPlanCache(cache);
+  if (!raw) return false;
   try {
     await storage.setItem(
       budgetPlanCacheKey(cache.userId, cache.household.householdId),
@@ -171,6 +186,17 @@ export async function writeBudgetPlanCache(
     return true;
   } catch {
     return false;
+  }
+}
+
+export function serializeBudgetPlanCache(
+  cache: BudgetPlanCacheRecord,
+): string | null {
+  try {
+    const raw = JSON.stringify(cache);
+    return raw.length <= MAX_CACHE_BYTES ? raw : null;
+  } catch {
+    return null;
   }
 }
 

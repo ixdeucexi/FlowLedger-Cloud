@@ -8,7 +8,7 @@
     "test:api": "node --test api/_utils/*.test.js",
     "test:flo": "node --test --experimental-strip-types supabase/functions/flo-chat/contract.test.mjs",
     "test:edge": "node --test --experimental-strip-types supabase/functions/flo-chat/contract.test.mjs supabase/functions/billing-dispatcher/contract.test.mjs",
-    "test:release-fixture": "node --test scripts/seed-reviewer-fixture.test.mjs",
+    "test:release-fixture": "node --test scripts/seed-reviewer-fixture.test.mjs scripts/startup-shell-contract.test.cjs",
     "test:mobile": "pnpm --filter @workspace/mobile run test",
     "test": "pnpm run test:api && pnpm run test:edge && pnpm run test:release-fixture && pnpm run test:mobile",
     "build": "pnpm run check:mobile-config && pnpm run test && pnpm run typecheck && pnpm -r --if-present run build",

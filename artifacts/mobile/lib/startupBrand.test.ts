@@ -62,6 +62,7 @@ test("startup stays constant until the destination screen is ready", () => {
   const rootPosition = webDocument.indexOf('id="root"');
   assert.ok(coverPosition > 0 && coverPosition < rootPosition);
   assert.match(webDocument, /#flowledger-web-startup-cover \{[\s\S]+position: fixed;[\s\S]+inset: 0;[\s\S]+z-index: 2147483647;[\s\S]+background: #050816/);
+  assert.match(webDocument, /#flowledger-web-startup-cover\[hidden\] \{[\s\S]+display: none !important;[\s\S]+transition: none/);
   assert.match(webDocument, /data-state="visible"[\s\S]+data-reason="initial"/);
   assert.match(webDocument, /data-generation="0"/);
   assert.match(webDocument, /role="progressbar"[\s\S]+aria-label="Loading your FlowLedger plan"/);
@@ -70,10 +71,14 @@ test("startup stays constant until the destination screen is ready", () => {
   assert.match(webDocument, /visibilitychange[\s\S]+document\.visibilityState === "hidden"[\s\S]+arm\("resume"\)/);
   assert.match(webDocument, /pagehide[\s\S]+arm\("resume"\)/);
   assert.match(webDocument, /flowledger:startup-cover-armed/);
+  assert.match(webDocument, /root\.setAttribute\("inert", ""\)[\s\S]+cover\.hidden = false[\s\S]+cover\.dataset\.state = "visible"/);
   assert.doesNotMatch(webDocument, /pageshow[\s\S]+data\.state\s*=\s*"hidden"/);
   assert.match(webDocument, /<noscript>[\s\S]+#flowledger-web-startup-cover \{ display: none; \}/);
-  assert.match(webCover, /root\.removeAttribute\("inert"\)/);
-  assert.match(webCover, /cover\.dataset\.state = "hidden"/);
+  assert.match(webCover, /WEB_STARTUP_COVER_RELEASED_EVENT = "flowledger:startup-cover-released"/);
+  assert.match(webCover, /requestAnimationFrame\(commitRelease\)/);
+  assert.match(webCover, /requestIdleCallback\(run, \{ timeout: 5_000 \}\)/);
+  assert.match(webCover, /scheduling\?\.isInputPending\?\.\(\)/);
+  assert.match(webCover, /currentCover\.dataset\.state = "hidden";[\s\S]+currentCover\.hidden = true;[\s\S]+currentRoot\.removeAttribute\("inert"\)/);
   assert.doesNotMatch(webCover, /\.remove\(\)/);
   assert.match(webCover, /WEB_WORKSPACE_READY_EVENT = "flowledger:workspace-ready"/);
   assert.match(webCover, /currentWorkspaceReadiness = \{ scopeKey, generation \}/);

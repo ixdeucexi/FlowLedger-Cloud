@@ -2,6 +2,7 @@ export const WEB_STARTUP_COVER_ID = "flowledger-web-startup-cover";
 export const WEB_STARTUP_ROOT_ID = "root";
 export const WEB_WORKSPACE_READY_EVENT = "flowledger:workspace-ready";
 export const WEB_STARTUP_COVER_ARMED_EVENT = "flowledger:startup-cover-armed";
+export const WEB_STARTUP_COVER_RELEASED_EVENT = "flowledger:startup-cover-released";
 
 export type WebStartupCoverReason = "initial" | "resume" | "scope-change" | null;
 
@@ -14,6 +15,10 @@ export interface WebWorkspaceReadyDetail {
 export interface WebStartupCoverArmedDetail {
   generation: number;
   reason: Exclude<WebStartupCoverReason, null>;
+}
+
+export interface WebStartupCoverReleasedDetail {
+  generation: number;
 }
 
 export interface WebWorkspaceRevealTransition {
@@ -128,6 +133,8 @@ let currentWorkspaceReadiness: {
   generation: number;
 } | null = null;
 
+let pendingReleaseGeneration: number | null = null;
+
 export function currentWebWorkspaceReadyScopeKey(): string | null {
   return currentWorkspaceReadiness?.scopeKey ?? null;
 }
@@ -179,6 +186,137 @@ export function webStartupCoverReason(): WebStartupCoverReason {
     : null;
 }
 
+export function webStartupCoverIsReleased(
+  expectedGeneration = currentWebStartupCoverGeneration(),
+): boolean {
+  if (typeof document === "undefined") return true;
+  const cover = document.getElementById(WEB_STARTUP_COVER_ID);
+  const root = document.getElementById(WEB_STARTUP_ROOT_ID);
+  if (!cover || !root) return true;
+  return Boolean(
+    currentWebStartupCoverGeneration() === expectedGeneration
+    && cover.hidden
+    && cover.dataset.state === "hidden"
+    && !cover.dataset.reason
+    && !root.hasAttribute("inert")
+    && !root.hasAttribute("aria-hidden"),
+  );
+}
+
+/**
+ * Queue nonessential web work only after the cover's hidden state has painted.
+ * Release-event listeners never execute application work synchronously: the
+ * next animation frame and then an idle turn separate it from the atomic
+ * hide/unlock callback. A resume/scope re-arm sends the work back to the gate.
+ */
+export function scheduleWebStartupBackgroundWork(
+  work: () => void,
+  delayMs = 0,
+  expectedGeneration = currentWebStartupCoverGeneration(),
+): () => void {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    const timer = setTimeout(work, Math.max(0, delayMs));
+    return () => clearTimeout(timer);
+  }
+
+  type IdleWindow = Window & {
+    requestIdleCallback?: (
+      callback: () => void,
+      options?: { timeout?: number },
+    ) => number;
+    cancelIdleCallback?: (handle: number) => void;
+  };
+  const browserWindow = window as IdleWindow;
+  let targetGeneration = expectedGeneration;
+  let cancelled = false;
+  let listening = false;
+  let frameHandle: number | null = null;
+  let timerHandle: ReturnType<typeof setTimeout> | null = null;
+  let idleHandle: number | null = null;
+
+  const removeReleaseListener = () => {
+    if (!listening) return;
+    listening = false;
+    window.removeEventListener(WEB_STARTUP_COVER_RELEASED_EVENT, handleRelease);
+  };
+  const cancelScheduled = () => {
+    if (frameHandle !== null) window.cancelAnimationFrame(frameHandle);
+    if (timerHandle !== null) clearTimeout(timerHandle);
+    if (idleHandle !== null) browserWindow.cancelIdleCallback?.(idleHandle);
+    frameHandle = null;
+    timerHandle = null;
+    idleHandle = null;
+  };
+  const awaitRelease = () => {
+    if (cancelled) return;
+    const currentGeneration = currentWebStartupCoverGeneration();
+    if (currentGeneration !== targetGeneration) targetGeneration = currentGeneration;
+    if (!webStartupCoverIsReleased(targetGeneration)) {
+      if (!listening) {
+        listening = true;
+        window.addEventListener(WEB_STARTUP_COVER_RELEASED_EVENT, handleRelease);
+      }
+      return;
+    }
+    removeReleaseListener();
+    frameHandle = window.requestAnimationFrame(() => {
+      frameHandle = null;
+      timerHandle = setTimeout(() => {
+        timerHandle = null;
+        if (cancelled) return;
+        if (!webStartupCoverIsReleased(targetGeneration)) {
+          awaitRelease();
+          return;
+        }
+        const run = () => {
+          idleHandle = null;
+          if (cancelled) return;
+          if (!webStartupCoverIsReleased(targetGeneration)) {
+            awaitRelease();
+            return;
+          }
+          work();
+        };
+        if (typeof browserWindow.requestIdleCallback === "function") {
+          idleHandle = browserWindow.requestIdleCallback(run, { timeout: 5_000 });
+        } else {
+          // WebKit does not consistently expose requestIdleCallback. Yield a
+          // separate task and keep giving pending input priority when the
+          // Scheduling API is available.
+          const runFallback = () => {
+            timerHandle = null;
+            const scheduling = typeof navigator !== "undefined"
+              ? (navigator as Navigator & {
+                  scheduling?: { isInputPending?: () => boolean };
+                }).scheduling
+              : undefined;
+            if (scheduling?.isInputPending?.()) {
+              frameHandle = window.requestAnimationFrame(() => {
+                frameHandle = null;
+                timerHandle = setTimeout(runFallback, 0);
+              });
+              return;
+            }
+            run();
+          };
+          timerHandle = setTimeout(runFallback, 0);
+        }
+      }, Math.max(0, delayMs));
+    });
+  };
+  const handleRelease = () => {
+    removeReleaseListener();
+    awaitRelease();
+  };
+
+  awaitRelease();
+  return () => {
+    cancelled = true;
+    removeReleaseListener();
+    cancelScheduled();
+  };
+}
+
 export function currentWebStartupCoverGeneration(): number {
   if (typeof document === "undefined") return 0;
   const raw = document.getElementById(WEB_STARTUP_COVER_ID)?.dataset.generation;
@@ -211,12 +349,14 @@ export function armWebStartupCover(
   if (!cover || !root) return currentWebStartupCoverGeneration();
 
   const generation = currentWebStartupCoverGeneration() + 1;
+  pendingReleaseGeneration = null;
+  root.setAttribute("inert", "");
+  root.setAttribute("aria-hidden", "true");
+  cover.hidden = false;
   cover.dataset.generation = String(generation);
   cover.dataset.state = "visible";
   cover.dataset.reason = reason;
   cover.removeAttribute("aria-hidden");
-  root.setAttribute("inert", "");
-  root.setAttribute("aria-hidden", "true");
   document.documentElement.removeAttribute("data-flowledger-ready");
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent<WebStartupCoverArmedDetail>(
@@ -264,16 +404,50 @@ export function releaseWebStartupCover(expectedGeneration?: number): boolean {
   const cover = document.getElementById(WEB_STARTUP_COVER_ID);
   const root = document.getElementById(WEB_STARTUP_ROOT_ID);
   if (!cover || !root) return false;
-  if (!startupCoverGenerationCanRelease(
-    expectedGeneration,
-    currentWebStartupCoverGeneration(),
-  )) return false;
+  const generation = currentWebStartupCoverGeneration();
+  if (!startupCoverGenerationCanRelease(expectedGeneration, generation)) return false;
+  if (cover.hidden && cover.dataset.state === "hidden") return true;
+  if (pendingReleaseGeneration === generation) return true;
 
-  root.removeAttribute("inert");
-  root.removeAttribute("aria-hidden");
-  cover.setAttribute("aria-hidden", "true");
-  cover.dataset.state = "hidden";
-  delete cover.dataset.reason;
-  document.documentElement.dataset.flowledgerReady = "true";
+  pendingReleaseGeneration = generation;
+  const commitRelease = () => {
+    if (pendingReleaseGeneration === generation) pendingReleaseGeneration = null;
+    if (
+      typeof document === "undefined"
+      || document.visibilityState !== "visible"
+      || !startupCoverGenerationCanRelease(
+        generation,
+        currentWebStartupCoverGeneration(),
+      )
+    ) return;
+    const currentCover = document.getElementById(WEB_STARTUP_COVER_ID);
+    const currentRoot = document.getElementById(WEB_STARTUP_ROOT_ID);
+    if (!currentCover || !currentRoot) return;
+
+    // Detach the opaque compositor layer before making the workspace
+    // interactive. A CSS opacity transition can leave old loader pixels on
+    // screen while pointer events already reach the app on a busy PWA frame.
+    currentCover.setAttribute("aria-hidden", "true");
+    currentCover.dataset.state = "hidden";
+    currentCover.hidden = true;
+    delete currentCover.dataset.reason;
+    currentRoot.removeAttribute("inert");
+    currentRoot.removeAttribute("aria-hidden");
+    document.documentElement.dataset.flowledgerReady = "true";
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent<WebStartupCoverReleasedDetail>(
+        WEB_STARTUP_COVER_RELEASED_EVENT,
+        { detail: { generation } },
+      ));
+    }
+  };
+
+  // Keep the fully opaque, blocking cover through the readiness commit. The
+  // next paint atomically contains the detached cover and interactive root.
+  if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+    window.requestAnimationFrame(commitRelease);
+  } else {
+    commitRelease();
+  }
   return true;
 }

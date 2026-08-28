@@ -9,6 +9,12 @@ const canonicalProject = {
   name: "flow-ledger-cloud",
   domain: "flowledger-algo.com",
 };
+const productionHosts = [
+  canonicalProject.domain,
+  `www.${canonicalProject.domain}`,
+  `${canonicalProject.name}.vercel.app`,
+  "flow-ledger-cloud-flow-ledger-s-projects.vercel.app",
+];
 
 function runVercel(args) {
   if (process.platform === "win32") {
@@ -121,17 +127,27 @@ for (const [key, expected] of Object.entries(expectedProjectSettings)) {
   }
 }
 
-const canonicalDeployment = JSON.parse(
-  runVercel(["inspect", canonicalProject.domain, "--format=json"]),
-);
-if (
-  canonicalDeployment.name !== canonicalProject.name
-  || canonicalDeployment.target !== "production"
-  || canonicalDeployment.readyState !== "READY"
-  || !canonicalDeployment.aliases?.includes(canonicalProject.domain)
-  || !canonicalDeployment.aliases?.includes(`www.${canonicalProject.domain}`)
-) {
-  throw new Error("The canonical FlowLedger aliases do not resolve to a ready production deployment of the linked project.");
+const productionDeployments = productionHosts.map(host => ({
+  host,
+  value: JSON.parse(runVercel(["inspect", host, "--format=json"])),
+}));
+const canonicalDeployment = productionDeployments[0].value;
+if (typeof canonicalDeployment.id !== "string" || canonicalDeployment.id.trim().length === 0) {
+  throw new Error(`${productionHosts[0]} returned no production deployment ID.`);
+}
+for (const { host, value } of productionDeployments) {
+  if (
+    typeof value.id !== "string"
+    || value.id.trim().length === 0
+    || value.name !== canonicalProject.name
+    || value.target !== "production"
+    || value.readyState !== "READY"
+    || value.id !== canonicalDeployment.id
+  ) {
+    throw new Error(
+      `${host} does not resolve to the same ready production deployment of the linked FlowLedger project.`,
+    );
+  }
 }
 
 console.log("Vercel credentials are Production-only and canonical project build settings match the release contract.");

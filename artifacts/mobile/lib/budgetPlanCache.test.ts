@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   budgetPlanCacheCanHydrateBeforeMembership,
   budgetPlanCacheKey,
+  budgetPlanCacheWriteMatchesHydratedRecord,
   clearBudgetPlanCachesForUser,
   parseBudgetPlanCache,
   readBudgetPlanCache,
@@ -79,6 +80,28 @@ test("only a personal owner cache can hydrate before live membership verificatio
   })), false);
 });
 
+test("an exact hydrated record suppresses only its redundant first rewrite", () => {
+  const hydrated = {
+    scopeKey: "user-a:household-a",
+    dataUpdatedAt: "2026-08-28T01:59:59.000Z",
+  };
+  assert.equal(budgetPlanCacheWriteMatchesHydratedRecord(hydrated, { ...hydrated }), true);
+  assert.equal(budgetPlanCacheWriteMatchesHydratedRecord(hydrated, {
+    ...hydrated,
+    dataUpdatedAt: "2026-08-28T02:01:00.000Z",
+  }), false);
+  assert.equal(budgetPlanCacheWriteMatchesHydratedRecord(hydrated, {
+    ...hydrated,
+    scopeKey: "user-a:household-b",
+  }), false);
+  assert.equal(budgetPlanCacheWriteMatchesHydratedRecord(null, hydrated), false);
+  assert.equal(
+    budgetPlanCacheWriteMatchesHydratedRecord(hydrated, { ...hydrated }, false),
+    false,
+    "changed secondary cache content must be persisted even when freshness is unchanged",
+  );
+});
+
 test("corrupt, future, and structurally incomplete snapshots fail closed", () => {
   const cached = record();
   assert.equal(parseBudgetPlanCache("not-json", "user-a", "household-a"), null);
@@ -125,5 +148,10 @@ test("startup hydrates an exact cached plan before awaiting the financial core",
     /const resolvedScope = await scopeRequest;[\s\S]+hydrateBudgetPlanCache\([\s\S]+householdsRef\.current/,
   );
   assert.match(context, /!categoriesReady[\s\S]+writeBudgetPlanCache\(cache\)/);
+  assert.match(context, /hydratedWrite\.activeHousehold[\s\S]+hydratedWrite\.households[\s\S]+hydratedWrite\.categories[\s\S]+hydratedWrite\.dailyCheckingCloses/);
+  assert.match(context, /activeHousehold: cache\.household,[\s\S]+households: cache\.households/);
+  assert.doesNotMatch(context, /activeHousehold: nextHousehold,[\s\S]+households: nextHouseholds/);
+  assert.match(context, /budgetPlanCacheWriteMatchesHydratedRecord\([\s\S]+hydratedContentUnchanged[\s\S]+planCacheHydrationWriteSkipRef\.current = null/);
+  assert.match(context, /scheduleBudgetBackgroundWork\([\s\S]+writeBudgetPlanCache\(cache\)/);
   assert.match(auth, /await clearBudgetPlanCachesForUser\(signedOutUserId\)/);
 });

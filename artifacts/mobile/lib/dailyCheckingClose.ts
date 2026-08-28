@@ -9,6 +9,45 @@ export interface DailyCheckingCloseSnapshot {
   source: "plaid_sync";
 }
 
+export interface DailyCheckingCloseLoadState {
+  scopeKey: string | null;
+  status: DailyCheckingCloseLoadStatus;
+}
+
+/**
+ * Preserve React state identity when the optional close-history response is
+ * byte-for-byte equivalent to the exact-scope cache already on screen.
+ * Close rows arrive in a canonical newest-first order, so order is part of the
+ * equality contract and a changed order is deliberately published.
+ */
+export function reuseDailyCheckingCloseSnapshots(
+  current: DailyCheckingCloseSnapshot[],
+  next: DailyCheckingCloseSnapshot[],
+): DailyCheckingCloseSnapshot[] {
+  if (
+    current.length === next.length
+    && current.every((row, index) => {
+      const candidate = next[index];
+      return candidate !== undefined
+        && row.balance_date === candidate.balance_date
+        && Object.is(row.checking_balance, candidate.checking_balance)
+        && row.observed_at === candidate.observed_at
+        && row.account_count === candidate.account_count
+        && row.source === candidate.source;
+    })
+  ) return current;
+  return next;
+}
+
+export function reuseDailyCheckingCloseLoadState(
+  current: DailyCheckingCloseLoadState,
+  next: DailyCheckingCloseLoadState,
+): DailyCheckingCloseLoadState {
+  return current.scopeKey === next.scopeKey && current.status === next.status
+    ? current
+    : next;
+}
+
 export interface DailyBalanceCloseMetadata {
   balanceSource: DailyBalanceSource;
   balanceDate: string;

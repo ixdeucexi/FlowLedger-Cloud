@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { calendarBalanceIsVisible, loadAllDailyCheckingCloses, localDateInTimeZone, overlayCompletedDailyCheckingCloses, shouldApplyDailyCheckingCloseLoad, type DailyCheckingCloseSnapshot } from "./dailyCheckingClose";
+import {
+  calendarBalanceIsVisible,
+  loadAllDailyCheckingCloses,
+  localDateInTimeZone,
+  overlayCompletedDailyCheckingCloses,
+  reuseDailyCheckingCloseLoadState,
+  reuseDailyCheckingCloseSnapshots,
+  shouldApplyDailyCheckingCloseLoad,
+  type DailyCheckingCloseSnapshot,
+} from "./dailyCheckingClose";
 
 const projected = [
   { day: 23, balance: 910 },
@@ -123,4 +132,40 @@ test("a newer close-history caller wins across startup and bank-refresh channels
   assert.equal(shouldApplyDailyCheckingCloseLoad(startupGeneration, bankRefreshGeneration, true), false);
   assert.equal(shouldApplyDailyCheckingCloseLoad(bankRefreshGeneration, bankRefreshGeneration, true), true);
   assert.equal(shouldApplyDailyCheckingCloseLoad(bankRefreshGeneration, bankRefreshGeneration, false), false);
+});
+
+test("equivalent close rows and status preserve state identity", () => {
+  const current: DailyCheckingCloseSnapshot[] = [{
+    balance_date: "2026-08-27",
+    checking_balance: 123.45,
+    observed_at: "2026-08-28T04:55:00Z",
+    account_count: 2,
+    source: "plaid_sync",
+  }];
+  const equivalent = current.map(row => ({ ...row }));
+  assert.equal(reuseDailyCheckingCloseSnapshots(current, equivalent), current);
+
+  const changed = equivalent.map(row => ({ ...row, checking_balance: 123.46 }));
+  assert.equal(reuseDailyCheckingCloseSnapshots(current, changed), changed);
+
+  const second: DailyCheckingCloseSnapshot = {
+    ...current[0],
+    balance_date: "2026-08-26",
+    observed_at: "2026-08-27T04:55:00Z",
+  };
+  const twoRows = [current[0], second];
+  const deleted = [current[0]];
+  const reordered = [second, current[0]];
+  assert.equal(reuseDailyCheckingCloseSnapshots(twoRows, deleted), deleted);
+  assert.equal(reuseDailyCheckingCloseSnapshots(twoRows, reordered), reordered);
+
+  const currentLoad = { scopeKey: "user-a:household-a", status: "ready" as const };
+  assert.equal(
+    reuseDailyCheckingCloseLoadState(currentLoad, { ...currentLoad }),
+    currentLoad,
+  );
+  assert.deepEqual(
+    reuseDailyCheckingCloseLoadState(currentLoad, { ...currentLoad, status: "error" }),
+    { ...currentLoad, status: "error" },
+  );
 });
