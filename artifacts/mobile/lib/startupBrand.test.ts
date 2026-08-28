@@ -64,7 +64,11 @@ test("cold-start uses a verified saved plan instead of a navigation-only loading
   const callback = readFileSync("app/auth/callback.tsx", "utf8");
 
   assert.doesNotMatch(tabs, /PlanRestoreOverlay|phase="plan"/);
-  assert.match(tabs, /!dataUpdatedAt \? \(/);
+  assert.match(tabs, /!dataUpdatedAt \|\| !workspaceMounted/);
+  assert.match(tabs, /requestAnimationFrame\(\(\) => \{[\s\S]+requestAnimationFrame/);
+  assert.match(tabs, /onLayout=\{\(\) => setWorkspaceMounted\(true\)\}/);
+  assert.match(tabs, /!workspaceReadyToReveal \? \(/);
+  assert.match(tabs, /workspaceLoadingOverlay/);
   assert.match(tabs, /<AppLoadingIntro[\s\S]+phase="workspace"/);
   assert.doesNotMatch(tabs, /WorkspaceLoadingMobileNavigation/);
   assert.doesNotMatch(tabs, /You can choose another page while it loads/);

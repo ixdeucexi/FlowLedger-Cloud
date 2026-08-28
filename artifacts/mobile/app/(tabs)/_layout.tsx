@@ -623,6 +623,30 @@ function TabContent() {
     overdueBillCount,
     newFeedbackCount,
   );
+  const [workspaceMounted, setWorkspaceMounted] = React.useState(false);
+  const [workspaceReadyToReveal, setWorkspaceReadyToReveal] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!dataUpdatedAt || !workspaceMounted) {
+      setWorkspaceReadyToReveal(false);
+      return;
+    }
+
+    // Keep the branded loader over the already-mounted destination until the
+    // browser/native renderer has completed two frames. This avoids revealing
+    // a half-mounted route without making live network refresh part of startup.
+    let secondFrame = 0;
+    const firstFrame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(() => {
+        setWorkspaceReadyToReveal(true);
+      });
+    });
+
+    return () => {
+      cancelAnimationFrame(firstFrame);
+      if (secondFrame) cancelAnimationFrame(secondFrame);
+    };
+  }, [dataUpdatedAt, workspaceMounted]);
 
   React.useEffect(() => {
     if (!dataUpdatedAt) return;
@@ -641,18 +665,20 @@ function TabContent() {
       style={[styles.tabTransitionRoot, { backgroundColor: colors.background }]}
     >
       <View style={styles.tabTransitionContent}>
+        <View
+          accessibilityElementsHidden={!workspaceReadyToReveal}
+          importantForAccessibility={
+            workspaceReadyToReveal ? "auto" : "no-hide-descendants"
+          }
+          style={styles.tabTransitionContent}
+        >
         <ConnectivityBanner desktop={isDesktop} />
         <AppDiscoveryProvider>
         <ResponsiveDesktopChrome enabled={isDesktop}>
-          {loadError ? (
-            <BudgetLoadDelayScreen onRetry={retryBudgetLoad} />
-          ) : !dataUpdatedAt ? (
-            <AppLoadingIntro
-              phase="workspace"
-              accessibilityLabel="FlowLedger is opening your plan"
-            />
-          ) : (
-          <View style={styles.tabsFrame}>
+          <View
+            onLayout={() => setWorkspaceMounted(true)}
+            style={styles.tabsFrame}
+          >
           <Tabs
             backBehavior="history"
             detachInactiveScreens
@@ -840,7 +866,6 @@ function TabContent() {
           </Tabs>
           {!loading ? <FloLauncher desktop={isDesktop} /> : null}
           </View>
-          )}
         </ResponsiveDesktopChrome>
         </AppDiscoveryProvider>
         {demoMode && !isStoreCaptureMode() ? <DemoModeBanner /> : null}
@@ -848,6 +873,19 @@ function TabContent() {
         <SaveStatusBanner />
         <DecisionDueModal />
         <GuidedTour />
+        </View>
+        {loadError ? (
+          <View style={styles.workspaceLoadingOverlay}>
+            <BudgetLoadDelayScreen onRetry={retryBudgetLoad} />
+          </View>
+        ) : !workspaceReadyToReveal ? (
+          <View style={styles.workspaceLoadingOverlay}>
+            <AppLoadingIntro
+              phase="workspace"
+              accessibilityLabel="FlowLedger is opening your plan"
+            />
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -890,6 +928,10 @@ const styles = StyleSheet.create({
   tabsFrame: {
     flex: 1,
     minWidth: 0,
+  },
+  workspaceLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1000,
   },
   alertTabBadge: {
     minWidth: 18,
