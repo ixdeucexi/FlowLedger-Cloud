@@ -32,6 +32,37 @@ const webFiles = filesBelow(webDist).filter(file => /\.(?:html|js)$/i.test(file)
 if (!webFiles.some(file => /\.js$/i.test(file))) {
   throw new Error("No exported Expo web JavaScript was found. Export the production PWA before artifact checks.");
 }
+
+const webIndexPath = path.join(webDist, "index.html");
+if (!fs.existsSync(webIndexPath)) {
+  throw new Error("The exported PWA index.html is missing.");
+}
+const webIndex = fs.readFileSync(webIndexPath, "utf8");
+const coverPosition = webIndex.indexOf('id="flowledger-web-startup-cover"');
+const rootPosition = webIndex.indexOf('id="root"');
+const controllerPosition = webIndex.indexOf('window.addEventListener("pagehide"');
+const bundlePosition = webIndex.indexOf('/_expo/static/js/web/entry-');
+if (
+  coverPosition < 0
+  || rootPosition <= coverPosition
+  || controllerPosition <= rootPosition
+  || bundlePosition <= controllerPosition
+) {
+  throw new Error("The exported PWA must place its startup cover and re-arm controller before the deferred Expo bundle.");
+}
+for (const required of [
+  'data-state="visible"',
+  'data-reason="initial"',
+  'aria-label="Loading your FlowLedger plan"',
+  '<div id="root" inert aria-hidden="true"></div>',
+  'document.visibilityState === "hidden"',
+  'arm("resume")',
+]) {
+  if (!webIndex.includes(required)) {
+    throw new Error(`The exported PWA startup barrier is missing ${JSON.stringify(required)}.`);
+  }
+}
+
 const targets = [...webFiles, guidePdf];
 for (const target of targets) {
   const content = fs.readFileSync(target).toString("latin1");

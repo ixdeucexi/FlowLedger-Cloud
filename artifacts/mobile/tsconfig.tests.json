@@ -176,6 +176,8 @@
     ,"lib/userGuide.ts"
     ,"lib/userGuide.test.ts"
     ,"lib/startupBrand.test.ts"
+    ,"lib/webStartupCover.ts"
+    ,"lib/webStartupCover.test.ts"
     ,"lib/foundingFreeLaunch.test.ts"
     ,"lib/foundingFreeReviewCenterEntitlement.test.ts"
     ,"lib/launchMode.ts"

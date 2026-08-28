@@ -7,6 +7,8 @@ test("startup stays constant until the destination screen is ready", () => {
   const brand = readFileSync("components/AppLoadingIntro.tsx", "utf8");
   const index = readFileSync("app/index.tsx", "utf8");
   const appConfig = readFileSync("app.config.js", "utf8");
+  const webDocument = readFileSync("public/index.html", "utf8");
+  const webCover = readFileSync("lib/webStartupCover.ts", "utf8");
 
   assert.match(layout, /SplashScreen\.preventAutoHideAsync\(\)/);
   assert.match(
@@ -55,6 +57,29 @@ test("startup stays constant until the destination screen is ready", () => {
   assert.doesNotMatch(layout, /<AppLoadingIntro[\s\S]{0,120}phase="privacy"/);
   assert.match(index, /<AppLoadingIntro phase="app" \/>/);
   assert.doesNotMatch(index, /Animated|timing|opacity/);
+
+  const coverPosition = webDocument.indexOf('id="flowledger-web-startup-cover"');
+  const rootPosition = webDocument.indexOf('id="root"');
+  assert.ok(coverPosition > 0 && coverPosition < rootPosition);
+  assert.match(webDocument, /#flowledger-web-startup-cover \{[\s\S]+position: fixed;[\s\S]+inset: 0;[\s\S]+z-index: 2147483647;[\s\S]+background: #050816/);
+  assert.match(webDocument, /data-state="visible"[\s\S]+data-reason="initial"/);
+  assert.match(webDocument, /role="progressbar"[\s\S]+aria-label="Loading your FlowLedger plan"/);
+  assert.match(webDocument, /Loading Plan\.\.\./);
+  assert.match(webDocument, /<div id="root" inert aria-hidden="true"><\/div>/);
+  assert.match(webDocument, /visibilitychange[\s\S]+document\.visibilityState === "hidden"[\s\S]+arm\("resume"\)/);
+  assert.match(webDocument, /pagehide[\s\S]+arm\("resume"\)/);
+  assert.doesNotMatch(webDocument, /pageshow[\s\S]+data\.state\s*=\s*"hidden"/);
+  assert.match(webDocument, /<noscript>[\s\S]+#flowledger-web-startup-cover \{ display: none; \}/);
+  assert.match(webCover, /root\.removeAttribute\("inert"\)/);
+  assert.match(webCover, /cover\.dataset\.state = "hidden"/);
+  assert.doesNotMatch(webCover, /\.remove\(\)/);
+  assert.match(webCover, /WEB_WORKSPACE_READY_EVENT = "flowledger:workspace-ready"/);
+  assert.match(webCover, /currentWorkspaceReadyScopeKey = scopeKey/);
+  assert.match(webCover, /workspaceReadyScopeKey === currentScopeKey/);
+  assert.match(webCover, /verifiedScopeKey === currentScopeKey/);
+  assert.match(layout, /visible: document\.visibilityState === "visible"/);
+  assert.match(layout, /shouldReleaseWebStartupCover\(/);
+  assert.match(layout, /<ErrorBoundary onError=\{\(\) => releaseWebStartupCover\(\)\}>/);
 });
 
 test("cold-start uses a verified saved plan instead of a navigation-only loading shell", () => {
@@ -64,11 +89,13 @@ test("cold-start uses a verified saved plan instead of a navigation-only loading
   const callback = readFileSync("app/auth/callback.tsx", "utf8");
 
   assert.doesNotMatch(tabs, /PlanRestoreOverlay|phase="plan"/);
-  assert.match(tabs, /!dataUpdatedAt \|\| !workspaceMounted/);
+  assert.match(tabs, /!dataUpdatedAt \|\| !startupCoreReady \|\| !workspaceMounted/);
   assert.match(tabs, /requestAnimationFrame\(\(\) => \{[\s\S]+requestAnimationFrame/);
   assert.match(tabs, /onLayout=\{\(\) => setWorkspaceMounted\(true\)\}/);
   assert.match(tabs, /!workspaceReadyToReveal \? \(/);
   assert.match(tabs, /workspaceLoadingOverlay/);
+  assert.match(tabs, /publishWebWorkspaceReadiness\(workspaceScopeKey, workspaceReadyToReveal\)/);
+  assert.doesNotMatch(tabs, /releaseWebStartupCover/);
   assert.match(tabs, /<AppLoadingIntro[\s\S]+phase="workspace"/);
   assert.doesNotMatch(tabs, /WorkspaceLoadingMobileNavigation/);
   assert.doesNotMatch(tabs, /You can choose another page while it loads/);
@@ -90,6 +117,16 @@ test("startup plan loading fails closed instead of hanging on household discover
     /withLoadTimeout\(\s*resolveHouseholds\(uid, false\),\s*8000,\s*"Load households"/,
   );
   assert.match(budgetContext, /finally \{[\s\S]*?shouldReleaseBudgetLoading\(\{[\s\S]*?setLoading\(false\)/);
+  assert.match(budgetContext, /const startupCoreReady = demoMode \|\| Boolean\(/);
+  assert.match(
+    budgetContext,
+    /hydrateBudgetPlanCache[\s\S]+setStartupCoreReadyScopeKey\(`\$\{cache\.userId\}:\$\{nextHousehold\.householdId\}`\)/,
+  );
+  assert.match(
+    budgetContext,
+    /setStartupCoreReadyScopeKey\([\s\S]+`\$\{uid\}:\$\{scope\.householdId\}`/,
+  );
+  assert.match(budgetContext, /clearScopedFinancialData[\s\S]+setStartupCoreReadyScopeKey\(null\)/);
   assert.match(
     budgetContext,
     /withLoadTimeout\(\s*verifyCurrentHouseholdMembership[\s\S]*?8000/,
@@ -123,6 +160,11 @@ test("startup plan loading fails closed instead of hanging on household discover
     layout,
     /window\.addEventListener\("pageshow", verifyAfterReturn\)/,
   );
+  assert.match(
+    layout,
+    /webWasHiddenRef\.current = false;[\s\S]+setWebRevealEpoch\(value => value \+ 1\)/,
+  );
+  assert.match(layout, /webRevealEpoch,[\s\S]+webWorkspaceReadyScopeKey/);
   assert.match(
     layout,
     /if \(\s*document\.visibilityState !== "visible" \|\|\s*!webWasHiddenRef\.current\s*\)\s*return/,

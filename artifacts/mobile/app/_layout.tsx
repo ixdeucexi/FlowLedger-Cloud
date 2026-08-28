@@ -70,6 +70,13 @@ import { verifyCurrentHouseholdMembership } from "@/lib/households";
 import { ownsLegacyPersonalRows } from "@/lib/householdDataScope";
 import { apiConfigurationError } from "@/lib/api";
 import { supabaseConfigurationError } from "@/lib/supabase";
+import {
+  releaseWebStartupCover,
+  shouldReleaseWebStartupCover,
+  WEB_WORKSPACE_READY_EVENT,
+  currentWebWorkspaceReadyScopeKey,
+  type WebWorkspaceReadyDetail,
+} from "@/lib/webStartupCover";
 
 SplashScreen.preventAutoHideAsync();
 SplashScreen.setOptions({ duration: 0, fade: false });
@@ -425,6 +432,10 @@ function RootNavigator({
   );
   const [privacyRefreshRetry, setPrivacyRefreshRetry] = useState(0);
   const [verifiedPrivacyScopeKey, setVerifiedPrivacyScopeKey] = useState<string | null>(null);
+  const [webWorkspaceReadyScopeKey, setWebWorkspaceReadyScopeKey] = useState<string | null>(
+    () => currentWebWorkspaceReadyScopeKey(),
+  );
+  const [webRevealEpoch, setWebRevealEpoch] = useState(0);
   const privacyRefreshGenerationRef = useRef(0);
   const privacySessionUserIdRef = useRef(session?.user.id ?? null);
   const previousAppStateRef = useRef(AppState.currentState);
@@ -458,6 +469,20 @@ function RootNavigator({
     setPrivacyRefreshError(null);
     setPrivacyShielded(Boolean(nextUserId));
   }, [session?.user.id]);
+
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined") return;
+    const handleWorkspaceReadiness = (event: Event) => {
+      const detail = (event as CustomEvent<WebWorkspaceReadyDetail>).detail;
+      if (!detail?.scopeKey) return;
+      setWebWorkspaceReadyScopeKey(currentWebWorkspaceReadyScopeKey());
+    };
+    window.addEventListener(WEB_WORKSPACE_READY_EVENT, handleWorkspaceReadiness);
+    setWebWorkspaceReadyScopeKey(currentWebWorkspaceReadyScopeKey());
+    return () => {
+      window.removeEventListener(WEB_WORKSPACE_READY_EVENT, handleWorkspaceReadiness);
+    };
+  }, []);
   const coreReady =
     fontsReady && !authLoading && biometricLockReady && themeReady;
   // The native splash must never wait on network data. Render the app-owned
@@ -621,6 +646,9 @@ function RootNavigator({
       if (document.visibilityState !== "visible" || !webWasHiddenRef.current)
         return;
       webWasHiddenRef.current = false;
+      // Re-run the root-only cover decision even on signed-out/public routes,
+      // where no privacy or budget state necessarily changes after pageshow.
+      setWebRevealEpoch(value => value + 1);
       const scope = privacyScopeRef.current;
       if (!scope.userId || !hasRevealedPlanRef.current) return;
       if (ownsLegacyPersonalRows(scope)) {
@@ -665,6 +693,37 @@ function RootNavigator({
   useEffect(() => {
     if (initialAppReady) setAppReady(true);
   }, [initialAppReady]);
+
+  useEffect(() => {
+    const terminalErrorReady = Boolean(
+      navigationReady && (budgetLoadError || privacyRefreshError),
+    );
+    if (Platform.OS !== "web" || typeof document === "undefined") return;
+
+    const workspaceRoute = Boolean(session && firstRootSegment === "(tabs)");
+    if (shouldReleaseWebStartupCover({
+      visible: document.visibilityState === "visible",
+      readyToReveal,
+      terminalErrorReady,
+      workspaceRoute,
+      currentScopeKey: currentPrivacyScopeKey,
+      verifiedScopeKey: verifiedPrivacyScopeKey,
+      workspaceReadyScopeKey: webWorkspaceReadyScopeKey,
+    })) {
+      releaseWebStartupCover();
+    }
+  }, [
+    budgetLoadError,
+    currentPrivacyScopeKey,
+    firstRootSegment,
+    navigationReady,
+    privacyRefreshError,
+    readyToReveal,
+    session?.user.id,
+    verifiedPrivacyScopeKey,
+    webRevealEpoch,
+    webWorkspaceReadyScopeKey,
+  ]);
 
   useEffect(() => {
     if (appReady) void hideSplash();
@@ -875,7 +934,10 @@ export default function RootLayout() {
     supabaseConfigurationError ?? apiConfigurationError();
 
   useEffect(() => {
-    if (runtimeConfigurationError && fontsReady) void hideSplash();
+    if (runtimeConfigurationError && fontsReady) {
+      void hideSplash();
+      releaseWebStartupCover();
+    }
   }, [fontsReady, hideSplash, runtimeConfigurationError]);
 
   useEffect(() => {
@@ -909,7 +971,7 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <ErrorBoundary>
+      <ErrorBoundary onError={() => releaseWebStartupCover()}>
         <ThemeProvider>
           <NetworkStatusProvider>
             <QueryClientProvider client={queryClient}>

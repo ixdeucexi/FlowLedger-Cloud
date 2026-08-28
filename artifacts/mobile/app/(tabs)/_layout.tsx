@@ -63,6 +63,9 @@ import {
 import { MOBILE_RIBBON_ITEMS } from "@/lib/mobileRibbon";
 import * as Haptics from "@/lib/haptics";
 import { isStoreCaptureMode } from "@/lib/demoMode";
+import {
+  publishWebWorkspaceReadiness,
+} from "@/lib/webStartupCover";
 
 function todayIsoDate() {
   const now = new Date();
@@ -528,12 +531,15 @@ function TabContent() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const router = useRouter();
+  const { user } = useAuth();
   const {
     loading,
+    startupCoreReady,
     loadError,
     dataUpdatedAt,
     retryBudgetLoad,
     demoMode,
+    activeHousehold,
     transactions,
     pendingBankTransactions,
     pendingPlanMatches,
@@ -625,16 +631,19 @@ function TabContent() {
   );
   const [workspaceMounted, setWorkspaceMounted] = React.useState(false);
   const [workspaceReadyToReveal, setWorkspaceReadyToReveal] = React.useState(false);
+  const workspaceScopeKey = user
+    ? `${user.id}:${activeHousehold?.householdId ?? "personal"}`
+    : null;
 
   React.useEffect(() => {
-    if (!dataUpdatedAt || !workspaceMounted) {
+    if (!dataUpdatedAt || !startupCoreReady || !workspaceMounted) {
       setWorkspaceReadyToReveal(false);
       return;
     }
 
-    // Keep the branded loader over the already-mounted destination until the
-    // browser/native renderer has completed two frames. This avoids revealing
-    // a half-mounted route without making live network refresh part of startup.
+    // Keep the branded loader over the live, already-mounted destination until
+    // the browser/native renderer has completed two frames. The page can only
+    // request reveal after an exact-scope cached or live core has committed.
     let secondFrame = 0;
     const firstFrame = requestAnimationFrame(() => {
       secondFrame = requestAnimationFrame(() => {
@@ -646,7 +655,15 @@ function TabContent() {
       cancelAnimationFrame(firstFrame);
       if (secondFrame) cancelAnimationFrame(secondFrame);
     };
-  }, [dataUpdatedAt, workspaceMounted]);
+  }, [dataUpdatedAt, startupCoreReady, workspaceMounted]);
+
+  React.useEffect(() => {
+    if (Platform.OS !== "web" || !workspaceScopeKey) return;
+    publishWebWorkspaceReadiness(workspaceScopeKey, workspaceReadyToReveal);
+    return () => {
+      publishWebWorkspaceReadiness(workspaceScopeKey, false);
+    };
+  }, [workspaceReadyToReveal, workspaceScopeKey]);
 
   React.useEffect(() => {
     if (!dataUpdatedAt) return;

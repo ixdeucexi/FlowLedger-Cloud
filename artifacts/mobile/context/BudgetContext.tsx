@@ -484,6 +484,8 @@ interface BudgetContextType {
   canEditHousehold: boolean;
   forecastConfidence: ForecastConfidence;
   loading: boolean;
+  /** True after an exact-scope cached or live core has committed for use. */
+  startupCoreReady: boolean;
   loadError: string | null;
   dataUpdatedAt: string | null;
   retryBudgetLoad: () => void;
@@ -1201,6 +1203,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [activeHouseholdId, setActiveHouseholdId] = useState<string | null>(null);
   const [settings,      setSettings]      = useState<Settings>(DEFAULT_SETTINGS);
   const [loading,       setLoading]       = useState(true);
+  const [startupCoreReadyScopeKey, setStartupCoreReadyScopeKey] = useState<string | null>(null);
   const [loadError,     setLoadError]     = useState<string | null>(null);
   const [dataUpdatedAt, setDataUpdatedAt] = useState<string | null>(null);
   const [loadRetryNonce, setLoadRetryNonce] = useState(0);
@@ -1291,6 +1294,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     householdActivityRequestRef.current += 1;
     setHouseholdDetailsReadyScopeKey(null);
     setCategoriesReadyScopeKey(null);
+    setStartupCoreReadyScopeKey(null);
     scopeCoreLoadWaitersRef.current.forEach(waiters => {
       waiters.forEach(waiter => waiter.reject(new Error("The active household changed.")));
     });
@@ -1370,6 +1374,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   );
   const categoriesReady = demoMode || Boolean(
     secondaryDataScopeKey && categoriesReadyScopeKey === secondaryDataScopeKey,
+  );
+  const startupCoreReady = demoMode || Boolean(
+    secondaryDataScopeKey && startupCoreReadyScopeKey === secondaryDataScopeKey,
   );
   const replaceActiveHouseholdScope = useCallback((next: HouseholdMembership | null) => {
     if (householdScopeRef.current?.householdId !== next?.householdId) resetSaveLifecycle();
@@ -1462,6 +1469,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       `${cache.userId}:${nextHousehold.householdId}`,
       cachedSettings,
     );
+    setStartupCoreReadyScopeKey(`${cache.userId}:${nextHousehold.householdId}`);
     setDataUpdatedAt(cache.dataUpdatedAt);
     lastPlanRefreshAtRef.current = Date.parse(cache.dataUpdatedAt) || 0;
     loaded.current = true;
@@ -2260,6 +2268,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setDailyCheckingCloseLoad({ scopeKey: null, status: "loading" });
       setHouseholdDetailsReadyScopeKey(null);
       setCategoriesReadyScopeKey(null);
+      setStartupCoreReadyScopeKey(null);
       transactionAccountIdentitiesRef.current = [];
       setHouseholds([]); setHouseholdMembers([]); setHouseholdActivity([]); replaceActiveHouseholdScope(null);
       billDateMovesRef.current = [];
@@ -2481,6 +2490,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }
         const queryUpdatedAt = queryClient.getQueryState(coreQueryKey)?.dataUpdatedAt;
         setDataUpdatedAt(new Date(queryUpdatedAt || Date.now()).toISOString());
+        setStartupCoreReadyScopeKey(
+          scope?.householdId ? `${uid}:${scope.householdId}` : null,
+        );
         setLoadError(null);
         loadSucceeded = true;
         if (blockingUserTransition) userTransitionPendingRef.current = false;
@@ -6905,7 +6917,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       households, householdMembers, householdActivity, householdDetailsReady, categoriesReady, activeHousehold, householdRole, canEditHousehold,
       refreshHouseholds, refreshHouseholdsForPrivacy, refreshHouseholdActivity, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
       updateHouseholdMemberRole, removeHouseholdMember, leaveActiveHousehold,
-      forecastConfidence, loading, loadError, dataUpdatedAt, retryBudgetLoad, refreshBankData, demoMode,
+      forecastConfidence, loading, startupCoreReady, loadError, dataUpdatedAt, retryBudgetLoad, refreshBankData, demoMode,
       saveStatus, saveError, retryLastSave, clearSaveError,
       dashboardFilter, setDashboardFilter,
       addBill, updateBill, stopFutureBill, deleteBill, deleteBillMistake, getBillById,

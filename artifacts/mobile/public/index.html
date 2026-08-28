@@ -43,6 +43,57 @@
         overflow-x: hidden;
       }
 
+      #flowledger-web-startup-cover {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        min-height: 100dvh;
+        background: #050816;
+        color: #f8fafc;
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+      }
+
+      #flowledger-web-startup-cover[data-state="hidden"] {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transition: opacity 90ms ease-out, visibility 0s linear 90ms;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #flowledger-web-startup-cover[data-state="hidden"] {
+          transition: none;
+        }
+      }
+
+      .flowledger-web-startup-brand {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .flowledger-web-startup-logo {
+        width: 200px;
+        height: 200px;
+        margin-bottom: 18px;
+        border-radius: 48px;
+        object-fit: contain;
+        filter: drop-shadow(0 8px 18px rgba(56, 189, 248, 0.22));
+      }
+
+      .flowledger-web-startup-status {
+        margin: 0;
+        color: #f8fafc;
+        font: 800 20px/1.2 Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
       @media (max-width: 767px) {
         * {
           scrollbar-width: none;
@@ -56,7 +107,49 @@
   </head>
 
   <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="root"></div>
+    <div
+      id="flowledger-web-startup-cover"
+      data-state="visible"
+      data-reason="initial"
+      role="progressbar"
+      aria-label="Loading your FlowLedger plan"
+    >
+      <div class="flowledger-web-startup-brand">
+        <img
+          class="flowledger-web-startup-logo"
+          src="/icon-192.png"
+          alt="FlowLedger"
+          width="200"
+          height="200"
+        />
+        <p class="flowledger-web-startup-status">Loading Plan...</p>
+      </div>
+    </div>
+    <noscript>
+      <style>#flowledger-web-startup-cover { display: none; }</style>
+      You need to enable JavaScript to run this app.
+    </noscript>
+    <div id="root" inert aria-hidden="true"></div>
+    <script>
+      (() => {
+        const cover = document.getElementById("flowledger-web-startup-cover");
+        const root = document.getElementById("root");
+        if (!cover || !root) return;
+
+        const arm = (reason) => {
+          cover.dataset.state = "visible";
+          cover.dataset.reason = reason;
+          cover.removeAttribute("aria-hidden");
+          root.setAttribute("inert", "");
+          root.setAttribute("aria-hidden", "true");
+          document.documentElement.removeAttribute("data-flowledger-ready");
+        };
+
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "hidden") arm("resume");
+        }, true);
+        window.addEventListener("pagehide", () => arm("resume"), true);
+      })();
+    </script>
   </body>
 </html>
