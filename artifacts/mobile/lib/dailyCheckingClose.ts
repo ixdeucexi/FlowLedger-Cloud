@@ -56,7 +56,7 @@ export function overlayCompletedDailyCheckingCloses<
   year: number,
   snapshots: DailyCheckingCloseSnapshot[],
   householdLocalToday: string,
-  historyStatus: DailyCheckingCloseLoadStatus = "ready",
+  _historyStatus: DailyCheckingCloseLoadStatus = "ready",
 ): Array<T & DailyBalanceCloseMetadata> {
   const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
   const completedByDay = new Map<number, DailyCheckingCloseSnapshot>();
@@ -82,13 +82,8 @@ export function overlayCompletedDailyCheckingCloses<
     if (!actual) {
       return {
         ...projected,
-        balanceSource: "unavailable",
+        balanceSource: "projected",
         balanceDate,
-        balanceUnavailableReason: historyStatus === "ready"
-          ? "close_not_recorded"
-          : historyStatus === "error"
-            ? "history_error"
-            : "history_loading",
       };
     }
     return {

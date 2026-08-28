@@ -30,43 +30,57 @@ test("today and future remain projected even when a same-day snapshot exists", (
   ], "2026-08-24");
 
   assert.deepEqual(result.map(day => [day.balance, day.balanceSource]), [
-    [910, "unavailable"],
+    [910, "projected"],
     [920, "projected"],
     [930, "projected"],
   ]);
 });
 
-test("past balances fail closed while close history is pending or has no snapshot", () => {
-  const pending = overlayCompletedDailyCheckingCloses(
-    projected,
-    7,
-    2026,
-    [],
-    "2026-08-25",
-    "loading",
-  );
-  assert.deepEqual(
-    pending.map(day => [day.day, day.balanceSource, day.balanceUnavailableReason]),
-    [
-      [23, "unavailable", "history_loading"],
-      [24, "unavailable", "history_loading"],
-      [25, "projected", undefined],
-    ],
-  );
+test("every date keeps its canonical projection when close history is loading, failed, or has no row", () => {
+  for (const historyStatus of ["loading", "error", "ready"] as const) {
+    const result = overlayCompletedDailyCheckingCloses(
+      projected,
+      7,
+      2026,
+      [],
+      "2026-08-25",
+      historyStatus,
+    );
+    assert.deepEqual(
+      result.map(day => [day.day, day.balance, day.balanceSource, day.balanceUnavailableReason]),
+      [
+        [23, 910, "projected", undefined],
+        [24, 920, "projected", undefined],
+        [25, 930, "projected", undefined],
+      ],
+    );
+    assert.equal(result.every(calendarBalanceIsVisible), true);
+  }
+});
 
-  const loaded = overlayCompletedDailyCheckingCloses(
-    projected,
-    7,
-    2026,
-    [],
-    "2026-08-25",
-    "ready",
-  );
-  assert.equal(loaded[0].balanceUnavailableReason, "close_not_recorded");
-  assert.equal(loaded[1].balanceUnavailableReason, "close_not_recorded");
-  assert.equal(calendarBalanceIsVisible(pending[0]), false);
-  assert.equal(calendarBalanceIsVisible(loaded[0]), false);
-  assert.equal(calendarBalanceIsVisible(loaded[2]), true);
+test("a valid cached actual close wins even while live close history is loading or failed", () => {
+  const snapshot: DailyCheckingCloseSnapshot = {
+    balance_date: "2026-08-23",
+    checking_balance: 812.34,
+    observed_at: "2026-08-24T03:55:00Z",
+    account_count: 1,
+    source: "plaid_sync",
+  };
+  for (const historyStatus of ["loading", "error"] as const) {
+    const result = overlayCompletedDailyCheckingCloses(
+      projected,
+      7,
+      2026,
+      [snapshot],
+      "2026-08-25",
+      historyStatus,
+    );
+    assert.deepEqual(result.map(day => [day.balance, day.balanceSource]), [
+      [812.34, "actual_close"],
+      [920, "projected"],
+      [930, "projected"],
+    ]);
+  }
 });
 
 test("household time zone controls the completed-date boundary", () => {

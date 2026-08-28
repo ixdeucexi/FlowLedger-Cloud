@@ -24,7 +24,6 @@ test("mobile calendar displays and announces the full balance", () => {
 
   assert.match(calendar, /accessibilityLabel=\{`Balance \$\{formatCalendarBalance\(visibleBalance\.balance\)\}`\}/);
   assert.doesNotMatch(calendar, /Actual close|Actual bank close/i);
-  assert.match(calendar, /Closing balance unavailable\./);
   assert.doesNotMatch(calendar, />Projected</);
   assert.match(calendar, /\{formatCalendarBalance\(visibleBalance\.balance\)\}/);
   assert.doesNotMatch(calendar, /formatCompactCalendarBalance/);

@@ -46,7 +46,7 @@ test("Snowball, simulation, Dashboard, and Flo remain on the projected financial
   }
 });
 
-test("calendar display hides unavailable past balances without changing projected risk math", () => {
+test("calendar display always receives a close while projected risk math stays canonical", () => {
   assert.match(monthly, /projectedDailyBalances[\s\S]*getDailyBalances/);
   assert.match(monthly, /dailyBalances[\s\S]*getCalendarDailyBalances/);
   assert.match(monthly, /const baseline = projectedDailyBalances/);
@@ -54,13 +54,14 @@ test("calendar display hides unavailable past balances without changing projecte
   assert.match(desktop, /selectedDay[\s\S]*props\.dailyBalances/);
   assert.match(calendar, /calendarBalanceIsVisible\(db\)/);
   assert.match(calendar, /visibleBalance && visibleBalance\.balance < safetyFloor/);
-  assert.match(calendar, /Closing balance unavailable/);
+  assert.match(calendar, /calendarBalanceIsVisible\(db\) \? db : undefined/);
   assert.match(monthly, /calendarBalanceIsVisible\(selectedForecastDay\)/);
   assert.match(monthly, /buildDayForecastFloPrompt\(dayLabel, date, selectedVisibleForecastDay\?\.balance/);
   assert.match(desktop, /calendarBalanceIsVisible\(balance\)/);
   assert.match(desktop, /visibleBalance\?\.balanceSource === "projected"/);
   assert.match(desktop, /weekDays\.filter\(calendarBalanceIsVisible\)/);
   assert.match(desktop, /\{visibleSelectedDay \? \(/);
+  assert.doesNotMatch(budgetContext, /balanceSource:\s*"unavailable"/);
 });
 
 test("household switching clears daily closes and time zone before asynchronous replacement", () => {
