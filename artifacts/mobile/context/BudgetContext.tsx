@@ -107,6 +107,13 @@ import { debtSyncRefreshPlan, replaceRowsById, rowsExactlyMatchRequestedIds } fr
 import { goalAffordabilityFromProjectedBalance } from "@/lib/goalAffordability";
 import { updateManualAccountWithAnchorAtomically } from "@/lib/atomicFinancialMutations";
 import {
+  budgetPlanCacheCanHydrateBeforeMembership,
+  clearBudgetPlanCachesForUser,
+  readBudgetPlanCache,
+  writeBudgetPlanCache,
+  type BudgetPlanCacheRecord,
+} from "@/lib/budgetPlanCache";
+import {
   normalizedSettingsFields,
   settingsDbPatch,
   type SettingsField,
@@ -1213,6 +1220,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const authoritativeSettingsByScopeRef = useRef(new Map<string, Settings>());
   const connectedBankAccountsRef = useRef<ConnectedBankAccount[]>([]);
   const transactionAccountIdentitiesRef = useRef<ConnectedBankAccount[]>([]);
+  const householdsRef = useRef<HouseholdMembership[]>([]);
   const retrySaveRef = useRef<null | (() => Promise<void>)>(null);
   const retrySavePromiseRef = useRef<Promise<void> | null>(null);
   const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1246,6 +1254,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const householdActivityRequestRef = useRef(0);
   const postCoreSecondaryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const postCoreDebtTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const planCacheWriteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scopeTransitionPendingRef = useRef<string | null>(null);
   const userTransitionPendingRef = useRef(false);
   const scopeCoreLoadWaitersRef = useRef(new Map<string, Set<{
@@ -1262,9 +1271,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { settingsRef.current = settings; }, [settings]);
   useEffect(() => { connectedBankAccountsRef.current = connectedBankAccounts; }, [connectedBankAccounts]);
   useEffect(() => { transactionAccountIdentitiesRef.current = transactionAccountIdentities; }, [transactionAccountIdentities]);
+  useEffect(() => { householdsRef.current = households; }, [households]);
   useEffect(() => () => {
     if (postCoreSecondaryTimerRef.current) clearTimeout(postCoreSecondaryTimerRef.current);
     if (postCoreDebtTimerRef.current) clearTimeout(postCoreDebtTimerRef.current);
+    if (planCacheWriteTimerRef.current) clearTimeout(planCacheWriteTimerRef.current);
   }, []);
 
   const clearScopedFinancialData = useCallback(() => {
@@ -1365,11 +1376,182 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     householdScopeRef.current = next;
     setActiveHouseholdId(next?.householdId ?? null);
   }, [resetSaveLifecycle]);
+
+  const hydrateBudgetPlanCache = useCallback((
+    cache: BudgetPlanCacheRecord,
+    authoritativeHousehold?: HouseholdMembership,
+    authoritativeHouseholds?: HouseholdMembership[],
+  ) => {
+    const nextHousehold = authoritativeHousehold ?? cache.household;
+    if (
+      cache.userId !== financialDataUserIdRef.current
+      || cache.household.householdId !== nextHousehold.householdId
+    ) return false;
+
+    const cachedAccounts = cache.data.accounts
+      .filter((account: any) => account?.account_type !== "credit_card")
+      .map(normalizeAccountRow);
+    const cachedIdentities = normalizeConnectedBankRows(cache.data.transactionAccountIdentities);
+    const cachedTransactions = [
+      ...cache.data.transactions,
+      ...cache.data.deletedTransactions,
+    ].map(normalizeTransactionRow);
+    const transactionCollections = accountAwareTransactionCollections(
+      cachedTransactions,
+      cachedIdentities,
+    );
+    const cachedSettings = {
+      ...DEFAULT_SETTINGS,
+      ...cache.data.settings,
+      paymentMethod: canonicalDebtPaymentMethod(
+        (cache.data.settings as Partial<Settings>).paymentMethod,
+      ),
+    } as Settings;
+
+    const nextHouseholds = authoritativeHouseholds ?? cache.households;
+    householdsRef.current = nextHouseholds;
+    setHouseholds(nextHouseholds);
+    replaceActiveHouseholdScope(nextHousehold);
+    setBills(reorderDebtPriorities(cache.data.bills.map(normalizeBillRow)));
+    const cachedOverrides = cache.data.overrides.map(normalizeMonthlyOverrideRow);
+    setOverrides(cachedOverrides);
+    overridesRef.current = cachedOverrides;
+    const cachedMoves = cache.data.billDateMoves.map(normalizeBillDateMoveRow);
+    setBillDateMoves(cachedMoves);
+    billDateMovesRef.current = cachedMoves;
+    setTransactions(transactionCollections.active);
+    setDeletedTransactions(transactionCollections.deleted);
+    setPendingBankTransactions(normalizePendingBankRows(cache.data.pendingBankTransactions));
+    setPendingPlanMatches(cache.data.pendingPlanMatches.map(normalizePendingPlanMatchRow));
+    setIncomes(cache.data.incomes.map((income: any) => ({
+      ...income,
+      amount: Number(income.amount),
+      amount_history: Array.isArray(income.amount_history) ? income.amount_history : [],
+    })));
+    setGoals(cache.data.goals.map(normalizeGoalRow));
+    setExtraPayments(cache.data.extraPayments.map(normalizeExtraPaymentRow).filter(isValidExtraPaymentPlan));
+    setCategories(fallbackCategoryList(cache.data.categories));
+    setCategoriesReadyScopeKey(`${cache.userId}:${nextHousehold.householdId}`);
+    setAccounts(cachedAccounts);
+    accountsRef.current = cachedAccounts;
+    authoritativeAccountsByIdRef.current = new Map(
+      cachedAccounts.map(account => [account.id, account]),
+    );
+    const canonicalBankAccounts = canonicalConnectedAccounts(
+      normalizeConnectedBankRows(cache.data.connectedBankAccounts),
+    );
+    setConnectedBankAccounts(canonicalBankAccounts);
+    connectedBankAccountsRef.current = canonicalBankAccounts;
+    setTransactionAccountIdentities(cachedIdentities);
+    transactionAccountIdentitiesRef.current = cachedIdentities;
+    const cachedCloses = normalizeDailyCheckingCloseRows(cache.data.dailyCheckingCloses);
+    setDailyCheckingCloses(cachedCloses);
+    setDailyCheckingCloseLoad({
+      scopeKey: `${cache.userId}:${nextHousehold.householdId}`,
+      status: "ready",
+    });
+    setHouseholdTimeZone(cache.data.householdTimeZone || "UTC");
+    setDecisions(cache.data.decisions.map((decision: any) => ({
+      ...decision,
+      calendar_date: decision.calendar_date ?? undefined,
+      applied_change: decision.applied_change ?? undefined,
+    })));
+    setSettings(cachedSettings);
+    settingsRef.current = cachedSettings;
+    authoritativeSettingsByScopeRef.current.set(
+      `${cache.userId}:${nextHousehold.householdId}`,
+      cachedSettings,
+    );
+    setDataUpdatedAt(cache.dataUpdatedAt);
+    lastPlanRefreshAtRef.current = Date.parse(cache.dataUpdatedAt) || 0;
+    loaded.current = true;
+    setLoadError(null);
+    setLoading(false);
+    return true;
+  }, [replaceActiveHouseholdScope]);
+
   useEffect(() => {
     if (householdScopeRef.current?.householdId === activeHousehold?.householdId) {
       householdScopeRef.current = activeHousehold;
     }
   }, [activeHousehold]);
+
+  useEffect(() => {
+    if (
+      demoMode
+      || !userId
+      || !activeHousehold
+      || !dataUpdatedAt
+      || !loaded.current
+      || !categoriesReady
+    ) return;
+    if (planCacheWriteTimerRef.current) clearTimeout(planCacheWriteTimerRef.current);
+    const cache: BudgetPlanCacheRecord = {
+      version: 1,
+      userId,
+      household: activeHousehold,
+      households,
+      savedAt: new Date().toISOString(),
+      dataUpdatedAt,
+      data: {
+        bills,
+        overrides,
+        billDateMoves,
+        transactions,
+        deletedTransactions,
+        pendingBankTransactions,
+        pendingPlanMatches,
+        incomes,
+        goals,
+        extraPayments,
+        categories,
+        accounts,
+        connectedBankAccounts,
+        dailyCheckingCloses,
+        householdTimeZone,
+        transactionAccountIdentities,
+        decisions,
+        settings: settings as unknown as Record<string, unknown>,
+      },
+    };
+    planCacheWriteTimerRef.current = setTimeout(() => {
+      planCacheWriteTimerRef.current = null;
+      void writeBudgetPlanCache(cache).then(written => {
+        if (!written) console.warn("Verified plan cache could not be updated.");
+      });
+    }, 250);
+    return () => {
+      if (planCacheWriteTimerRef.current) {
+        clearTimeout(planCacheWriteTimerRef.current);
+        planCacheWriteTimerRef.current = null;
+      }
+    };
+  }, [
+    accounts,
+    activeHousehold,
+    billDateMoves,
+    bills,
+    categories,
+    categoriesReady,
+    connectedBankAccounts,
+    dailyCheckingCloses,
+    dataUpdatedAt,
+    decisions,
+    deletedTransactions,
+    demoMode,
+    extraPayments,
+    goals,
+    householdTimeZone,
+    households,
+    incomes,
+    overrides,
+    pendingBankTransactions,
+    pendingPlanMatches,
+    settings,
+    transactionAccountIdentities,
+    transactions,
+    userId,
+  ]);
 
   const assertCanEditHousehold = useCallback((action = "change this household plan") => {
     if (!canEditHouseholdPlan(householdScopeRef.current?.role)) {
@@ -1625,6 +1807,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     // completed successfully. When the authoritative selection changes, old
     // financial arrays are cleared in the same render before the new label can
     // be exposed; the new scope stays loading until its core query commits.
+    householdsRef.current = memberships;
     setHouseholds(memberships);
     if (!next) {
       replaceActiveHouseholdScope(null);
@@ -1814,6 +1997,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   useLayoutEffect(() => {
     if (financialDataUserIdRef.current === userId) return;
     const priorUserId = financialDataUserIdRef.current;
+    if (priorUserId) void clearBudgetPlanCachesForUser(priorUserId);
     financialDataUserIdRef.current = userId;
     householdResolutionRequestRef.current += 1;
     loadRequestRef.current += 1;
@@ -2084,7 +2268,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
       return;
     }
-    const backgroundRefresh = backgroundRefreshPendingRef.current && loaded.current;
+    let backgroundRefresh = backgroundRefreshPendingRef.current && loaded.current;
     if (!backgroundRefresh) {
       backgroundRefreshPendingRef.current = false;
       loaded.current = false;
@@ -2099,12 +2283,46 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const blockingUserTransition = userTransitionPendingRef.current;
       try {
         const uid = userId;
-        const scope = await withLoadTimeout(
+        const cachedPlanRequest = readStoredActiveHouseholdId(uid).then(storedHouseholdId => (
+          storedHouseholdId
+            ? readBudgetPlanCache(uid, storedHouseholdId)
+            : null
+        ));
+        const scopeRequest = withLoadTimeout(
           resolveHouseholds(uid, false),
           8000,
           "Load households",
+        ).then(
+          value => ({ ok: true as const, value }),
+          error => ({ ok: false as const, error }),
         );
+        const cachedPlan = await cachedPlanRequest;
+        let cacheHydrated = false;
+        if (
+          requestId === loadRequestRef.current
+          && cachedPlan
+          && budgetPlanCacheCanHydrateBeforeMembership(cachedPlan)
+        ) {
+          cacheHydrated = hydrateBudgetPlanCache(cachedPlan);
+          if (cacheHydrated) backgroundRefresh = true;
+        }
+        const resolvedScope = await scopeRequest;
+        if (!resolvedScope.ok) throw resolvedScope.error;
+        const scope = resolvedScope.value;
         if (requestId !== loadRequestRef.current) return;
+        if (
+          !cacheHydrated
+          && cachedPlan
+          && scope
+          && cachedPlan.household.householdId === scope.householdId
+        ) {
+          cacheHydrated = hydrateBudgetPlanCache(
+            cachedPlan,
+            scope,
+            householdsRef.current,
+          );
+          if (cacheHydrated) backgroundRefresh = true;
+        }
         resolvedScopeId = scope?.householdId ?? null;
         blockingScopeTransition = Boolean(
           resolvedScopeId
@@ -2445,7 +2663,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }).catch(() => undefined);
       }
     })();
-  }, [userId, demoMode, loadRetryNonce, resolveHouseholds, applyHouseholdSelect, loadAllTransactions, refreshDailyCheckingCloses, refreshHouseholdDetails, loadScopedSettings, queryClient, replaceActiveHouseholdScope, settleScopeCoreLoad]);
+  }, [userId, demoMode, loadRetryNonce, resolveHouseholds, hydrateBudgetPlanCache, applyHouseholdSelect, loadAllTransactions, refreshDailyCheckingCloses, refreshHouseholdDetails, loadScopedSettings, queryClient, replaceActiveHouseholdScope, settleScopeCoreLoad]);
 
   const loadBankData = useCallback(async () => {
     if (!user || demoMode) return;

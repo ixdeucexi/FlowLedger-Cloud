@@ -625,8 +625,9 @@ function TabContent() {
   );
 
   React.useEffect(() => {
+    if (!dataUpdatedAt) return;
     void syncAppBadge(notificationCount);
-  }, [notificationCount]);
+  }, [dataUpdatedAt, notificationCount]);
 
   React.useEffect(
     () => () => {

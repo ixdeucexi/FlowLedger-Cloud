@@ -34,6 +34,14 @@ test("primary tabs mount on first use, retain state, and detach when hidden", ()
   assert.doesNotMatch(tabLayout, /lazy: isAdd/);
 });
 
+test("the protected workspace cannot publish empty startup badge counts", () => {
+  const tabLayout = readFileSync("app/(tabs)/_layout.tsx", "utf8");
+  assert.match(
+    tabLayout,
+    /React\.useEffect\(\(\) => \{\s*if \(!dataUpdatedAt\) return;\s*void syncAppBadge\(notificationCount\)/,
+  );
+});
+
 test("native tab bar reserves the real Android navigation inset", () => {
   assert.deepEqual(nativeTabBarMetrics(0), { height: 86, paddingBottom: 14 });
   assert.deepEqual(nativeTabBarMetrics(24), { height: 96, paddingBottom: 24 });

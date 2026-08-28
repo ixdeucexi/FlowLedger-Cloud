@@ -13,6 +13,7 @@ import { detachPushNotifications } from "@/lib/pushNotifications";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 import { planSimulationStoragePrefix } from "@/lib/planSimulator";
 import { clearLearningTourForAccountChange } from "@/lib/learningTour";
+import { clearBudgetPlanCachesForUser } from "@/lib/budgetPlanCache";
 import { supabase } from "@/lib/supabase";
 import { completeSupabaseAuthUrl, nativeAuthRedirectUri, nativePasswordResetRedirectUri } from "@/lib/authLinks";
 import { deactivateBillingIdentity } from "@/lib/nativeBilling";
@@ -421,6 +422,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await clearLastAppRoute(signedOutUserId);
     await clearLearningTourForAccountChange();
     if (signedOutUserId) {
+      await clearBudgetPlanCachesForUser(signedOutUserId);
       const prefix = planSimulationStoragePrefix(signedOutUserId);
       const simulatorDraftKeys = await AsyncStorage.getAllKeys()
         .then(keys => keys.filter(key => key.startsWith(prefix)))

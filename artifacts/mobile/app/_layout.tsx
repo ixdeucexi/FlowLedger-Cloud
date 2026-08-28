@@ -487,7 +487,7 @@ function RootNavigator({
     && verifiedPrivacyScopeKey !== currentPrivacyScopeKey,
   );
   const navigatorPrivacyKey = session
-    ? verifiedPrivacyScopeKey ?? `pending:${session.user.id}`
+    ? currentPrivacyScopeKey ?? `pending:${session.user.id}`
     : "signed-out";
   const readyToReveal =
     navigationReady && (!effectivePrivacyShielded || !!privacyRefreshError);

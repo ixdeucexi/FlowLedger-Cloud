@@ -57,7 +57,7 @@ test("startup stays constant until the destination screen is ready", () => {
   assert.doesNotMatch(index, /Animated|timing|opacity/);
 });
 
-test("cold-start loading states share the FlowLedger loading experience without covering restored tabs", () => {
+test("cold-start uses a verified saved plan instead of a navigation-only loading shell", () => {
   const tabs = readFileSync("app/(tabs)/_layout.tsx", "utf8");
   const setup = readFileSync("app/setup.tsx", "utf8");
   const simulator = readFileSync("app/plan-simulator.tsx", "utf8");
@@ -65,8 +65,9 @@ test("cold-start loading states share the FlowLedger loading experience without 
 
   assert.doesNotMatch(tabs, /PlanRestoreOverlay|phase="plan"/);
   assert.match(tabs, /!dataUpdatedAt \? \(/);
-  assert.match(tabs, /accessibilityLabel="FlowLedger is opening your plan"/);
-  assert.match(tabs, /<AppLoadingIntro phase="workspace"/);
+  assert.match(tabs, /<AppLoadingIntro[\s\S]+phase="workspace"/);
+  assert.doesNotMatch(tabs, /WorkspaceLoadingMobileNavigation/);
+  assert.doesNotMatch(tabs, /You can choose another page while it loads/);
   assert.match(tabs, /Welcome back/);
   assert.match(tabs, /We’re getting your plan ready/);
   assert.doesNotMatch(tabs, /Couldn’t load your plan|\{message\}/);
@@ -140,6 +141,7 @@ test("startup plan loading fails closed instead of hanging on household discover
   assert.match(layout, /restorableRouteCanApply\(\{/);
   assert.match(layout, /currentScopeKey: routeScopeKeyRef\.current/);
   assert.match(layout, /currentEntry: routePrefetchRef\.current/);
+  assert.match(layout, /if \(loading \|\| \(session && budgetLoading\)\) return/);
   assert.match(layout, /if \(!requestedSetup && settings\.onboarding_completed\)/);
   assert.match(budgetContext, /if \(ownsLegacyPersonalRows\(priorScope\)\) return/);
 });
@@ -167,6 +169,7 @@ test("scope and user transitions stay shielded, retryable, and remount route-loc
     /accessibilityElementsHidden=\{\s*biometricLocked \|\| effectivePrivacyShielded \|\| !readyToReveal/,
   );
   assert.match(layout, /key=\{navigatorPrivacyKey\}/);
+  assert.match(layout, /currentPrivacyScopeKey \?\? `pending:\$\{session\.user\.id\}`/);
   assert.match(layout, /Your previous plan remains hidden\./);
   assert.match(layout, /onPress=\{retryBudgetLoad\}/);
   assert.match(layout, /const webWasHiddenRef = useRef\([\s\S]+document\.visibilityState === "hidden"/);
