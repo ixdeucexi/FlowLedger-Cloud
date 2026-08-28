@@ -173,6 +173,24 @@ export interface DashboardFinancialModelInput {
   }>;
 }
 
+/**
+ * Dashboard decisions only need enough dated forecast truth to reach the next
+ * paycheck or, when no paycheck is scheduled, the next 30 days. Three calendar
+ * months cover that 30-day window even when today is the last day of February.
+ *
+ * Keep this bounded: using the user's full Forecast horizon here makes the
+ * first Dashboard render synchronously rebuild as many as 24 monthly ledgers.
+ * The full horizon still belongs to Forecast and the desktop outlook.
+ */
+export const DASHBOARD_DECISION_FORECAST_MONTHS = 3;
+
+export function dashboardDecisionForecastMonthLimit(configuredHorizonMonths: number): number {
+  return Math.min(
+    DASHBOARD_DECISION_FORECAST_MONTHS,
+    Math.max(2, configuredHorizonMonths),
+  );
+}
+
 function localDateLabel(date: string): string {
   const parsed = dateOnlyToLocalDate(date);
   if (!parsed) return date;
@@ -321,17 +339,28 @@ export function buildDashboardFinancialModel(input: DashboardFinancialModelInput
   );
 
   const decisionForecastDays: Array<{ date: string; balance: number; income: number }> = [];
-  for (let index = 0; index < Math.max(2, settings.forecast_horizon_months); index += 1) {
+  const decisionForecastMonthLimit = dashboardDecisionForecastMonthLimit(
+    settings.forecast_horizon_months,
+  );
+  for (let index = 0; index < decisionForecastMonthLimit; index += 1) {
     const month = (currentMonth + index) % 12;
     const year = selectedYear + Math.floor((currentMonth + index) / 12);
     const prefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+    const monthBalances = index === 0
+      ? currentMonthBalances
+      : getDailyBalances(month, year);
     decisionForecastDays.push(
-      ...getDailyBalances(month, year).map((day) => ({
+      ...monthBalances.map((day) => ({
         date: `${prefix}-${String(day.day).padStart(2, "0")}`,
         balance: day.balance,
         income: day.income,
       })),
     );
+    const availableDecisionDays = decisionForecastDays.filter((day) => day.date >= todayIso);
+    const reachedNextPaycheck = availableDecisionDays.some(
+      (day) => day.date > todayIso && day.income > 0.005,
+    );
+    if (reachedNextPaycheck || availableDecisionDays.length >= 30) break;
   }
   const futureForecastDays = decisionForecastDays.filter((day) => day.date >= todayIso);
   const nextPaycheck = futureForecastDays.find(

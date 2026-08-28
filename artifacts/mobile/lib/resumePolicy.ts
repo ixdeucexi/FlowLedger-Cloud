@@ -104,6 +104,25 @@ export function shouldReleaseBudgetLoading({
   return !backgroundRefresh;
 }
 
+export function shouldShowBudgetLoadError({
+  backgroundRefresh,
+  blockingScopeTransition,
+  blockingUserTransition,
+  usableCoreReady,
+}: {
+  backgroundRefresh: boolean;
+  blockingScopeTransition: boolean;
+  blockingUserTransition: boolean;
+  usableCoreReady: boolean;
+}) {
+  return (
+    !backgroundRefresh
+    || !usableCoreReady
+    || blockingScopeTransition
+    || blockingUserTransition
+  );
+}
+
 export function scopedRequestIsCurrent({
   requestId,
   currentRequestId,

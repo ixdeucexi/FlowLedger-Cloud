@@ -111,6 +111,7 @@
       id="flowledger-web-startup-cover"
       data-state="visible"
       data-reason="initial"
+      data-generation="0"
       role="progressbar"
       aria-label="Loading your FlowLedger plan"
     >
@@ -137,12 +138,20 @@
         if (!cover || !root) return;
 
         const arm = (reason) => {
+          const parsedGeneration = Number(cover.dataset.generation);
+          const generation = Number.isSafeInteger(parsedGeneration) && parsedGeneration >= 0
+            ? parsedGeneration + 1
+            : 1;
+          cover.dataset.generation = String(generation);
           cover.dataset.state = "visible";
           cover.dataset.reason = reason;
           cover.removeAttribute("aria-hidden");
           root.setAttribute("inert", "");
           root.setAttribute("aria-hidden", "true");
           document.documentElement.removeAttribute("data-flowledger-ready");
+          window.dispatchEvent(new CustomEvent("flowledger:startup-cover-armed", {
+            detail: { generation, reason },
+          }));
         };
 
         document.addEventListener("visibilitychange", () => {

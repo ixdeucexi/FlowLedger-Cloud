@@ -370,10 +370,14 @@ function MobileDashboardScreen() {
   const [yearNegSchedule, setYearNegSchedule] = useState<OutlookMonth[]>([]);
 
   useEffect(() => {
-    if (!isFocused) return;
+    // The full outlook is needed on wide desktop and when its mobile modal is
+    // explicitly open. Running it during every mobile Dashboard mount performed
+    // a second full-horizon projection that starved bottom-tab input for seconds.
+    if (!isFocused || (!isCommandWide && !negCalendarVisible)) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     let i = 0;
+    const nextSchedule: OutlookMonth[] = [];
     setYearNegSchedule([]);
 
     const calculateNextMonth = () => {
@@ -389,9 +393,13 @@ function MobileDashboardScreen() {
         firstNegDay: negEntry?.day ?? null,
         lowestBalance: lowest === Infinity ? 0 : lowest,
       };
-      setYearNegSchedule(previous => [...previous, next]);
+      nextSchedule.push(next);
       i += 1;
-      if (i < settings.forecast_horizon_months) timer = setTimeout(calculateNextMonth, 0);
+      if (i < settings.forecast_horizon_months) {
+        timer = setTimeout(calculateNextMonth, 0);
+        return;
+      }
+      if (!cancelled) setYearNegSchedule(nextSchedule);
     };
 
     timer = setTimeout(calculateNextMonth, 0);
@@ -399,7 +407,7 @@ function MobileDashboardScreen() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [getDailyBalances, currentMonth, selectedYear, isFocused, settings.forecast_horizon_months]);
+  }, [getDailyBalances, currentMonth, selectedYear, isCommandWide, isFocused, negCalendarVisible, settings.forecast_horizon_months]);
 
   // First month (across all 12) that needs added breathing room
   const firstYearNegEntry = yearNegSchedule.find(e => e.firstNegDay !== null) ?? null;
@@ -1954,7 +1962,17 @@ function MobileDashboardScreen() {
             </Text>
 
             <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
-              {yearNegSchedule.map(entry => {
+              {yearNegSchedule.length === 0 ? (
+                <View
+                  accessible
+                  accessibilityRole="progressbar"
+                  accessibilityLabel="Building the breathing room outlook"
+                  accessibilityLiveRegion="polite"
+                  style={styles.negSheetLoading}
+                >
+                  <Text style={[styles.negSheetRowDetail, { color: c.mutedForeground }]}>Building outlook...</Text>
+                </View>
+              ) : yearNegSchedule.map(entry => {
                 const isNeg = entry.firstNegDay !== null;
                 const isLow = !isNeg && entry.lowestBalance < settings.safety_floor;
                 const iconName = isNeg ? "trending-up" as const : isLow ? "target" as const : "check-circle" as const;
@@ -2218,6 +2236,7 @@ const styles = StyleSheet.create({
   negSheetHandle:      { width: 40, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 16 },
   negSheetTitle:       { fontSize: 20, fontFamily: "Inter_700Bold", marginBottom: 4 },
   negSheetSub:         { fontSize: 13, fontFamily: "Inter_400Regular", marginBottom: 16 },
+  negSheetLoading:     { minHeight: 160, alignItems: "center", justifyContent: "center", paddingVertical: 32 },
   negSheetRow:         { flexDirection: "row", alignItems: "center", gap: 12, padding: 14 },
   negSheetRowMonth:    { fontSize: 15, fontFamily: "Inter_600SemiBold", marginBottom: 2 },
   negSheetRowDetail:   { fontSize: 12, fontFamily: "Inter_400Regular" },

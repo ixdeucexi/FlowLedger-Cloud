@@ -92,7 +92,7 @@ test("Android channel precedes permission request and token rotation is observed
   assert.match(layout, /privacyRefreshGenerationRef/);
   assert.match(
     layout,
-    /generation !== privacyRefreshGenerationRef\.current \|\|\s*!isPrivacySurfaceActive\(\)/,
+    /startupVerificationCanCommit\(\s*generation,\s*privacyRefreshGenerationRef\.current,\s*isPrivacySurfaceActive\(\)/,
   );
   assert.match(layout, /if \(previous === "active"\) return/);
   assert.doesNotMatch(

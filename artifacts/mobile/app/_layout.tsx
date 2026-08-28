@@ -71,10 +71,18 @@ import { ownsLegacyPersonalRows } from "@/lib/householdDataScope";
 import { apiConfigurationError } from "@/lib/api";
 import { supabaseConfigurationError } from "@/lib/supabase";
 import {
+  armWebStartupCover,
+  currentWebStartupCoverGeneration,
   releaseWebStartupCover,
   shouldReleaseWebStartupCover,
+  startupVerificationCanCommit,
+  webStartupRouteIsProtected,
+  webStartupCoverReason,
+  WEB_STARTUP_COVER_ARMED_EVENT,
   WEB_WORKSPACE_READY_EVENT,
+  currentWebWorkspaceReadyGeneration,
   currentWebWorkspaceReadyScopeKey,
+  type WebStartupCoverArmedDetail,
   type WebWorkspaceReadyDetail,
 } from "@/lib/webStartupCover";
 
@@ -433,7 +441,17 @@ function RootNavigator({
   const [privacyRefreshRetry, setPrivacyRefreshRetry] = useState(0);
   const [verifiedPrivacyScopeKey, setVerifiedPrivacyScopeKey] = useState<string | null>(null);
   const [webWorkspaceReadyScopeKey, setWebWorkspaceReadyScopeKey] = useState<string | null>(
-    () => currentWebWorkspaceReadyScopeKey(),
+    () => currentWebWorkspaceReadyGeneration() === currentWebStartupCoverGeneration()
+      ? currentWebWorkspaceReadyScopeKey()
+      : null,
+  );
+  const [webWorkspaceReadyGeneration, setWebWorkspaceReadyGeneration] = useState<number | null>(
+    () => currentWebWorkspaceReadyGeneration() === currentWebStartupCoverGeneration()
+      ? currentWebWorkspaceReadyGeneration()
+      : null,
+  );
+  const [webStartupCoverGeneration, setWebStartupCoverGeneration] = useState(
+    () => currentWebStartupCoverGeneration(),
   );
   const [webRevealEpoch, setWebRevealEpoch] = useState(0);
   const privacyRefreshGenerationRef = useRef(0);
@@ -462,6 +480,7 @@ function RootNavigator({
   useLayoutEffect(() => {
     const nextUserId = session?.user.id ?? null;
     if (privacySessionUserIdRef.current === nextUserId) return;
+    if (Platform.OS === "web") armWebStartupCover("scope-change");
     privacySessionUserIdRef.current = nextUserId;
     privacyRefreshGenerationRef.current += 1;
     hasRevealedPlanRef.current = false;
@@ -476,11 +495,34 @@ function RootNavigator({
       const detail = (event as CustomEvent<WebWorkspaceReadyDetail>).detail;
       if (!detail?.scopeKey) return;
       setWebWorkspaceReadyScopeKey(currentWebWorkspaceReadyScopeKey());
+      setWebWorkspaceReadyGeneration(currentWebWorkspaceReadyGeneration());
+    };
+    const handleStartupCoverArmed = (event: Event) => {
+      const detail = (event as CustomEvent<WebStartupCoverArmedDetail>).detail;
+      setWebStartupCoverGeneration(
+        Number.isSafeInteger(detail?.generation)
+          ? detail.generation
+          : currentWebStartupCoverGeneration(),
+      );
+      setWebWorkspaceReadyScopeKey(null);
+      setWebWorkspaceReadyGeneration(null);
     };
     window.addEventListener(WEB_WORKSPACE_READY_EVENT, handleWorkspaceReadiness);
-    setWebWorkspaceReadyScopeKey(currentWebWorkspaceReadyScopeKey());
+    window.addEventListener(WEB_STARTUP_COVER_ARMED_EVENT, handleStartupCoverArmed);
+    const coverGeneration = currentWebStartupCoverGeneration();
+    const readinessGeneration = currentWebWorkspaceReadyGeneration();
+    setWebStartupCoverGeneration(coverGeneration);
+    setWebWorkspaceReadyScopeKey(
+      readinessGeneration === coverGeneration
+        ? currentWebWorkspaceReadyScopeKey()
+        : null,
+    );
+    setWebWorkspaceReadyGeneration(
+      readinessGeneration === coverGeneration ? readinessGeneration : null,
+    );
     return () => {
       window.removeEventListener(WEB_WORKSPACE_READY_EVENT, handleWorkspaceReadiness);
+      window.removeEventListener(WEB_STARTUP_COVER_ARMED_EVENT, handleStartupCoverArmed);
     };
   }, []);
   const coreReady =
@@ -503,6 +545,32 @@ function RootNavigator({
   const currentPrivacyScopeKey = session
     ? `${session.user.id}:${activeHousehold?.householdId ?? "personal"}`
     : null;
+  const protectedRoute = webStartupRouteIsProtected(firstRootSegment);
+  // Mounted-route protection deliberately does not depend on `session`.
+  // Supabase clears the session before AuthObserver's /login replace commits.
+  const workspaceRoute = firstRootSegment === "(tabs)";
+
+  // The static document cover is the only web loader. Re-arm it in a layout
+  // effect before a protected route can paint a different or unready scope.
+  useLayoutEffect(() => {
+    if (
+      Platform.OS !== "web"
+      || !workspaceRoute
+      || !currentPrivacyScopeKey
+      || (
+        webWorkspaceReadyScopeKey === currentPrivacyScopeKey
+        && webWorkspaceReadyGeneration === webStartupCoverGeneration
+      )
+    ) return;
+    if (webStartupCoverReason() !== null) return;
+    armWebStartupCover("scope-change");
+  }, [
+    currentPrivacyScopeKey,
+    webStartupCoverGeneration,
+    webWorkspaceReadyGeneration,
+    webWorkspaceReadyScopeKey,
+    workspaceRoute,
+  ]);
   // Child routes retain local state across provider changes. A previously
   // revealed scope must stay covered synchronously until the replacement
   // scope's core has committed and passive child cleanup has run.
@@ -535,19 +603,19 @@ function RootNavigator({
       "Household access check",
     )
       .then(() => {
-        if (
-          generation !== privacyRefreshGenerationRef.current ||
-          !isPrivacySurfaceActive()
-        )
-          return;
+        if (!startupVerificationCanCommit(
+          generation,
+          privacyRefreshGenerationRef.current,
+          isPrivacySurfaceActive(),
+        )) return;
         setPrivacyShielded(false);
       })
       .catch(() => {
-        if (
-          generation !== privacyRefreshGenerationRef.current ||
-          !isPrivacySurfaceActive()
-        )
-          return;
+        if (!startupVerificationCanCommit(
+          generation,
+          privacyRefreshGenerationRef.current,
+          isPrivacySurfaceActive(),
+        )) return;
         if (blocking) {
           setPrivacyShielded(true);
           setPrivacyRefreshError(
@@ -648,6 +716,17 @@ function RootNavigator({
       webWasHiddenRef.current = false;
       // Re-run the root-only cover decision even on signed-out/public routes,
       // where no privacy or budget state necessarily changes after pageshow.
+      const coverGeneration = currentWebStartupCoverGeneration();
+      const readinessGeneration = currentWebWorkspaceReadyGeneration();
+      setWebStartupCoverGeneration(coverGeneration);
+      setWebWorkspaceReadyScopeKey(
+        readinessGeneration === coverGeneration
+          ? currentWebWorkspaceReadyScopeKey()
+          : null,
+      );
+      setWebWorkspaceReadyGeneration(
+        readinessGeneration === coverGeneration ? readinessGeneration : null,
+      );
       setWebRevealEpoch(value => value + 1);
       const scope = privacyScopeRef.current;
       if (!scope.userId || !hasRevealedPlanRef.current) return;
@@ -700,17 +779,19 @@ function RootNavigator({
     );
     if (Platform.OS !== "web" || typeof document === "undefined") return;
 
-    const workspaceRoute = Boolean(session && firstRootSegment === "(tabs)");
     if (shouldReleaseWebStartupCover({
       visible: document.visibilityState === "visible",
       readyToReveal,
       terminalErrorReady,
+      protectedRoute,
       workspaceRoute,
       currentScopeKey: currentPrivacyScopeKey,
       verifiedScopeKey: verifiedPrivacyScopeKey,
       workspaceReadyScopeKey: webWorkspaceReadyScopeKey,
+      coverGeneration: webStartupCoverGeneration,
+      workspaceReadyGeneration: webWorkspaceReadyGeneration,
     })) {
-      releaseWebStartupCover();
+      releaseWebStartupCover(webStartupCoverGeneration);
     }
   }, [
     budgetLoadError,
@@ -718,10 +799,13 @@ function RootNavigator({
     firstRootSegment,
     navigationReady,
     privacyRefreshError,
+    protectedRoute,
     readyToReveal,
     session?.user.id,
     verifiedPrivacyScopeKey,
     webRevealEpoch,
+    webStartupCoverGeneration,
+    webWorkspaceReadyGeneration,
     webWorkspaceReadyScopeKey,
   ]);
 

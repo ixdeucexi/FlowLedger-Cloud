@@ -63,22 +63,32 @@ test("startup stays constant until the destination screen is ready", () => {
   assert.ok(coverPosition > 0 && coverPosition < rootPosition);
   assert.match(webDocument, /#flowledger-web-startup-cover \{[\s\S]+position: fixed;[\s\S]+inset: 0;[\s\S]+z-index: 2147483647;[\s\S]+background: #050816/);
   assert.match(webDocument, /data-state="visible"[\s\S]+data-reason="initial"/);
+  assert.match(webDocument, /data-generation="0"/);
   assert.match(webDocument, /role="progressbar"[\s\S]+aria-label="Loading your FlowLedger plan"/);
   assert.match(webDocument, /Loading Plan\.\.\./);
   assert.match(webDocument, /<div id="root" inert aria-hidden="true"><\/div>/);
   assert.match(webDocument, /visibilitychange[\s\S]+document\.visibilityState === "hidden"[\s\S]+arm\("resume"\)/);
   assert.match(webDocument, /pagehide[\s\S]+arm\("resume"\)/);
+  assert.match(webDocument, /flowledger:startup-cover-armed/);
   assert.doesNotMatch(webDocument, /pageshow[\s\S]+data\.state\s*=\s*"hidden"/);
   assert.match(webDocument, /<noscript>[\s\S]+#flowledger-web-startup-cover \{ display: none; \}/);
   assert.match(webCover, /root\.removeAttribute\("inert"\)/);
   assert.match(webCover, /cover\.dataset\.state = "hidden"/);
   assert.doesNotMatch(webCover, /\.remove\(\)/);
   assert.match(webCover, /WEB_WORKSPACE_READY_EVENT = "flowledger:workspace-ready"/);
-  assert.match(webCover, /currentWorkspaceReadyScopeKey = scopeKey/);
+  assert.match(webCover, /currentWorkspaceReadiness = \{ scopeKey, generation \}/);
   assert.match(webCover, /workspaceReadyScopeKey === currentScopeKey/);
-  assert.match(webCover, /verifiedScopeKey === currentScopeKey/);
+  assert.match(webCover, /verifiedScopeKey !== currentScopeKey/);
+  assert.match(webCover, /workspaceReadyGeneration === coverGeneration/);
+  assert.match(webCover, /expectedGeneration === currentGeneration/);
+  assert.match(webCover, /if \(!currentScopeKey\) return false/);
   assert.match(layout, /visible: document\.visibilityState === "visible"/);
   assert.match(layout, /shouldReleaseWebStartupCover\(/);
+  assert.match(layout, /const protectedRoute = webStartupRouteIsProtected\(firstRootSegment\)/);
+  assert.match(layout, /const workspaceRoute = firstRootSegment === "\(tabs\)"/);
+  assert.doesNotMatch(layout, /workspaceRoute = Boolean\(session/);
+  assert.match(layout, /releaseWebStartupCover\(webStartupCoverGeneration\)/);
+  assert.match(layout, /armWebStartupCover\("scope-change"\)/);
   assert.match(layout, /<ErrorBoundary onError=\{\(\) => releaseWebStartupCover\(\)\}>/);
 });
 
@@ -89,12 +99,16 @@ test("cold-start uses a verified saved plan instead of a navigation-only loading
   const callback = readFileSync("app/auth/callback.tsx", "utf8");
 
   assert.doesNotMatch(tabs, /PlanRestoreOverlay|phase="plan"/);
-  assert.match(tabs, /!dataUpdatedAt \|\| !startupCoreReady \|\| !workspaceMounted/);
+  assert.match(tabs, /dataUpdatedAt && startupCoreReady && workspaceMounted/);
   assert.match(tabs, /requestAnimationFrame\(\(\) => \{[\s\S]+requestAnimationFrame/);
   assert.match(tabs, /onLayout=\{\(\) => setWorkspaceMounted\(true\)\}/);
-  assert.match(tabs, /!workspaceReadyToReveal \? \(/);
-  assert.match(tabs, /workspaceLoadingOverlay/);
-  assert.match(tabs, /publishWebWorkspaceReadiness\(workspaceScopeKey, workspaceReadyToReveal\)/);
+  assert.match(tabs, /nextWebWorkspaceRevealedScopeKey\(/);
+  assert.doesNotMatch(tabs, /setWorkspaceReadyToReveal\(false\)/);
+  assert.doesNotMatch(tabs, /workspaceLoadingOverlay/);
+  assert.match(tabs, /Platform\.OS !== "web" && !workspaceReadyToReveal/);
+  assert.match(tabs, /nativeWorkspaceLoadingOverlay/);
+  assert.match(tabs, /publishWebWorkspaceReadiness\([\s\S]+webStartupCoverGeneration/);
+  assert.match(tabs, /WEB_STARTUP_COVER_ARMED_EVENT/);
   assert.doesNotMatch(tabs, /releaseWebStartupCover/);
   assert.match(tabs, /<AppLoadingIntro[\s\S]+phase="workspace"/);
   assert.doesNotMatch(tabs, /WorkspaceLoadingMobileNavigation/);
@@ -105,6 +119,21 @@ test("cold-start uses a verified saved plan instead of a navigation-only loading
   assert.match(setup, /<AppLoadingIntro phase="setup"/);
   assert.match(simulator, /<AppLoadingIntro phase="simulator"/);
   assert.match(callback, /<AppLoadingIntro phase="privacy"/);
+});
+
+test("the revealed web workspace cannot mount a second touch-blocking loader", () => {
+  const tabs = readFileSync("app/(tabs)/_layout.tsx", "utf8");
+  assert.match(tabs, /Platform\.OS !== "web" && !workspaceReadyToReveal/);
+  assert.doesNotMatch(tabs, /\) : !workspaceReadyToReveal \? \(/);
+  assert.doesNotMatch(tabs, /workspaceLoadingOverlay/);
+  assert.match(
+    tabs,
+    /revealedWorkspaceScopeKey === workspaceScopeKey/,
+  );
+  assert.match(
+    tabs,
+    /nextWebWorkspaceRevealedScopeKey\(\{[\s\S]+readinessSatisfied: false/,
+  );
 });
 
 test("startup plan loading fails closed instead of hanging on household discovery", () => {
@@ -120,13 +149,22 @@ test("startup plan loading fails closed instead of hanging on household discover
   assert.match(budgetContext, /const startupCoreReady = demoMode \|\| Boolean\(/);
   assert.match(
     budgetContext,
-    /hydrateBudgetPlanCache[\s\S]+setStartupCoreReadyScopeKey\(`\$\{cache\.userId\}:\$\{nextHousehold\.householdId\}`\)/,
+    /hydrateBudgetPlanCache[\s\S]+updateStartupCoreReadyScopeKey\(`\$\{cache\.userId\}:\$\{nextHousehold\.householdId\}`\)/,
   );
   assert.match(
     budgetContext,
-    /setStartupCoreReadyScopeKey\([\s\S]+`\$\{uid\}:\$\{scope\.householdId\}`/,
+    /updateStartupCoreReadyScopeKey\([\s\S]+`\$\{uid\}:\$\{scope\.householdId\}`/,
   );
-  assert.match(budgetContext, /clearScopedFinancialData[\s\S]+setStartupCoreReadyScopeKey\(null\)/);
+  assert.match(budgetContext, /clearScopedFinancialData[\s\S]+updateStartupCoreReadyScopeKey\(null\)/);
+  assert.match(
+    budgetContext,
+    /startupCoreReadyScopeKeyRef\.current = scopeKey;[\s\S]+setStartupCoreReadyScopeKey\(scopeKey\)/,
+  );
+  assert.match(
+    budgetContext,
+    /const committedHouseholdId = householdScopeRef\.current\?\.householdId \?\? null;[\s\S]+householdResolutionChangesCommittedScope\(\s*committedHouseholdId,\s*nextHouseholdId/,
+  );
+  assert.match(budgetContext, /shouldShowBudgetLoadError\(\{/);
   assert.match(
     budgetContext,
     /withLoadTimeout\(\s*verifyCurrentHouseholdMembership[\s\S]*?8000/,

@@ -12,3 +12,16 @@ export type HouseholdDataScope = {
 export function ownsLegacyPersonalRows(scope: HouseholdDataScope | null | undefined) {
   return scope?.isPersonal === true && scope.role === "owner";
 }
+
+/**
+ * Decide against the scope that is committed when an asynchronous household
+ * discovery finishes. A cache may commit the same household while discovery
+ * is in flight, so comparing with a pre-request snapshot creates a false
+ * transition and clears the plan that is already ready to reveal.
+ */
+export function householdResolutionChangesCommittedScope(
+  committedHouseholdId: string | null,
+  resolvedHouseholdId: string | null,
+): boolean {
+  return committedHouseholdId !== resolvedHouseholdId;
+}

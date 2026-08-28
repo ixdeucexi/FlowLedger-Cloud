@@ -64,7 +64,11 @@ import { MOBILE_RIBBON_ITEMS } from "@/lib/mobileRibbon";
 import * as Haptics from "@/lib/haptics";
 import { isStoreCaptureMode } from "@/lib/demoMode";
 import {
+  currentWebStartupCoverGeneration,
+  nextWebWorkspaceRevealedScopeKey,
   publishWebWorkspaceReadiness,
+  WEB_STARTUP_COVER_ARMED_EVENT,
+  type WebStartupCoverArmedDetail,
 } from "@/lib/webStartupCover";
 
 function todayIsoDate() {
@@ -630,24 +634,63 @@ function TabContent() {
     newFeedbackCount,
   );
   const [workspaceMounted, setWorkspaceMounted] = React.useState(false);
-  const [workspaceReadyToReveal, setWorkspaceReadyToReveal] = React.useState(false);
+  const [revealedWorkspaceScopeKey, setRevealedWorkspaceScopeKey] =
+    React.useState<string | null>(null);
+  const [webStartupCoverGeneration, setWebStartupCoverGeneration] =
+    React.useState(() => currentWebStartupCoverGeneration());
   const workspaceScopeKey = user
     ? `${user.id}:${activeHousehold?.householdId ?? "personal"}`
     : null;
+  const workspaceReadyToReveal = Boolean(
+    workspaceScopeKey && revealedWorkspaceScopeKey === workspaceScopeKey,
+  );
 
   React.useEffect(() => {
-    if (!dataUpdatedAt || !startupCoreReady || !workspaceMounted) {
-      setWorkspaceReadyToReveal(false);
+    if (Platform.OS !== "web" || typeof window === "undefined") return;
+    const handleStartupCoverArmed = (event: Event) => {
+      const detail = (event as CustomEvent<WebStartupCoverArmedDetail>).detail;
+      setWebStartupCoverGeneration(
+        Number.isSafeInteger(detail?.generation)
+          ? detail.generation
+          : currentWebStartupCoverGeneration(),
+      );
+    };
+    window.addEventListener(WEB_STARTUP_COVER_ARMED_EVENT, handleStartupCoverArmed);
+    // Close the layout-effect-before-passive-listener race on initial mount.
+    setWebStartupCoverGeneration(currentWebStartupCoverGeneration());
+    return () => {
+      window.removeEventListener(WEB_STARTUP_COVER_ARMED_EVENT, handleStartupCoverArmed);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    const readinessSatisfied = Boolean(
+      dataUpdatedAt && startupCoreReady && workspaceMounted,
+    );
+    if (!readinessSatisfied) {
+      setRevealedWorkspaceScopeKey((current) =>
+        nextWebWorkspaceRevealedScopeKey({
+          revealedScopeKey: current,
+          currentScopeKey: workspaceScopeKey,
+          readinessSatisfied: false,
+        }),
+      );
       return;
     }
 
-    // Keep the branded loader over the live, already-mounted destination until
-    // the browser/native renderer has completed two frames. The page can only
-    // request reveal after an exact-scope cached or live core has committed.
+    // The document cover remains the only web loader until the exact-scope
+    // usable core and mounted destination have completed two frames. After reveal,
+    // same-scope background refresh state is deliberately monotonic.
     let secondFrame = 0;
     const firstFrame = requestAnimationFrame(() => {
       secondFrame = requestAnimationFrame(() => {
-        setWorkspaceReadyToReveal(true);
+        setRevealedWorkspaceScopeKey((current) =>
+          nextWebWorkspaceRevealedScopeKey({
+            revealedScopeKey: current,
+            currentScopeKey: workspaceScopeKey,
+            readinessSatisfied: true,
+          }),
+        );
       });
     });
 
@@ -655,15 +698,23 @@ function TabContent() {
       cancelAnimationFrame(firstFrame);
       if (secondFrame) cancelAnimationFrame(secondFrame);
     };
-  }, [dataUpdatedAt, startupCoreReady, workspaceMounted]);
+  }, [dataUpdatedAt, startupCoreReady, workspaceMounted, workspaceScopeKey]);
 
   React.useEffect(() => {
     if (Platform.OS !== "web" || !workspaceScopeKey) return;
-    publishWebWorkspaceReadiness(workspaceScopeKey, workspaceReadyToReveal);
+    publishWebWorkspaceReadiness(
+      workspaceScopeKey,
+      workspaceReadyToReveal,
+      webStartupCoverGeneration,
+    );
     return () => {
-      publishWebWorkspaceReadiness(workspaceScopeKey, false);
+      publishWebWorkspaceReadiness(
+        workspaceScopeKey,
+        false,
+        webStartupCoverGeneration,
+      );
     };
-  }, [workspaceReadyToReveal, workspaceScopeKey]);
+  }, [webStartupCoverGeneration, workspaceReadyToReveal, workspaceScopeKey]);
 
   React.useEffect(() => {
     if (!dataUpdatedAt) return;
@@ -892,11 +943,11 @@ function TabContent() {
         <GuidedTour />
         </View>
         {loadError ? (
-          <View style={styles.workspaceLoadingOverlay}>
+          <View style={styles.workspaceErrorOverlay}>
             <BudgetLoadDelayScreen onRetry={retryBudgetLoad} />
           </View>
-        ) : !workspaceReadyToReveal ? (
-          <View style={styles.workspaceLoadingOverlay}>
+        ) : Platform.OS !== "web" && !workspaceReadyToReveal ? (
+          <View style={styles.nativeWorkspaceLoadingOverlay}>
             <AppLoadingIntro
               phase="workspace"
               accessibilityLabel="FlowLedger is opening your plan"
@@ -946,7 +997,11 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  workspaceLoadingOverlay: {
+  workspaceErrorOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1000,
+  },
+  nativeWorkspaceLoadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 1000,
   },

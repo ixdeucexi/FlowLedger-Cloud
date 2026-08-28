@@ -100,8 +100,11 @@ import { normalizeBillImportance, type BillImportance } from "@/lib/billImportan
 import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
 import { buildTransactionLedger, remainingPlannedAmount, selectFlowLedgerTransactions } from "@/lib/ledgerEngine";
 import { debtSourceCommitmentsForDebts, type PendingPlanMatch } from "@/lib/pendingPlanMatches";
-import { householdResolutionIsCurrent, loadResolvedHouseholdSelection, PWA_RESUME_STALE_MS, scopedRequestIsCurrent, shouldRefreshPlanOnResume, shouldReleaseBudgetLoading } from "@/lib/resumePolicy";
-import { ownsLegacyPersonalRows } from "@/lib/householdDataScope";
+import { householdResolutionIsCurrent, loadResolvedHouseholdSelection, PWA_RESUME_STALE_MS, scopedRequestIsCurrent, shouldRefreshPlanOnResume, shouldReleaseBudgetLoading, shouldShowBudgetLoadError } from "@/lib/resumePolicy";
+import {
+  householdResolutionChangesCommittedScope,
+  ownsLegacyPersonalRows,
+} from "@/lib/householdDataScope";
 import { dateIdKeysetFilter, loadAllDateIdKeysetRows } from "@/lib/pagedQuery";
 import { debtSyncRefreshPlan, replaceRowsById, rowsExactlyMatchRequestedIds } from "@/lib/debtSyncResult";
 import { goalAffordabilityFromProjectedBalance } from "@/lib/goalAffordability";
@@ -1258,6 +1261,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const postCoreSecondaryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const postCoreDebtTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const planCacheWriteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startupCoreReadyScopeKeyRef = useRef<string | null>(null);
   const scopeTransitionPendingRef = useRef<string | null>(null);
   const userTransitionPendingRef = useRef(false);
   const scopeCoreLoadWaitersRef = useRef(new Map<string, Set<{
@@ -1281,6 +1285,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (planCacheWriteTimerRef.current) clearTimeout(planCacheWriteTimerRef.current);
   }, []);
 
+  const updateStartupCoreReadyScopeKey = useCallback((scopeKey: string | null) => {
+    startupCoreReadyScopeKeyRef.current = scopeKey;
+    setStartupCoreReadyScopeKey(scopeKey);
+  }, []);
+
   const clearScopedFinancialData = useCallback(() => {
     if (postCoreSecondaryTimerRef.current) {
       clearTimeout(postCoreSecondaryTimerRef.current);
@@ -1294,7 +1303,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     householdActivityRequestRef.current += 1;
     setHouseholdDetailsReadyScopeKey(null);
     setCategoriesReadyScopeKey(null);
-    setStartupCoreReadyScopeKey(null);
+    updateStartupCoreReadyScopeKey(null);
     scopeCoreLoadWaitersRef.current.forEach(waiters => {
       waiters.forEach(waiter => waiter.reject(new Error("The active household changed.")));
     });
@@ -1328,7 +1337,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     settingsRef.current = DEFAULT_SETTINGS;
     authoritativeSettingsByScopeRef.current.clear();
     setDataUpdatedAt(null);
-  }, []);
+  }, [updateStartupCoreReadyScopeKey]);
 
   const resetSaveLifecycle = useCallback(() => {
     saveLifecycleGenerationRef.current += 1;
@@ -1469,14 +1478,17 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       `${cache.userId}:${nextHousehold.householdId}`,
       cachedSettings,
     );
-    setStartupCoreReadyScopeKey(`${cache.userId}:${nextHousehold.householdId}`);
+    // Exact-scope cache hydration is the fast/offline startup contract. The
+    // authoritative discovery guard prevents this same scope from being
+    // falsely cleared while its background refresh is still in flight.
+    updateStartupCoreReadyScopeKey(`${cache.userId}:${nextHousehold.householdId}`);
     setDataUpdatedAt(cache.dataUpdatedAt);
     lastPlanRefreshAtRef.current = Date.parse(cache.dataUpdatedAt) || 0;
     loaded.current = true;
     setLoadError(null);
     setLoading(false);
     return true;
-  }, [replaceActiveHouseholdScope]);
+  }, [replaceActiveHouseholdScope, updateStartupCoreReadyScopeKey]);
 
   useEffect(() => {
     if (householdScopeRef.current?.householdId === activeHousehold?.householdId) {
@@ -1779,7 +1791,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const resolveHouseholds = useCallback(async (uid: string, loadDetails = true) => {
     const resolutionRequestId = ++householdResolutionRequestRef.current;
-    const priorHouseholdId = householdScopeRef.current?.householdId ?? null;
     const resolution = await loadResolvedHouseholdSelection({
       loadHouseholds: () => loadHouseholdMemberships(uid),
       readStoredHouseholdId: () => readStoredActiveHouseholdId(uid),
@@ -1799,14 +1810,21 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const memberships = resolution.households;
     const next = resolution.activeHousehold;
     const nextHouseholdId = next?.householdId ?? null;
-    const scopeChanged = priorHouseholdId !== nextHouseholdId;
+    // Compare at commit time. The exact cached scope may have hydrated while
+    // household discovery was in flight; treating the pre-request null as the
+    // current scope clears readiness and creates a page -> loader flash.
+    const committedHouseholdId = householdScopeRef.current?.householdId ?? null;
+    const scopeChanged = householdResolutionChangesCommittedScope(
+      committedHouseholdId,
+      nextHouseholdId,
+    );
     if (scopeChanged) {
       bankRefreshRequestRef.current += 1;
       clearScopedFinancialData();
       setHouseholdMembers([]);
       setHouseholdActivity([]);
       loaded.current = false;
-      scopeTransitionPendingRef.current = priorHouseholdId && nextHouseholdId
+      scopeTransitionPendingRef.current = committedHouseholdId && nextHouseholdId
         ? nextHouseholdId
         : null;
       setLoading(nextHouseholdId !== null);
@@ -2268,7 +2286,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setDailyCheckingCloseLoad({ scopeKey: null, status: "loading" });
       setHouseholdDetailsReadyScopeKey(null);
       setCategoriesReadyScopeKey(null);
-      setStartupCoreReadyScopeKey(null);
+      updateStartupCoreReadyScopeKey(null);
       transactionAccountIdentitiesRef.current = [];
       setHouseholds([]); setHouseholdMembers([]); setHouseholdActivity([]); replaceActiveHouseholdScope(null);
       billDateMovesRef.current = [];
@@ -2490,7 +2508,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }
         const queryUpdatedAt = queryClient.getQueryState(coreQueryKey)?.dataUpdatedAt;
         setDataUpdatedAt(new Date(queryUpdatedAt || Date.now()).toISOString());
-        setStartupCoreReadyScopeKey(
+        updateStartupCoreReadyScopeKey(
           scope?.householdId ? `${uid}:${scope.householdId}` : null,
         );
         setLoadError(null);
@@ -2646,7 +2664,17 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           : new Error("FlowLedger could not load your plan.");
         if (requestId === loadRequestRef.current) {
           if (resolvedScopeId) settleScopeCoreLoad(resolvedScopeId, loadFailure);
-          if (!backgroundRefresh || blockingScopeTransition || blockingUserTransition) {
+          if (shouldShowBudgetLoadError({
+            backgroundRefresh,
+            blockingScopeTransition,
+            blockingUserTransition,
+            usableCoreReady: Boolean(
+              userId
+              && householdScopeRef.current?.householdId
+              && startupCoreReadyScopeKeyRef.current
+                === `${userId}:${householdScopeRef.current.householdId}`
+            ),
+          })) {
             setLoadError(loadFailure.message);
           }
         }
@@ -2675,7 +2703,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }).catch(() => undefined);
       }
     })();
-  }, [userId, demoMode, loadRetryNonce, resolveHouseholds, hydrateBudgetPlanCache, applyHouseholdSelect, loadAllTransactions, refreshDailyCheckingCloses, refreshHouseholdDetails, loadScopedSettings, queryClient, replaceActiveHouseholdScope, settleScopeCoreLoad]);
+  }, [userId, demoMode, loadRetryNonce, resolveHouseholds, hydrateBudgetPlanCache, applyHouseholdSelect, loadAllTransactions, refreshDailyCheckingCloses, refreshHouseholdDetails, loadScopedSettings, queryClient, replaceActiveHouseholdScope, settleScopeCoreLoad, updateStartupCoreReadyScopeKey]);
 
   const loadBankData = useCallback(async () => {
     if (!user || demoMode) return;

@@ -11,6 +11,7 @@ import {
   scopedRequestIsCurrent,
   shouldRefreshPlanOnResume,
   shouldReleaseBudgetLoading,
+  shouldShowBudgetLoadError,
 } from "./resumePolicy";
 
 const households = [
@@ -207,6 +208,33 @@ test("failed user or household transitions keep the privacy barrier until retry 
     blockingScopeTransition: false,
     blockingUserTransition: false,
     loadSucceeded: false,
+  }), true);
+});
+
+test("an exact warm cache remains usable when its background refresh is offline", () => {
+  assert.equal(shouldShowBudgetLoadError({
+    backgroundRefresh: true,
+    blockingScopeTransition: false,
+    blockingUserTransition: false,
+    usableCoreReady: true,
+  }), false);
+  assert.equal(shouldShowBudgetLoadError({
+    backgroundRefresh: true,
+    blockingScopeTransition: true,
+    blockingUserTransition: false,
+    usableCoreReady: true,
+  }), true);
+  assert.equal(shouldShowBudgetLoadError({
+    backgroundRefresh: false,
+    blockingScopeTransition: false,
+    blockingUserTransition: false,
+    usableCoreReady: false,
+  }), true);
+  assert.equal(shouldShowBudgetLoadError({
+    backgroundRefresh: true,
+    blockingScopeTransition: false,
+    blockingUserTransition: false,
+    usableCoreReady: false,
   }), true);
 });
 

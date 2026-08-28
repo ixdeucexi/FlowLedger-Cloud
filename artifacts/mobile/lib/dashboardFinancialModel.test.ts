@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  DASHBOARD_DECISION_FORECAST_MONTHS,
+  dashboardDecisionForecastMonthLimit,
   buildDashboardSavingsAccounts,
   buildDashboardFinancialModel,
   type DashboardAccount as Account,
@@ -238,6 +240,89 @@ test("builds the one financial model consumed by desktop and mobile dashboards",
   assert.equal(unavailableWithoutManualModel.pendingCheckingSummary, null);
   assert.equal(unavailableWithoutManualModel.checkingAccountBalance, null);
   assert.equal(unavailableWithoutManualModel.bankCurrentCheckingBalance, null);
+});
+
+test("bounds Dashboard render-time forecast work independently of the full Forecast horizon", () => {
+  let dailyBalanceCalls = 0;
+  const dailyBalancesForMonth = (month: number, year: number): DailyBalance[] => Array.from(
+    { length: new Date(year, month + 1, 0).getDate() },
+    (_, index) => ({
+      day: index + 1,
+      income: 0,
+      expense: 0,
+      bills: 0,
+      net: 0,
+      balance: 2_000,
+    }),
+  );
+  const januaryBalances = dailyBalancesForMonth(0, 2026);
+
+  const modelInput: Parameters<typeof buildDashboardFinancialModel>[0] = {
+    now: new Date(2026, 0, 31, 12),
+    selectedYear: 2026,
+    settings: { ...settings, forecast_horizon_months: 24 },
+    forecastConfidence: { level: "high", label: "High", reasons: [] },
+    accounts: [],
+    connectedBankAccounts: [],
+    pendingBankTransactions: [],
+    pendingPlanMatches: [],
+    categories: [],
+    categoryBudgets: {},
+    goals: [],
+    incomes: [income],
+    cashFlow: {
+      monthlyIncome: 3_000,
+      totalBillsDue: 0,
+      totalPaid: 0,
+      netTransactions: 0,
+      goalAllocations: 0,
+      remaining: 3_000,
+    },
+    currentMonthBalances: januaryBalances,
+    getMonthlyBills: () => [],
+    getMonthlyIncome: () => 3_000,
+    getTransactionsForMonth: () => [],
+    getDailyBalances: (month, year) => {
+      dailyBalanceCalls += 1;
+      return dailyBalancesForMonth(month, year);
+    },
+    getBillMonthlyTotal: () => 0,
+    getPaidAmount: () => 0,
+    getBillOccurrencesInMonth: () => [],
+  };
+  const model = buildDashboardFinancialModel(modelInput);
+
+  assert.equal(DASHBOARD_DECISION_FORECAST_MONTHS, 3);
+  assert.equal(dashboardDecisionForecastMonthLimit(24), 3);
+  assert.equal(dailyBalanceCalls, 2);
+  assert.ok(model.decisionForecastDays.length >= 30);
+  assert.ok(Number.isFinite(model.algorithmSuite.flowScore.score));
+
+  dailyBalanceCalls = 0;
+  buildDashboardFinancialModel({
+    ...modelInput,
+    settings: { ...settings, forecast_horizon_months: 1 },
+  });
+  assert.equal(dashboardDecisionForecastMonthLimit(1), 2);
+  assert.equal(dailyBalanceCalls, 1);
+});
+
+test("defers the full outlook until desktop or an explicit mobile modal", () => {
+  const mobileDashboard = readFileSync("app/(tabs)/index.tsx", "utf8");
+  const outlookEffect = mobileDashboard.slice(
+    mobileDashboard.indexOf("// ── 12-month negative schedule"),
+    mobileDashboard.indexOf("// First month (across all 12)"),
+  );
+
+  assert.match(outlookEffect, /if \(!isFocused \|\| \(!isCommandWide && !negCalendarVisible\)\) return;/);
+  assert.match(outlookEffect, /nextSchedule\.push\(next\)/);
+  assert.match(outlookEffect, /i < settings\.forecast_horizon_months/);
+  assert.match(outlookEffect, /setYearNegSchedule\(nextSchedule\)/);
+  assert.doesNotMatch(outlookEffect, /setYearNegSchedule\(previous =>/);
+
+  assert.match(mobileDashboard, /accessibilityRole="progressbar"/);
+  assert.match(mobileDashboard, /accessibilityLabel="Building the breathing room outlook"/);
+  assert.match(mobileDashboard, /Building outlook\.\.\./);
 });
 
 test("dashboard treats rollover as planned extra without raising the required or overdue amount", () => {
