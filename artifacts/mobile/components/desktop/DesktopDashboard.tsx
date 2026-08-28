@@ -24,6 +24,7 @@ import Svg, {
 import { AddBillModal } from "@/components/AddBillModal";
 import { AppText } from "@/components/AppText";
 import { DashboardCustomizer } from "@/components/DashboardCustomizer";
+import { DashboardSnapshotStage } from "@/components/DashboardSnapshotStage";
 import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import { DashboardUtilityWidgets } from "@/components/DashboardUtilityWidgets";
 import { DesktopAddMenu } from "@/components/desktop/DesktopAddMenu";
@@ -32,44 +33,21 @@ import { IncomeModal } from "@/components/IncomeModal";
 import { MonthlyDebtCheckInModal } from "@/components/MonthlyDebtCheckInModal";
 import { useAuth } from "@/context/AuthContext";
 import { useBudget, type Bill, type Goal, type IncomeItem } from "@/context/BudgetContext";
+import { useDashboardFinancialSnapshot } from "@/context/DashboardFinancialSnapshotContext";
 import { useDashboardLayoutPreferences } from "@/hooks/useDashboardLayoutPreferences";
 import { useSetupReadiness } from "@/hooks/useSetupReadiness";
-import { isActiveTransaction } from "@/lib/billMatching";
 import {
-  categoryBudgetStorageKey,
-  loadCategoryBudgets,
-  readCategoryBudgetCache,
-  subscribeCategoryBudgets,
-} from "@/lib/categoryBudgetStore";
-import { buildDashboardFinancialModel } from "@/lib/dashboardFinancialModel";
-import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
+  isDashboardFinancialSnapshotReadyForScope,
+  type DashboardFinancialSnapshot,
+} from "@/lib/dashboardFinancialSnapshot";
 import { desktopActivityDestination, isDesktopAddAction, type DesktopAddAction } from "@/lib/desktopActions";
 import { WIDE_DESKTOP_BREAKPOINT } from "@/lib/desktopExperience";
 import { transactionDebt } from "@/lib/transactionDebt";
-import { buildReviewQueue } from "@/lib/reviewCenter";
-import { buildTodaysDecisions } from "@/lib/todaysDecisions";
 import { buildFlowGuideRouteParams } from "@/lib/flowledgerGuide";
 import type { BillEditableBaseline, BillEditableField } from "@/lib/billEditPersistence";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 type Accent = "cyan" | "purple" | "green" | "amber" | "blue" | "neutral";
-
-type UpcomingBill = {
-  key: string;
-  id: string;
-  name: string;
-  category: string;
-  amount: number;
-  day: number;
-  month: number;
-  year: number;
-  isDebt: boolean;
-  frequency?: "monthly" | "quarterly" | "biweekly" | "weekly";
-  pending: boolean;
-  sourceId?: string;
-  kind?: "required" | "rollover" | "extra";
-  paidOff?: boolean;
-};
 
 const BRAND = {
   background: "#03040b",
@@ -488,36 +466,67 @@ function EmptyState({ icon, text }: { icon: FeatherName; text: string }) {
 }
 
 export function DesktopDashboard() {
+  const { user } = useAuth();
+  const { activeHousehold } = useBudget();
+  const {
+    acknowledgeDashboardSnapshotContentMounted,
+    dashboardFinancialSnapshot,
+    retryDashboardFinancialSnapshot,
+  } = useDashboardFinancialSnapshot();
+  const householdId = activeHousehold?.householdId ?? null;
+  const budgetId = activeHousehold?.budgetId ?? null;
+
+  if (isDashboardFinancialSnapshotReadyForScope(
+    dashboardFinancialSnapshot,
+    user?.id,
+    householdId,
+    budgetId,
+  )) {
+    return (
+      <DesktopDashboardContent
+        acknowledgeMounted={acknowledgeDashboardSnapshotContentMounted}
+        dashboardSnapshot={dashboardFinancialSnapshot.value}
+        snapshotKey={dashboardFinancialSnapshot.key}
+      />
+    );
+  }
+
+  const exactScopeError = dashboardFinancialSnapshot?.status === "error"
+    && dashboardFinancialSnapshot.identity.userId === user?.id
+    && dashboardFinancialSnapshot.identity.householdId === householdId
+    && dashboardFinancialSnapshot.identity.budgetId === budgetId;
+  return (
+    <DashboardSnapshotStage
+      acknowledgeMounted={exactScopeError
+        ? acknowledgeDashboardSnapshotContentMounted
+        : undefined}
+      failed={exactScopeError}
+      onRetry={exactScopeError ? retryDashboardFinancialSnapshot : undefined}
+      snapshotKey={exactScopeError ? dashboardFinancialSnapshot.key : undefined}
+    />
+  );
+}
+
+function DesktopDashboardContent({
+  acknowledgeMounted,
+  dashboardSnapshot,
+  snapshotKey,
+}: {
+  acknowledgeMounted: (snapshotKey: string) => () => void;
+  dashboardSnapshot: DashboardFinancialSnapshot;
+  snapshotKey: string;
+}) {
   const router = useRouter();
   const routeParams = useLocalSearchParams<{ action?: string }>();
   const { width } = useWindowDimensions();
   const { user } = useAuth();
   const {
-    accounts,
     addBill,
     addGoal,
     addIncome,
-    activeHousehold,
     bills,
-    categories,
-    connectedBankAccounts,
     forecastConfidence,
-    getBillMonthlyTotal,
-    getBillOccurrencesInMonth,
-    getDebtMonthSettlements,
-    getCashFlow,
-    getDailyBalances,
-    getRemainingDebtPlanForMonth,
-    getMonthlyBills,
-    getMonthlyIncome,
-    getPaidAmount,
-    getTransactionsForMonth,
-    goals,
     incomes,
-    pendingBankTransactions,
-    pendingPlanMatches,
-    transactions,
-    selectedYear,
     setDashboardFilter,
     settings,
     deleteBill,
@@ -528,6 +537,11 @@ export function DesktopDashboard() {
     updateGoal,
   } = useBudget();
   const { readiness: setupReadiness } = useSetupReadiness();
+
+  useEffect(
+    () => acknowledgeMounted(snapshotKey),
+    [acknowledgeMounted, snapshotKey],
+  );
 
   const [pageAddOpen, setPageAddOpen] = useState(false);
   const [billEditor, setBillEditor] = useState<{ bill: Bill | null; debt: boolean } | null>(null);
@@ -564,8 +578,13 @@ export function DesktopDashboard() {
     addIncome(income as Omit<IncomeItem, "id">), [addIncome]);
 
   const now = new Date();
-  const currentMonth = now.getMonth();
-  const today = now.getDate();
+  const {
+    model: dashboardModel,
+    reviewCenterCount: reviewCount,
+    desktopTodayDecisions: todayDecisions,
+    upcoming,
+    recentActivity,
+  } = dashboardSnapshot;
   const isWide = width >= WIDE_DESKTOP_BREAKPOINT;
   const isPrimaryRow = width >= 1180;
   const metricWidth = isWide ? "23.5%" : "48%";
@@ -573,108 +592,14 @@ export function DesktopDashboard() {
   const name = displayName(user);
   const firstName = name.split(/\s+/)[0] || name;
 
-  const dailyBalances = useMemo(
-    () => getDailyBalances(currentMonth, selectedYear),
-    [currentMonth, getDailyBalances, selectedYear],
-  );
-  const cashFlow = useMemo(
-    () => getCashFlow(currentMonth, selectedYear),
-    [currentMonth, getCashFlow, selectedYear],
-  );
-
-  const categoryBudgetScope = useMemo(
-    () => ({
-      userId: user?.id,
-      householdId: activeHousehold?.householdId,
-      budgetId: activeHousehold?.budgetId,
-    }),
-    [activeHousehold?.budgetId, activeHousehold?.householdId, user?.id],
-  );
-  const categoryBudgetKey = useMemo(
-    () => categoryBudgetStorageKey(currentMonth, selectedYear, categoryBudgetScope),
-    [categoryBudgetScope, currentMonth, selectedYear],
-  );
-  const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
-
-  useEffect(() => {
-    let cancelled = false;
-    const refresh = () => {
-      setCategoryBudgets(
-        readCategoryBudgetCache(currentMonth, selectedYear, categoryBudgetScope),
-      );
-      void loadCategoryBudgets(categoryBudgetScope, currentMonth, selectedYear).then((next) => {
-        if (!cancelled) setCategoryBudgets(next);
-      });
-    };
-    refresh();
-    const unsubscribe = subscribeCategoryBudgets(refresh);
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-  }, [categoryBudgetKey, categoryBudgetScope, currentMonth, selectedYear]);
-
-  const dashboardModel = useMemo(
-    () => buildDashboardFinancialModel({
-      now,
-      selectedYear,
-      settings,
-      forecastConfidence,
-      accounts,
-      connectedBankAccounts,
-      pendingBankTransactions,
-      pendingPlanMatches,
-      categories,
-      categoryBudgets,
-      goals,
-      incomes,
-      cashFlow,
-      currentMonthBalances: dailyBalances,
-      getMonthlyBills,
-      getMonthlyIncome,
-      getTransactionsForMonth,
-      getDailyBalances,
-      getBillMonthlyTotal,
-      getPaidAmount,
-      getBillOccurrencesInMonth,
-      getDebtMonthSettlements,
-    }),
-    [
-      accounts,
-      cashFlow,
-      categories,
-      categoryBudgets,
-      connectedBankAccounts,
-      currentMonth,
-      dailyBalances,
-      forecastConfidence,
-      getBillMonthlyTotal,
-      getBillOccurrencesInMonth,
-      getDebtMonthSettlements,
-      getDailyBalances,
-      getMonthlyBills,
-      getMonthlyIncome,
-      getPaidAmount,
-      getTransactionsForMonth,
-      goals,
-      incomes,
-      pendingBankTransactions,
-      pendingPlanMatches,
-      selectedYear,
-      settings,
-      today,
-    ],
-  );
   const {
     activeAccountCount,
-    activePendingMatches,
     algorithmSuite,
     bankCurrentCheckingBalance: checkingBalance,
     categoryPlan,
     currentGoals: activeGoals,
     goalPercent,
     goalTotals,
-    monthTransactions,
     monthlyIncome,
     pendingCheckingSummary,
     unpaidCount,
@@ -687,125 +612,6 @@ export function DesktopDashboard() {
       ? "Checking balance unavailable"
       : `Checking balance ${checkingBalanceLabel}`;
 
-  const upcoming = useMemo(() => {
-    const candidates: UpcomingBill[] = [];
-    const appendMonth = (month: number, year: number, minimumDay: number) => {
-      const debtPlan = getRemainingDebtPlanForMonth(month, year);
-      const debtSettlements = getDebtMonthSettlements(month, year);
-      getMonthlyBills(month, year)
-        .filter(isBillEligibleForUpcomingPlan)
-        .filter(bill => !bill.is_debt || !debtPlan)
-        .forEach((bill) => {
-          const days = getBillOccurrencesInMonth(bill, month, year).sort((a, b) => a - b);
-          if (!days.length) return;
-          const debtSettlement = bill.is_debt ? debtSettlements.get(bill.id) : undefined;
-          const exactDebtOccurrences = new Map(debtSettlement?.occurrences?.map(occurrence => [
-            Number(occurrence.occurrenceDate.slice(8, 10)),
-            occurrence,
-          ]));
-          const monthlyTotal = debtSettlement?.configuredObligation
-            ?? getBillMonthlyTotal(bill, month, year);
-          const occurrenceAmount = monthlyTotal / days.length;
-          let paidRemaining = debtSettlement?.paidAmount ?? getPaidAmount(bill.id, month, year);
-          days.forEach((day) => {
-            const exactDebtOccurrence = exactDebtOccurrences.get(day);
-            const required = exactDebtOccurrence?.configuredObligation ?? occurrenceAmount;
-            const paid = exactDebtOccurrence
-              ? Math.min(required, exactDebtOccurrence.paidAmount)
-              : Math.min(required, Math.max(0, paidRemaining));
-            paidRemaining = Math.max(0, paidRemaining - paid);
-            const remaining = exactDebtOccurrence?.remainingRequired
-              ?? Math.max(0, required - paid);
-            if (remaining <= 0.005 || day < minimumDay) return;
-            const occurrenceDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-            candidates.push({
-              key: `${bill.id}:${occurrenceDate}`,
-              id: bill.id,
-              name: bill.name,
-              category: bill.is_debt ? "Debt payment" : bill.category || "Bill",
-              amount: remaining,
-              day,
-              month,
-              year,
-              isDebt: bill.is_debt,
-              frequency: bill.frequency,
-              pending: activePendingMatches.some(
-                (match) =>
-                  match.target_id === bill.id && match.occurrence_date === occurrenceDate,
-              ),
-            });
-          });
-        });
-      debtPlan?.allocations.forEach(allocation => {
-        const [allocationYear, allocationMonth, allocationDay] = allocation.date.split("-").map(Number);
-        if (allocationYear !== year || allocationMonth !== month + 1 || allocationDay < minimumDay || allocation.amount <= 0.005) return;
-        const pendingTargetId = allocation.sourceBillId ?? allocation.targetBillId;
-        candidates.push({
-          key: allocation.id,
-          id: allocation.targetBillId,
-          name: allocation.targetBillName,
-          category: allocation.kind === "rollover" ? "Snowball rollover" : "Debt payment",
-          amount: allocation.amount,
-          day: allocationDay,
-          month,
-          year,
-          isDebt: true,
-          pending: activePendingMatches.some(
-            match => match.target_id === pendingTargetId && match.occurrence_date === allocation.date,
-          ),
-          sourceId: allocation.sourceBillId,
-          kind: allocation.kind,
-          paidOff: allocation.paidOff,
-        });
-      });
-    };
-
-    appendMonth(currentMonth, selectedYear, today);
-    if (candidates.length < 5) {
-      const nextMonth = (currentMonth + 1) % 12;
-      const nextYear = selectedYear + (currentMonth === 11 ? 1 : 0);
-      appendMonth(nextMonth, nextYear, 1);
-    }
-    return candidates
-      .sort(
-        (left, right) =>
-          left.year - right.year || left.month - right.month || left.day - right.day,
-      )
-      .slice(0, 5);
-  }, [
-    activePendingMatches,
-    currentMonth,
-    getDebtMonthSettlements,
-    getBillMonthlyTotal,
-    getBillOccurrencesInMonth,
-    getMonthlyBills,
-    getPaidAmount,
-    getRemainingDebtPlanForMonth,
-    selectedYear,
-    today,
-  ]);
-
-  const recentActivity = useMemo(
-    () =>
-      monthTransactions
-        .filter(isActiveTransaction)
-        .sort((left, right) => right.date.localeCompare(left.date))
-        .slice(0, 4),
-    [monthTransactions],
-  );
-  const reviewCount = useMemo(
-    () => buildReviewQueue(
-      transactions,
-      `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`,
-    ).length,
-    [now, transactions],
-  );
-  const snowballTarget = useMemo(
-    () => bills
-      .filter(bill => bill.is_debt && bill.balance > 0.005 && bill.include_in_snowball !== false)
-      .sort((left, right) => left.balance - right.balance || left.priority - right.priority)[0] ?? null,
-    [bills],
-  );
   const payoffDebts = useMemo(
     () => bills.filter(bill => bill.is_debt && bill.balance > 0.005 && bill.include_in_snowball !== false),
     [bills],
@@ -817,56 +623,6 @@ export function DesktopDashboard() {
     ))[0] ?? null,
     [payoffDebts],
   );
-  const nearlyCompleteGoal = useMemo(
-    () => activeGoals
-      .filter(goal => goal.target_amount > 0 && goal.current_amount < goal.target_amount)
-      .sort((left, right) => (right.current_amount / right.target_amount) - (left.current_amount / left.target_amount))[0] ?? null,
-    [activeGoals],
-  );
-  const todayDecisions = useMemo(() => {
-    const next = upcoming[0];
-    const nextDate = next ? new Date(next.year, next.month, next.day) : null;
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const daysAway = nextDate ? Math.max(0, Math.round((nextDate.getTime() - todayStart.getTime()) / 86_400_000)) : 0;
-    const lowestDate = algorithmSuite.safeCushion.lowestDay
-      ? new Date(selectedYear, currentMonth, algorithmSuite.safeCushion.lowestDay).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-      : null;
-    const sameSourceRollovers = next?.isDebt && next.sourceId
-      ? upcoming.filter(candidate =>
-        candidate.key !== next.key
-        && candidate.sourceId === next.sourceId
-        && candidate.year === next.year
-        && candidate.month === next.month
-        && candidate.day === next.day
-        && candidate.kind === "rollover",
-      )
-      : [];
-    const rolloverAmount = sameSourceRollovers.reduce((sum, candidate) => sum + candidate.amount, 0);
-    const rolloverNames = [...new Set(sameSourceRollovers.map(candidate => candidate.name))];
-    return buildTodaysDecisions({
-      reviewCount,
-      lowestBalance: algorithmSuite.safeCushion.lowestBalance,
-      lowestDate,
-      safetyFloor: settings.safety_floor,
-      safeToSpend: algorithmSuite.safeCushion.amount,
-      nextBill: next && nextDate ? {
-        id: next.id,
-        name: next.name,
-        amount: next.amount,
-        dateLabel: daysAway === 0 ? "today" : daysAway === 1 ? "tomorrow" : nextDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        daysAway,
-        isDebt: next.isDebt,
-        frequency: next.frequency,
-        paidOff: next.paidOff,
-        rollover: rolloverAmount > 0.005 ? {
-          name: rolloverNames.length === 1 ? rolloverNames[0] : "your next debts",
-          amount: rolloverAmount,
-        } : null,
-      } : null,
-      snowballTarget: snowballTarget ? { name: snowballTarget.name, balance: snowballTarget.balance } : null,
-      goal: nearlyCompleteGoal ? { name: nearlyCompleteGoal.name, current: nearlyCompleteGoal.current_amount, target: nearlyCompleteGoal.target_amount } : null,
-    }).filter(decision => decision.id !== "breathing-room-opportunity");
-  }, [algorithmSuite.safeCushion, currentMonth, nearlyCompleteGoal, now, reviewCount, selectedYear, settings.safety_floor, snowballTarget, upcoming]);
   const available = algorithmSuite.safeCushion.amount;
   const progress = algorithmSuite.stability;
   const nextMilestone =
@@ -1389,13 +1145,13 @@ export function DesktopDashboard() {
         </View>
       </View>
 
-      <DashboardCustomizer
+      {customizerOpen ? <DashboardCustomizer
         visible={customizerOpen}
         layout={dashboardLayout}
         onChange={updateDashboardLayout}
         onReset={resetDashboardLayout}
         onClose={() => setCustomizerOpen(false)}
-      />
+      /> : null}
 
       <View style={styles.detailGrid}>
         <SurfaceCard
@@ -1577,7 +1333,7 @@ export function DesktopDashboard() {
         </View>
       </View>
 
-      <AddBillModal
+      {billEditor !== null ? <AddBillModal
         visible={billEditor !== null}
         onClose={() => setBillEditor(null)}
         onSave={saveBill}
@@ -1586,19 +1342,19 @@ export function DesktopDashboard() {
         onDeleteMistake={deleteBillMistake}
         editBill={billEditor?.bill ?? null}
         forceDebt={billEditor?.debt ?? false}
-      />
-      <IncomeModal
+      /> : null}
+      {incomeEditorOpen ? <IncomeModal
         visible={incomeEditorOpen}
         onClose={() => setIncomeEditorOpen(false)}
         onSave={saveIncome}
-      />
-      <GoalModal
+      /> : null}
+      {goalEditor !== undefined ? <GoalModal
         visible={goalEditor !== undefined}
         onClose={() => setGoalEditor(undefined)}
         onSave={saveGoal}
         onDelete={deleteGoal}
         editGoal={goalEditor ?? null}
-      />
+      /> : null}
     </ScrollView>
   );
 }

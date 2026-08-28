@@ -169,6 +169,7 @@ export interface DashboardFinancialModelInput {
       occurrenceDate: string;
       configuredObligation: number;
       paidAmount: number;
+      remainingRequired?: number;
     }>;
   }>;
 }

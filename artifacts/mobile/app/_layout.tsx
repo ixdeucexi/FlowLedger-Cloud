@@ -77,6 +77,7 @@ import {
   shouldReleaseWebStartupCover,
   startupVerificationCanCommit,
   webStartupRouteIsProtected,
+  workspaceScopeTransitionNeedsCover,
   webStartupCoverReason,
   WEB_STARTUP_COVER_ARMED_EVENT,
   WEB_WORKSPACE_READY_EVENT,
@@ -549,26 +550,23 @@ function RootNavigator({
   // Mounted-route protection deliberately does not depend on `session`.
   // Supabase clears the session before AuthObserver's /login replace commits.
   const workspaceRoute = firstRootSegment === "(tabs)";
+  const priorWorkspaceScopeKeyRef = useRef(currentPrivacyScopeKey);
 
-  // The static document cover is the only web loader. Re-arm it in a layout
-  // effect before a protected route can paint a different or unready scope.
+  // Re-arm only for a real authenticated scope change. A later tab navigation
+  // or same-scope snapshot refresh may publish unready while its interactive
+  // shell mounts; it must never put the boot cover back over the app.
   useLayoutEffect(() => {
-    if (
-      Platform.OS !== "web"
-      || !workspaceRoute
-      || !currentPrivacyScopeKey
-      || (
-        webWorkspaceReadyScopeKey === currentPrivacyScopeKey
-        && webWorkspaceReadyGeneration === webStartupCoverGeneration
-      )
-    ) return;
-    if (webStartupCoverReason() !== null) return;
-    armWebStartupCover("scope-change");
+    const previousScopeKey = priorWorkspaceScopeKeyRef.current;
+    priorWorkspaceScopeKeyRef.current = currentPrivacyScopeKey;
+    if (Platform.OS !== "web") return;
+    if (workspaceScopeTransitionNeedsCover({
+      previousScopeKey,
+      currentScopeKey: currentPrivacyScopeKey,
+      workspaceRoute,
+      coverAlreadyArmed: webStartupCoverReason() !== null,
+    })) armWebStartupCover("scope-change");
   }, [
     currentPrivacyScopeKey,
-    webStartupCoverGeneration,
-    webWorkspaceReadyGeneration,
-    webWorkspaceReadyScopeKey,
     workspaceRoute,
   ]);
   // Child routes retain local state across provider changes. A previously

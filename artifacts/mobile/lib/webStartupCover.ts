@@ -22,6 +22,57 @@ export interface WebWorkspaceRevealTransition {
   readinessSatisfied: boolean;
 }
 
+export interface WebWorkspaceRevealToken {
+  scopeKey: string;
+  generation: number;
+  contentKey: string;
+}
+
+export function nextWebWorkspaceRevealToken(input: {
+  revealed: WebWorkspaceRevealToken | null;
+  currentScopeKey: string | null;
+  currentGeneration: number;
+  currentContentKey: string;
+  readinessSatisfied: boolean;
+  coverArmed?: boolean;
+}): WebWorkspaceRevealToken | null {
+  if (!input.currentScopeKey) return null;
+  const sameBarrier = input.revealed?.scopeKey === input.currentScopeKey
+    && input.revealed.generation === input.currentGeneration;
+  if (
+    sameBarrier
+    && (
+      !input.coverArmed
+      || input.revealed?.contentKey === input.currentContentKey
+    )
+  ) return input.revealed;
+  return input.readinessSatisfied
+    ? {
+        scopeKey: input.currentScopeKey,
+        generation: input.currentGeneration,
+        contentKey: input.currentContentKey,
+      }
+    : null;
+}
+
+export function webWorkspaceRevealTokenIsReady(input: {
+  revealed: WebWorkspaceRevealToken | null;
+  currentScopeKey: string | null;
+  currentGeneration: number;
+  currentContentKey: string;
+  coverArmed: boolean;
+}): boolean {
+  return Boolean(
+    input.currentScopeKey
+    && input.revealed?.scopeKey === input.currentScopeKey
+    && input.revealed.generation === input.currentGeneration
+    && (
+      !input.coverArmed
+      || input.revealed.contentKey === input.currentContentKey
+    ),
+  );
+}
+
 export interface WebStartupReleaseState {
   visible: boolean;
   readyToReveal: boolean;
@@ -54,6 +105,21 @@ export function webStartupRouteIsProtected(
   return Boolean(
     firstRootSegment
     && !PUBLIC_WEB_ROOT_SEGMENTS.has(firstRootSegment),
+  );
+}
+
+export function workspaceScopeTransitionNeedsCover(input: {
+  previousScopeKey: string | null;
+  currentScopeKey: string | null;
+  workspaceRoute: boolean;
+  coverAlreadyArmed: boolean;
+}): boolean {
+  return Boolean(
+    input.workspaceRoute
+    && !input.coverAlreadyArmed
+    && input.previousScopeKey
+    && input.currentScopeKey
+    && input.previousScopeKey !== input.currentScopeKey,
   );
 }
 

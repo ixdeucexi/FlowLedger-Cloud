@@ -1,9 +1,16 @@
 import { Platform } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { assertFinancialMutationOnline } from "@/lib/networkStatus";
+import {
+  createExactCategoryBudgetMemoryCache,
+  parseCategoryBudgetCache,
+  resolveGuardedRemoteValue,
+} from "@/lib/categoryBudgetLoadPolicy";
 
 export const CATEGORY_BUDGETS_EVENT = "flowledger-category-budgets-updated";
 const categoryBudgetListeners = new Set<() => void>();
+const categoryBudgetCacheRevisions = new Map<string, number>();
+const categoryBudgetMemoryCache = createExactCategoryBudgetMemoryCache();
 
 export interface CategoryBudgetScope {
   userId?: string | null;
@@ -20,22 +27,44 @@ export function categoryBudgetStorageKey(month: number, year: number, scope?: Ca
 }
 
 export function readCategoryBudgetCache(month: number, year: number, scope?: CategoryBudgetScope): Record<string, number> {
+  const key = categoryBudgetStorageKey(month, year, scope);
+  const memory = categoryBudgetMemoryCache.read(key);
+  if (memory) return memory;
   if (Platform.OS !== "web") return {};
   try {
-    const raw = globalThis.localStorage?.getItem(categoryBudgetStorageKey(month, year, scope));
-    const parsed = raw ? JSON.parse(raw) as Record<string, unknown> : {};
-    return normalizeBudgetMap(parsed);
+    const parsed = parseCategoryBudgetCache(globalThis.localStorage?.getItem(key));
+    if (parsed) categoryBudgetMemoryCache.write(key, parsed);
+    return parsed ?? {};
   } catch {
     return {};
   }
 }
 
+export function hasCategoryBudgetCache(month: number, year: number, scope?: CategoryBudgetScope): boolean {
+  const key = categoryBudgetStorageKey(month, year, scope);
+  if (categoryBudgetMemoryCache.has(key)) return true;
+  if (Platform.OS !== "web") return false;
+  try {
+    const value = parseCategoryBudgetCache(
+      globalThis.localStorage?.getItem(key) ?? null,
+    );
+    if (value) categoryBudgetMemoryCache.write(key, value);
+    return value !== null;
+  } catch {
+    return false;
+  }
+}
+
 export function writeCategoryBudgetCache(month: number, year: number, budgets: Record<string, number>, scope?: CategoryBudgetScope, notify = true) {
   const clean = normalizeBudgetMap(budgets);
+  const storageKey = categoryBudgetStorageKey(month, year, scope);
+  categoryBudgetMemoryCache.write(storageKey, clean);
+  categoryBudgetCacheRevisions.set(
+    storageKey,
+    (categoryBudgetCacheRevisions.get(storageKey) ?? 0) + 1,
+  );
   if (Platform.OS === "web") {
-    const key = categoryBudgetStorageKey(month, year, scope);
-    if (Object.keys(clean).length) globalThis.localStorage?.setItem(key, JSON.stringify(clean));
-    else globalThis.localStorage?.removeItem(key);
+    globalThis.localStorage?.setItem(storageKey, JSON.stringify(clean));
     if (notify) globalThis.dispatchEvent?.(new Event(CATEGORY_BUDGETS_EVENT));
   }
   if (notify) categoryBudgetListeners.forEach(listener => listener());
@@ -46,26 +75,61 @@ export function subscribeCategoryBudgets(listener: () => void) {
   return () => categoryBudgetListeners.delete(listener);
 }
 
-export async function loadCategoryBudgets(scope: CategoryBudgetScope, month: number, year: number): Promise<Record<string, number>> {
+export interface CategoryBudgetLoadResult {
+  value: Record<string, number>;
+  exact: boolean;
+  error: string | null;
+}
+
+export async function loadCategoryBudgetsExact(scope: CategoryBudgetScope, month: number, year: number): Promise<CategoryBudgetLoadResult> {
   const cached = readCategoryBudgetCache(month, year, scope);
-  if (!scope.userId) return cached;
+  if (!scope.userId) return {
+    value: cached,
+    exact: hasCategoryBudgetCache(month, year, scope),
+    error: null,
+  };
+  const storageKey = categoryBudgetStorageKey(month, year, scope);
+  const revisionAtStart = categoryBudgetCacheRevisions.get(storageKey) ?? 0;
+  try {
+    const value = await resolveGuardedRemoteValue({
+      revisionAtStart,
+      currentRevision: () => categoryBudgetCacheRevisions.get(storageKey) ?? 0,
+      readCurrent: () => readCategoryBudgetCache(month, year, scope),
+      loadRemote: async () => {
+        const query = applyScope(
+          supabase.from("category_budgets").select("category, amount"),
+          scope,
+        ).eq("month", month).eq("year", year);
+        const { data, error } = await query;
+        if (error) throw error;
+        const remote: Record<string, number> = {};
+        (data ?? []).forEach((row: any) => {
+          const category = String(row.category ?? "").trim();
+          const amount = Number(row.amount);
+          if (category && Number.isFinite(amount) && amount >= 0) remote[category] = amount;
+        });
+        return remote;
+      },
+      commitRemote: value => {
+        writeCategoryBudgetCache(month, year, value, scope, false);
+      },
+    });
+    return {
+      value,
+      exact: hasCategoryBudgetCache(month, year, scope),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      value: readCategoryBudgetCache(month, year, scope),
+      exact: hasCategoryBudgetCache(month, year, scope),
+      error: error instanceof Error ? error.message : "Category plan unavailable.",
+    };
+  }
+}
 
-  const query = applyScope(
-    supabase.from("category_budgets").select("category, amount"),
-    scope,
-  ).eq("month", month).eq("year", year);
-  const { data, error } = await query;
-  if (error) return cached;
-
-  const remote: Record<string, number> = {};
-  (data ?? []).forEach((row: any) => {
-    const category = String(row.category ?? "").trim();
-    const amount = Number(row.amount);
-    if (category && Number.isFinite(amount) && amount >= 0) remote[category] = amount;
-  });
-  const result = remote;
-  writeCategoryBudgetCache(month, year, result, scope, false);
-  return result;
+export async function loadCategoryBudgets(scope: CategoryBudgetScope, month: number, year: number): Promise<Record<string, number>> {
+  return (await loadCategoryBudgetsExact(scope, month, year)).value;
 }
 
 export async function saveCategoryBudgets(scope: CategoryBudgetScope, month: number, year: number, budgets: Record<string, number>): Promise<void> {

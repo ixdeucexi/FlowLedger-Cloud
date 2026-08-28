@@ -99,10 +99,13 @@ test("cold-start uses a verified saved plan instead of a navigation-only loading
   const callback = readFileSync("app/auth/callback.tsx", "utf8");
 
   assert.doesNotMatch(tabs, /PlanRestoreOverlay|phase="plan"/);
-  assert.match(tabs, /dataUpdatedAt && startupCoreReady && workspaceMounted/);
+  assert.match(
+    tabs,
+    /dataUpdatedAt[\s\S]{0,120}startupCoreReady[\s\S]{0,120}workspaceMounted[\s\S]{0,120}dashboardSnapshotStartupSettled/,
+  );
   assert.match(tabs, /requestAnimationFrame\(\(\) => \{[\s\S]+requestAnimationFrame/);
   assert.match(tabs, /onLayout=\{\(\) => setWorkspaceMounted\(true\)\}/);
-  assert.match(tabs, /nextWebWorkspaceRevealedScopeKey\(/);
+  assert.match(tabs, /nextWebWorkspaceRevealToken\(/);
   assert.doesNotMatch(tabs, /setWorkspaceReadyToReveal\(false\)/);
   assert.doesNotMatch(tabs, /workspaceLoadingOverlay/);
   assert.match(tabs, /Platform\.OS !== "web" && !workspaceReadyToReveal/);
@@ -128,11 +131,11 @@ test("the revealed web workspace cannot mount a second touch-blocking loader", (
   assert.doesNotMatch(tabs, /workspaceLoadingOverlay/);
   assert.match(
     tabs,
-    /revealedWorkspaceScopeKey === workspaceScopeKey/,
+    /webWorkspaceRevealTokenIsReady\(\{/,
   );
   assert.match(
     tabs,
-    /nextWebWorkspaceRevealedScopeKey\(\{[\s\S]+readinessSatisfied: false/,
+    /nextWebWorkspaceRevealToken\(\{[\s\S]+readinessSatisfied: false/,
   );
 });
 

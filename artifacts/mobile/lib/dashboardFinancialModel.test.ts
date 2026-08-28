@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { performance } from "node:perf_hooks";
 import test from "node:test";
 
 import {
@@ -17,6 +18,18 @@ import {
   type DashboardSettings as Settings,
   type DashboardTransaction as Transaction,
 } from "./dashboardFinancialModel";
+import {
+  buildDashboardFinancialSnapshot,
+  dashboardFinancialSnapshotKey,
+  errorDashboardFinancialSnapshot,
+  isDashboardFinancialSnapshotReadyForScope,
+  pendingDashboardFinancialSnapshot,
+  selectRecentDashboardActivity,
+  sumPostedDashboardIncome,
+  type DashboardFinancialSnapshotBuildInput,
+  type DashboardFinancialSnapshotIdentity,
+} from "./dashboardFinancialSnapshot";
+import { countReviewQueue } from "./reviewCenter";
 
 const settings: Settings = {
   zeroBasedBudgetEnabled: true,
@@ -105,6 +118,84 @@ const balances: DailyBalance[] = [
     balance: 1_243,
   },
 ];
+
+const snapshotIdentity: DashboardFinancialSnapshotIdentity = {
+  userId: "user:one",
+  householdId: "household|one",
+  budgetId: "budget:one",
+  dataRevision: "financial:42",
+  planInputRevision: "2026-07-10:budgets-3",
+};
+
+function dashboardSnapshotBuildInput(): DashboardFinancialSnapshotBuildInput {
+  const snapshotTransactions: Transaction[] = [
+    {
+      id: "review-me",
+      date: "2026-07-10",
+      amount: -25,
+      category: "Other",
+      note: "Needs review",
+      source: "plaid",
+      review_status: "needs_review",
+      plaid_account_id: "connected-checking",
+    },
+    {
+      id: "posted-income",
+      date: "2026-07-10",
+      amount: 750,
+      category: "Income",
+      note: "Deposit",
+      source: "plaid",
+      review_status: "categorized",
+      plaid_account_id: "connected-checking",
+    },
+  ];
+  const snapshotBalances: DailyBalance[] = [
+    { day: 10, income: 0, expense: 25, bills: 0, net: -25, balance: 1_975 },
+    { day: 15, income: 3_000, expense: 0, bills: 1_000, net: 2_000, balance: 3_975 },
+  ];
+  return {
+    now: new Date(2026, 6, 10, 12),
+    selectedYear: 2026,
+    settings,
+    forecastConfidence: { level: "high", label: "High", reasons: [] },
+    accounts: [],
+    connectedBankAccounts: [{
+      id: "connected-checking",
+      plaid_account_id: "connected-checking",
+      name: "Checking",
+      account_type: "depository",
+      account_subtype: "checking",
+      current_balance: 2_000,
+      is_active: true,
+    }],
+    pendingBankTransactions: [],
+    pendingPlanMatches: [],
+    categories: ["Housing", "Other"],
+    categoryBudgets: { Housing: 1_000 },
+    goals: [activeGoal],
+    incomes: [income],
+    allBills: [bill],
+    allTransactions: snapshotTransactions,
+    getCashFlow: () => ({
+      monthlyIncome: 3_000,
+      totalBillsDue: 1_000,
+      totalPaid: 0,
+      netTransactions: 725,
+      goalAllocations: 0,
+      remaining: 2_725,
+    }),
+    getMonthlyBills: () => [bill],
+    getMonthlyIncome: () => 3_000,
+    getTransactionsForMonth: () => snapshotTransactions,
+    getDailyBalances: () => snapshotBalances,
+    getBillMonthlyTotal: () => 1_000,
+    getPaidAmount: () => 0,
+    getBillOccurrencesInMonth: () => [15],
+    getDebtMonthSettlements: () => new Map(),
+    getRemainingDebtPlanForMonth: () => null,
+  };
+}
 
 test("builds the one financial model consumed by desktop and mobile dashboards", () => {
   const accounts: Account[] = [{
@@ -307,14 +398,528 @@ test("bounds Dashboard render-time forecast work independently of the full Forec
   assert.equal(dailyBalanceCalls, 1);
 });
 
-test("defers the full outlook until desktop or an explicit mobile modal", () => {
+test("builds an exact-scope provider Dashboard snapshot", () => {
+  let cashFlowCalls = 0;
+  let dailyBalanceCalls = 0;
+  const input = dashboardSnapshotBuildInput();
+  const ready = buildDashboardFinancialSnapshot(snapshotIdentity, {
+    ...input,
+    getCashFlow: (month, year) => {
+      cashFlowCalls += 1;
+      return input.getCashFlow(month, year);
+    },
+    getDailyBalances: (month, year) => {
+      dailyBalanceCalls += 1;
+      return input.getDailyBalances(month, year);
+    },
+  });
+
+  assert.equal(cashFlowCalls, 1);
+  assert.equal(dailyBalanceCalls, 1);
+  assert.equal(ready.key, dashboardFinancialSnapshotKey(snapshotIdentity));
+  assert.equal(ready.value.reviewCenterCount, 1);
+  assert.equal(ready.value.postedIncome, 750);
+  assert.deepEqual(ready.value.categoryBudgets, { Housing: 1_000 });
+  assert.ok(ready.value.model.activePendingMatchIds instanceof Set);
+  assert.ok(ready.value.todayDecisions.length > 0);
+  assert.ok(ready.value.desktopTodayDecisions.length > 0);
+  assert.equal(ready.value.upcoming[0]?.id, bill.id);
+  assert.equal(ready.value.recentActivity.length, 2);
+  assert.equal(ready.value.recentActivity[0]?.id, "review-me");
+  assert.equal(
+    isDashboardFinancialSnapshotReadyForScope(
+      ready,
+      snapshotIdentity.userId,
+      snapshotIdentity.householdId,
+      snapshotIdentity.budgetId,
+    ),
+    true,
+  );
+  assert.equal(
+    isDashboardFinancialSnapshotReadyForScope(
+      ready,
+      snapshotIdentity.userId,
+      snapshotIdentity.householdId,
+      "another-budget",
+    ),
+    false,
+  );
+});
+
+test("Dashboard snapshot rolls December 31 into the next local year", () => {
+  const base = dashboardSnapshotBuildInput();
+  const requestedBillMonths: Array<[number, number]> = [];
+  const december = buildDashboardFinancialSnapshot(snapshotIdentity, {
+    ...base,
+    now: new Date(2026, 11, 31, 12),
+    selectedYear: 2026,
+    goals: [],
+    incomes: [],
+    getMonthlyBills: (month, year) => {
+      requestedBillMonths.push([month, year]);
+      return [bill];
+    },
+    getTransactionsForMonth: () => [],
+    getDailyBalances: () => [{
+      day: 31,
+      income: 0,
+      expense: 0,
+      bills: 0,
+      net: 0,
+      balance: 1_000,
+    }],
+    preparedCashFlow: base.getCashFlow(11, 2026),
+    preparedCurrentMonthBalances: [{
+      day: 31,
+      income: 0,
+      expense: 0,
+      bills: 0,
+      net: 0,
+      balance: 1_000,
+    }],
+    reviewCenterCount: 0,
+    postedIncome: 0,
+  });
+
+  assert.equal(december.value.model.todayIso, "2026-12-31");
+  assert.ok(requestedBillMonths.some(([month, year]) => month === 0 && year === 2027));
+  assert.equal(december.value.upcoming[0]?.month, 0);
+  assert.equal(december.value.upcoming[0]?.year, 2027);
+
+  const january = buildDashboardFinancialSnapshot(
+    { ...snapshotIdentity, planInputRevision: "2027-01-01:budgets-3" },
+    {
+      ...base,
+      now: new Date(2027, 0, 1, 12),
+      selectedYear: 2027,
+      goals: [],
+      incomes: [],
+      getTransactionsForMonth: () => [],
+      preparedCashFlow: base.getCashFlow(0, 2027),
+      preparedCurrentMonthBalances: [{
+        day: 1,
+        income: 0,
+        expense: 0,
+        bills: 0,
+        net: 0,
+        balance: 1_000,
+      }],
+      reviewCenterCount: 0,
+      postedIncome: 0,
+    },
+  );
+  assert.equal(january.value.model.todayIso, "2027-01-01");
+  assert.equal(january.value.upcoming[0]?.year, 2027);
+});
+
+test("snapshot Upcoming preserves the canonical remaining debt occurrence", () => {
+  const debt: Bill = {
+    ...bill,
+    id: "mortgage",
+    name: "Mortgage",
+    category: "Debt",
+    is_debt: true,
+    amount: 100,
+    balance: 42_000,
+  };
+  const base = dashboardSnapshotBuildInput();
+  const ready = buildDashboardFinancialSnapshot(snapshotIdentity, {
+    ...base,
+    settings: { ...base.settings, debtPayoffEnabled: false },
+    allBills: [debt],
+    getMonthlyBills: () => [debt],
+    getBillMonthlyTotal: () => 100,
+    getPaidAmount: () => 67.13,
+    getDebtMonthSettlements: (month, year) => new Map([[debt.id, {
+      configuredObligation: 100,
+      paidAmount: 67.13,
+      occurrences: [{
+        occurrenceDate: `${year}-${String(month + 1).padStart(2, "0")}-15`,
+        configuredObligation: 100,
+        paidAmount: 67.13,
+        remainingRequired: 32.87,
+      }],
+    }]]),
+    getRemainingDebtPlanForMonth: () => null,
+  });
+
+  assert.equal(ready.value.upcoming[0]?.id, debt.id);
+  assert.equal(ready.value.upcoming[0]?.amount, 32.87);
+});
+
+test("builds the prepared snapshot in bounded work without rescanning a production-shaped ledger", () => {
+  const ambiguousLeft: DashboardFinancialSnapshotIdentity = {
+    userId: "a:b",
+    householdId: "c",
+    budgetId: null,
+    dataRevision: "d",
+    planInputRevision: "e",
+  };
+  const ambiguousRight: DashboardFinancialSnapshotIdentity = {
+    userId: "a",
+    householdId: "b:c",
+    budgetId: null,
+    dataRevision: "d",
+    planInputRevision: "e",
+  };
+  assert.notEqual(
+    dashboardFinancialSnapshotKey(ambiguousLeft),
+    dashboardFinancialSnapshotKey(ambiguousRight),
+  );
+
+  const productionLedger: Transaction[] = Array.from({ length: 20_000 }, (_, index) => ({
+    id: `transaction-${index}`,
+    date: `2026-${String((index % 12) + 1).padStart(2, "0")}-${String((index % 28) + 1).padStart(2, "0")}`,
+    amount: index % 2 ? -19.95 : 2_500,
+    category: index % 2 ? "Spending" : "Income",
+    note: `Ledger item ${index}`,
+    source: "plaid",
+    review_status: index % 19 === 0 ? "needs_review" : "categorized",
+    plaid_account_id: "connected-checking",
+  }));
+  let ledgerReads = 0;
+  const trappedLedger: Transaction[] = new Proxy(productionLedger, {
+    get(target, property, receiver) {
+      ledgerReads += 1;
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  const base = dashboardSnapshotBuildInput();
+  const calls = {
+    cashFlow: 0,
+    dailyBalances: 0,
+    debtSettlements: 0,
+    debtPlan: 0,
+    monthlyBills: 0,
+  };
+  const startedAt = performance.now();
+  const ready = buildDashboardFinancialSnapshot(snapshotIdentity, {
+    ...base,
+    allTransactions: trappedLedger,
+    // These values are prepared in separate provider stages. The atomic final
+    // snapshot stage must not walk the full ledger again.
+    reviewCenterCount: 1_053,
+    postedIncome: 25_000_000,
+    preparedCashFlow: base.getCashFlow(6, 2026),
+    preparedCurrentMonthBalances: base.getDailyBalances(6, 2026),
+    getCashFlow: (month, year) => {
+      calls.cashFlow += 1;
+      return base.getCashFlow(month, year);
+    },
+    getDailyBalances: (month, year) => {
+      calls.dailyBalances += 1;
+      return base.getDailyBalances(month, year);
+    },
+    getDebtMonthSettlements: (month, year) => {
+      calls.debtSettlements += 1;
+      return base.getDebtMonthSettlements?.(month, year) ?? new Map();
+    },
+    getRemainingDebtPlanForMonth: (month, year) => {
+      calls.debtPlan += 1;
+      return base.getRemainingDebtPlanForMonth(month, year);
+    },
+    getMonthlyBills: (month, year) => {
+      calls.monthlyBills += 1;
+      return base.getMonthlyBills(month, year);
+    },
+  });
+  const elapsed = performance.now() - startedAt;
+
+  assert.equal(ledgerReads, 0);
+  assert.equal(ready.value.reviewCenterCount, 1_053);
+  assert.equal(ready.value.postedIncome, 25_000_000);
+  assert.deepEqual(calls, {
+    cashFlow: 0,
+    dailyBalances: 0,
+    debtSettlements: 3,
+    debtPlan: 2,
+    monthlyBills: 3,
+  });
+  assert.ok(elapsed < 500, `prepared snapshot build took ${elapsed.toFixed(1)}ms`);
+
+  const pending = pendingDashboardFinancialSnapshot(snapshotIdentity);
+  assert.equal(
+    isDashboardFinancialSnapshotReadyForScope(
+      pending,
+      snapshotIdentity.userId,
+      snapshotIdentity.householdId,
+      snapshotIdentity.budgetId,
+    ),
+    false,
+  );
+  assert.equal(
+    isDashboardFinancialSnapshotReadyForScope(
+      errorDashboardFinancialSnapshot(snapshotIdentity, "retry"),
+      snapshotIdentity.userId,
+      snapshotIdentity.householdId,
+      snapshotIdentity.budgetId,
+    ),
+    false,
+  );
+});
+
+test("cold final snapshot build stays bounded with 20k current-month rows", (context) => {
+  const denseCurrentMonth: Transaction[] = Array.from(
+    { length: 20_000 },
+    (_, index) => ({
+      id: `dense-current-${index}`,
+      date: `2026-07-${String((index % 28) + 1).padStart(2, "0")}`,
+      amount: index % 5 === 0 ? 2_500 : -19.95,
+      category: index % 5 === 0 ? "Income" : index % 2 ? "Food" : "Other",
+      note: `Current month row ${index}`,
+      source: "plaid",
+      review_status: "needs_review",
+      plaid_account_id: "connected-checking",
+    }),
+  );
+  const base = dashboardSnapshotBuildInput();
+  const reviewStartedAt = performance.now();
+  const preparedReviewCenterCount = countReviewQueue(
+    denseCurrentMonth,
+    "2026-07-10",
+  );
+  const reviewElapsed = performance.now() - reviewStartedAt;
+  const postedStartedAt = performance.now();
+  const preparedPostedIncome = sumPostedDashboardIncome(
+    denseCurrentMonth,
+    base.connectedBankAccounts,
+  );
+  const postedElapsed = performance.now() - postedStartedAt;
+  const recentStartedAt = performance.now();
+  const preparedRecentActivity = selectRecentDashboardActivity(denseCurrentMonth);
+  const recentElapsed = performance.now() - recentStartedAt;
+  const startedAt = performance.now();
+  const ready = buildDashboardFinancialSnapshot(snapshotIdentity, {
+    ...base,
+    allTransactions: denseCurrentMonth,
+    getTransactionsForMonth: (month, year) => (
+      month === 6 && year === 2026 ? denseCurrentMonth : []
+    ),
+    preparedCashFlow: base.getCashFlow(6, 2026),
+    preparedCurrentMonthBalances: base.getDailyBalances(6, 2026),
+    reviewCenterCount: preparedReviewCenterCount,
+    postedIncome: preparedPostedIncome,
+    recentActivity: preparedRecentActivity,
+  });
+  const elapsed = performance.now() - startedAt;
+
+  assert.equal(ready.value.model.monthTransactions.length, 20_000);
+  assert.equal(ready.value.recentActivity.length, 4);
+  assert.equal(ready.value.reviewCenterCount, 20_000);
+  assert.equal(ready.value.postedIncome, 10_000_000);
+  assert.ok(
+    reviewElapsed < 50,
+    `cold 20k review stage took ${reviewElapsed.toFixed(1)}ms`,
+  );
+  assert.ok(
+    postedElapsed < 50,
+    `cold 20k posted-income stage took ${postedElapsed.toFixed(1)}ms`,
+  );
+  assert.ok(
+    recentElapsed < 50,
+    `cold 20k recent selector took ${recentElapsed.toFixed(1)}ms`,
+  );
+  assert.ok(
+    elapsed < 50,
+    `cold 20k current-month snapshot took ${elapsed.toFixed(1)}ms`,
+  );
+  context.diagnostic(
+    `cold 20k stages: review=${reviewElapsed.toFixed(1)}ms, posted=${postedElapsed.toFixed(1)}ms, recent=${recentElapsed.toFixed(1)}ms, final=${elapsed.toFixed(1)}ms`,
+  );
+});
+
+test("recent Dashboard activity is newest-first, stable, and excludes deleted rows", () => {
+  const rows: Transaction[] = [
+    { id: "same-a", date: "2026-08-28", amount: -1, category: "Other", note: "A" },
+    { id: "old", date: "2026-08-01", amount: -1, category: "Other", note: "Old" },
+    { id: "deleted", date: "2026-08-31", amount: -1, category: "Other", note: "Deleted", deleted_at: "2026-08-31T12:00:00.000Z" },
+    { id: "same-b", date: "2026-08-28", amount: -1, category: "Other", note: "B" },
+    { id: "new", date: "2026-08-30", amount: -1, category: "Other", note: "New" },
+    { id: "middle", date: "2026-08-15", amount: -1, category: "Other", note: "Middle" },
+  ];
+
+  assert.deepEqual(
+    selectRecentDashboardActivity(rows).map(transaction => transaction.id),
+    ["new", "same-a", "same-b", "middle"],
+  );
+});
+
+test("mobile Dashboard render consumes only a ready snapshot and never runs financial projection", () => {
+  const mobileDashboard = readFileSync("app/(tabs)/index.tsx", "utf8");
+  const contentStart = mobileDashboard.indexOf("function MobileDashboardContent");
+  const contentEnd = mobileDashboard.indexOf("function ZeroBudgetStat", contentStart);
+  const content = mobileDashboard.slice(contentStart, contentEnd);
+  const outlookStart = content.indexOf("// ── 12-month negative schedule");
+  const outlookEnd = content.indexOf("// First month (across all 12)", outlookStart);
+  const renderWithoutExplicitOutlook = `${content.slice(0, outlookStart)}${content.slice(outlookEnd)}`;
+  const pendingStage = readFileSync(
+    "components/DashboardSnapshotStage.tsx",
+    "utf8",
+  );
+
+  for (const forbidden of [
+    /getCashFlow\(/,
+    /getDailyBalances\(/,
+    /getDebtMonthSettlements\(/,
+    /getRemainingDebtPlanForMonth\(/,
+    /buildDashboardFinancialModel\(/,
+    /buildAlgorithmSuite\(/,
+    /buildReviewQueue\(/,
+    /countReviewQueue\(/,
+  ]) {
+    assert.doesNotMatch(renderWithoutExplicitOutlook, forbidden);
+  }
+  assert.doesNotMatch(mobileDashboard, /import \{[^}]*buildDashboardFinancialModel/);
+  assert.doesNotMatch(mobileDashboard, /subscribeCategoryBudgets/);
+  assert.match(mobileDashboard, /dashboardFinancialSnapshot/);
+  assert.match(mobileDashboard, /isDashboardFinancialSnapshotReadyForScope/);
+  assert.match(mobileDashboard, /householdId,[\s\S]*budgetId,/);
+  assert.match(mobileDashboard, /model: dashboardModel/);
+
+  assert.match(pendingStage, /pointerEvents="box-none"/);
+  assert.match(pendingStage, /Preparing today's plan/);
+  assert.match(pendingStage, /\/\(tabs\)\/monthly/);
+  assert.match(pendingStage, /\/\(tabs\)\/transactions/);
+  assert.match(
+    pendingStage,
+    /style=\{styles\.status\}[\s\S]*?accessibilityLiveRegion="polite"|accessibilityLiveRegion="polite"[\s\S]*?style=\{styles\.status\}/,
+  );
+  assert.match(
+    pendingStage,
+    /<\/View>\s*\{failed && onRetry \? \(\s*<Pressable\s+accessibilityRole="button"/,
+  );
+  assert.doesNotMatch(pendingStage, /<Modal|AppLoadingIntro|position:\s*"absolute"/);
+});
+
+test("both Dashboard render paths are projection-free and keep pending navigation interactive", () => {
+  const mobileDashboard = readFileSync("app/(tabs)/index.tsx", "utf8");
+  const desktopDashboard = readFileSync(
+    "components/desktop/DesktopDashboard.tsx",
+    "utf8",
+  );
+  const stage = readFileSync("components/DashboardSnapshotStage.tsx", "utf8");
+
+  for (const source of [mobileDashboard, desktopDashboard]) {
+    for (const forbidden of [
+      /getCashFlow\(/,
+      /getDebtMonthSettlements\(/,
+      /getRemainingDebtPlanForMonth\(/,
+      /buildDashboardFinancialModel\(/,
+      /buildAlgorithmSuite\(/,
+      /buildReviewQueue\(/,
+      /countReviewQueue\(/,
+    ]) {
+      assert.doesNotMatch(source, forbidden);
+    }
+    assert.match(source, /isDashboardFinancialSnapshotReadyForScope/);
+    assert.match(source, /dashboardFinancialSnapshot/);
+    assert.match(source, /useDashboardFinancialSnapshot/);
+    assert.match(source, /budgetId/);
+  }
+  // Mobile's only daily projection is the explicitly opened outlook effect;
+  // Desktop has no projection getter at all.
+  assert.doesNotMatch(desktopDashboard, /getDailyBalances\(/);
+  assert.match(stage, /pointerEvents="box-none"/);
+  assert.match(stage, /router\.push\("\/\(tabs\)\/monthly"/);
+  assert.match(stage, /router\.push\("\/\(tabs\)\/transactions"/);
+  assert.doesNotMatch(stage, /<Modal|pointerEvents="none"/);
+});
+
+test("ready mobile and lazy desktop content acknowledge their exact snapshot mount", () => {
+  const mobileDashboard = readFileSync("app/(tabs)/index.tsx", "utf8");
+  const desktopDashboard = readFileSync(
+    "components/desktop/DesktopDashboard.tsx",
+    "utf8",
+  );
+
+  for (const source of [mobileDashboard, desktopDashboard]) {
+    assert.match(source, /acknowledgeDashboardSnapshotContentMounted/);
+    assert.match(source, /snapshotKey=\{dashboardFinancialSnapshot\.key\}/);
+    assert.match(
+      source,
+      /useEffect\(\s*\(\) => acknowledgeMounted\(snapshotKey\),\s*\[acknowledgeMounted, snapshotKey\],\s*\)/,
+    );
+    assert.match(
+      source,
+      /snapshotKey=\{exactScopeError \? dashboardFinancialSnapshot\.key : undefined\}/,
+    );
+  }
+  const stage = readFileSync("components/DashboardSnapshotStage.tsx", "utf8");
+  assert.match(
+    stage,
+    /if \(!acknowledgeMounted \|\| !snapshotKey\) return undefined;[\s\S]*return acknowledgeMounted\(snapshotKey\)/,
+  );
+  const lazyImport = mobileDashboard.indexOf("const DesktopDashboard = React.lazy");
+  const desktopFallback = mobileDashboard.indexOf("<React.Suspense", lazyImport);
+  assert.ok(lazyImport >= 0 && desktopFallback > lazyImport);
+  assert.match(desktopDashboard, /function DesktopDashboardContent/);
+});
+
+test("snapshot publication is isolated from non-Dashboard Budget consumers", () => {
+  const budgetContext = readFileSync("context/BudgetContext.tsx", "utf8");
+  const snapshotContext = readFileSync(
+    "context/DashboardFinancialSnapshotContext.tsx",
+    "utf8",
+  );
+  const controllerStart = budgetContext.indexOf(
+    "function DashboardFinancialSnapshotController",
+  );
+  const providerValueStart = budgetContext.indexOf(
+    "const budgetContextValue: BudgetContextType",
+  );
+  const providerReturn = budgetContext.slice(providerValueStart, controllerStart);
+  const controller = budgetContext.slice(controllerStart);
+
+  assert.ok(providerValueStart > 0 && controllerStart > providerValueStart);
+  assert.doesNotMatch(providerReturn, /dashboardFinancialSnapshot\s*[,}]/);
+  assert.doesNotMatch(providerReturn, /setComputedSnapshot|setLoadedCategoryBudgets/);
+  assert.match(providerReturn, /<BudgetContext\.Provider value=\{budgetContextValue\}>/);
+  assert.match(providerReturn, /<DashboardFinancialSnapshotController/);
+  assert.match(controller, /useState<DashboardFinancialSnapshotState \| null>/);
+  assert.match(controller, /<DashboardFinancialSnapshotContextProvider/);
+  assert.match(snapshotContext, /export function useDashboardFinancialSnapshot/);
+});
+
+test("hidden Dashboard editors and sheets do not mount on the ready first frame", () => {
+  const mobileDashboard = readFileSync("app/(tabs)/index.tsx", "utf8");
+  const desktopDashboard = readFileSync(
+    "components/desktop/DesktopDashboard.tsx",
+    "utf8",
+  );
+
+  for (const conditional of [
+    /\{customizerOpen \? <DashboardCustomizer/,
+    /\{addBillVisible \? <AddBillModal/,
+    /\{goalModalVisible \? <GoalModal/,
+    /\{savingsAccountNameTarget \? <SavingsAccountNameModal/,
+    /\{flowScoreVisible \? <Modal/,
+    /\{safeCushionVisible \? <Modal/,
+    /\{actionModalVisible \? <Modal/,
+    /\{categoryBudgetModalVisible \? <Modal/,
+    /\{moveMoneyVisible \? <Modal/,
+    /\{negCalendarVisible \? <Modal/,
+  ]) {
+    assert.match(mobileDashboard, conditional);
+  }
+  for (const conditional of [
+    /\{customizerOpen \? <DashboardCustomizer/,
+    /\{billEditor !== null \? <AddBillModal/,
+    /\{incomeEditorOpen \? <IncomeModal/,
+    /\{goalEditor !== undefined \? <GoalModal/,
+  ]) {
+    assert.match(desktopDashboard, conditional);
+  }
+});
+
+test("defers the full outlook on every mobile-responsive width until explicit open", () => {
   const mobileDashboard = readFileSync("app/(tabs)/index.tsx", "utf8");
   const outlookEffect = mobileDashboard.slice(
     mobileDashboard.indexOf("// ── 12-month negative schedule"),
     mobileDashboard.indexOf("// First month (across all 12)"),
   );
 
-  assert.match(outlookEffect, /if \(!isFocused \|\| \(!isCommandWide && !negCalendarVisible\)\) return;/);
+  assert.match(outlookEffect, /if \(!isFocused \|\| !negCalendarVisible\) return;/);
+  assert.doesNotMatch(outlookEffect, /isCommandWide/);
   assert.match(outlookEffect, /nextSchedule\.push\(next\)/);
   assert.match(outlookEffect, /i < settings\.forecast_horizon_months/);
   assert.match(outlookEffect, /setYearNegSchedule\(nextSchedule\)/);
@@ -323,6 +928,8 @@ test("defers the full outlook until desktop or an explicit mobile modal", () => 
   assert.match(mobileDashboard, /accessibilityRole="progressbar"/);
   assert.match(mobileDashboard, /accessibilityLabel="Building the breathing room outlook"/);
   assert.match(mobileDashboard, /Building outlook\.\.\./);
+  assert.match(mobileDashboard, /accessibilityLabel="Open the breathing room outlook"/);
+  assert.match(mobileDashboard, /tap to calculate/);
 });
 
 test("dashboard treats rollover as planned extra without raising the required or overdue amount", () => {
@@ -438,7 +1045,7 @@ test("lists each canonical savings account once and uses manual savings as a fal
   }]);
 });
 
-test("keeps both dashboard presentations on the shared calculation model", () => {
+test("keeps both Dashboard presentations on the provider snapshot", () => {
   const mobileDashboard = readFileSync("app/(tabs)/index.tsx", "utf8");
   const desktopDashboard = readFileSync(
     "components/desktop/DesktopDashboard.tsx",
@@ -446,10 +1053,17 @@ test("keeps both dashboard presentations on the shared calculation model", () =>
   );
 
   for (const source of [mobileDashboard, desktopDashboard]) {
-    assert.match(source, /buildDashboardFinancialModel\(/);
     assert.doesNotMatch(source, /import \{ buildAlgorithmSuite/);
     assert.doesNotMatch(source, /connectedCheckingBalance\(/);
   }
+  assert.doesNotMatch(mobileDashboard, /buildDashboardFinancialModel\(/);
+  assert.doesNotMatch(desktopDashboard, /buildDashboardFinancialModel\(/);
+  assert.match(mobileDashboard, /dashboardFinancialSnapshot/);
+  assert.match(desktopDashboard, /dashboardFinancialSnapshot/);
+  assert.match(desktopDashboard, /desktopTodayDecisions: todayDecisions/);
+  assert.match(desktopDashboard, /upcoming,/);
+  assert.match(desktopDashboard, /recentActivity,/);
+  assert.doesNotMatch(desktopDashboard, /monthTransactions[\s\S]{0,160}\.sort\(/);
 });
 
 test("desktop Upcoming uses canonical debt occurrences when the payoff planner is disabled", () => {
@@ -457,11 +1071,17 @@ test("desktop Upcoming uses canonical debt occurrences when the payoff planner i
     "components/desktop/DesktopDashboard.tsx",
     "utf8",
   );
+  const snapshotBuilder = readFileSync(
+    "lib/dashboardFinancialSnapshot.ts",
+    "utf8",
+  );
 
-  assert.match(desktopDashboard, /const debtSettlements = getDebtMonthSettlements\(month, year\)/);
-  assert.match(desktopDashboard, /exactDebtOccurrence\?\.configuredObligation/);
-  assert.match(desktopDashboard, /exactDebtOccurrence\?\.remainingRequired/);
-  assert.match(desktopDashboard, /getDebtMonthSettlements,[\s\S]+getBillMonthlyTotal/);
+  assert.match(desktopDashboard, /dashboardSnapshot[\s\S]*upcoming,/);
+  assert.doesNotMatch(desktopDashboard, /getDebtMonthSettlements\(/);
+  assert.match(snapshotBuilder, /buildDashboardUpcomingBills/);
+  assert.match(snapshotBuilder, /exactDebtOccurrence\?\.configuredObligation/);
+  assert.match(snapshotBuilder, /exactDebtOccurrence\?\.remainingRequired/);
+  assert.match(snapshotBuilder, /getDebtMonthSettlements\?\.\(month, year\)/);
 });
 
 test("both dashboards resume the same canonical setup walkthrough", () => {

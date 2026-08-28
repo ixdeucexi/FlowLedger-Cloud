@@ -13,6 +13,10 @@ const flo = fs.readFileSync(path.resolve(root, "app/(tabs)/flo.tsx"), "utf8");
 const simulator = fs.readFileSync(path.resolve(root, "app/plan-simulator.tsx"), "utf8");
 
 test("core daily balances remain projected while only the calendar getter overlays actual closes", () => {
+  const projectedBuilder = budgetContext.slice(
+    budgetContext.indexOf("const buildDailyBalances = useCallback"),
+    budgetContext.indexOf("const getDailyBalances = useCallback"),
+  );
   const projectedGetter = budgetContext.slice(
     budgetContext.indexOf("const getDailyBalances = useCallback"),
     budgetContext.indexOf("const getCalendarDailyBalances = useCallback"),
@@ -21,7 +25,9 @@ test("core daily balances remain projected while only the calendar getter overla
     budgetContext.indexOf("const getCalendarDailyBalances = useCallback"),
     budgetContext.indexOf("const getPlanSimulationBaseline = useCallback"),
   );
-  assert.match(projectedGetter, /balanceSource:\s*"projected"/);
+  assert.match(projectedBuilder, /balanceSource:\s*"projected"/);
+  assert.match(projectedGetter, /getOrComputeRevisionValue/);
+  assert.match(projectedGetter, /buildDailyBalances\(month, year\)/);
   assert.doesNotMatch(projectedGetter, /overlayCompletedDailyCheckingCloses/);
   assert.match(calendarGetter, /overlayCompletedDailyCheckingCloses/);
   assert.match(calendarGetter, /getDailyBalances\(month, year\)/);

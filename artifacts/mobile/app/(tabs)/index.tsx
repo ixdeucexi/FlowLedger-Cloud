@@ -10,9 +10,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from "react-native-svg";
 
 import { AddBillModal } from "@/components/AddBillModal";
-import { AppLoadingIntro } from "@/components/AppLoadingIntro";
 import { AppText } from "@/components/AppText";
 import { DashboardCustomizer } from "@/components/DashboardCustomizer";
+import { DashboardSnapshotStage } from "@/components/DashboardSnapshotStage";
 import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import { DashboardUtilityWidgets } from "@/components/DashboardUtilityWidgets";
 import { FlowmentumHandoffModal } from "@/components/FlowmentumHandoffModal";
@@ -28,6 +28,7 @@ import type { Bill, Goal, PendingBankTransaction } from "@/context/BudgetContext
 import { useBudget } from "@/context/BudgetContext";
 import { useAuth } from "@/context/AuthContext";
 import { useAppDiscovery } from "@/context/AppDiscoveryContext";
+import { useDashboardFinancialSnapshot } from "@/context/DashboardFinancialSnapshotContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
@@ -35,11 +36,14 @@ import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useDashboardLayoutPreferences } from "@/hooks/useDashboardLayoutPreferences";
 import { useSetupReadiness } from "@/hooks/useSetupReadiness";
 import { applyCategoryBudgetMove, buildZeroBudgetSummary } from "@/lib/categoryPlanning";
-import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets as saveCategoryBudgetsRemote, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
-import { buildDashboardFinancialModel, type DashboardSavingsAccount } from "@/lib/dashboardFinancialModel";
-import { isCheckingBalanceTransaction } from "@/lib/billMatching";
+import { saveCategoryBudgets as saveCategoryBudgetsRemote } from "@/lib/categoryBudgetStore";
+import type { DashboardSavingsAccount } from "@/lib/dashboardFinancialModel";
+import {
+  isDashboardFinancialSnapshotReadyForScope,
+  type DashboardFinancialSnapshot,
+} from "@/lib/dashboardFinancialSnapshot";
 import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
-import { compactDateLabel, dateOnlyToLocalDate, localDateString } from "@/lib/dateLabels";
+import { compactDateLabel } from "@/lib/dateLabels";
 import {
   FLOWMENTUM_URL,
   flowmentumPreviewStorageKey,
@@ -47,10 +51,9 @@ import {
   isFlowmentumHandoffEligible,
   shouldShowFlowmentumHandoff,
 } from "@/lib/flowmentumHandoff";
-import { buildReviewQueue, transactionCategoryParts } from "@/lib/reviewCenter";
+import { transactionCategoryParts } from "@/lib/reviewCenter";
 import type { AlgorithmInsight } from "@/lib/algorithmSuite";
 import { unplannedPendingExpenses } from "@/lib/plaidActivity";
-import { buildTodaysDecisions, summarizeDatedDebtDecision } from "@/lib/todaysDecisions";
 import { buildFlowGuideRouteParams } from "@/lib/flowledgerGuide";
 
 const MONTH_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -195,7 +198,7 @@ export default function DashboardScreen() {
 
   return (
     <React.Suspense
-      fallback={<AppLoadingIntro phase="workspace" accessibilityLabel="FlowLedger is opening your dashboard" />}
+      fallback={<DashboardSnapshotStage failed={false} />}
     >
       <DesktopDashboard />
     </React.Suspense>
@@ -203,6 +206,56 @@ export default function DashboardScreen() {
 }
 
 function MobileDashboardScreen() {
+  const { user } = useAuth();
+  const { activeHousehold } = useBudget();
+  const {
+    acknowledgeDashboardSnapshotContentMounted,
+    dashboardFinancialSnapshot,
+    retryDashboardFinancialSnapshot,
+  } = useDashboardFinancialSnapshot();
+  const householdId = activeHousehold?.householdId ?? null;
+  const budgetId = activeHousehold?.budgetId ?? null;
+
+  if (isDashboardFinancialSnapshotReadyForScope(
+    dashboardFinancialSnapshot,
+    user?.id,
+    householdId,
+    budgetId,
+  )) {
+    return (
+      <MobileDashboardContent
+        acknowledgeMounted={acknowledgeDashboardSnapshotContentMounted}
+        dashboardSnapshot={dashboardFinancialSnapshot.value}
+        snapshotKey={dashboardFinancialSnapshot.key}
+      />
+    );
+  }
+
+  const exactScopeError = dashboardFinancialSnapshot?.status === "error"
+    && dashboardFinancialSnapshot.identity.userId === user?.id
+    && dashboardFinancialSnapshot.identity.householdId === householdId
+    && dashboardFinancialSnapshot.identity.budgetId === budgetId;
+  return (
+    <DashboardSnapshotStage
+      acknowledgeMounted={exactScopeError
+        ? acknowledgeDashboardSnapshotContentMounted
+        : undefined}
+      failed={exactScopeError}
+      onRetry={exactScopeError ? retryDashboardFinancialSnapshot : undefined}
+      snapshotKey={exactScopeError ? dashboardFinancialSnapshot.key : undefined}
+    />
+  );
+}
+
+function MobileDashboardContent({
+  acknowledgeMounted,
+  dashboardSnapshot,
+  snapshotKey,
+}: {
+  acknowledgeMounted: (snapshotKey: string) => () => void;
+  dashboardSnapshot: DashboardFinancialSnapshot;
+  snapshotKey: string;
+}) {
   const c = useColors();
   const { openNotifications, unreadNotificationCount } = useAppDiscovery();
   const dashboardTheme = DASHBOARD_THEMES[c.mode];
@@ -224,14 +277,21 @@ function MobileDashboardScreen() {
   const { user } = useAuth();
   const { isAdmin } = useMembership();
   const {
-    bills, getPaidAmount, getBillMonthlyTotal, getBillOccurrencesInMonth, getDebtMonthSettlements, getMonthlyBills, getRemainingDebtPlanForMonth, selectedYear,
-    getMonthlyIncome,
-    goals, addGoal, updateGoal, deleteGoal,
-    getCashFlow, addBill, getDailyBalances, getTransactionsForMonth, settings,
-    accounts, connectedBankAccounts, incomes, updateAccount, updateConnectedBankAccountDisplayName, forecastConfidence,
+    getPaidAmount, getBillMonthlyTotal, getMonthlyBills,
+    addGoal, updateGoal, deleteGoal,
+    addBill, getDailyBalances, getTransactionsForMonth, settings,
+    accounts, updateAccount, updateConnectedBankAccountDisplayName, forecastConfidence,
     categories, activeHousehold, canEditHousehold, demoMode,
-    pendingBankTransactions, pendingPlanMatches, transactions,
   } = useBudget();
+  const {
+    model: dashboardModel,
+    reviewCenterCount,
+    todayDecisions,
+    postedIncome,
+  } = dashboardSnapshot;
+  const { cashFlow, currentMonth } = dashboardModel;
+  const currentYear = Number(dashboardModel.todayIso.slice(0, 4));
+  const now = new Date();
   const { readiness: setupReadiness } = useSetupReadiness();
   const categoryBudgetScope = useMemo(() => ({
     userId: user?.id,
@@ -251,7 +311,9 @@ function MobileDashboardScreen() {
   const [addBillForceDebt, setAddBillForceDebt]     = useState(false);
   const [negCalendarVisible, setNegCalendarVisible]  = useState(false);
   const [categoryBudgetModalVisible, setCategoryBudgetModalVisible] = useState(false);
-  const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
+  const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>(
+    () => ({ ...dashboardSnapshot.categoryBudgets }),
+  );
   const [categoryBudgetDrafts, setCategoryBudgetDrafts] = useState<Record<string, string>>({});
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [moveMoneyVisible, setMoveMoneyVisible] = useState(false);
@@ -267,6 +329,14 @@ function MobileDashboardScreen() {
   const [customizerOpen, setCustomizerOpen] = useState(false);
   const { layout: dashboardLayout, updateLayout: updateDashboardLayout, resetLayout: resetDashboardLayout } = useDashboardLayoutPreferences();
   const checkedPendingSignatureRef = useRef("");
+
+  useEffect(
+    () => acknowledgeMounted(snapshotKey),
+    [acknowledgeMounted, snapshotKey],
+  );
+  useEffect(() => {
+    setCategoryBudgets({ ...dashboardSnapshot.categoryBudgets });
+  }, [dashboardSnapshot.categoryBudgets]);
   const flowScoreSwipeResponder = useMemo(() => PanResponder.create({
     onMoveShouldSetPanResponder: (_event, gesture) => gesture.dy > 10 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
     onPanResponderRelease: (_event, gesture) => {
@@ -341,9 +411,6 @@ function MobileDashboardScreen() {
   const frontRotate = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] });
   const backRotate  = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ["180deg", "360deg"] });
 
-  const now          = new Date();
-  const currentMonth = now.getMonth();
-  const today        = now.getDate();
   const timeGreeting = demoMode
     ? "Good morning"
     : now.getHours() < 5
@@ -354,26 +421,15 @@ function MobileDashboardScreen() {
     ? "Good afternoon"
     : "Good evening";
 
-  const cashFlow      = useMemo(() => getCashFlow(currentMonth, selectedYear), [getCashFlow, currentMonth, selectedYear]);
-
-  // ── Real daily balances for current month ──────────────────────────────────
-  const currentBalancesCache = useRef<ReturnType<typeof getDailyBalances>>([]);
-  const currentMonthBalances = useMemo(() => {
-    if (!isFocused && currentBalancesCache.current.length) return currentBalancesCache.current;
-    const balances = getDailyBalances(currentMonth, selectedYear);
-    currentBalancesCache.current = balances;
-    return balances;
-  }, [getDailyBalances, currentMonth, selectedYear, isFocused]);
-
   // ── 12-month negative schedule ─────────────────────────────────────────────
   type OutlookMonth = { month: number; year: number; label: string; firstNegDay: number | null; lowestBalance: number };
   const [yearNegSchedule, setYearNegSchedule] = useState<OutlookMonth[]>([]);
 
   useEffect(() => {
-    // The full outlook is needed on wide desktop and when its mobile modal is
-    // explicitly open. Running it during every mobile Dashboard mount performed
-    // a second full-horizon projection that starved bottom-tab input for seconds.
-    if (!isFocused || (!isCommandWide && !negCalendarVisible)) return;
+    // This full-horizon projection is user-requested on every responsive
+    // MobileDashboardContent layout. Even one cold month can be expensive, so
+    // never start it merely because a 900-1023px browser viewport is "wide".
+    if (!isFocused || !negCalendarVisible) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     let i = 0;
@@ -383,7 +439,7 @@ function MobileDashboardScreen() {
     const calculateNextMonth = () => {
       if (cancelled || i >= settings.forecast_horizon_months) return;
       const m = (currentMonth + i) % 12;
-      const y = selectedYear + Math.floor((currentMonth + i) / 12);
+      const y = currentYear + Math.floor((currentMonth + i) / 12);
       const balances = getDailyBalances(m, y);
       const negEntry = balances.find(db => db.balance < 0);
       const lowest = balances.reduce((min, db) => db.balance < min ? db.balance : min, Infinity);
@@ -407,80 +463,12 @@ function MobileDashboardScreen() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [getDailyBalances, currentMonth, selectedYear, isCommandWide, isFocused, negCalendarVisible, settings.forecast_horizon_months]);
+  }, [getDailyBalances, currentMonth, currentYear, isFocused, negCalendarVisible, settings.forecast_horizon_months]);
 
   // First month (across all 12) that needs added breathing room
   const firstYearNegEntry = yearNegSchedule.find(e => e.firstNegDay !== null) ?? null;
+  const outlookReady = yearNegSchedule.length >= settings.forecast_horizon_months;
 
-  const categoryBudgetKey = useMemo(
-    () => categoryBudgetStorageKey(currentMonth, selectedYear, categoryBudgetScope),
-    [categoryBudgetScope, selectedYear, currentMonth],
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    const refreshCategoryBudgets = () => {
-      setCategoryBudgets(readCategoryBudgetCache(currentMonth, selectedYear, categoryBudgetScope));
-      void loadCategoryBudgets(categoryBudgetScope, currentMonth, selectedYear).then(next => {
-        if (!cancelled) setCategoryBudgets(next);
-      });
-    };
-    refreshCategoryBudgets();
-    const unsubscribe = subscribeCategoryBudgets(refreshCategoryBudgets);
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-  }, [categoryBudgetKey, categoryBudgetScope, currentMonth, selectedYear]);
-
-  const dashboardModel = useMemo(() => buildDashboardFinancialModel({
-    now,
-    selectedYear,
-    settings,
-    forecastConfidence,
-    accounts,
-    connectedBankAccounts,
-    pendingBankTransactions,
-    pendingPlanMatches,
-    categories,
-    categoryBudgets,
-    goals,
-    incomes,
-    cashFlow,
-    currentMonthBalances,
-    getMonthlyBills,
-    getMonthlyIncome,
-    getTransactionsForMonth,
-    getDailyBalances,
-    getBillMonthlyTotal,
-    getPaidAmount,
-    getBillOccurrencesInMonth,
-    getDebtMonthSettlements,
-  }), [
-    accounts,
-    cashFlow,
-    categories,
-    categoryBudgets,
-    connectedBankAccounts,
-    currentMonth,
-    currentMonthBalances,
-    forecastConfidence,
-    getBillMonthlyTotal,
-    getBillOccurrencesInMonth,
-    getDebtMonthSettlements,
-    getDailyBalances,
-    getMonthlyBills,
-    getMonthlyIncome,
-    getPaidAmount,
-    getTransactionsForMonth,
-    goals,
-    incomes,
-    pendingBankTransactions,
-    pendingPlanMatches,
-    selectedYear,
-    settings,
-    today,
-  ]);
   const { categoryPlan } = dashboardModel;
 
   const categoryDetail = useMemo(() => {
@@ -488,19 +476,19 @@ function MobileDashboardScreen() {
     const row = categoryPlan.find(item => item.category === selectedCategory);
     if (!row) return null;
 
-    const categoryBills = getMonthlyBills(currentMonth, selectedYear)
+    const categoryBills = getMonthlyBills(currentMonth, currentYear)
       .filter(isBillEligibleForUpcomingPlan)
       .filter(bill => (bill.is_debt ? "Debt" : bill.category || "Other") === selectedCategory)
       .map(bill => ({
         id: bill.id,
         name: bill.name,
-        amount: getBillMonthlyTotal(bill, currentMonth, selectedYear),
-        paid: getPaidAmount(bill.id, currentMonth, selectedYear),
+        amount: getBillMonthlyTotal(bill, currentMonth, currentYear),
+        paid: getPaidAmount(bill.id, currentMonth, currentYear),
         dueDay: bill.due_day,
       }))
       .sort((left, right) => left.dueDay - right.dueDay || left.name.localeCompare(right.name));
 
-    const categoryTransactions = getTransactionsForMonth(currentMonth, selectedYear)
+    const categoryTransactions = getTransactionsForMonth(currentMonth, currentYear)
       .flatMap(transaction => transactionCategoryParts(transaction).map((part, index) => ({
         id: `${transaction.id}:${index}`,
         name: part.label,
@@ -527,7 +515,7 @@ function MobileDashboardScreen() {
       : `${selectedCategory} is on plan with $${Math.max(0, row.remaining).toFixed(0)} left.`;
 
     return { row, categoryBills, categoryTransactions, billTotal, actualSpending, hasCustomBudget, explanation };
-  }, [selectedCategory, categoryPlan, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, getTransactionsForMonth, currentMonth, selectedYear]);
+  }, [selectedCategory, categoryPlan, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, getTransactionsForMonth, currentMonth, currentYear]);
 
   const budgetEditableCategories = useMemo(() => {
     const names = new Set<string>();
@@ -544,21 +532,14 @@ function MobileDashboardScreen() {
   }, [categoryPlan, moveTargetCategory]);
 
   const zeroBudgetSummary = buildZeroBudgetSummary(
-    settings.zeroBasedBudgetEnabled ? getMonthlyIncome(currentMonth, selectedYear) : 0,
+    settings.zeroBasedBudgetEnabled ? dashboardModel.monthlyIncome : 0,
     categoryPlan,
   );
   const zeroBudgetIncome = zeroBudgetSummary.plannedIncome;
   const zeroBudgetLeftToAssign = zeroBudgetSummary.leftToAssign;
-  const postedIncome = settings.zeroBasedBudgetEnabled
-    ? getTransactionsForMonth(currentMonth, selectedYear)
-      .filter(transaction => transaction.amount > 0
-        && transaction.review_status !== "transfer"
-        && isCheckingBalanceTransaction(transaction, connectedBankAccounts))
-      .reduce((sum, transaction) => sum + transaction.amount, 0)
-    : 0;
   const persistCategoryBudgets = (next: Record<string, number>) => {
     setCategoryBudgets(next);
-    void saveCategoryBudgetsRemote(categoryBudgetScope, currentMonth, selectedYear, next).catch(() => undefined);
+    void saveCategoryBudgetsRemote(categoryBudgetScope, currentMonth, currentYear, next).catch(() => undefined);
   };
 
   const openCategoryBudgetEditorForCategory = (category: string) => {
@@ -624,7 +605,7 @@ function MobileDashboardScreen() {
   const clearCategoryBudgets = () => {
     setCategoryBudgets({});
     setCategoryBudgetDrafts({});
-    void saveCategoryBudgetsRemote(categoryBudgetScope, currentMonth, selectedYear, {}).catch(() => undefined);
+    void saveCategoryBudgetsRemote(categoryBudgetScope, currentMonth, currentYear, {}).catch(() => undefined);
     setCategoryBudgetModalVisible(false);
   };
 
@@ -842,71 +823,6 @@ function MobileDashboardScreen() {
       }),
     } as any);
   }, [algorithmSuite.flowScore.components, algorithmSuite.flowScore.label, algorithmSuite.flowScore.score, algorithmSuite.safeCushion.lowestBalance, algorithmSuite.stability, forecastConfidence.label, router, settings.safety_floor]);
-  const reviewCenterCount = useMemo(
-    () => buildReviewQueue(transactions, localDateString()).length,
-    [transactions],
-  );
-  const mobileSnowballTarget = useMemo(
-    () => bills
-      .filter(bill => bill.is_debt && bill.balance > 0.005 && bill.include_in_snowball !== false)
-      .sort((left, right) => left.balance - right.balance || left.priority - right.priority)[0] ?? null,
-    [bills],
-  );
-  const mobileGoalNearCompletion = useMemo(
-    () => currentGoals
-      .filter(goal => goal.target_amount > 0 && goal.current_amount < goal.target_amount)
-      .sort((left, right) => (right.current_amount / right.target_amount) - (left.current_amount / left.target_amount))[0] ?? null,
-    [currentGoals],
-  );
-  const todayDecisions = useMemo(() => {
-    const priorityBill = algorithmSuite.billPriority.nextBill;
-    let priorityDate: Date | null = null;
-    if (priorityBill) {
-      const priorityMonth = priorityBill.dueDay >= today ? currentMonth : (currentMonth + 1) % 12;
-      const priorityYear = priorityBill.dueDay >= today || currentMonth < 11 ? selectedYear : selectedYear + 1;
-      priorityDate = new Date(priorityYear, priorityMonth, priorityBill.dueDay);
-    }
-    const priorityBillRecord = priorityBill ? bills.find(bill => bill.id === priorityBill.id) : null;
-    const priorityMonth = priorityDate?.getMonth() ?? currentMonth;
-    const priorityYear = priorityDate?.getFullYear() ?? selectedYear;
-    const debtDecision = priorityBillRecord?.is_debt && priorityBill
-      ? summarizeDatedDebtDecision(
-        getRemainingDebtPlanForMonth(priorityMonth, priorityYear)?.allocations ?? [],
-        priorityBill.id,
-      )
-      : null;
-    if (debtDecision) priorityDate = dateOnlyToLocalDate(debtDecision.date);
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const daysAway = priorityDate ? Math.max(0, Math.round((priorityDate.getTime() - todayStart.getTime()) / 86_400_000)) : 0;
-    const lowestDate = algorithmSuite.safeCushion.lowestDay
-      ? new Date(selectedYear, currentMonth, algorithmSuite.safeCushion.lowestDay).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-      : null;
-    return buildTodaysDecisions({
-      reviewCount: reviewCenterCount,
-      lowestBalance: algorithmSuite.safeCushion.lowestBalance,
-      lowestDate,
-      safetyFloor: settings.safety_floor,
-      safeToSpend: algorithmSuite.safeCushion.amount,
-      nextBill: priorityBill && priorityDate ? {
-        id: priorityBill.id,
-        name: debtDecision?.name ?? priorityBill.name,
-        amount: debtDecision?.amount ?? priorityBill.amount,
-        dateLabel: daysAway === 0 ? "today" : daysAway === 1 ? "tomorrow" : priorityDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        daysAway,
-        isDebt: Boolean(priorityBillRecord?.is_debt),
-        closed: Boolean(priorityBillRecord?.is_debt && priorityBillRecord.balance <= 0.009),
-        frequency: priorityBillRecord?.frequency,
-        paidOff: debtDecision?.paidOff,
-        rollover: debtDecision?.rollover,
-      } : null,
-      snowballTarget: mobileSnowballTarget ? { name: mobileSnowballTarget.name, balance: mobileSnowballTarget.balance } : null,
-      goal: mobileGoalNearCompletion ? {
-        name: mobileGoalNearCompletion.name,
-        current: mobileGoalNearCompletion.current_amount,
-        target: mobileGoalNearCompletion.target_amount,
-      } : null,
-    }).filter(decision => decision.id !== "breathing-room-opportunity");
-  }, [algorithmSuite.billPriority.nextBill, algorithmSuite.safeCushion, bills, currentMonth, getRemainingDebtPlanForMonth, mobileGoalNearCompletion, mobileSnowballTarget, now, reviewCenterCount, selectedYear, settings.safety_floor, today]);
   const dashboardBillsLeft = Math.max(0, cashFlow.totalBillsDue);
   const dashboardSafeToSpend = Math.max(0, algorithmSuite.safeCushion.amount);
   const dashboardNextPaydayFull = algorithmSuite.stability.nextPaycheckLabel || "Not scheduled";
@@ -1043,7 +959,7 @@ function MobileDashboardScreen() {
         </View>
       )}
 
-      <Modal
+      {pendingFloCharge ? <Modal
         visible={Boolean(pendingFloCharge)}
         transparent
         animationType="fade"
@@ -1110,25 +1026,25 @@ function MobileDashboardScreen() {
             </Pressable>
           </View>
         </View>
-      </Modal>
+      </Modal> : null}
 
-      <FlowmentumHandoffModal
+      {flowmentumVisible ? <FlowmentumHandoffModal
         visible={flowmentumVisible}
         isAdminPreview={flowmentumAdminPreview}
         onDismiss={dismissFlowmentum}
         onExplore={exploreFlowmentum}
-      />
+      /> : null}
 
       <MonthlyDebtCheckInModal
         onReview={() => router.push({ pathname: "/(tabs)/bills", params: { view: "debt" } } as any)}
       />
 
-      <SavingsAccountNameModal
+      {savingsAccountNameTarget ? <SavingsAccountNameModal
         account={savingsAccountNameTarget}
         onClose={() => setSavingsAccountNameTarget(null)}
         onSave={saveSavingsAccountName}
         onReset={resetSavingsAccountName}
-      />
+      /> : null}
 
       <View
         style={[
@@ -1412,13 +1328,13 @@ function MobileDashboardScreen() {
         onViewGuide={() => openStabilityGuide()}
       />
 
-      <DashboardCustomizer
+      {customizerOpen ? <DashboardCustomizer
         visible={customizerOpen}
         layout={dashboardLayout}
         onChange={updateDashboardLayout}
         onReset={resetDashboardLayout}
         onClose={() => setCustomizerOpen(false)}
-      />
+      /> : null}
 
       {isCommandWide && settings.zeroBasedBudgetEnabled && (
         <Pressable
@@ -1464,28 +1380,37 @@ function MobileDashboardScreen() {
 
 
       {/* ── Breathing-room opportunity (tappable → 12-month outlook) ── */}
-      {isCommandWide && firstYearNegEntry && (
-        <Pressable
-          onPress={() => setNegCalendarVisible(true)}
-          style={({ pressed }) => [styles.negWarning, { backgroundColor: c.primary + "18", borderRadius: colors.radius, opacity: pressed ? 0.8 : 1 }]}
-        >
-          <Feather name="trending-up" size={15} color={c.primary} />
-          <Text style={[styles.negWarningText, { color: c.primary }]}>
-            Build more breathing room by{" "}
-            <Text style={{ fontFamily: "Inter_700Bold" }}>
-              {formatMonthDay(firstYearNegEntry.month, firstYearNegEntry.year, firstYearNegEntry.firstNegDay)}
-            </Text>
-            {" "}— tap to see full outlook
-          </Text>
-          <Feather name="chevron-right" size={14} color={c.primary} />
-        </Pressable>
-      )}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open the breathing room outlook"
+        onPress={() => {
+          setYearNegSchedule([]);
+          setNegCalendarVisible(true);
+        }}
+        style={({ pressed }) => [styles.negWarning, { backgroundColor: c.primary + "18", borderRadius: colors.radius, opacity: pressed ? 0.8 : 1 }]}
+      >
+        <Feather name={firstYearNegEntry ? "trending-up" : "calendar"} size={15} color={c.primary} />
+        <Text style={[styles.negWarningText, { color: c.primary }]}>
+          {!outlookReady
+            ? `Review your ${settings.forecast_horizon_months}-month breathing room outlook — tap to calculate`
+            : firstYearNegEntry
+              ? <>
+                  Build more breathing room by{" "}
+                  <Text style={{ fontFamily: "Inter_700Bold" }}>
+                    {formatMonthDay(firstYearNegEntry.month, firstYearNegEntry.year, firstYearNegEntry.firstNegDay)}
+                  </Text>
+                  {" "}— tap to see full outlook
+                </>
+              : `No below-zero day found in your ${settings.forecast_horizon_months}-month outlook — tap to review`}
+        </Text>
+        <Feather name="chevron-right" size={14} color={c.primary} />
+      </Pressable>
 
 
       {/* ── Upcoming Bills ── */}
 
 
-      <Modal
+      {flowScoreVisible ? <Modal
         visible={flowScoreVisible}
         transparent
         animationType="slide"
@@ -1554,9 +1479,9 @@ function MobileDashboardScreen() {
             </Pressable>
           </Pressable>
         </Pressable>
-      </Modal>
+      </Modal> : null}
 
-      <Modal
+      {safeCushionVisible ? <Modal
         visible={safeCushionVisible}
         transparent
         animationType="slide"
@@ -1618,9 +1543,9 @@ function MobileDashboardScreen() {
             </Pressable>
           </Pressable>
         </Pressable>
-      </Modal>
+      </Modal> : null}
 
-      <Modal
+      {actionModalVisible ? <Modal
         visible={actionModalVisible}
         transparent
         animationType="slide"
@@ -1672,9 +1597,9 @@ function MobileDashboardScreen() {
             </Pressable>
           </Pressable>
         </Pressable>
-      </Modal>
+      </Modal> : null}
 
-      <Modal
+      {categoryBudgetModalVisible ? <Modal
         visible={categoryBudgetModalVisible}
         transparent
         animationType="slide"
@@ -1685,7 +1610,7 @@ function MobileDashboardScreen() {
             <View style={[styles.sheetHandle, { backgroundColor: c.muted }]} />
             <Text style={[styles.sheetTitle, { color: c.foreground }]}>Monthly Category Budgets</Text>
             <Text style={[styles.sheetSub, { color: c.mutedForeground }]}>
-              {MONTH_FULL[currentMonth]} {selectedYear} · leave blank to use planned bills.
+              {MONTH_FULL[currentMonth]} {currentYear} · leave blank to use planned bills.
             </Text>
 
             <ScrollView style={styles.categoryBudgetList} keyboardShouldPersistTaps="handled">
@@ -1722,9 +1647,9 @@ function MobileDashboardScreen() {
             </View>
           </Pressable>
         </Pressable>
-      </Modal>
+      </Modal> : null}
 
-      <Modal
+      {selectedCategory ? <Modal
         visible={!!selectedCategory}
         transparent
         animationType="slide"
@@ -1746,7 +1671,7 @@ function MobileDashboardScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.sheetTitle, { color: c.foreground, marginBottom: 0 }]}>{categoryDetail.row.category}</Text>
                     <Text style={[styles.sheetSub, { color: c.mutedForeground, marginBottom: 0 }]}>
-                      {MONTH_FULL[currentMonth]} {selectedYear} category detail
+                      {MONTH_FULL[currentMonth]} {currentYear} category detail
                     </Text>
                   </View>
                   <Pressable onPress={() => setSelectedCategory(null)} style={[styles.categoryDetailClose, { backgroundColor: c.muted }]}>
@@ -1783,7 +1708,7 @@ function MobileDashboardScreen() {
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.categoryDetailItemName, { color: c.foreground }]}>{bill.name}</Text>
                         <Text style={[styles.categoryDetailItemMeta, { color: c.mutedForeground }]}>
-                          Due {formatMonthDay(currentMonth, selectedYear, bill.dueDay)}{bill.paid > 0 ? ` · $${bill.paid.toFixed(0)} paid` : ""}
+                          Due {formatMonthDay(currentMonth, currentYear, bill.dueDay)}{bill.paid > 0 ? ` · $${bill.paid.toFixed(0)} paid` : ""}
                         </Text>
                       </View>
                       <Text style={[styles.categoryDetailItemAmount, { color: c.foreground }]}>${bill.amount.toFixed(0)}</Text>
@@ -1838,9 +1763,9 @@ function MobileDashboardScreen() {
             )}
           </Pressable>
         </Pressable>
-      </Modal>
+      </Modal> : null}
 
-      <Modal
+      {moveMoneyVisible ? <Modal
         visible={moveMoneyVisible}
         transparent
         animationType="slide"
@@ -1927,18 +1852,18 @@ function MobileDashboardScreen() {
             </View>
           </Pressable>
         </Pressable>
-      </Modal>
+      </Modal> : null}
 
-      <AddBillModal
+      {addBillVisible ? <AddBillModal
         visible={addBillVisible}
         onClose={() => { setAddBillVisible(false); setAddBillForceDebt(false); }}
         onSave={(data) => addBill(data as Omit<Bill, "id" | "created_at">)}
         onDelete={() => {}}
         editBill={null}
         forceDebt={addBillForceDebt}
-      />
+      /> : null}
 
-      <GoalModal
+      {goalModalVisible ? <GoalModal
         visible={goalModalVisible}
         onClose={() => { setGoalModalVisible(false); setEditGoal(null); }}
         onSave={(data) => {
@@ -1947,11 +1872,11 @@ function MobileDashboardScreen() {
         }}
         onDelete={deleteGoal}
         editGoal={editGoal}
-      />
+      /> : null}
 
       {/* ── Add savings contribution modal ── */}
       {/* ── 12-Month Balance Outlook modal ── */}
-      <Modal visible={negCalendarVisible} transparent animationType="slide" onRequestClose={() => setNegCalendarVisible(false)}>
+      {negCalendarVisible ? <Modal visible transparent animationType="slide" onRequestClose={() => setNegCalendarVisible(false)}>
         <Pressable style={styles.negSheetOverlay} onPress={() => setNegCalendarVisible(false)}>
           <Pressable style={[styles.negSheet, { backgroundColor: c.card }]} onPress={() => {}}>
             {/* Handle */}
@@ -2021,7 +1946,7 @@ function MobileDashboardScreen() {
             </Pressable>
           </Pressable>
         </Pressable>
-      </Modal>
+      </Modal> : null}
 
       {/* ── Save to Budget popup ── */}
     </ScrollView>

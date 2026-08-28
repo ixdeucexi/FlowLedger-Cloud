@@ -132,12 +132,52 @@ export function buildReviewQueue<T extends ReviewTransactionLike>(
   const monthPrefix = todayIso.slice(0, 7);
   const rolloverDate = previousMonthEnd(todayIso);
   const queue = transactions
-    .filter(transaction => !transaction.removed_at && transaction.pending !== true)
-    .filter(transaction => transaction.source === "plaid")
-    .filter(transaction => transaction.id === focusTransactionId || transaction.date.startsWith(monthPrefix) || transaction.date === rolloverDate)
-    .filter(transaction => transaction.review_status === "needs_review")
+    .filter(transaction => isReviewQueueCandidate(
+      transaction,
+      monthPrefix,
+      rolloverDate,
+      focusTransactionId,
+    ))
     .sort((left, right) => left.date.localeCompare(right.date) || left.id.localeCompare(right.id));
   return prioritizeReviewTransaction(queue, focusTransactionId);
+}
+
+function isReviewQueueCandidate(
+  transaction: ReviewTransactionLike,
+  monthPrefix: string,
+  rolloverDate: string | null,
+  focusTransactionId?: string,
+): boolean {
+  return !transaction.removed_at
+    && transaction.pending !== true
+    && transaction.source === "plaid"
+    && (
+      transaction.id === focusTransactionId
+      || transaction.date.startsWith(monthPrefix)
+      || transaction.date === rolloverDate
+    )
+    && transaction.review_status === "needs_review";
+}
+
+/** Count-only Dashboard selector. It preserves buildReviewQueue membership
+ * exactly without sorting a large current-month review list. */
+export function countReviewQueue(
+  transactions: ReviewTransactionLike[],
+  todayIso: string,
+  focusTransactionId?: string,
+): number {
+  const monthPrefix = todayIso.slice(0, 7);
+  const rolloverDate = previousMonthEnd(todayIso);
+  let count = 0;
+  transactions.forEach(transaction => {
+    if (isReviewQueueCandidate(
+      transaction,
+      monthPrefix,
+      rolloverDate,
+      focusTransactionId,
+    )) count += 1;
+  });
+  return count;
 }
 
 export function reviewQueueAfterSkips<T extends Pick<ReviewTransactionLike, "id">>(queue: T[], skippedIds: string[]): T[] {

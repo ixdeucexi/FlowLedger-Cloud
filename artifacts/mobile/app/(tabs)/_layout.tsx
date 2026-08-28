@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { AppDiscoveryProvider } from "@/context/AppDiscoveryContext";
 import { useBudget } from "@/context/BudgetContext";
+import { useDashboardFinancialSnapshotStatus } from "@/context/DashboardFinancialSnapshotContext";
 import { SaveStatusBanner } from "@/components/SaveStatusBanner";
 import { ConnectivityBanner } from "@/components/ConnectivityBanner";
 import { DecisionDueModal } from "@/components/DecisionDueModal";
@@ -43,7 +44,7 @@ import {
   FeedbackBadgeProvider,
   useFeedbackBadge,
 } from "@/context/FeedbackBadgeContext";
-import { buildReviewQueue } from "@/lib/reviewCenter";
+import { countReviewQueue } from "@/lib/reviewCenter";
 import { tabBadgeValue } from "@/lib/tabBadge";
 import {
   buildOverdueBillOccurrences,
@@ -65,8 +66,10 @@ import * as Haptics from "@/lib/haptics";
 import { isStoreCaptureMode } from "@/lib/demoMode";
 import {
   currentWebStartupCoverGeneration,
-  nextWebWorkspaceRevealedScopeKey,
+  nextWebWorkspaceRevealToken,
   publishWebWorkspaceReadiness,
+  webStartupCoverReason,
+  webWorkspaceRevealTokenIsReady,
   WEB_STARTUP_COVER_ARMED_EVENT,
   type WebStartupCoverArmedDetail,
 } from "@/lib/webStartupCover";
@@ -535,6 +538,7 @@ function TabContent() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const router = useRouter();
+  const segments = useSegments();
   const { user } = useAuth();
   const {
     loading,
@@ -553,6 +557,11 @@ function TabContent() {
     getDebtMonthSettlements,
     getPaidAmount,
   } = useBudget();
+  const {
+    dashboardSnapshotDemanded,
+    dashboardSnapshotStartupSettled,
+    dashboardSnapshotTargetKey,
+  } = useDashboardFinancialSnapshotStatus();
   const { newFeedbackCount } = useFeedbackBadge();
   const themeMode = useEffectiveThemeMode();
   const isDark = themeMode === "dark";
@@ -565,7 +574,7 @@ function TabContent() {
     typeof navigator !== "undefined" &&
     /iPhone|iPad|iPod/i.test(navigator.userAgent);
   const activityReviewCount = React.useMemo(
-    () => buildReviewQueue(transactions, todayIsoDate()).length,
+    () => countReviewQueue(transactions, todayIsoDate()),
     [transactions],
   );
   const pendingAlertCount = React.useMemo(
@@ -634,16 +643,27 @@ function TabContent() {
     newFeedbackCount,
   );
   const [workspaceMounted, setWorkspaceMounted] = React.useState(false);
-  const [revealedWorkspaceScopeKey, setRevealedWorkspaceScopeKey] =
-    React.useState<string | null>(null);
+  const [revealedWorkspace, setRevealedWorkspace] = React.useState<{
+    scopeKey: string;
+    generation: number;
+    contentKey: string;
+  } | null>(null);
   const [webStartupCoverGeneration, setWebStartupCoverGeneration] =
     React.useState(() => currentWebStartupCoverGeneration());
   const workspaceScopeKey = user
     ? `${user.id}:${activeHousehold?.householdId ?? "personal"}`
     : null;
-  const workspaceReadyToReveal = Boolean(
-    workspaceScopeKey && revealedWorkspaceScopeKey === workspaceScopeKey,
-  );
+  const workspaceContentKey = dashboardSnapshotDemanded
+    ? `dashboard:${dashboardSnapshotTargetKey ?? "pending"}`
+    : `route:${segments.join("/")}`;
+  const workspaceReadyToReveal = webWorkspaceRevealTokenIsReady({
+    revealed: revealedWorkspace,
+    currentScopeKey: workspaceScopeKey,
+    currentGeneration: webStartupCoverGeneration,
+    currentContentKey: workspaceContentKey,
+    coverArmed: Platform.OS === "web" && webStartupCoverReason() !== null,
+  });
+  const workspaceInteractionReady = workspaceReadyToReveal;
 
   React.useEffect(() => {
     if (Platform.OS !== "web" || typeof window === "undefined") return;
@@ -664,15 +684,22 @@ function TabContent() {
   }, []);
 
   React.useEffect(() => {
+    const coverArmed = Platform.OS === "web" && webStartupCoverReason() !== null;
     const readinessSatisfied = Boolean(
-      dataUpdatedAt && startupCoreReady && workspaceMounted,
+      dataUpdatedAt
+      && startupCoreReady
+      && workspaceMounted
+      && dashboardSnapshotStartupSettled,
     );
     if (!readinessSatisfied) {
-      setRevealedWorkspaceScopeKey((current) =>
-        nextWebWorkspaceRevealedScopeKey({
-          revealedScopeKey: current,
+      setRevealedWorkspace((current) =>
+        nextWebWorkspaceRevealToken({
+          revealed: current,
           currentScopeKey: workspaceScopeKey,
+          currentGeneration: webStartupCoverGeneration,
+          currentContentKey: workspaceContentKey,
           readinessSatisfied: false,
+          coverArmed,
         }),
       );
       return;
@@ -684,11 +711,14 @@ function TabContent() {
     let secondFrame = 0;
     const firstFrame = requestAnimationFrame(() => {
       secondFrame = requestAnimationFrame(() => {
-        setRevealedWorkspaceScopeKey((current) =>
-          nextWebWorkspaceRevealedScopeKey({
-            revealedScopeKey: current,
+        setRevealedWorkspace((current) =>
+          nextWebWorkspaceRevealToken({
+            revealed: current,
             currentScopeKey: workspaceScopeKey,
+            currentGeneration: webStartupCoverGeneration,
+            currentContentKey: workspaceContentKey,
             readinessSatisfied: true,
+            coverArmed,
           }),
         );
       });
@@ -698,7 +728,15 @@ function TabContent() {
       cancelAnimationFrame(firstFrame);
       if (secondFrame) cancelAnimationFrame(secondFrame);
     };
-  }, [dataUpdatedAt, startupCoreReady, workspaceMounted, workspaceScopeKey]);
+  }, [
+    dashboardSnapshotStartupSettled,
+    dataUpdatedAt,
+    startupCoreReady,
+    webStartupCoverGeneration,
+    workspaceContentKey,
+    workspaceMounted,
+    workspaceScopeKey,
+  ]);
 
   React.useEffect(() => {
     if (Platform.OS !== "web" || !workspaceScopeKey) return;
@@ -734,9 +772,9 @@ function TabContent() {
     >
       <View style={styles.tabTransitionContent}>
         <View
-          accessibilityElementsHidden={!workspaceReadyToReveal}
+          accessibilityElementsHidden={!workspaceInteractionReady}
           importantForAccessibility={
-            workspaceReadyToReveal ? "auto" : "no-hide-descendants"
+            workspaceInteractionReady ? "auto" : "no-hide-descendants"
           }
           style={styles.tabTransitionContent}
         >

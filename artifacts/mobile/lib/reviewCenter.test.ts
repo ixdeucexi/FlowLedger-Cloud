@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { allocationLabel, allocationTotal, applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupPlannedExpenseAllocations, groupReviewTargets, incomeReviewTargets, matchedOccurrenceAllocations, occurrenceKey, prioritizeReviewTransaction, prioritizeSavedBillTarget, rankReviewTargets, reviewAllocationsAreBalanced, reviewedBillMonthSettlement, reviewQueueAfterSkips, reviewSettlementSummary, scheduledSnowballReviewTargets, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
+import { allocationLabel, allocationTotal, applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, countReviewQueue, forgottenBillSettlement, groupPlannedExpenseAllocations, groupReviewTargets, incomeReviewTargets, matchedOccurrenceAllocations, occurrenceKey, prioritizeReviewTransaction, prioritizeSavedBillTarget, rankReviewTargets, reviewAllocationsAreBalanced, reviewedBillMonthSettlement, reviewQueueAfterSkips, reviewSettlementSummary, scheduledSnowballReviewTargets, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
 
 test("queues active current-month and month-end rollover Plaid transactions oldest first", () => {
   const queue = buildReviewQueue([
@@ -227,6 +227,45 @@ test("Snowball plans appear with bills and debt in Review Center", () => {
 
   assert.deepEqual(grouped.bills.map(target => target.id), ["camera", "streaming"]);
   assert.equal(grouped.bills[0]?.type, "snowball");
+});
+
+test("count-only review selector has exact queue membership without sorting", () => {
+  const rows = [
+    { id: "current", date: "2026-07-12", amount: -20, category: "Other", note: "A", source: "plaid", review_status: "needs_review" },
+    { id: "rollover", date: "2026-06-30", amount: -10, category: "Other", note: "B", source: "plaid", review_status: "needs_review" },
+    { id: "old", date: "2026-06-29", amount: -10, category: "Other", note: "C", source: "plaid", review_status: "needs_review" },
+    { id: "pending", date: "2026-07-10", amount: -10, category: "Other", note: "D", source: "plaid", review_status: "needs_review", pending: true },
+    { id: "removed", date: "2026-07-10", amount: -10, category: "Other", note: "E", source: "plaid", review_status: "needs_review", removed_at: "2026-07-11" },
+    { id: "manual", date: "2026-07-10", amount: -10, category: "Other", note: "F", source: "manual", review_status: "needs_review" },
+    { id: "done", date: "2026-07-10", amount: -10, category: "Other", note: "G", source: "plaid", review_status: "categorized" },
+  ];
+  assert.equal(
+    countReviewQueue(rows, "2026-07-15"),
+    buildReviewQueue(rows, "2026-07-15").length,
+  );
+  assert.equal(countReviewQueue(rows, "2026-07-15"), 2);
+  assert.equal(
+    countReviewQueue(rows, "2026-07-15", "old"),
+    buildReviewQueue(rows, "2026-07-15", "old").length,
+  );
+});
+
+test("count-only review selector stays below one task budget for 20k dense rows", (context) => {
+  const rows = Array.from({ length: 20_000 }, (_, index) => ({
+    id: `review-${index}`,
+    date: `2026-07-${String((index % 28) + 1).padStart(2, "0")}`,
+    amount: -19.95,
+    category: "Other",
+    note: `Review ${index}`,
+    source: "plaid",
+    review_status: "needs_review",
+  }));
+  const startedAt = performance.now();
+  const count = countReviewQueue(rows, "2026-07-15");
+  const elapsed = performance.now() - startedAt;
+  assert.equal(count, rows.length);
+  assert.ok(elapsed < 50, `dense review count took ${elapsed.toFixed(1)}ms`);
+  context.diagnostic(`dense 20k review count=${elapsed.toFixed(1)}ms`);
 });
 
 test("an explicit subscription bill link outranks inferred matches", () => {
