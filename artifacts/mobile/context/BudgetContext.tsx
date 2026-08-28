@@ -103,7 +103,7 @@ import { debtSourceCommitmentsForDebts, type PendingPlanMatch } from "@/lib/pend
 import { householdResolutionIsCurrent, loadResolvedHouseholdSelection, PWA_RESUME_STALE_MS, scopedRequestIsCurrent, shouldRefreshPlanOnResume, shouldReleaseBudgetLoading } from "@/lib/resumePolicy";
 import { ownsLegacyPersonalRows } from "@/lib/householdDataScope";
 import { dateIdKeysetFilter, loadAllDateIdKeysetRows } from "@/lib/pagedQuery";
-import { debtSyncRequiresRefresh } from "@/lib/debtSyncResult";
+import { debtSyncRefreshPlan, replaceRowsById, rowsExactlyMatchRequestedIds } from "@/lib/debtSyncResult";
 import { goalAffordabilityFromProjectedBalance } from "@/lib/goalAffordability";
 import { updateManualAccountWithAnchorAtomically } from "@/lib/atomicFinancialMutations";
 import {
@@ -2324,32 +2324,88 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
                 p_as_of_date: localDateInTimeZone(new Date(), loadedTimeZone),
                 p_household_id: scope?.householdId ?? null,
               });
+              const requestIsCurrent = () => (
+                requestId === loadRequestRef.current
+                && scope?.householdId === householdScopeRef.current?.householdId
+              );
+              if (!requestIsCurrent()) return;
+
+              const refreshPlan = debtSyncRefreshPlan(synced.error ? undefined : synced.data);
+              const refreshAllDebtRows = async () => {
+                const [billRows, transactionRows] = await Promise.all([
+                  applyHouseholdSelect(supabase.from("bills").select("*"), uid),
+                  loadAllTransactions(uid),
+                ]);
+                if (billRows.error || transactionRows.error || !requestIsCurrent()) {
+                  if (billRows.error || transactionRows.error) {
+                    console.warn(
+                      "Scheduled debt full refresh skipped",
+                      billRows.error?.message ?? transactionRows.error?.message,
+                    );
+                  }
+                  return;
+                }
+                setBills(reorderDebtPriorities((billRows.data ?? []).map(normalizeBillRow)));
+                const refreshedCollections = accountAwareTransactionCollections(
+                  transactionRows.data ?? [],
+                  transactionAccountIdentitiesRef.current,
+                );
+                setTransactions(refreshedCollections.active);
+                setDeletedTransactions(refreshedCollections.deleted);
+              };
+
               if (synced.error) {
-                console.warn("Scheduled debt sync skipped", synced.error.message);
+                console.warn("Scheduled debt sync result unavailable", synced.error.message);
+                await refreshAllDebtRows();
                 return;
               }
-              if (
-                requestId !== loadRequestRef.current
-                || scope?.householdId !== householdScopeRef.current?.householdId
-                || !debtSyncRequiresRefresh(synced.data)
-              ) return;
+              if (refreshPlan.mode === "none") return;
+              if (refreshPlan.mode === "full") {
+                await refreshAllDebtRows();
+                return;
+              }
+
+              const emptyRows = Promise.resolve({ data: [] as any[], error: null });
               const [billRows, transactionRows] = await Promise.all([
-                applyHouseholdSelect(supabase.from("bills").select("*"), uid),
-                loadAllTransactions(uid),
+                refreshPlan.billIds.length > 0
+                  ? applyHouseholdSelect(supabase.from("bills").select("*"), uid)
+                    .in("id", refreshPlan.billIds)
+                  : emptyRows,
+                refreshPlan.transactionIds.length > 0
+                  ? applyHouseholdSelect(supabase.from("transactions").select("*"), uid)
+                    .in("id", refreshPlan.transactionIds)
+                  : emptyRows,
               ]);
-              if (
-                billRows.error
-                || transactionRows.error
-                || requestId !== loadRequestRef.current
-                || scope?.householdId !== householdScopeRef.current?.householdId
-              ) return;
-              setBills(reorderDebtPriorities((billRows.data ?? []).map(normalizeBillRow)));
+              const exactRowsLoaded = (
+                !billRows.error
+                && !transactionRows.error
+                && rowsExactlyMatchRequestedIds(billRows.data ?? [], refreshPlan.billIds)
+                && rowsExactlyMatchRequestedIds(transactionRows.data ?? [], refreshPlan.transactionIds)
+              );
+              if (!requestIsCurrent()) return;
+              if (!exactRowsLoaded) {
+                await refreshAllDebtRows();
+                return;
+              }
+
+              const refreshedBills = (billRows.data ?? []).map(normalizeBillRow);
+              setBills(current => reorderDebtPriorities(
+                replaceRowsById(current, refreshPlan.billIds, refreshedBills),
+              ));
               const refreshedCollections = accountAwareTransactionCollections(
                 transactionRows.data ?? [],
                 transactionAccountIdentitiesRef.current,
               );
-              setTransactions(refreshedCollections.active);
-              setDeletedTransactions(refreshedCollections.deleted);
+              setTransactions(current => replaceRowsById(
+                current,
+                refreshPlan.transactionIds,
+                refreshedCollections.active,
+              ).sort((left, right) => right.date.localeCompare(left.date)));
+              setDeletedTransactions(current => replaceRowsById(
+                current,
+                refreshPlan.transactionIds,
+                refreshedCollections.deleted,
+              ).sort((left, right) => String(right.deleted_at ?? "").localeCompare(String(left.deleted_at ?? ""))));
             })().catch(error => console.warn("Scheduled debt sync skipped", error));
           }, 900);
         }

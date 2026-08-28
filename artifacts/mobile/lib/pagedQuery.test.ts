@@ -133,7 +133,10 @@ test("every growing transaction refresh uses the complete paged loader", () => {
     context.indexOf("const loadAllTransactions"),
     context.indexOf("const loadDailyCheckingCloses"),
   ), /\.range\(/);
-  assert.doesNotMatch(context, /applyHouseholdSelect\(supabase\.from\("transactions"\)\.select\("\*"\), uid\)/);
+  assert.match(
+    context,
+    /applyHouseholdSelect\(supabase\.from\("transactions"\)\.select\("\*"\), uid\)[\s\S]{0,80}\.in\("id", refreshPlan\.transactionIds\)/,
+  );
 });
 
 test("the 1000-row core request stays aligned with the PostgREST release cap", () => {
@@ -151,7 +154,15 @@ test("startup renders core data before secondary debt maintenance and records on
   assert.ok(source.indexOf("refreshHouseholdDetails(scope)") > source.indexOf("loadSucceeded = true"));
   assert.ok(source.indexOf('supabase.from("categories").select("name")') > source.indexOf("loadSucceeded = true"));
   assert.ok(source.indexOf("sync_due_debt_transactions") > source.indexOf("loadSucceeded = true"));
-  assert.ok(source.indexOf("debtSyncRequiresRefresh(synced.data)") < source.indexOf("loadAllTransactions(uid)", source.indexOf("sync_due_debt_transactions")));
+  assert.ok(source.indexOf("debtSyncRefreshPlan(") < source.indexOf("loadAllTransactions(uid)", source.indexOf("sync_due_debt_transactions")));
+  assert.match(source, /refreshPlan\.billIds[\s\S]*?\.in\("id", refreshPlan\.billIds\)/);
+  assert.match(source, /refreshPlan\.transactionIds[\s\S]*?\.in\("id", refreshPlan\.transactionIds\)/);
+  assert.match(source, /rowsExactlyMatchRequestedIds\(billRows\.data \?\? \[\], refreshPlan\.billIds\)/);
+  assert.match(source, /rowsExactlyMatchRequestedIds\(transactionRows\.data \?\? \[\], refreshPlan\.transactionIds\)/);
+  assert.match(source, /replaceRowsById\(current, refreshPlan\.billIds, refreshedBills\)/);
+  assert.match(source, /replaceRowsById\([\s\S]*?refreshPlan\.transactionIds,[\s\S]*?refreshedCollections\.active/);
+  assert.match(source, /if \(synced\.error\) \{[\s\S]*?await refreshAllDebtRows\(\)/);
+  assert.match(source, /if \(!exactRowsLoaded\) \{[\s\S]*?await refreshAllDebtRows\(\)/);
   assert.match(source, /accountAwareTransactionCollections\([\s\S]*?transactionAccountIdentitiesRef\.current/);
   assert.doesNotMatch(source, /setCategories\(DEFAULT_CATEGORIES\);[\s\S]{0,80}loadSucceeded = true/);
   assert.match(source, /Promise\.all\(\[[\s\S]*?Promise\.all\(\[[\s\S]*?loadBillDateMoves/);
