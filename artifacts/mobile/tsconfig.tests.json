@@ -141,6 +141,8 @@
     ,"lib/interfacePreferences.ts"
     ,"lib/navigationMemory.ts"
     ,"lib/navigationMemory.test.ts"
+    ,"lib/debtSyncResult.ts"
+    ,"lib/debtSyncResult.test.ts"
     ,"lib/activityRange.ts"
     ,"lib/activityRange.test.ts"
     ,"lib/activityUi.test.ts"
@@ -225,6 +227,7 @@
     ,"lib/billMatchCandidates.ts"
     ,"lib/billMatchCandidates.test.ts"
     ,"lib/atomicFinancialMutations.test.ts"
+    ,"lib/startupDebtSyncMigration.test.ts"
     ,"lib/supabaseRuntimeConfig.ts"
     ,"lib/supabaseRuntimeConfig.test.ts"
   ]

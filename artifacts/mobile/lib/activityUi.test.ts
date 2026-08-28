@@ -40,17 +40,20 @@ test("Activity keeps exact money and accessible modal and touch-target contracts
   );
 });
 
-test("Activity keeps paged history account-aware and filtered weekly totals honest", () => {
+test("Activity reuses the complete account-aware ledger and keeps filtered weekly totals honest", () => {
   assert.match(
     mobileActivity,
-    /selectFlowLedgerTransactions\(\s*historyTransactions,\s*transactionAccountIdentities,\s*\)\.included/,
+    /BudgetContext already loads the complete, account-aware transaction ledger/,
   );
-  assert.match(mobileActivity, /\.eq\("pending", false\)/);
-  assert.match(mobileActivity, /\.order\("id", \{ ascending: false \}\)/);
-  assert.match(mobileActivity, /\.limit\(ACTIVITY_PAGE_SIZE\)/);
-  assert.match(mobileActivity, /dateIdKeysetFilter\(pageCursor\)/);
-  assert.match(mobileActivity, /appendUniqueRowsById\(current, nextPage\)/);
-  assert.match(mobileActivity, /historyHasMore = !demoMode && historyPageHasMore/);
+  assert.match(
+    mobileActivity,
+    /selectFlowLedgerTransactions\(\s*transactions,\s*transactionAccountIdentities,\s*\)\.included/,
+  );
+  assert.match(mobileActivity, /const historyHasMore = false/);
+  assert.doesNotMatch(
+    mobileActivity,
+    /ACTIVITY_PAGE_SIZE|historyTransactions|dateIdKeysetFilter/,
+  );
   assert.match(
     mobileActivity,
     /weeks:\s*usesCompletePlannedSummary\s*\?\s*monthSummaryBasis\.weeks/,

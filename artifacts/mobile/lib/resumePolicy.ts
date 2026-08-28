@@ -35,16 +35,33 @@ export async function loadResolvedHouseholdSelection<T extends HouseholdRestoreC
   activeHousehold: T | null;
   remoteHouseholdId: string | null;
 }> {
-  // Resolve every critical discovery read before returning anything a caller
-  // could commit. Rejections leave the caller's cached scope/data untouched.
+  // Start local/remote preferences beside authoritative discovery. Each is
+  // immediately rejection-handled so an early discovery failure or genuine
+  // empty result cannot leave an unobserved background rejection.
+  const settlePreference = (load: () => Promise<string | null>) =>
+    Promise.resolve()
+      .then(load)
+      .then(
+        value => ({ ok: true as const, value }),
+        error => ({ ok: false as const, error }),
+      );
+  const storedHouseholdIdRequest = settlePreference(readStoredHouseholdId);
+  const remoteHouseholdIdRequest = settlePreference(readRemoteHouseholdId);
+
+  // Do not return or commit a preference-derived selection until every
+  // authoritative membership/household/budget discovery read has succeeded.
   const households = await loadHouseholds();
   if (households.length === 0) {
     return { households, activeHousehold: null, remoteHouseholdId: null };
   }
-  const [storedHouseholdId, remoteHouseholdId] = await Promise.all([
-    readStoredHouseholdId(),
-    readRemoteHouseholdId(),
+  const [storedResult, remoteResult] = await Promise.all([
+    storedHouseholdIdRequest,
+    remoteHouseholdIdRequest,
   ]);
+  if (!storedResult.ok) throw storedResult.error;
+  if (!remoteResult.ok) throw remoteResult.error;
+  const storedHouseholdId = storedResult.value;
+  const remoteHouseholdId = remoteResult.value;
   return {
     households,
     activeHousehold: chooseRestoredHousehold({

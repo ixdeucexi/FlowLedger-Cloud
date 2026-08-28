@@ -64,6 +64,57 @@ export async function readLastAppRoute(userId: string, householdId: string) {
   return normalizeRestorableRoute(preferences.lastRoute);
 }
 
+export interface RestorableRoutePrefetch {
+  scopeKey: string;
+  promise: Promise<string | null>;
+}
+
+/**
+ * Starts one local route read per authenticated household scope and reuses it
+ * while the financial core loads. The caller still decides when navigation is
+ * safe; this helper never applies a route or reveals scoped UI by itself.
+ */
+export function prefetchRestorableRoute(
+  existing: RestorableRoutePrefetch | null,
+  scopeKey: string,
+  load: () => Promise<string | null>,
+): RestorableRoutePrefetch {
+  if (existing?.scopeKey === scopeKey) return existing;
+  return {
+    scopeKey,
+    promise: Promise.resolve().then(load).catch(() => null),
+  };
+}
+
+export function restorableRoutePrefetchIsCurrent(
+  prefetch: RestorableRoutePrefetch | null,
+  scopeKey: string,
+): boolean {
+  return prefetch?.scopeKey === scopeKey;
+}
+
+export function restorableRouteCanApply({
+  cancelled,
+  applyReady,
+  expectedScopeKey,
+  currentScopeKey,
+  entry,
+  currentEntry,
+}: {
+  cancelled: boolean;
+  applyReady: boolean;
+  expectedScopeKey: string;
+  currentScopeKey: string | null;
+  entry: RestorableRoutePrefetch;
+  currentEntry: RestorableRoutePrefetch | null;
+}): boolean {
+  return !cancelled
+    && applyReady
+    && currentScopeKey === expectedScopeKey
+    && entry.scopeKey === expectedScopeKey
+    && currentEntry === entry;
+}
+
 export async function rememberAppRoute(
   userId: string,
   householdId: string,

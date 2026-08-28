@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-na
 
 import type { DailyBalance, DecisionRecord, Goal, GoalExpense, Transaction } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
+import { calendarBalanceIsVisible } from "@/lib/dailyCheckingClose";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { isConfirmedBillMatch } from "@/lib/billMatching";
 import { isSnowballPaymentTransaction, snowballPaymentName } from "@/lib/debtPaymentPlan";
@@ -226,7 +227,8 @@ export function CalendarView({
           const ungroupedCalendarGoals = calendarGoals.filter(goal => !groupedPlannedExpenseIds.has(goal.id));
 
           const decisionAmount = isBeforeStart ? 0 : (decisionsByDay[day] ?? 0);
-          const isLowRiskDay = Boolean(db && db.balance < safetyFloor);
+          const visibleBalance = calendarBalanceIsVisible(db) ? db : undefined;
+          const isLowRiskDay = Boolean(visibleBalance && visibleBalance.balance < safetyFloor);
           const chips: { label: string; kind: ChipKind }[] = [];
 
           if (db && db.scheduledIncome > 0) chips.push({ label: "Payday", kind: "income" });
@@ -273,7 +275,7 @@ export function CalendarView({
               disabled={isBeforeStart}
               onPress={() => onDayPress(ds)}
               accessibilityRole="button"
-              accessibilityLabel={`${ds}. ${db ? `Balance ${formatCalendarBalance(db.balance)}.` : "No forecast available."}`}
+              accessibilityLabel={`${ds}. ${visibleBalance ? `Balance ${formatCalendarBalance(visibleBalance.balance)}.` : db ? "Closing balance unavailable." : "No forecast available."}`}
               accessibilityState={{ disabled: isBeforeStart, selected: isSelected }}
               style={({ pressed }) => [
                 styles.cellOuter,
@@ -315,19 +317,19 @@ export function CalendarView({
                       {day}
                     </Text>
                   </View>
-                  {db ? (
+                  {visibleBalance ? (
                     <Text
                       style={[
                         styles.balanceText,
                         isDesktop && styles.desktopBalanceText,
-                        { color: db.balance >= safetyFloor ? calendarTheme.green : db.balance < 0 ? calendarTheme.red : calendarTheme.amber },
+                        { color: visibleBalance.balance >= safetyFloor ? calendarTheme.green : visibleBalance.balance < 0 ? calendarTheme.red : calendarTheme.amber },
                       ]}
-                      accessibilityLabel={`Balance ${formatCalendarBalance(db.balance)}`}
+                      accessibilityLabel={`Balance ${formatCalendarBalance(visibleBalance.balance)}`}
                       numberOfLines={1}
                       adjustsFontSizeToFit
                       minimumFontScale={0.55}
                     >
-                      {formatCalendarBalance(db.balance)}
+                      {formatCalendarBalance(visibleBalance.balance)}
                     </Text>
                   ) : null}
                 </View>

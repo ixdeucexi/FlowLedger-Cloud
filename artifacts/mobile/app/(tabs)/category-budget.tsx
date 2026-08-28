@@ -39,6 +39,7 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
   const { user } = useAuth();
   const {
     categories,
+    categoriesReady,
     getMonthlyBills,
     getBillMonthlyTotal,
     getMonthlyIncome,
@@ -193,6 +194,33 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
           <Pressable onPress={() => void updateSettings({ zeroBasedBudgetEnabled: true })} style={[styles.modeGateButton, { backgroundColor: c.primary }]}>
             <Text style={[styles.modeGateButtonText, { color: c.primaryForeground }]}>Use Zero Budget</Text>
           </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  if (!categoriesReady) {
+    return (
+      <View style={[styles.screen, { backgroundColor: c.background, paddingTop: insets.top + 10 }]}>
+        <PremiumBackdrop variant="green" />
+        <View style={styles.header}>
+          {!embedded ? (
+            <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: c.card }]}>
+              <Feather name="chevron-left" size={20} color={c.foreground} />
+            </Pressable>
+          ) : null}
+          <View style={{ flex: 1 }}>
+            {embedded ? <PlanViewSelector textStyle={styles.title} /> : <Text style={[styles.title, { color: c.foreground }]}>Category Budget</Text>}
+            <Text style={[styles.subtitle, { color: c.mutedForeground }]}>Give every dollar a job</Text>
+            <DataFreshnessLabel compact />
+          </View>
+        </View>
+        <View style={[styles.modeGate, { backgroundColor: c.card, borderColor: c.border }]}>
+          <View style={[styles.modeGateIcon, { backgroundColor: c.primary + "18" }]}>
+            <Feather name="refresh-cw" size={24} color={c.primary} />
+          </View>
+          <Text accessibilityLiveRegion="polite" style={[styles.modeGateTitle, { color: c.foreground }]}>Loading categories…</Text>
+          <Text style={[styles.modeGateText, { color: c.mutedForeground }]}>Your saved category plan will appear here.</Text>
         </View>
       </View>
     );

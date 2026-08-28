@@ -65,7 +65,7 @@ import { recordDiagnostic } from "@/lib/diagnostics";
 import { isDevDemoMode } from "@/lib/demoMode";
 import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, getLatestRecordedIncomeAmount, isBillActiveForMonth, isIncomeActiveForMonth, moveSettledBillOverrideDate, resolveFinalizedBillOccurrenceDays, resolveIncomeMatchOccurrenceDate } from "@/lib/schedule";
 import { accountUpdatesOperatingAnchor, bankBalanceAdjustment, connectedCheckingObservedAnchor, evaluateForecastConfidence, historicalMonthOpeningBalance, operatingAccountAnchor, type AccountSnapshot, type AccountType, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
-import { loadAllDailyCheckingCloses, localDateInTimeZone, overlayCompletedDailyCheckingCloses, shouldApplyDailyCheckingCloseLoad, type DailyBalanceSource, type DailyCheckingCloseSnapshot } from "@/lib/dailyCheckingClose";
+import { loadAllDailyCheckingCloses, localDateInTimeZone, overlayCompletedDailyCheckingCloses, shouldApplyDailyCheckingCloseLoad, type DailyBalanceSource, type DailyCheckingCloseLoadStatus, type DailyCheckingCloseSnapshot } from "@/lib/dailyCheckingClose";
 import { scenarioDates, type DecisionResult, type DecisionScenario, type DecisionType } from "@/lib/decisions";
 import {
   acceptHouseholdInviteCode,
@@ -103,6 +103,7 @@ import { debtSourceCommitmentsForDebts, type PendingPlanMatch } from "@/lib/pend
 import { householdResolutionIsCurrent, loadResolvedHouseholdSelection, PWA_RESUME_STALE_MS, scopedRequestIsCurrent, shouldRefreshPlanOnResume, shouldReleaseBudgetLoading } from "@/lib/resumePolicy";
 import { ownsLegacyPersonalRows } from "@/lib/householdDataScope";
 import { dateIdKeysetFilter, loadAllDateIdKeysetRows } from "@/lib/pagedQuery";
+import { debtSyncRequiresRefresh } from "@/lib/debtSyncResult";
 import { goalAffordabilityFromProjectedBalance } from "@/lib/goalAffordability";
 import { updateManualAccountWithAnchorAtomically } from "@/lib/atomicFinancialMutations";
 import {
@@ -435,6 +436,7 @@ export interface DailyBalance {
   balanceSource: DailyBalanceSource;
   balanceDate: string;
   balanceObservedAt?: string;
+  balanceUnavailableReason?: "history_loading" | "history_error" | "close_not_recorded";
   projectedInflow?: number;
   projectedOutflow?: number;
   events?: FinancialEvent[];
@@ -468,6 +470,8 @@ interface BudgetContextType {
   households: HouseholdMembership[];
   householdMembers: HouseholdMember[];
   householdActivity: HouseholdActivity[];
+  householdDetailsReady: boolean;
+  categoriesReady: boolean;
   activeHousehold: HouseholdMembership | null;
   householdRole: HouseholdRole | null;
   canEditHousehold: boolean;
@@ -1171,16 +1175,22 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [incomes,       setIncomes]       = useState<IncomeItem[]>([]);
   const [goals,         setGoals]         = useState<Goal[]>([]);
   const [extraPayments, setExtraPayments] = useState<ExtraPayment[]>([]);
-  const [categories,    setCategories]    = useState<string[]>([]);
+  const [categories,    setCategories]    = useState<string[]>(DEFAULT_CATEGORIES);
   const [accounts,      setAccounts]      = useState<Account[]>([]);
   const [connectedBankAccounts, setConnectedBankAccounts] = useState<ConnectedBankAccount[]>([]);
   const [dailyCheckingCloses, setDailyCheckingCloses] = useState<DailyCheckingCloseSnapshot[]>([]);
+  const [dailyCheckingCloseLoad, setDailyCheckingCloseLoad] = useState<{
+    scopeKey: string | null;
+    status: DailyCheckingCloseLoadStatus;
+  }>({ scopeKey: null, status: "loading" });
   const [householdTimeZone, setHouseholdTimeZone] = useState("UTC");
   const [transactionAccountIdentities, setTransactionAccountIdentities] = useState<ConnectedBankAccount[]>([]);
   const [decisions,     setDecisions]     = useState<DecisionRecord[]>([]);
   const [households,    setHouseholds]    = useState<HouseholdMembership[]>([]);
   const [householdMembers, setHouseholdMembers] = useState<HouseholdMember[]>([]);
   const [householdActivity, setHouseholdActivity] = useState<HouseholdActivity[]>([]);
+  const [householdDetailsReadyScopeKey, setHouseholdDetailsReadyScopeKey] = useState<string | null>(null);
+  const [categoriesReadyScopeKey, setCategoriesReadyScopeKey] = useState<string | null>(null);
   const [activeHouseholdId, setActiveHouseholdId] = useState<string | null>(null);
   const [settings,      setSettings]      = useState<Settings>(DEFAULT_SETTINGS);
   const [loading,       setLoading]       = useState(true);
@@ -1234,6 +1244,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const householdResolutionRequestRef = useRef(0);
   const householdDetailsRequestRef = useRef(0);
   const householdActivityRequestRef = useRef(0);
+  const postCoreSecondaryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const postCoreDebtTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scopeTransitionPendingRef = useRef<string | null>(null);
   const userTransitionPendingRef = useRef(false);
   const scopeCoreLoadWaitersRef = useRef(new Map<string, Set<{
@@ -1250,10 +1262,24 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { settingsRef.current = settings; }, [settings]);
   useEffect(() => { connectedBankAccountsRef.current = connectedBankAccounts; }, [connectedBankAccounts]);
   useEffect(() => { transactionAccountIdentitiesRef.current = transactionAccountIdentities; }, [transactionAccountIdentities]);
+  useEffect(() => () => {
+    if (postCoreSecondaryTimerRef.current) clearTimeout(postCoreSecondaryTimerRef.current);
+    if (postCoreDebtTimerRef.current) clearTimeout(postCoreDebtTimerRef.current);
+  }, []);
 
   const clearScopedFinancialData = useCallback(() => {
+    if (postCoreSecondaryTimerRef.current) {
+      clearTimeout(postCoreSecondaryTimerRef.current);
+      postCoreSecondaryTimerRef.current = null;
+    }
+    if (postCoreDebtTimerRef.current) {
+      clearTimeout(postCoreDebtTimerRef.current);
+      postCoreDebtTimerRef.current = null;
+    }
     householdDetailsRequestRef.current += 1;
     householdActivityRequestRef.current += 1;
+    setHouseholdDetailsReadyScopeKey(null);
+    setCategoriesReadyScopeKey(null);
     scopeCoreLoadWaitersRef.current.forEach(waiters => {
       waiters.forEach(waiter => waiter.reject(new Error("The active household changed.")));
     });
@@ -1270,7 +1296,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setIncomes([]);
     setGoals([]);
     setExtraPayments([]);
-    setCategories([]);
+    setCategories(DEFAULT_CATEGORIES);
     setAccounts([]);
     accountsRef.current = [];
     authoritativeAccountsByIdRef.current.clear();
@@ -1278,6 +1304,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     connectedBankAccountsRef.current = [];
     dailyCheckingCloseRequestRef.current += 1;
     setDailyCheckingCloses([]);
+    setDailyCheckingCloseLoad({ scopeKey: null, status: "loading" });
     setHouseholdTimeZone("UTC");
     setTransactionAccountIdentities([]);
     transactionAccountIdentitiesRef.current = [];
@@ -1324,6 +1351,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   );
   const householdRole = activeHousehold?.role ?? null;
   const canEditHousehold = canEditHouseholdPlan(activeHousehold?.role);
+  const secondaryDataScopeKey = userId && activeHousehold?.householdId
+    ? `${userId}:${activeHousehold.householdId}`
+    : null;
+  const householdDetailsReady = demoMode || Boolean(
+    secondaryDataScopeKey && householdDetailsReadyScopeKey === secondaryDataScopeKey,
+  );
+  const categoriesReady = demoMode || Boolean(
+    secondaryDataScopeKey && categoriesReadyScopeKey === secondaryDataScopeKey,
+  );
   const replaceActiveHouseholdScope = useCallback((next: HouseholdMembership | null) => {
     if (householdScopeRef.current?.householdId !== next?.householdId) resetSaveLifecycle();
     householdScopeRef.current = next;
@@ -1372,7 +1408,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     );
     if (cursor) query = query.or(dateIdKeysetFilter(cursor));
     return query;
-  }), [applyHouseholdSelect]);
+  }, 1_000), [applyHouseholdSelect]);
 
   const loadDailyCheckingCloses = useCallback((scope?: HouseholdMembership | null) => {
     if (!scope?.householdId) return Promise.resolve({ data: [], error: null });
@@ -1392,11 +1428,30 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     isCurrent: () => boolean,
   ) => {
     const requestGeneration = ++dailyCheckingCloseRequestRef.current;
+    const scopeKey = scope?.householdId
+      ? `${financialDataUserIdRef.current ?? "signed-out"}:${scope.householdId}`
+      : null;
+    setDailyCheckingCloseLoad(current => (
+      current.scopeKey === scopeKey && current.status === "ready"
+        ? current
+        : { scopeKey, status: "loading" }
+    ));
     // Recorded closes are display-only. Start them beside the financial load,
     // but never make startup/resume or data freshness wait for paged history.
     void loadDailyCheckingCloses(scope).then(result => {
       if (result.error) {
         console.warn("Daily checking history deferred", result.error.message);
+        if (shouldApplyDailyCheckingCloseLoad(
+          requestGeneration,
+          dailyCheckingCloseRequestRef.current,
+          isCurrent(),
+        )) {
+          setDailyCheckingCloseLoad(current => (
+            current.scopeKey === scopeKey && current.status === "ready"
+              ? current
+              : { scopeKey, status: "error" }
+          ));
+        }
         return;
       }
       if (!shouldApplyDailyCheckingCloseLoad(
@@ -1405,10 +1460,22 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         isCurrent(),
       )) return;
       setDailyCheckingCloses(normalizeDailyCheckingCloseRows(result.data ?? []));
+      setDailyCheckingCloseLoad({ scopeKey, status: "ready" });
     }).catch(error => {
-      // Retain the last successful history; the calendar can keep using it or
-      // honestly fall back to projected dates after a household-scope clear.
+      // Retain the last successful same-scope history. After a scope clear,
+      // past balances stay unavailable until a guarded history load succeeds.
       console.warn("Daily checking history deferred", error);
+      if (shouldApplyDailyCheckingCloseLoad(
+        requestGeneration,
+        dailyCheckingCloseRequestRef.current,
+        isCurrent(),
+      )) {
+        setDailyCheckingCloseLoad(current => (
+          current.scopeKey === scopeKey && current.status === "ready"
+            ? current
+            : { scopeKey, status: "error" }
+        ));
+      }
     });
   }, [loadDailyCheckingCloses]);
 
@@ -1495,9 +1562,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const refreshHouseholdDetails = useCallback(async (scope?: HouseholdMembership | null) => {
     const requestId = ++householdDetailsRequestRef.current;
+    const requestUserId = financialDataUserIdRef.current;
+    const readyScopeKey = requestUserId && scope?.householdId
+      ? `${requestUserId}:${scope.householdId}`
+      : null;
     if (!scope) {
       setHouseholdMembers([]);
       setHouseholdActivity([]);
+      setHouseholdDetailsReadyScopeKey(null);
       return;
     }
     const [members, activity] = await Promise.all([
@@ -1509,12 +1581,13 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       currentRequestId: householdDetailsRequestRef.current,
       householdId: scope.householdId,
       currentHouseholdId: householdScopeRef.current?.householdId,
-    })) return;
+    }) || requestUserId !== financialDataUserIdRef.current) return;
     setHouseholdMembers(members);
     setHouseholdActivity(activity);
+    setHouseholdDetailsReadyScopeKey(readyScopeKey);
   }, []);
 
-  const resolveHouseholds = useCallback(async (uid: string) => {
+  const resolveHouseholds = useCallback(async (uid: string, loadDetails = true) => {
     const resolutionRequestId = ++householdResolutionRequestRef.current;
     const priorHouseholdId = householdScopeRef.current?.householdId ?? null;
     const resolution = await loadResolvedHouseholdSelection({
@@ -1570,9 +1643,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     } else {
       void writeStoredActiveHouseholdId(uid, next.householdId);
     }
-    void refreshHouseholdDetails(next).catch(error => {
-      console.warn("Household details refresh skipped", error);
-    });
+    if (loadDetails) {
+      void refreshHouseholdDetails(next).catch(error => {
+        console.warn("Household details refresh skipped", error);
+      });
+    }
     return next;
   }, [clearScopedFinancialData, refreshHouseholdDetails, replaceActiveHouseholdScope]);
 
@@ -1853,7 +1928,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   }, [activeHousehold]);
 
   useEffect(() => {
-    if (!user || demoMode || !activeHousehold || activeHousehold.role === "viewer") return;
+    if (loading || !user || demoMode || !activeHousehold || activeHousehold.role === "viewer") return;
     const detectedTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
     if (detectedTimeZone === "UTC") return;
     void (async () => {
@@ -1871,7 +1946,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         setHouseholdTimeZone(detectedTimeZone);
       }
     })();
-  }, [user, demoMode, activeHousehold]);
+  }, [loading, user, demoMode, activeHousehold]);
 
   const switchHousehold = useCallback(async (householdId: string) => {
     if (!user || demoMode) return;
@@ -1997,7 +2072,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!userId) {
       setLoadError(null);
       setBills([]); setOverrides([]); setBillDateMoves([]); setTransactions([]); setDeletedTransactions([]); setPendingBankTransactions([]); setIncomes([]);
-      setGoals([]); setExtraPayments([]); setCategories([]); setAccounts([]); setConnectedBankAccounts([]); setDailyCheckingCloses([]); setHouseholdTimeZone("UTC"); setTransactionAccountIdentities([]); setDecisions([]); setSettings(DEFAULT_SETTINGS);
+      setGoals([]); setExtraPayments([]); setCategories(DEFAULT_CATEGORIES); setAccounts([]); setConnectedBankAccounts([]); setDailyCheckingCloses([]); setHouseholdTimeZone("UTC"); setTransactionAccountIdentities([]); setDecisions([]); setSettings(DEFAULT_SETTINGS);
+      setDailyCheckingCloseLoad({ scopeKey: null, status: "loading" });
+      setHouseholdDetailsReadyScopeKey(null);
+      setCategoriesReadyScopeKey(null);
       transactionAccountIdentitiesRef.current = [];
       setHouseholds([]); setHouseholdMembers([]); setHouseholdActivity([]); replaceActiveHouseholdScope(null);
       billDateMovesRef.current = [];
@@ -2022,7 +2100,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       try {
         const uid = userId;
         const scope = await withLoadTimeout(
-          resolveHouseholds(uid),
+          resolveHouseholds(uid, false),
           8000,
           "Load households",
         );
@@ -2036,15 +2114,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           requestId === loadRequestRef.current
           && scope?.householdId === householdScopeRef.current?.householdId
         ));
-        // Custom category labels are useful in editors, but they do not change
-        // the financial ledger. Start the read beside core loading and apply it
-        // independently so a slow display-only query cannot hold the app shell.
-        const secondaryCategoryRequest = Promise.resolve(
-          applyHouseholdSelect(supabase.from("categories").select("name"), uid),
-        ).catch(error => ({
-          data: null,
-          error: { message: error instanceof Error ? error.message : "Category loading failed." },
-        }));
         // Version the positional result cache when its shape changes. This
         // prevents an in-memory pre-update array from shifting Decisions into
         // the removed daily-close slot during a web hot reload.
@@ -2204,58 +2273,85 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           settleScopeCoreLoad(resolvedScopeId);
         }
 
-        void secondaryCategoryRequest.then(categoryResult => {
+        // Household members/activity and custom category labels do not affect
+        // the financial core. Start them after the loading barrier can release
+        // so their requests and JSON work cannot delay the first real screen.
+        if (postCoreSecondaryTimerRef.current) clearTimeout(postCoreSecondaryTimerRef.current);
+        postCoreSecondaryTimerRef.current = setTimeout(() => {
+          postCoreSecondaryTimerRef.current = null;
           if (
             requestId !== loadRequestRef.current
             || scope?.householdId !== householdScopeRef.current?.householdId
           ) return;
-          if (categoryResult.error) {
-            console.warn("Custom categories skipped", categoryResult.error.message);
-            setCategories(DEFAULT_CATEGORIES);
-            return;
-          }
-          const cats = (categoryResult.data ?? []).map((category: any) => category.name as string);
-          setCategories(cats.length > 0 ? fallbackCategoryList(cats) : DEFAULT_CATEGORIES);
-        }).catch(error => {
-          if (
-            requestId === loadRequestRef.current
-            && scope?.householdId === householdScopeRef.current?.householdId
-          ) {
-            console.warn("Custom categories skipped", error);
-            setCategories(DEFAULT_CATEGORIES);
-          }
-        });
-
-        // Scheduled debt maintenance is important but is not required to render
-        // the saved plan. Run it after the first complete screen is available.
-        if (scope?.role !== "viewer") {
-          void (async () => {
-            const synced = await supabase.rpc("sync_due_debt_transactions", {
-              p_as_of_date: localDateInTimeZone(new Date(), loadedTimeZone),
-              p_household_id: scope?.householdId ?? null,
-            });
-            if (synced.error) {
-              console.warn("Scheduled debt sync skipped", synced.error.message);
-              return;
-            }
-            const [billRows, transactionRows] = await Promise.all([
-              applyHouseholdSelect(supabase.from("bills").select("*"), uid),
-              loadAllTransactions(uid),
-            ]);
+          void refreshHouseholdDetails(scope).catch(error => {
+            console.warn("Household details refresh skipped", error);
+          });
+          void Promise.resolve(
+            applyHouseholdSelect(supabase.from("categories").select("name"), uid),
+          ).then(categoryResult => {
             if (
-              billRows.error
-              || transactionRows.error
-              || requestId !== loadRequestRef.current
+              requestId !== loadRequestRef.current
               || scope?.householdId !== householdScopeRef.current?.householdId
             ) return;
-            setBills(reorderDebtPriorities((billRows.data ?? []).map(normalizeBillRow)));
-            const refreshedCollections = accountAwareTransactionCollections(
-              transactionRows.data ?? [],
-              rawConnectedAccounts,
-            );
-            setTransactions(refreshedCollections.active);
-            setDeletedTransactions(refreshedCollections.deleted);
-          })().catch(error => console.warn("Scheduled debt sync skipped", error));
+            if (categoryResult.error) {
+              console.warn("Custom categories skipped", categoryResult.error.message);
+              return;
+            }
+            const cats = (categoryResult.data ?? []).map((category: any) => category.name as string);
+            setCategories(cats.length > 0 ? fallbackCategoryList(cats) : DEFAULT_CATEGORIES);
+            setCategoriesReadyScopeKey(scope?.householdId ? `${uid}:${scope.householdId}` : null);
+          }).catch(error => {
+            if (
+              requestId === loadRequestRef.current
+              && scope?.householdId === householdScopeRef.current?.householdId
+            ) console.warn("Custom categories skipped", error);
+          });
+        }, 300);
+
+        // Scheduled debt maintenance is important but is not required to render
+        // the saved plan. Give the first screen time to paint, then refetch the
+        // large ledger only when the RPC reports a real persisted change.
+        if (scope?.role !== "viewer") {
+          if (postCoreDebtTimerRef.current) clearTimeout(postCoreDebtTimerRef.current);
+          postCoreDebtTimerRef.current = setTimeout(() => {
+            postCoreDebtTimerRef.current = null;
+            if (
+              requestId !== loadRequestRef.current
+              || scope?.householdId !== householdScopeRef.current?.householdId
+            ) return;
+            void (async () => {
+              const synced = await supabase.rpc("sync_due_debt_transactions", {
+                p_as_of_date: localDateInTimeZone(new Date(), loadedTimeZone),
+                p_household_id: scope?.householdId ?? null,
+              });
+              if (synced.error) {
+                console.warn("Scheduled debt sync skipped", synced.error.message);
+                return;
+              }
+              if (
+                requestId !== loadRequestRef.current
+                || scope?.householdId !== householdScopeRef.current?.householdId
+                || !debtSyncRequiresRefresh(synced.data)
+              ) return;
+              const [billRows, transactionRows] = await Promise.all([
+                applyHouseholdSelect(supabase.from("bills").select("*"), uid),
+                loadAllTransactions(uid),
+              ]);
+              if (
+                billRows.error
+                || transactionRows.error
+                || requestId !== loadRequestRef.current
+                || scope?.householdId !== householdScopeRef.current?.householdId
+              ) return;
+              setBills(reorderDebtPriorities((billRows.data ?? []).map(normalizeBillRow)));
+              const refreshedCollections = accountAwareTransactionCollections(
+                transactionRows.data ?? [],
+                transactionAccountIdentitiesRef.current,
+              );
+              setTransactions(refreshedCollections.active);
+              setDeletedTransactions(refreshedCollections.deleted);
+            })().catch(error => console.warn("Scheduled debt sync skipped", error));
+          }, 900);
         }
       } catch (error) {
         console.warn("Budget load failed or timed out", error);
@@ -2293,7 +2389,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }).catch(() => undefined);
       }
     })();
-  }, [userId, demoMode, loadRetryNonce, resolveHouseholds, applyHouseholdSelect, loadAllTransactions, refreshDailyCheckingCloses, loadScopedSettings, queryClient, replaceActiveHouseholdScope, settleScopeCoreLoad]);
+  }, [userId, demoMode, loadRetryNonce, resolveHouseholds, applyHouseholdSelect, loadAllTransactions, refreshDailyCheckingCloses, refreshHouseholdDetails, loadScopedSettings, queryClient, replaceActiveHouseholdScope, settleScopeCoreLoad]);
 
   const loadBankData = useCallback(async () => {
     if (!user || demoMode) return;
@@ -5693,20 +5789,28 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   }, [bills, transactions, deletedTransactions, forecastLedgerTransactions, transactionLedger, incomes, goals, decisions, overrides, billDateMoves, extraPayments, connectedBankAccounts, householdTimeZone, accounts, getBillEffectiveMonthlyTotal, getBillMonthlyTotal, getBillOccurrencesInMonth, getDebtSourceCommitment, getExtraPayment, getRemainingDebtPlanForMonth, pendingBankTransactions, pendingPlanMatches, settings.starting_balance, settings.starting_balance_date, balanceComputationCache, user]);
 
   const getCalendarDailyBalances = useCallback((month: number, year: number): DailyBalance[] => {
+    if (demoMode) return getDailyBalances(month, year);
     let householdLocalToday: string;
     try {
       householdLocalToday = localDateInTimeZone(new Date(), householdTimeZone);
     } catch {
       householdLocalToday = localDateInTimeZone(new Date(), "UTC");
     }
+    const closeScopeKey = activeHousehold?.householdId && userId
+      ? `${userId}:${activeHousehold.householdId}`
+      : null;
+    const closeScopeMatches = Boolean(
+      closeScopeKey && dailyCheckingCloseLoad.scopeKey === closeScopeKey,
+    );
     return overlayCompletedDailyCheckingCloses(
       getDailyBalances(month, year),
       month,
       year,
-      dailyCheckingCloses,
+      closeScopeMatches ? dailyCheckingCloses : [],
       householdLocalToday,
+      closeScopeMatches ? dailyCheckingCloseLoad.status : "loading",
     );
-  }, [dailyCheckingCloses, getDailyBalances, householdTimeZone]);
+  }, [activeHousehold?.householdId, dailyCheckingCloseLoad, dailyCheckingCloses, demoMode, getDailyBalances, householdTimeZone, userId]);
 
   const checkGoalAffordability = useCallback(
     (goal: Goal, month: number, year: number): GoalAffordability => {
@@ -6524,7 +6628,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   return (
     <BudgetContext.Provider value={{
       bills, overrides, billDateMoves, transactions, deletedTransactions, pendingBankTransactions, pendingPlanMatches, incomes, goals, extraPayments, categories, settings, accounts, connectedBankAccounts, transactionAccountIdentities, householdTimeZone, decisions,
-      households, householdMembers, householdActivity, activeHousehold, householdRole, canEditHousehold,
+      households, householdMembers, householdActivity, householdDetailsReady, categoriesReady, activeHousehold, householdRole, canEditHousehold,
       refreshHouseholds, refreshHouseholdsForPrivacy, refreshHouseholdActivity, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
       updateHouseholdMemberRole, removeHouseholdMember, leaveActiveHousehold,
       forecastConfidence, loading, loadError, dataUpdatedAt, retryBudgetLoad, refreshBankData, demoMode,

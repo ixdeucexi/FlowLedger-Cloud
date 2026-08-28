@@ -466,6 +466,7 @@ export default function MoreScreen({
     households,
     householdMembers,
     householdActivity,
+    householdDetailsReady,
     activeHousehold,
     householdRole,
     canEditHousehold,
@@ -2870,7 +2871,13 @@ export default function MoreScreen({
                     <Feather name="refresh-cw" size={16} color={c.primary} />
                   </Pressable>
                 </View>
-                {householdMembers.length === 0 ? (
+                {!householdDetailsReady ? (
+                  <Text
+                    style={[styles.emptyText, { color: c.mutedForeground }]}
+                  >
+                    Loading members…
+                  </Text>
+                ) : householdMembers.length === 0 ? (
                   <Text
                     style={[styles.emptyText, { color: c.mutedForeground }]}
                   >
@@ -3246,7 +3253,13 @@ export default function MoreScreen({
                     <Feather name="refresh-cw" size={16} color={c.primary} />
                   </Pressable>
                 </View>
-                {householdActivity.length === 0 ? (
+                {!householdDetailsReady ? (
+                  <Text
+                    style={[styles.emptyText, { color: c.mutedForeground }]}
+                  >
+                    Loading household activity…
+                  </Text>
+                ) : householdActivity.length === 0 ? (
                   <Text
                     style={[styles.emptyText, { color: c.mutedForeground }]}
                   >

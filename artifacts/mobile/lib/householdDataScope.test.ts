@@ -31,9 +31,9 @@ test("membership loading and every resume surface share the owner-only privacy r
     budgetContext,
     /if \(ownsLegacyPersonalRows\(priorScope\)\) return;[\s\S]+verifyCurrentHouseholdMembership\(userId, priorScope\.householdId\)/,
   );
-  assert.match(
-    activity,
-    /if \(ownsLegacyPersonalRows\(activeHousehold\)\) \{[\s\S]+query = query\.eq\("household_id", activeHousehold\.householdId\)/,
-  );
+  // Activity consumes BudgetContext's complete, already-scoped ledger and must
+  // not issue a second household query with its own scoping implementation.
+  assert.doesNotMatch(activity, /supabase\.from\("transactions"\)/);
+  assert.match(activity, /selectFlowLedgerTransactions\(\s*transactions,/);
   assert.doesNotMatch(budgetContext, /if \(priorScope\.isPersonal\) return/);
 });

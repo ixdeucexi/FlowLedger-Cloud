@@ -73,17 +73,20 @@ test("a transient discovery failure preserves the cached owner scope and financi
 
   await assert.rejects(refresh, /temporary network failure/);
   assert.strictEqual(committed, cached);
-  assert.equal(preferenceReads, 0);
+  assert.equal(preferenceReads, 2);
 });
 
-test("a successfully resolved empty membership set can clear the active scope", async () => {
+test("a successfully resolved empty membership set clears scope and absorbs preference failures", async () => {
+  let preferenceReads = 0;
   const resolved = await loadResolvedHouseholdSelection({
     loadHouseholds: async () => [],
     readStoredHouseholdId: async () => {
-      throw new Error("empty discovery must not read preferences");
+      preferenceReads += 1;
+      throw new Error("local preference unavailable");
     },
     readRemoteHouseholdId: async () => {
-      throw new Error("empty discovery must not read preferences");
+      preferenceReads += 1;
+      throw new Error("remote preference unavailable");
     },
   });
   assert.deepEqual(resolved, {
@@ -91,6 +94,36 @@ test("a successfully resolved empty membership set can clear the active scope", 
     activeHousehold: null,
     remoteHouseholdId: null,
   });
+  await Promise.resolve();
+  assert.equal(preferenceReads, 2);
+});
+
+test("household and preference reads overlap but selection waits for discovery", async () => {
+  let finishDiscovery!: () => void;
+  const discoveryGate = new Promise<void>(resolve => { finishDiscovery = resolve; });
+  const events: string[] = [];
+  const pending = loadResolvedHouseholdSelection({
+    loadHouseholds: async () => {
+      events.push("discovery-started");
+      await discoveryGate;
+      events.push("discovery-finished");
+      return households;
+    },
+    readStoredHouseholdId: async () => {
+      events.push("stored-read");
+      return "family";
+    },
+    readRemoteHouseholdId: async () => {
+      events.push("remote-read");
+      return "personal";
+    },
+  });
+  await Promise.resolve();
+  assert.deepEqual(events, ["discovery-started", "stored-read", "remote-read"]);
+  finishDiscovery();
+  const resolved = await pending;
+  assert.equal(resolved.activeHousehold?.householdId, "family");
+  assert.deepEqual(events, ["discovery-started", "stored-read", "remote-read", "discovery-finished"]);
 });
 
 test("refreshes a plan after the resume window expires", () => {

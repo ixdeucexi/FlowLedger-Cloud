@@ -1,4 +1,5 @@
-export type DailyBalanceSource = "projected" | "actual_close";
+export type DailyBalanceSource = "projected" | "actual_close" | "unavailable";
+export type DailyCheckingCloseLoadStatus = "loading" | "ready" | "error";
 
 export interface DailyCheckingCloseSnapshot {
   balance_date: string;
@@ -12,6 +13,13 @@ export interface DailyBalanceCloseMetadata {
   balanceSource: DailyBalanceSource;
   balanceDate: string;
   balanceObservedAt?: string;
+  balanceUnavailableReason?: "history_loading" | "history_error" | "close_not_recorded";
+}
+
+export function calendarBalanceIsVisible(
+  day: Pick<DailyBalanceCloseMetadata, "balanceSource"> | null | undefined,
+): boolean {
+  return Boolean(day && day.balanceSource !== "unavailable");
 }
 
 export type DailyCheckingClosePageResult = {
@@ -48,6 +56,7 @@ export function overlayCompletedDailyCheckingCloses<
   year: number,
   snapshots: DailyCheckingCloseSnapshot[],
   householdLocalToday: string,
+  historyStatus: DailyCheckingCloseLoadStatus = "ready",
 ): Array<T & DailyBalanceCloseMetadata> {
   const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
   const completedByDay = new Map<number, DailyCheckingCloseSnapshot>();
@@ -66,8 +75,22 @@ export function overlayCompletedDailyCheckingCloses<
 
   return projectedDays.map(projected => {
     const balanceDate = `${monthPrefix}-${String(projected.day).padStart(2, "0")}`;
+    if (!ISO_DATE.test(householdLocalToday) || balanceDate >= householdLocalToday) {
+      return { ...projected, balanceSource: "projected", balanceDate };
+    }
     const actual = completedByDay.get(projected.day);
-    if (!actual) return { ...projected, balanceSource: "projected", balanceDate };
+    if (!actual) {
+      return {
+        ...projected,
+        balanceSource: "unavailable",
+        balanceDate,
+        balanceUnavailableReason: historyStatus === "ready"
+          ? "close_not_recorded"
+          : historyStatus === "error"
+            ? "history_error"
+            : "history_loading",
+      };
+    }
     return {
       ...projected,
       balance: actual.checking_balance,

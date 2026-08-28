@@ -22,10 +22,11 @@ test("calendar balances round cents to the nearest whole dollar", () => {
 test("mobile calendar displays and announces the full balance", () => {
   const calendar = readFileSync(path.resolve(process.cwd(), "components/CalendarView.tsx"), "utf8");
 
-  assert.match(calendar, /accessibilityLabel=\{`Balance \$\{formatCalendarBalance\(db\.balance\)\}`\}/);
-  assert.doesNotMatch(calendar, /Actual close|Actual bank close|Closing balance/i);
+  assert.match(calendar, /accessibilityLabel=\{`Balance \$\{formatCalendarBalance\(visibleBalance\.balance\)\}`\}/);
+  assert.doesNotMatch(calendar, /Actual close|Actual bank close/i);
+  assert.match(calendar, /Closing balance unavailable\./);
   assert.doesNotMatch(calendar, />Projected</);
-  assert.match(calendar, /\{formatCalendarBalance\(db\.balance\)\}/);
+  assert.match(calendar, /\{formatCalendarBalance\(visibleBalance\.balance\)\}/);
   assert.doesNotMatch(calendar, /formatCompactCalendarBalance/);
 });
 
@@ -33,10 +34,11 @@ test("selected-day and desktop details show balance amounts without source label
   const monthly = readFileSync(path.resolve(process.cwd(), "app/(tabs)/monthly.tsx"), "utf8");
   const desktop = readFileSync(path.resolve(process.cwd(), "components/desktop/DesktopCalendarPage.tsx"), "utf8");
 
-  assert.match(monthly, /selectedForecastDay\.balance\.toFixed\(2\)/);
+  assert.match(monthly, /selectedVisibleForecastDay\.balance\.toFixed\(2\)/);
   assert.doesNotMatch(monthly, /actual bank close|closing balance/i);
-  assert.match(desktop, /money\(selectedDay\?\.balance \?\? 0\)/);
-  assert.doesNotMatch(desktop, /actual close|actual bank close|closing balance|last verified bank balance/i);
+  assert.match(desktop, /money\(visibleSelectedDay\.balance\)/);
+  assert.match(desktop, /visibleBalance\?\.balanceSource === "projected"/);
+  assert.doesNotMatch(desktop, /actual close|actual bank close|last verified bank balance/i);
 });
 
 test("Forecast day details use the canonical debt occurrence instead of the current recurring minimum", () => {

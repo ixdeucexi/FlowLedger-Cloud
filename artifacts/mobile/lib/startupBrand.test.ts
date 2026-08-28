@@ -82,7 +82,7 @@ test("startup plan loading fails closed instead of hanging on household discover
 
   assert.match(
     budgetContext,
-    /withLoadTimeout\(\s*resolveHouseholds\(uid\),\s*8000,\s*"Load households"/,
+    /withLoadTimeout\(\s*resolveHouseholds\(uid, false\),\s*8000,\s*"Load households"/,
   );
   assert.match(budgetContext, /finally \{[\s\S]*?shouldReleaseBudgetLoading\(\{[\s\S]*?setLoading\(false\)/);
   assert.match(
@@ -134,6 +134,13 @@ test("startup plan loading fails closed instead of hanging on household discover
     layout,
     /withStartupTimeout\([\s\S]*?readLastAppRoute[\s\S]*?1_500/,
   );
+  assert.match(layout, /prefetchRestorableRoute\(/);
+  assert.match(layout, /verifiedPrivacyScopeKey === currentPrivacyScopeKey/);
+  assert.match(layout, /restorableRouteApplyReady/);
+  assert.match(layout, /restorableRouteCanApply\(\{/);
+  assert.match(layout, /currentScopeKey: routeScopeKeyRef\.current/);
+  assert.match(layout, /currentEntry: routePrefetchRef\.current/);
+  assert.match(layout, /if \(!requestedSetup && settings\.onboarding_completed\)/);
   assert.match(budgetContext, /if \(ownsLegacyPersonalRows\(priorScope\)\) return/);
 });
 

@@ -46,7 +46,14 @@ import { ThemeProvider, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { NetworkStatusProvider } from "@/hooks/useNetworkStatus";
-import { readLastAppRoute, rememberAppRoute } from "@/lib/navigationMemory";
+import {
+  prefetchRestorableRoute,
+  readLastAppRoute,
+  rememberAppRoute,
+  restorableRouteCanApply,
+  restorableRoutePrefetchIsCurrent,
+  type RestorableRoutePrefetch,
+} from "@/lib/navigationMemory";
 import { WEB_VIEWPORT_CONTENT } from "@/lib/webViewport";
 import {
   configureNativeNotificationPresentation,
@@ -102,7 +109,11 @@ function withStartupTimeout<T>(
   });
 }
 
-function AuthObserver() {
+function AuthObserver({
+  restorableRouteApplyReady,
+}: {
+  restorableRouteApplyReady: boolean;
+}) {
   const { session, loading } = useAuth();
   const {
     activeHousehold,
@@ -117,7 +128,17 @@ function AuthObserver() {
   const searchParams =
     useGlobalSearchParams<Record<string, string | string[]>>();
   const restoreAttemptRef = useRef<string | null>(null);
+  const routePrefetchRef = useRef<RestorableRoutePrefetch | null>(null);
   const notificationInitialRef = useRef<string | null>(null);
+  const routeUserId = session?.user.id ?? null;
+  const routeHouseholdId = activeHousehold?.householdId ?? null;
+  const routeScopeKey = !loading && routeUserId && routeHouseholdId
+    ? `${routeUserId}:${routeHouseholdId}`
+    : null;
+  const routeScopeKeyRef = useRef<string | null>(routeScopeKey);
+  const routeApplyReadyRef = useRef(restorableRouteApplyReady);
+  routeScopeKeyRef.current = routeScopeKey;
+  routeApplyReadyRef.current = restorableRouteApplyReady;
 
   useEffect(() => {
     if (Platform.OS === "web") return;
@@ -205,6 +226,33 @@ function AuthObserver() {
     return serialized ? `${pathname}?${serialized}` : pathname;
   }, [pathname, searchParams]);
 
+  // Reading the last route is local preference work, so overlap it with the
+  // financial core. It cannot navigate until RootNavigator confirms that this
+  // exact user/household scope is both loaded and privacy-verified.
+  useEffect(() => {
+    restoreAttemptRef.current = null;
+    if (!routeScopeKey || !routeUserId || !routeHouseholdId) {
+      routePrefetchRef.current = null;
+      return;
+    }
+    const entry = prefetchRestorableRoute(
+      routePrefetchRef.current,
+      routeScopeKey,
+      () => withStartupTimeout(
+        readLastAppRoute(routeUserId, routeHouseholdId),
+        1_500,
+        "Restore last screen",
+      ),
+    );
+    routePrefetchRef.current = entry;
+    return () => {
+      if (
+        routePrefetchRef.current === entry
+        && routeScopeKeyRef.current !== routeScopeKey
+      ) routePrefetchRef.current = null;
+    };
+  }, [routeHouseholdId, routeScopeKey, routeUserId]);
+
   useEffect(() => {
     if (loading || (session && budgetLoading)) return;
     const firstSegment = segments[0] as string | undefined;
@@ -247,19 +295,33 @@ function AuthObserver() {
         } catch {}
       }
       if (!requestedSetup && settings.onboarding_completed) {
-        const restoreKey = `${session.user.id}:${householdId}`;
+        if (!restorableRouteApplyReady || !routeScopeKey || !routeHouseholdId) return;
+        const restoreKey = routeScopeKey;
         if (restoreAttemptRef.current === restoreKey) return;
         restoreAttemptRef.current = restoreKey;
+        const entry = restorableRoutePrefetchIsCurrent(routePrefetchRef.current, restoreKey)
+          ? routePrefetchRef.current!
+          : prefetchRestorableRoute(
+              null,
+              restoreKey,
+              () => withStartupTimeout(
+                readLastAppRoute(session.user.id, routeHouseholdId),
+                1_500,
+                "Restore last screen",
+              ),
+            );
+        routePrefetchRef.current = entry;
         let cancelled = false;
-        void withStartupTimeout(
-          readLastAppRoute(session.user.id, householdId),
-          1_500,
-          "Restore last screen",
-        )
-          .catch(() => null)
-          .then((destination) => {
-            if (!cancelled) replaceRoute(destination ?? "/(tabs)");
-          });
+        void entry.promise.then((destination) => {
+          if (restorableRouteCanApply({
+            cancelled,
+            applyReady: routeApplyReadyRef.current,
+            expectedScopeKey: restoreKey,
+            currentScopeKey: routeScopeKeyRef.current,
+            entry,
+            currentEntry: routePrefetchRef.current,
+          })) replaceRoute(destination ?? "/(tabs)");
+        });
         return () => {
           cancelled = true;
         };
@@ -284,6 +346,9 @@ function AuthObserver() {
     budgetLoading,
     currentRoute,
     loading,
+    restorableRouteApplyReady,
+    routeHouseholdId,
+    routeScopeKey,
     router,
     segments,
     session,
@@ -426,6 +491,14 @@ function RootNavigator({
     : "signed-out";
   const readyToReveal =
     navigationReady && (!effectivePrivacyShielded || !!privacyRefreshError);
+  const restorableRouteApplyReady = Boolean(
+    session
+    && !budgetLoading
+    && !budgetLoadError
+    && currentPrivacyScopeKey
+    && verifiedPrivacyScopeKey === currentPrivacyScopeKey
+    && !effectivePrivacyShielded
+  );
 
   const verifySharedHousehold = useCallback((blocking: boolean) => {
     const generation = ++privacyRefreshGenerationRef.current;
@@ -632,7 +705,7 @@ function RootNavigator({
       >
         {appReady ? (
           <>
-            <AuthObserver />
+            <AuthObserver restorableRouteApplyReady={restorableRouteApplyReady} />
             <GestureHandlerRootView key={navigatorPrivacyKey} style={{ flex: 1 }}>
               <Stack screenOptions={{ headerShown: false }}>
                 <Stack.Screen name="index" />

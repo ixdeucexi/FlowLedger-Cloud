@@ -34,7 +34,8 @@ test("fictional capture screens avoid live account requests", () => {
 
   assert.match(flo, /demoMode \? storeCaptureChat : initialChat/);
   assert.match(flo, /if \(demoMode \|\| !user\?\.id \|\| !activeHousehold\?\.householdId \|\| floProLocked\)/);
-  assert.match(activity, /if \(demoMode\) \{/);
+  assert.doesNotMatch(activity, /supabase\.from\("transactions"\)/);
+  assert.match(activity, /selectFlowLedgerTransactions\(\s*transactions,/);
   assert.match(dashboard, /const timeGreeting = demoMode\s+\? "Good morning"/);
   assert.match(installPrompt, /platform === "desktop" \|\| storeCaptureMode/);
 });

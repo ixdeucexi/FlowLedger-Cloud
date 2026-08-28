@@ -32,6 +32,7 @@ import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { DESKTOP_MODAL_HANDLE, DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR, DESKTOP_MODAL_WIDE } from "@/lib/desktopModal";
 import { configuredDebtAmountForRemainingPayment, parsePlannedDebtAmount } from "@/lib/debtPlanDomain";
+import { calendarBalanceIsVisible } from "@/lib/dailyCheckingClose";
 import { confirmedBillMatchId, isConfirmedBillMatch } from "@/lib/billMatching";
 import { nextPlannedDebtPayment } from "@/lib/billSurplusRouting";
 import { allocationLabel, groupPlannedExpenseAllocations, matchedOccurrenceAllocations, occurrenceKey, reviewSettlementSummary, transactionDisplayName } from "@/lib/reviewCenter";
@@ -790,6 +791,9 @@ export default function MonthlyScreen() {
   const selectedForecastDay = selectedDay === null
     ? undefined
     : dailyBalances.find(item => item.day === selectedDay);
+  const selectedVisibleForecastDay = calendarBalanceIsVisible(selectedForecastDay)
+    ? selectedForecastDay
+    : undefined;
   const selectedForecastGroups = useMemo(
     () => groupForecastEvents(calendarVisibleForecastEvents(selectedForecastDay?.events)),
     [selectedForecastDay]
@@ -2191,7 +2195,7 @@ export default function MonthlyScreen() {
                         </Text>
                         <Text style={[styles.dayOverlaySub, { color: c.mutedForeground }]}>
                           {selectedDayItemCount} item{selectedDayItemCount === 1 ? "" : "s"}
-                          {selectedForecastDay ? ` · $${selectedForecastDay.balance.toFixed(2)}` : ""}
+                          {selectedVisibleForecastDay ? ` · $${selectedVisibleForecastDay.balance.toFixed(2)}` : ""}
                         </Text>
                       </View>
                     </View>
@@ -2201,9 +2205,9 @@ export default function MonthlyScreen() {
                   </View>
 
                   <ScrollView style={styles.dayOverlayScroll} contentContainerStyle={styles.dayOverlayScrollContent} showsVerticalScrollIndicator={isDesktop}>
-                    {selectedForecastDay && selectedForecastDay.balance < settings.safety_floor ? (
-                      <View style={[styles.dayOverlayRisk, { backgroundColor: selectedForecastDay.balance < 0 ? c.destructive + "14" : c.warning + "16", borderColor: selectedForecastDay.balance < 0 ? c.destructive + "70" : c.warning + "70" }]}>
-                        <Feather name="alert-triangle" size={16} color={selectedForecastDay.balance < 0 ? c.destructive : c.warning} />
+                    {selectedVisibleForecastDay && selectedVisibleForecastDay.balance < settings.safety_floor ? (
+                      <View style={[styles.dayOverlayRisk, { backgroundColor: selectedVisibleForecastDay.balance < 0 ? c.destructive + "14" : c.warning + "16", borderColor: selectedVisibleForecastDay.balance < 0 ? c.destructive + "70" : c.warning + "70" }]}>
+                        <Feather name="alert-triangle" size={16} color={selectedVisibleForecastDay.balance < 0 ? c.destructive : c.warning} />
                         <Text style={[styles.dayOverlayRiskText, { color: c.foreground }]}>
                           {`Below your $${settings.safety_floor.toFixed(0)} safety floor.`}
                         </Text>
@@ -2830,7 +2834,7 @@ export default function MonthlyScreen() {
                         router.push({
                           pathname: "/(tabs)/flo",
                           params: {
-                            prompt: buildDayForecastFloPrompt(dayLabel, date, selectedForecastDay?.balance, selectedForecastGroups),
+                            prompt: buildDayForecastFloPrompt(dayLabel, date, selectedVisibleForecastDay?.balance, selectedForecastGroups),
                             promptId: `${date}-${Date.now()}`,
                           },
                         } as never);

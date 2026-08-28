@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { loadAllDailyCheckingCloses, localDateInTimeZone, overlayCompletedDailyCheckingCloses, shouldApplyDailyCheckingCloseLoad, type DailyCheckingCloseSnapshot } from "./dailyCheckingClose";
+import { calendarBalanceIsVisible, loadAllDailyCheckingCloses, localDateInTimeZone, overlayCompletedDailyCheckingCloses, shouldApplyDailyCheckingCloseLoad, type DailyCheckingCloseSnapshot } from "./dailyCheckingClose";
 
 const projected = [
   { day: 23, balance: 910 },
@@ -30,10 +30,43 @@ test("today and future remain projected even when a same-day snapshot exists", (
   ], "2026-08-24");
 
   assert.deepEqual(result.map(day => [day.balance, day.balanceSource]), [
-    [910, "projected"],
+    [910, "unavailable"],
     [920, "projected"],
     [930, "projected"],
   ]);
+});
+
+test("past balances fail closed while close history is pending or has no snapshot", () => {
+  const pending = overlayCompletedDailyCheckingCloses(
+    projected,
+    7,
+    2026,
+    [],
+    "2026-08-25",
+    "loading",
+  );
+  assert.deepEqual(
+    pending.map(day => [day.day, day.balanceSource, day.balanceUnavailableReason]),
+    [
+      [23, "unavailable", "history_loading"],
+      [24, "unavailable", "history_loading"],
+      [25, "projected", undefined],
+    ],
+  );
+
+  const loaded = overlayCompletedDailyCheckingCloses(
+    projected,
+    7,
+    2026,
+    [],
+    "2026-08-25",
+    "ready",
+  );
+  assert.equal(loaded[0].balanceUnavailableReason, "close_not_recorded");
+  assert.equal(loaded[1].balanceUnavailableReason, "close_not_recorded");
+  assert.equal(calendarBalanceIsVisible(pending[0]), false);
+  assert.equal(calendarBalanceIsVisible(loaded[0]), false);
+  assert.equal(calendarBalanceIsVisible(loaded[2]), true);
 });
 
 test("household time zone controls the completed-date boundary", () => {

@@ -6,6 +6,7 @@ import test from "node:test";
 const root = process.cwd();
 const budgetContext = fs.readFileSync(path.resolve(root, "context/BudgetContext.tsx"), "utf8");
 const monthly = fs.readFileSync(path.resolve(root, "app/(tabs)/monthly.tsx"), "utf8");
+const calendar = fs.readFileSync(path.resolve(root, "components/CalendarView.tsx"), "utf8");
 const desktop = fs.readFileSync(path.resolve(root, "components/desktop/DesktopCalendarPage.tsx"), "utf8");
 const dashboard = fs.readFileSync(path.resolve(root, "app/(tabs)/index.tsx"), "utf8");
 const flo = fs.readFileSync(path.resolve(root, "app/(tabs)/flo.tsx"), "utf8");
@@ -24,6 +25,17 @@ test("core daily balances remain projected while only the calendar getter overla
   assert.doesNotMatch(projectedGetter, /overlayCompletedDailyCheckingCloses/);
   assert.match(calendarGetter, /overlayCompletedDailyCheckingCloses/);
   assert.match(calendarGetter, /getDailyBalances\(month, year\)/);
+  assert.match(calendarGetter, /const closeScopeMatches = Boolean/);
+  assert.match(calendarGetter, /closeScopeMatches \? dailyCheckingCloses : \[\]/);
+  assert.match(calendarGetter, /closeScopeMatches \? dailyCheckingCloseLoad\.status : "loading"/);
+});
+
+test("demo and store-capture calendars keep their fictional projected history", () => {
+  const calendarGetter = budgetContext.slice(
+    budgetContext.indexOf("const getCalendarDailyBalances = useCallback"),
+    budgetContext.indexOf("const getPlanSimulationBaseline = useCallback"),
+  );
+  assert.match(calendarGetter, /if \(demoMode\) return getDailyBalances\(month, year\)/);
 });
 
 test("Snowball, simulation, Dashboard, and Flo remain on the projected financial getter", () => {
@@ -34,12 +46,21 @@ test("Snowball, simulation, Dashboard, and Flo remain on the projected financial
   }
 });
 
-test("calendar display and selected-day detail use actual closes without changing risk math", () => {
+test("calendar display hides unavailable past balances without changing projected risk math", () => {
   assert.match(monthly, /projectedDailyBalances[\s\S]*getDailyBalances/);
   assert.match(monthly, /dailyBalances[\s\S]*getCalendarDailyBalances/);
   assert.match(monthly, /const baseline = projectedDailyBalances/);
   assert.match(desktop, /summarizeCalendarMonth\(props\.projectedDailyBalances/);
   assert.match(desktop, /selectedDay[\s\S]*props\.dailyBalances/);
+  assert.match(calendar, /calendarBalanceIsVisible\(db\)/);
+  assert.match(calendar, /visibleBalance && visibleBalance\.balance < safetyFloor/);
+  assert.match(calendar, /Closing balance unavailable/);
+  assert.match(monthly, /calendarBalanceIsVisible\(selectedForecastDay\)/);
+  assert.match(monthly, /buildDayForecastFloPrompt\(dayLabel, date, selectedVisibleForecastDay\?\.balance/);
+  assert.match(desktop, /calendarBalanceIsVisible\(balance\)/);
+  assert.match(desktop, /visibleBalance\?\.balanceSource === "projected"/);
+  assert.match(desktop, /weekDays\.filter\(calendarBalanceIsVisible\)/);
+  assert.match(desktop, /\{visibleSelectedDay \? \(/);
 });
 
 test("household switching clears daily closes and time zone before asynchronous replacement", () => {
@@ -52,6 +73,7 @@ test("household switching clears daily closes and time zone before asynchronous 
   assert.ok(switchBody.indexOf("bankRefreshRequestRef.current += 1;") < firstAwait);
   assert.ok(switchBody.indexOf("clearScopedFinancialData();") < firstAwait);
   assert.match(budgetContext, /setDailyCheckingCloses\(\[\]\);[\s\S]*setHouseholdTimeZone\("UTC"\)/);
+  assert.match(budgetContext, /setDailyCheckingCloseLoad\(\{ scopeKey: null, status: "loading" \}\)/);
 });
 
 test("daily-close loading is paged and never blocks core startup or bank refresh", () => {
@@ -82,6 +104,9 @@ test("optional close-history failures retain cached state and cannot update data
   assert.match(refreshHelper, /if \(result\.error\)[\s\S]*return;/);
   assert.match(refreshHelper, /requestGeneration[\s\S]*dailyCheckingCloseRequestRef\.current[\s\S]*isCurrent\(\)/);
   assert.match(refreshHelper, /setDailyCheckingCloses/);
+  assert.match(refreshHelper, /financialDataUserIdRef\.current[\s\S]*scope\.householdId/);
+  assert.match(refreshHelper, /current\.scopeKey === scopeKey && current\.status === "ready"[\s\S]*\? current/);
+  assert.match(refreshHelper, /setDailyCheckingCloseLoad\(\{ scopeKey, status: "ready" \}\)/);
   assert.doesNotMatch(refreshHelper, /setDailyCheckingCloses\(\[\]\)|setDataUpdatedAt|setLoading/);
 });
 

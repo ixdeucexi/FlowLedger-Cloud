@@ -49,7 +49,7 @@ import type {
   SnowballFundingSource,
   Transaction,
 } from "@/context/BudgetContext";
-import { normalizeTransactionRow, useBudget } from "@/context/BudgetContext";
+import { useBudget } from "@/context/BudgetContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
@@ -123,10 +123,7 @@ import {
   summarizeActivitySnapshot,
   type ActivityRangeId,
 } from "@/lib/activityRange";
-import { supabase } from "@/lib/supabase";
 import { exportActivityCsv } from "@/lib/activityCsv";
-import { ownsLegacyPersonalRows } from "@/lib/householdDataScope";
-import { appendUniqueRowsById, dateIdKeysetFilter, type DateIdCursor } from "@/lib/pagedQuery";
 import { CategoryBudgetScreen } from "./category-budget";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -141,7 +138,6 @@ type ActivitySource =
 type TypeFilter = "all" | "expense" | "income";
 type SourceFilter = "all" | ActivitySource;
 type SortOrder = "asc" | "desc";
-const ACTIVITY_PAGE_SIZE = 100;
 const MODAL_HANDOFF_DELAY_MS = 350;
 type MatchedPaymentPrompt = {
   transaction: Transaction;
@@ -399,16 +395,6 @@ export function ActivityScreen() {
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
   const [search, setSearch] = useState("");
-  const [historyPage, setHistoryPage] = useState(0);
-  const [historyTransactions, setHistoryTransactions] = useState<Transaction[]>(
-    [],
-  );
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyReady, setHistoryReady] = useState(false);
-  const [historyPageHasMore, setHistoryPageHasMore] = useState(false);
-  const [historyError, setHistoryError] = useState<string | null>(null);
-  const [historyRetryNonce, setHistoryRetryNonce] = useState(0);
-  const historyCursorRef = useRef<DateIdCursor | null>(null);
   const activityPreferenceReadyRef = useRef(false);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
@@ -596,157 +582,15 @@ export function ActivityScreen() {
   const currentActivityMonth = todayIsoDate().slice(0, 7);
   const monthFilter =
     activeDateRange.startDate?.slice(0, 7) ?? currentActivityMonth;
-  const remoteHistorySearch = useMemo(
-    () => search.trim().replace(/[%_(),]/g, " ").slice(0, 80),
-    [search],
-  );
-
-  useEffect(() => {
-    setHistoryPage(0);
-    setHistoryTransactions([]);
-    setHistoryReady(false);
-    setHistoryPageHasMore(false);
-    historyCursorRef.current = null;
-  }, [
-    activeDateRange.endDate,
-    activeDateRange.id,
-    activeDateRange.startDate,
-    activeHousehold?.householdId,
-    search,
-    transactionAccountIdentities,
-  ]);
-
-  useEffect(() => {
-    if (!user || !activeHousehold) return;
-    if (demoMode) {
-      setHistoryTransactions([]);
-      setHistoryError(null);
-      setHistoryLoading(false);
-      setHistoryReady(true);
-      setHistoryPageHasMore(false);
-      return;
-    }
-    let active = true;
-    const timer = setTimeout(() => {
-      const pageCursor = historyPage > 0 ? historyCursorRef.current : null;
-      if (historyPage > 0 && !pageCursor) {
-        setHistoryPageHasMore(false);
-        setHistoryReady(true);
-        return;
-      }
-      setHistoryLoading(true);
-      if (historyPage === 0) setHistoryReady(false);
-      setHistoryError(null);
-      void (async () => {
-        let query = supabase
-          .from("transactions")
-          .select("*")
-          .is("deleted_at", null)
-          .is("removed_at", null)
-          .eq("pending", false)
-          .order("date", { ascending: false })
-          .order("id", { ascending: false })
-          .limit(ACTIVITY_PAGE_SIZE);
-        if (ownsLegacyPersonalRows(activeHousehold)) {
-          query = query.or(
-            `household_id.eq.${activeHousehold.householdId},and(household_id.is.null,user_id.eq.${user.id})`,
-          );
-        } else {
-          query = query.eq("household_id", activeHousehold.householdId);
-        }
-        if (activeDateRange.startDate)
-          query = query.gte("date", activeDateRange.startDate);
-        if (activeDateRange.endDate)
-          query = query.lte("date", activeDateRange.endDate);
-        const checkingAccountIds = Array.from(
-          new Set(
-            transactionAccountIdentities
-              .filter(
-                (account) =>
-                  String(account.account_type ?? "").toLowerCase() ===
-                    "depository" &&
-                  String(account.account_subtype ?? "").toLowerCase() ===
-                    "checking",
-              )
-              .flatMap((account) => [account.id, account.plaid_account_id])
-              .filter(
-                (value): value is string =>
-                  Boolean(value) && /^[A-Za-z0-9_-]+$/.test(value as string),
-              ),
-          ),
-        );
-        query = query.or(
-          checkingAccountIds.length > 0
-            ? `source.is.null,source.neq.plaid,plaid_account_id.in.(${checkingAccountIds.join(",")})`
-            : "source.is.null,source.neq.plaid",
-        );
-        if (pageCursor) query = query.or(dateIdKeysetFilter(pageCursor));
-        if (remoteHistorySearch) {
-          query = query.or(
-            `merchant_name.ilike.%${remoteHistorySearch}%,note.ilike.%${remoteHistorySearch}%,category.ilike.%${remoteHistorySearch}%`,
-          );
-        }
-        const { data, error } = await query;
-        if (error) throw error;
-        if (!active) return;
-        const nextPage = (data ?? []).map(normalizeTransactionRow);
-        const lastRow = nextPage.at(-1);
-        historyCursorRef.current = lastRow
-          ? { date: lastRow.date, id: lastRow.id }
-          : historyCursorRef.current;
-        setHistoryTransactions((current) => (
-          historyPage === 0
-            ? nextPage
-            : appendUniqueRowsById(current, nextPage)
-        ));
-        setHistoryPageHasMore(nextPage.length === ACTIVITY_PAGE_SIZE);
-        setHistoryReady(true);
-      })()
-        .catch((error) => {
-          if (active)
-            setHistoryError(
-              error instanceof Error
-                ? error.message
-                : "Activity history could not be loaded.",
-            );
-        })
-        .finally(() => {
-          if (active) setHistoryLoading(false);
-        });
-    }, 240);
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [
-    activeDateRange.endDate,
-    activeDateRange.startDate,
-    activeHousehold,
-    demoMode,
-    historyPage,
-    historyRetryNonce,
-    remoteHistorySearch,
-    transactions.length,
-    transactionAccountIdentities,
-    user,
-  ]);
-
-  const accountAwareHistoryTransactions = useMemo(
-    () =>
-      selectFlowLedgerTransactions(
-        historyTransactions,
-        transactionAccountIdentities,
-      ).included,
-    [historyTransactions, transactionAccountIdentities],
-  );
-
+  // BudgetContext already loads the complete, account-aware transaction ledger
+  // with keyset paging. Re-querying its first 100 rows here delayed Activity,
+  // duplicated network/JSON work, and made totals look artificially partial.
   const activityTransactions = useMemo(() => {
-    if (!demoMode) return accountAwareHistoryTransactions;
     return selectFlowLedgerTransactions(
       transactions,
       transactionAccountIdentities,
     ).included;
-  }, [accountAwareHistoryTransactions, demoMode, transactionAccountIdentities, transactions]);
+  }, [transactionAccountIdentities, transactions]);
 
   const activityAccountIdentityById = useMemo(() => {
     const byId = new Map<string, (typeof transactionAccountIdentities)[number]>();
@@ -762,7 +606,7 @@ export function ActivityScreen() {
     return byId;
   }, [transactionAccountIdentities]);
 
-  const historyHasMore = !demoMode && historyPageHasMore;
+  const historyHasMore = false;
 
   // ── Build unified activity feed ───────────────────────────────────────────
   const allActivity = useMemo((): ActivityItem[] => {
@@ -1117,12 +961,7 @@ export function ActivityScreen() {
 
   const runningBalanceById = useMemo(() => {
     const today = todayIsoDate();
-    if (
-      !historyReady ||
-      historyError ||
-      historyHasMore ||
-      remoteHistorySearch
-    )
+    if (historyHasMore)
       return new Map<string, number>();
     const hasConnectedChecking = connectedBankAccounts.some(
       (account) => account.is_active && account.account_subtype === "checking",
@@ -1184,11 +1023,8 @@ export function ActivityScreen() {
     activeDateRange.startDate,
     activityTransactions,
     connectedBankAccounts,
-    historyError,
     historyHasMore,
-    historyReady,
     householdTimeZone,
-    remoteHistorySearch,
     transactionAccountIdentities,
   ]);
 
@@ -3369,9 +3205,9 @@ export function ActivityScreen() {
           hasActiveFilters={hasActiveFilters}
           onResetFilters={clearFilters}
           hasMore={historyHasMore}
-          loadingMore={historyLoading}
-          loadError={historyError}
-          onLoadMore={() => setHistoryPage((page) => page + 1)}
+          loadingMore={false}
+          loadError={null}
+          onLoadMore={() => undefined}
           onAdd={() => {
             setEditTx(null);
             setEditModalVisible(true);
@@ -3391,12 +3227,6 @@ export function ActivityScreen() {
           ]}
           scrollIndicatorInsets={{ bottom: listBottomPadding }}
           stickySectionHeadersEnabled
-          onEndReachedThreshold={0.35}
-          onEndReached={() => {
-            if (!historyLoading && historyHasMore) {
-              setHistoryPage((page) => page + 1);
-            }
-          }}
           ListHeaderComponent={renderListHeader()}
           ListEmptyComponent={
             <EmptyState
@@ -3419,66 +3249,6 @@ export function ActivityScreen() {
                     }
               }
             />
-          }
-          ListFooterComponent={
-            historyError ? (
-              <View style={styles.historyFooter}>
-                <Text style={[styles.historyError, { color: c.destructive }]}>
-                  {historyError}
-                </Text>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => setHistoryRetryNonce((value) => value + 1)}
-                  style={[
-                    styles.historyRetry,
-                    { borderColor: c.border, backgroundColor: c.card },
-                  ]}
-                >
-                  <Text
-                    style={[styles.historyRetryText, { color: c.foreground }]}
-                  >
-                    Retry
-                  </Text>
-                </Pressable>
-              </View>
-            ) : historyLoading ? (
-              <View style={styles.historyFooter}>
-                <Text
-                  style={[
-                    styles.historyRetryText,
-                    { color: c.mutedForeground },
-                  ]}
-                >
-                  Loading more activity…
-                </Text>
-              </View>
-            ) : historyHasMore ? (
-              <View style={styles.historyFooter}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Load more activity"
-                  onPress={() => setHistoryPage((page) => page + 1)}
-                  style={({ pressed }) => [
-                    styles.historyLoadMore,
-                    {
-                      backgroundColor: c.card,
-                      borderColor: c.border,
-                      opacity: pressed ? 0.78 : 1,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.historyLoadMoreText,
-                      { color: c.foreground },
-                    ]}
-                  >
-                    Load more activity
-                  </Text>
-                  <Feather name="chevron-down" size={17} color={c.primary} />
-                </Pressable>
-              </View>
-            ) : null
           }
           renderSectionHeader={({ section: { title } }) => (
             <View
@@ -5678,40 +5448,4 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   sheetCloseText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
-  historyFooter: {
-    minHeight: 56,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  historyError: {
-    fontSize: 12,
-    lineHeight: 17,
-    fontFamily: "Inter_500Medium",
-    textAlign: "center",
-  },
-  historyRetry: {
-    minHeight: 44,
-    minWidth: 104,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  historyRetryText: { fontSize: 13, fontFamily: "Inter_700Bold" },
-  historyLoadMore: {
-    minHeight: 48,
-    minWidth: 190,
-    borderWidth: 1,
-    borderRadius: 15,
-    paddingHorizontal: 18,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  historyLoadMoreText: { fontSize: 13, fontFamily: "Inter_700Bold" },
 });

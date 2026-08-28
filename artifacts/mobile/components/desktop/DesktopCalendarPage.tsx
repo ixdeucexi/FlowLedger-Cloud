@@ -28,6 +28,7 @@ import {
 } from "@/lib/desktopCalendar";
 import type { FinancialEvent } from "@/lib/forecast";
 import { calendarVisibleForecastEvents, formatEventStatus } from "@/lib/forecastDisplay";
+import { calendarBalanceIsVisible } from "@/lib/dailyCheckingClose";
 
 const MONTHS = [
   "January",
@@ -298,18 +299,22 @@ function DesktopMonthGrid({
       <View style={styles.calendarGrid}>
         {cells.map((cell) => {
           const balance = cell.inCurrentMonth ? balancesByDay.get(cell.day) : undefined;
+          const visibleBalance = calendarBalanceIsVisible(balance) ? balance : undefined;
           const events = calendarVisibleForecastEvents(balance?.events);
           const visibleEvents = events.slice(0, compact ? 2 : 3);
           const hiddenCount = Math.max(0, events.length - visibleEvents.length);
           const selected = selectedDate === cell.date;
           const isToday = today === cell.date;
-          const isLowest = cell.date === lowestBalanceDate;
+          const isLowest = Boolean(
+            visibleBalance?.balanceSource === "projected"
+            && cell.date === lowestBalanceDate
+          );
           const tightestForecastIsRisk = lowestBalance < safetyFloor;
           return (
             <Pressable
               key={cell.date}
               accessibilityRole="button"
-              accessibilityLabel={`${displayDate(cell.date, true)}. ${events.length} scheduled ${events.length === 1 ? "item" : "items"}${balance ? `. Balance ${money(balance.balance)}` : ""}`}
+              accessibilityLabel={`${displayDate(cell.date, true)}. ${events.length} scheduled ${events.length === 1 ? "item" : "items"}${visibleBalance ? `. Balance ${money(visibleBalance.balance)}` : balance ? ". Closing balance unavailable" : ""}`}
               accessibilityState={{ selected }}
               disabled={!cell.inCurrentMonth}
               onPress={() => onSelectDate(cell.date)}
@@ -338,8 +343,8 @@ function DesktopMonthGrid({
               {hiddenCount > 0 ? (
                 <Text style={styles.moreText}>+{hiddenCount} more</Text>
               ) : null}
-              {balance ? (
-                <Text style={styles.dayBalanceSource}>{money(balance.balance)}</Text>
+              {visibleBalance ? (
+                <Text style={styles.dayBalanceSource}>{money(visibleBalance.balance)}</Text>
               ) : null}
               {isLowest ? (
                 <View style={[styles.lowestCellBadge, tightestForecastIsRisk && styles.riskCellBadge]}>
@@ -421,8 +426,9 @@ function SelectedDayPanel({
     transferTransactionIds,
   );
   const weekLabel = `Week of ${shortDate(weekDates[0] ?? selectedDate)} – ${shortDate(weekDates[6] ?? selectedDate)}`;
-  const trendValues = weekDays.length ? weekDays.map((day) => day.balance) : [selectedDay?.balance ?? 0];
-  const isRiskDay = Boolean(selectedDay && selectedDay.balance < safetyFloor);
+  const visibleSelectedDay = calendarBalanceIsVisible(selectedDay) ? selectedDay : undefined;
+  const trendValues = weekDays.filter(calendarBalanceIsVisible).map((day) => day.balance);
+  const isRiskDay = Boolean(visibleSelectedDay && visibleSelectedDay.balance < safetyFloor);
   return (
     <DesktopCard style={styles.detailPanel}>
       <View style={styles.detailHeader}>
@@ -473,11 +479,13 @@ function SelectedDayPanel({
           <Feather name="file-text" size={15} color={palette.faint} /><Text style={styles.disabledActionText}>Add Note · Coming Soon</Text>
         </Pressable>
 
-        <View style={[styles.balanceCard, isRiskDay && styles.riskBalanceCard]}>
-          <View style={[styles.balanceIcon, isRiskDay && styles.riskBalanceIcon]}><Feather name="shield" size={18} color={isRiskDay ? palette.red : palette.blue} /></View>
-          <View style={styles.balanceCopy}><Text style={[styles.balanceValue, isRiskDay && styles.riskBalanceValue]}>{money(selectedDay?.balance ?? 0)}</Text>{isRiskDay ? <Text style={styles.balanceDetail}>Below {money(safetyFloor)} safety floor</Text> : null}</View>
-          <BalanceTrend balances={trendValues} label={`Balance trend for ${weekLabel}`} tone={isRiskDay ? "risk" : "plan"} />
-        </View>
+        {visibleSelectedDay ? (
+          <View style={[styles.balanceCard, isRiskDay && styles.riskBalanceCard]}>
+            <View style={[styles.balanceIcon, isRiskDay && styles.riskBalanceIcon]}><Feather name="shield" size={18} color={isRiskDay ? palette.red : palette.blue} /></View>
+            <View style={styles.balanceCopy}><Text style={[styles.balanceValue, isRiskDay && styles.riskBalanceValue]}>{money(visibleSelectedDay.balance)}</Text>{isRiskDay ? <Text style={styles.balanceDetail}>Below {money(safetyFloor)} safety floor</Text> : null}</View>
+            {trendValues.length ? <BalanceTrend balances={trendValues} label={`Balance trend for ${weekLabel}`} tone={isRiskDay ? "risk" : "plan"} /> : null}
+          </View>
+        ) : null}
 
         <View style={styles.weekCard}>
           <Text style={styles.sectionTitle}>{weekLabel}</Text>

@@ -126,6 +126,7 @@ test("every growing transaction refresh uses the complete paged loader", () => {
   assert.match(context, /const loadAllTransactions = useCallback/);
   assert.ok((context.match(/loadAllTransactions\(/g) ?? []).length >= 5);
   assert.match(context, /loadAllDateIdKeysetRows/);
+  assert.match(context, /loadAllDateIdKeysetRows<any>\([\s\S]*?\}, 1_000\)/);
   assert.match(context, /dateIdKeysetFilter\(cursor\)/);
   assert.match(context, /\.order\("date", \{ ascending: false \}\)[\s\S]*?\.order\("id", \{ ascending: false \}\)/);
   assert.doesNotMatch(context.slice(
@@ -135,16 +136,41 @@ test("every growing transaction refresh uses the complete paged loader", () => {
   assert.doesNotMatch(context, /applyHouseholdSelect\(supabase\.from\("transactions"\)\.select\("\*"\), uid\)/);
 });
 
+test("the 1000-row core request stays aligned with the PostgREST release cap", () => {
+  const config = readFileSync("../../supabase/config.toml", "utf8");
+  assert.match(config, /\[api\][\s\S]*?max_rows\s*=\s*1000/);
+});
+
 test("startup renders core data before secondary debt maintenance and records only successful freshness", () => {
   const context = readFileSync("context/BudgetContext.tsx", "utf8");
   const loadStart = context.indexOf("// ── Load from Supabase");
   const loadEnd = context.indexOf("const loadBankData", loadStart);
   const source = context.slice(loadStart, loadEnd);
   assert.ok(source.indexOf("setDataUpdatedAt") < source.indexOf("sync_due_debt_transactions"));
-  assert.match(source, /const secondaryCategoryRequest = Promise\.resolve/);
-  assert.ok(source.indexOf("secondaryCategoryRequest.then") > source.indexOf("loadSucceeded = true"));
+  assert.doesNotMatch(source, /const secondaryCategoryRequest = Promise\.resolve/);
+  assert.ok(source.indexOf("refreshHouseholdDetails(scope)") > source.indexOf("loadSucceeded = true"));
+  assert.ok(source.indexOf('supabase.from("categories").select("name")') > source.indexOf("loadSucceeded = true"));
+  assert.ok(source.indexOf("sync_due_debt_transactions") > source.indexOf("loadSucceeded = true"));
+  assert.ok(source.indexOf("debtSyncRequiresRefresh(synced.data)") < source.indexOf("loadAllTransactions(uid)", source.indexOf("sync_due_debt_transactions")));
+  assert.match(source, /accountAwareTransactionCollections\([\s\S]*?transactionAccountIdentitiesRef\.current/);
+  assert.doesNotMatch(source, /setCategories\(DEFAULT_CATEGORIES\);[\s\S]{0,80}loadSucceeded = true/);
   assert.match(source, /Promise\.all\(\[[\s\S]*?Promise\.all\(\[[\s\S]*?loadBillDateMoves/);
   assert.match(source, /if \(loadSucceeded\) \{[\s\S]*?lastPlanRefreshAtRef\.current = Date\.now\(\)/);
+});
+
+test("deferred display-only reads expose scope-stamped loading instead of false empty/default UI", () => {
+  const context = readFileSync("context/BudgetContext.tsx", "utf8");
+  const more = readFileSync("app/(tabs)/more.tsx", "utf8");
+  const categoryBudget = readFileSync("app/(tabs)/category-budget.tsx", "utf8");
+  assert.match(context, /householdDetailsReadyScopeKey/);
+  assert.match(context, /categoriesReadyScopeKey/);
+  assert.match(context, /secondaryDataScopeKey = userId && activeHousehold\?\.householdId/);
+  assert.match(context, /setHouseholdDetailsReadyScopeKey\(readyScopeKey\)/);
+  assert.match(context, /setCategoriesReadyScopeKey\(scope\?\.householdId \? `\$\{uid\}:\$\{scope\.householdId\}` : null\)/);
+  assert.ok(more.indexOf("!householdDetailsReady") < more.indexOf("No members yet."));
+  assert.ok(more.lastIndexOf("!householdDetailsReady") < more.indexOf("No household changes yet."));
+  assert.match(categoryBudget, /if \(!categoriesReady\) \{[\s\S]*?Loading categories…/);
+  assert.match(categoryBudget, /Loading categories…/);
 });
 
 test("native reconnect forces a background plan reload after an offline transition", () => {
