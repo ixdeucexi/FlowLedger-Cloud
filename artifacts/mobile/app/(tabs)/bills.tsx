@@ -417,7 +417,7 @@ export default function BillsScreen() {
     (bill: Bill) => {
       const next = nextBillOccurrence(bill);
       if (next.days.length > 0)
-        return `Next occurrence: ${MONTH_FULL[next.month]} ${next.days[0]}, ${next.year}`;
+        return `Next: ${MONTH_FULL[next.month].slice(0, 3)} ${next.days[0]}, ${next.year}`;
       return "No upcoming occurrence";
     },
     [nextBillOccurrence],
@@ -1104,7 +1104,7 @@ export default function BillsScreen() {
                           styles.card,
                           {
                             backgroundColor: c.card,
-                            borderRadius: 20,
+                            borderRadius: colors.radius,
                             opacity: pressed ? 0.88 : 1,
                           },
                         ]}
@@ -1136,7 +1136,7 @@ export default function BillsScreen() {
                               >
                                 {item.name}
                               </Text>
-                              <View style={[styles.metaRow]}>
+                              <View style={styles.metaRow}>
                                 <View
                                   style={[
                                     styles.tag,
@@ -1157,86 +1157,95 @@ export default function BillsScreen() {
                                     styles.metaText,
                                     { color: c.mutedForeground },
                                   ]}
+                                  numberOfLines={1}
+                                  ellipsizeMode="tail"
                                 >
                                   {stopped
                                     ? formatStoppedText(item)
                                     : formatBillDueText(item)}
                                 </Text>
-                                {stopped ? (
-                                  <View
-                                    style={[
-                                      styles.tag,
-                                      { backgroundColor: c.muted },
-                                    ]}
-                                  >
-                                    <Text
-                                      style={[
-                                        styles.tagText,
-                                        { color: c.mutedForeground },
-                                      ]}
-                                    >
-                                      Stopped
-                                    </Text>
-                                  </View>
-                                ) : null}
-                                {overdue ? (
-                                  <View
-                                    style={[
-                                      styles.tag,
-                                      { backgroundColor: c.destructive + "18" },
-                                    ]}
-                                  >
-                                    <Text
-                                      style={[
-                                        styles.tagText,
-                                        { color: c.destructive },
-                                      ]}
-                                    >
-                                      Past due · $
-                                      {overdue.remainingAmount.toFixed(2)}
-                                    </Text>
-                                  </View>
-                                ) : null}
-                                {pending ? (
-                                  <View
-                                    style={[
-                                      styles.tag,
-                                      {
-                                        backgroundColor:
-                                          colors.brand.blue + "18",
-                                      },
-                                    ]}
-                                  >
-                                    <Text
-                                      style={[
-                                        styles.tagText,
-                                        { color: colors.brand.blue },
-                                      ]}
-                                    >
-                                      {pending.status === "ready_review"
-                                        ? "Ready to review"
-                                        : "Payment pending"}
-                                    </Text>
-                                  </View>
-                                ) : null}
-                                {!item.is_recurring && (
-                                  <View
-                                    style={[
-                                      styles.tag,
-                                      { backgroundColor: c.muted },
-                                    ]}
-                                  >
-                                    <Text
-                                      style={[
-                                        styles.tagText,
-                                        { color: c.mutedForeground },
-                                      ]}
-                                    >
-                                      One-time
-                                    </Text>
-                                  </View>
-                                )}
                               </View>
+                              {stopped || overdue || pending || !item.is_recurring ? (
+                                <View style={styles.cardStatusRow}>
+                                  {stopped ? (
+                                    <View
+                                      style={[
+                                        styles.tag,
+                                        { backgroundColor: c.muted },
+                                      ]}
+                                    >
+                                      <Text
+                                        style={[
+                                          styles.tagText,
+                                          { color: c.mutedForeground },
+                                        ]}
+                                      >
+                                        Stopped
+                                      </Text>
+                                    </View>
+                                  ) : null}
+                                  {overdue ? (
+                                    <View
+                                      style={[
+                                        styles.tag,
+                                        {
+                                          backgroundColor:
+                                            c.destructive + "18",
+                                        },
+                                      ]}
+                                    >
+                                      <Text
+                                        style={[
+                                          styles.tagText,
+                                          { color: c.destructive },
+                                        ]}
+                                      >
+                                        Past due · $
+                                        {overdue.remainingAmount.toFixed(2)}
+                                      </Text>
+                                    </View>
+                                  ) : null}
+                                  {pending ? (
+                                    <View
+                                      style={[
+                                        styles.tag,
+                                        {
+                                          backgroundColor:
+                                            colors.brand.blue + "18",
+                                        },
+                                      ]}
+                                    >
+                                      <Text
+                                        style={[
+                                          styles.tagText,
+                                          { color: colors.brand.blue },
+                                        ]}
+                                      >
+                                        {pending.status === "ready_review"
+                                          ? "Ready to review"
+                                          : "Payment pending"}
+                                      </Text>
+                                    </View>
+                                  ) : null}
+                                  {!item.is_recurring && (
+                                    <View
+                                      style={[
+                                        styles.tag,
+                                        { backgroundColor: c.muted },
+                                      ]}
+                                    >
+                                      <Text
+                                        style={[
+                                          styles.tagText,
+                                          { color: c.mutedForeground },
+                                        ]}
+                                      >
+                                        One-time
+                                      </Text>
+                                    </View>
+                                  )}
+                                </View>
+                              ) : null}
                             </View>
                             <View style={styles.cardRight}>
                               <Text
@@ -2336,7 +2345,8 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 10,
+    minHeight: 78,
+    marginBottom: 7,
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.12)",
     shadowColor: "#000",
@@ -2346,11 +2356,11 @@ const styles = StyleSheet.create({
     elevation: 3,
     overflow: "hidden",
   },
-  cardBody: { flex: 1, paddingHorizontal: 12, paddingVertical: 14 },
+  cardBody: { flex: 1, paddingHorizontal: 12, paddingVertical: 11 },
   cardTop: { flexDirection: "row", alignItems: "flex-start" },
   cardLeft: { flex: 1, minWidth: 0 },
   cardRight: {
-    maxWidth: "45%",
+    maxWidth: "39%",
     minWidth: 0,
     flexShrink: 1,
     alignItems: "flex-end",
@@ -2360,9 +2370,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     alignItems: "center",
-    flexWrap: "wrap",
+    flexWrap: "nowrap",
   },
-  metaText: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  metaText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 10,
+    lineHeight: 15,
+    fontFamily: "Inter_400Regular",
+  },
+  cardStatusRow: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+    flexWrap: "wrap",
+    marginTop: 5,
+  },
   editHint: {
     width: 42,
     minHeight: 48,
@@ -2384,19 +2407,19 @@ const styles = StyleSheet.create({
     height: 44,
     marginLeft: 13,
     borderWidth: 1,
-    borderRadius: 15,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
   billName: {
-    fontSize: 17,
+    fontSize: 14,
     fontFamily: "Inter_800ExtraBold",
-    marginBottom: 7,
+    marginBottom: 4,
     letterSpacing: -0.2,
   },
-  tag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  tagText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
-  amount: { fontSize: 18, fontFamily: "Inter_700Bold" },
+  tag: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
+  tagText: { fontSize: 9, fontFamily: "Inter_600SemiBold" },
+  amount: { fontSize: 15, fontFamily: "Inter_800ExtraBold" },
   amountSub: { fontSize: 10, fontFamily: "Inter_400Regular" },
 
   // Debt-specific
