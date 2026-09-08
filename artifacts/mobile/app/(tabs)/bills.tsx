@@ -826,7 +826,7 @@ export default function BillsScreen() {
               ]}
             >
               <View style={styles.billSnapshotHeader}>
-                <View>
+                <View style={styles.billSnapshotHeading}>
                   <Text
                     style={[styles.billSnapshotLabel, { color: c.primary }]}
                   >
@@ -948,7 +948,14 @@ export default function BillsScreen() {
                 <View
                   style={[
                     styles.billSnapshotStat,
-                    { backgroundColor: c.background, borderColor: c.border },
+                    {
+                      backgroundColor: c.isDark
+                        ? "rgba(15,23,42,0.42)"
+                        : "rgba(248,250,252,0.96)",
+                      borderColor: c.isDark
+                        ? "rgba(148,163,184,0.10)"
+                        : "rgba(15,23,42,0.08)",
+                    },
                   ]}
                 >
                   <Text
@@ -968,7 +975,14 @@ export default function BillsScreen() {
                 <View
                   style={[
                     styles.billSnapshotStat,
-                    { backgroundColor: c.background, borderColor: c.border },
+                    {
+                      backgroundColor: c.isDark
+                        ? "rgba(15,23,42,0.42)"
+                        : "rgba(248,250,252,0.96)",
+                      borderColor: c.isDark
+                        ? "rgba(148,163,184,0.10)"
+                        : "rgba(15,23,42,0.08)",
+                    },
                   ]}
                 >
                   <Text
@@ -988,7 +1002,14 @@ export default function BillsScreen() {
                 <View
                   style={[
                     styles.billSnapshotStat,
-                    { backgroundColor: c.background, borderColor: c.border },
+                    {
+                      backgroundColor: c.isDark
+                        ? "rgba(15,23,42,0.42)"
+                        : "rgba(248,250,252,0.96)",
+                      borderColor: c.isDark
+                        ? "rgba(148,163,184,0.10)"
+                        : "rgba(15,23,42,0.08)",
+                    },
                   ]}
                 >
                   <Text
@@ -2160,23 +2181,19 @@ const styles = StyleSheet.create({
   },
   billSnapshotCard: {
     borderWidth: 1,
-    borderRadius: 20,
-    padding: 14,
+    borderRadius: 26,
+    padding: 17,
     marginHorizontal: 16,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.1,
-    shadowRadius: 18,
-    elevation: 3,
+    marginBottom: 17,
   },
   billSnapshotHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
-    marginBottom: 10,
+    marginBottom: 8,
   },
+  billSnapshotHeading: { flex: 1, minWidth: 0 },
   billSnapshotLabel: {
     fontSize: 9,
     fontFamily: "Inter_800ExtraBold",
@@ -2184,7 +2201,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   billSnapshotTitle: {
-    fontSize: 18,
+    fontSize: 15,
     fontFamily: "Inter_800ExtraBold",
     marginTop: 2,
   },
@@ -2211,11 +2228,10 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
   },
   billSnapshotAmount: {
-    fontSize: 32,
-    lineHeight: 36,
+    fontSize: 39,
     fontFamily: "Inter_800ExtraBold",
-    letterSpacing: -1.3,
-    marginTop: 1,
+    letterSpacing: -1.5,
+    marginTop: 0,
   },
   billSnapshotAmountSub: {
     fontSize: 10,
@@ -2227,13 +2243,13 @@ const styles = StyleSheet.create({
     minHeight: 68,
     borderWidth: 1,
     borderRadius: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
     alignItems: "center",
     justifyContent: "center",
   },
   billSnapshotPaidValue: {
-    fontSize: 15,
+    fontSize: 16,
     fontFamily: "Inter_800ExtraBold",
     marginTop: 3,
   },
@@ -2250,15 +2266,15 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   billProgressFill: { height: "100%", borderRadius: 999 },
-  billSnapshotStats: { flexDirection: "row", gap: 8 },
+  billSnapshotStats: { flexDirection: "row", gap: 10 },
   billSnapshotStat: {
     flex: 1,
     borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 9,
-    paddingVertical: 8,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
   },
-  billSnapshotValue: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
+  billSnapshotValue: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
   billSnapshotStatLabel: {
     fontSize: 10,
     fontFamily: "Inter_700Bold",
