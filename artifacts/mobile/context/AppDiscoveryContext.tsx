@@ -45,6 +45,8 @@ type AppDiscoveryValue = {
   openSearch: () => void;
   openCommands: () => void;
   openNotifications: () => void;
+  dismissNotification: (id: string) => void;
+  dismissedNotificationIds: string[];
   unreadNotificationCount: number;
 };
 
@@ -200,6 +202,10 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
       });
     }
   }, [demoMode, householdId, userId]);
+
+  const dismissAppNotification = useCallback((id: string) => {
+    persistNotificationState(state => dismissNotification(state, id));
+  }, [persistNotificationState]);
 
   const searchIndex = useMemo(() => buildUniversalSearchIndex({
     bills,
@@ -376,8 +382,10 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
     openSearch,
     openCommands,
     openNotifications,
+    dismissNotification: dismissAppNotification,
+    dismissedNotificationIds: notificationState.dismissedIds,
     unreadNotificationCount: unreadCount,
-  }), [openCommands, openNotifications, openSearch, unreadCount]);
+  }), [dismissAppNotification, notificationState.dismissedIds, openCommands, openNotifications, openSearch, unreadCount]);
 
   return (
     <AppDiscoveryContext.Provider value={value}>

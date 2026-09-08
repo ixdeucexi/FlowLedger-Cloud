@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddBillModal } from "@/components/AddBillModal";
+import { AccessibleIconButton } from "@/components/AccessiblePressable";
 import { CommandPlusButton } from "@/components/CommandPlusButton";
 import { DesktopBillsDebtsPage } from "@/components/desktop/DesktopBillsDebtsPage";
 import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
@@ -25,6 +26,7 @@ import colors from "@/constants/colors";
 import type { Bill } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useAuth } from "@/context/AuthContext";
+import { useAppDiscovery } from "@/context/AppDiscoveryContext";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { confirmAction } from "@/lib/confirmAction";
@@ -107,6 +109,7 @@ export default function BillsScreen() {
     debtId?: string;
   }>();
   const { user } = useAuth();
+  const { dismissNotification, dismissedNotificationIds } = useAppDiscovery();
   const {
     bills,
     addBill,
@@ -387,6 +390,16 @@ export default function BillsScreen() {
       getPaidAmount,
       pendingOccurrenceKeys,
     ],
+  );
+  const dismissedOverdueIds = useMemo(
+    () => new Set(dismissedNotificationIds),
+    [dismissedNotificationIds],
+  );
+  const visibleOverdueAlerts = useMemo(
+    () => overdueBills.filter(alert => !dismissedOverdueIds.has(
+      `bill-overdue:${alert.billId}:${alert.firstOccurrenceDate}`,
+    )),
+    [dismissedOverdueIds, overdueBills],
   );
   const overdueByBill = useMemo(
     () => new Map(overdueBills.map((alert) => [alert.billId, alert])),
@@ -719,71 +732,87 @@ export default function BillsScreen() {
             </View>
           </View>
 
-          {activeTab === "bills" && overdueBills.length > 0 ? (
+          {activeTab === "bills" && visibleOverdueAlerts.length > 0 ? (
             <View style={styles.overdueAlerts}>
-              {overdueBills.map(overdueBill => (
-                <Pressable
+              {visibleOverdueAlerts.map(overdueBill => (
+                <View
                   key={overdueBill.billId}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${overdueBill.name} is past due with $${overdueBill.remainingAmount.toFixed(2)} remaining. Review it on the calendar.`}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/(tabs)/monthly",
-                      params: {
-                        openDate: overdueBill.firstOccurrenceDate,
-                        openDateAt: String(Date.now()),
-                      },
-                    } as any)
-                  }
-                  style={({ pressed }) => [
+                  style={[
                     styles.overdueCard,
                     isDesktop && styles.desktopSection,
                     {
                       backgroundColor: c.destructive + "12",
                       borderColor: c.destructive + "70",
-                      opacity: pressed ? 0.82 : 1,
                     },
                   ]}
                 >
-                  <View
-                    style={[
-                      styles.overdueIcon,
-                      { backgroundColor: c.destructive + "20" },
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${overdueBill.name} is past due with $${overdueBill.remainingAmount.toFixed(2)} remaining. Review it on the calendar.`}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/(tabs)/monthly",
+                        params: {
+                          openDate: overdueBill.firstOccurrenceDate,
+                          openDateAt: String(Date.now()),
+                        },
+                      } as any)
+                    }
+                    style={({ pressed }) => [
+                      styles.overdueMain,
+                      { opacity: pressed ? 0.82 : 1 },
                     ]}
                   >
-                    <Feather
-                      name="alert-triangle"
-                      size={19}
-                      color={c.destructive}
-                    />
-                  </View>
-                  <View style={styles.overdueCopy}>
-                    <Text style={[styles.overdueEyebrow, { color: c.destructive }]}>
-                      Past due · action needed
-                    </Text>
-                    <Text
-                      numberOfLines={1}
-                      ellipsizeMode="tail"
-                      style={[styles.overdueTitle, { color: c.foreground }]}
+                    <View
+                      style={[
+                        styles.overdueIcon,
+                        { backgroundColor: c.destructive + "20" },
+                      ]}
                     >
-                      {overdueBill.name}
-                    </Text>
-                    <Text
-                      style={[styles.overdueText, { color: c.mutedForeground }]}
-                    >
-                      ${overdueBill.remainingAmount.toFixed(2)} remains ·{" "}
-                      {new Date(
-                        `${overdueBill.firstOccurrenceDate}T12:00:00`,
-                      ).toLocaleDateString("en-US", {
-                        month: "long",
-                        day: "numeric",
-                        year: "numeric",
-                      })}{" "}
-                      passed · tap to review or mark paid.
-                    </Text>
-                  </View>
-                  <Feather name="chevron-right" size={18} color={c.destructive} />
-                </Pressable>
+                      <Feather
+                        name="alert-triangle"
+                        size={19}
+                        color={c.destructive}
+                      />
+                    </View>
+                    <View style={styles.overdueCopy}>
+                      <Text style={[styles.overdueEyebrow, { color: c.destructive }]}>
+                        Past due · action needed
+                      </Text>
+                      <Text
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                        style={[styles.overdueTitle, { color: c.foreground }]}
+                      >
+                        {overdueBill.name}
+                      </Text>
+                      <Text
+                        style={[styles.overdueText, { color: c.mutedForeground }]}
+                      >
+                        ${overdueBill.remainingAmount.toFixed(2)} remains ·{" "}
+                        {new Date(
+                          `${overdueBill.firstOccurrenceDate}T12:00:00`,
+                        ).toLocaleDateString("en-US", {
+                          month: "long",
+                          day: "numeric",
+                          year: "numeric",
+                        })}{" "}
+                        passed · tap to review or mark paid.
+                      </Text>
+                    </View>
+                    <Feather name="chevron-right" size={18} color={c.destructive} />
+                  </Pressable>
+                  <AccessibleIconButton
+                    accessibilityLabel={`Dismiss ${overdueBill.name} overdue alert`}
+                    icon="x"
+                    size={16}
+                    color={c.mutedForeground}
+                    onPress={() => dismissNotification(
+                      `bill-overdue:${overdueBill.billId}:${overdueBill.firstOccurrenceDate}`,
+                    )}
+                    style={styles.overdueDismiss}
+                  />
+                </View>
               ))}
             </View>
           ) : null}
@@ -2068,9 +2097,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   overdueCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
+    position: "relative",
     borderWidth: 1,
     borderRadius: 20,
     padding: 12,
@@ -2079,6 +2106,23 @@ const styles = StyleSheet.create({
   },
   overdueAlerts: {
     marginBottom: 0,
+  },
+  overdueMain: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    paddingRight: 30,
+  },
+  overdueDismiss: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
   },
   overdueIcon: {
     width: 36,
