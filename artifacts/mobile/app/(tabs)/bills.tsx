@@ -671,7 +671,7 @@ export default function BillsScreen() {
           <View
             style={[
               styles.segmentWrap,
-              { paddingHorizontal: 16, marginBottom: 12 },
+              { paddingHorizontal: 16, marginBottom: 8 },
             ]}
           >
             <View style={[styles.segment, { backgroundColor: c.muted }]}>
@@ -725,7 +725,7 @@ export default function BillsScreen() {
                 <Pressable
                   key={overdueBill.billId}
                   accessibilityRole="button"
-                  accessibilityLabel={`${overdueBill.name} is past due. Review it on the calendar.`}
+                  accessibilityLabel={`${overdueBill.name} is past due with $${overdueBill.remainingAmount.toFixed(2)} remaining. Review it on the calendar.`}
                   onPress={() =>
                     router.push({
                       pathname: "/(tabs)/monthly",
@@ -761,13 +761,17 @@ export default function BillsScreen() {
                     <Text style={[styles.overdueEyebrow, { color: c.destructive }]}>
                       Past due · action needed
                     </Text>
-                    <Text style={[styles.overdueTitle, { color: c.foreground }]}>
-                      {overdueBill.name} still needs $
-                      {overdueBill.remainingAmount.toFixed(2)}
+                    <Text
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                      style={[styles.overdueTitle, { color: c.foreground }]}
+                    >
+                      {overdueBill.name}
                     </Text>
                     <Text
                       style={[styles.overdueText, { color: c.mutedForeground }]}
                     >
+                      ${overdueBill.remainingAmount.toFixed(2)} remains ·{" "}
                       {new Date(
                         `${overdueBill.firstOccurrenceDate}T12:00:00`,
                       ).toLocaleDateString("en-US", {
@@ -775,7 +779,7 @@ export default function BillsScreen() {
                         day: "numeric",
                         year: "numeric",
                       })}{" "}
-                      has passed. Tap to review or mark it paid.
+                      passed · tap to review or mark paid.
                     </Text>
                   </View>
                   <Feather name="chevron-right" size={18} color={c.destructive} />
@@ -2042,7 +2046,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingBottom: 10,
   },
   headerCopy: { flex: 1, minWidth: 0, paddingRight: 14 },
   pageEyebrow: {
@@ -2066,10 +2070,10 @@ const styles = StyleSheet.create({
   overdueCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 11,
+    gap: 9,
     borderWidth: 1,
-    borderRadius: 24,
-    padding: 16,
+    borderRadius: 20,
+    padding: 12,
     marginHorizontal: 16,
     marginBottom: 12,
   },
@@ -2077,9 +2081,9 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   overdueIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2091,20 +2095,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0.7,
   },
   overdueTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: "Inter_800ExtraBold",
     marginTop: 2,
   },
   overdueText: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: "Inter_400Regular",
-    lineHeight: 17,
+    lineHeight: 15,
     marginTop: 3,
   },
   billSnapshotCard: {
     borderWidth: 1,
-    borderRadius: 24,
-    padding: 18,
+    borderRadius: 20,
+    padding: 14,
     marginHorizontal: 16,
     marginBottom: 12,
     shadowColor: "#000",
@@ -2118,7 +2122,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
-    marginBottom: 14,
+    marginBottom: 10,
   },
   billSnapshotLabel: {
     fontSize: 9,
@@ -2127,7 +2131,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   billSnapshotTitle: {
-    fontSize: 19,
+    fontSize: 18,
     fontFamily: "Inter_800ExtraBold",
     marginTop: 2,
   },
@@ -2146,37 +2150,37 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-end",
     justifyContent: "space-between",
-    gap: 16,
+    gap: 12,
   },
   billSnapshotAmountWrap: { flex: 1 },
   billSnapshotAmountLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: "Inter_600SemiBold",
   },
   billSnapshotAmount: {
-    fontSize: 36,
-    lineHeight: 41,
+    fontSize: 32,
+    lineHeight: 36,
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: -1.3,
     marginTop: 1,
   },
   billSnapshotAmountSub: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: "Inter_500Medium",
     marginTop: 1,
   },
   billSnapshotPaidTile: {
-    minWidth: 88,
-    minHeight: 80,
+    minWidth: 80,
+    minHeight: 68,
     borderWidth: 1,
-    borderRadius: 18,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     alignItems: "center",
     justifyContent: "center",
   },
   billSnapshotPaidValue: {
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: "Inter_800ExtraBold",
     marginTop: 3,
   },
@@ -2189,17 +2193,17 @@ const styles = StyleSheet.create({
     height: 7,
     borderRadius: 999,
     overflow: "hidden",
-    marginTop: 16,
-    marginBottom: 14,
+    marginTop: 10,
+    marginBottom: 10,
   },
   billProgressFill: { height: "100%", borderRadius: 999 },
   billSnapshotStats: { flexDirection: "row", gap: 8 },
   billSnapshotStat: {
     flex: 1,
     borderWidth: 1,
-    borderRadius: 16,
+    borderRadius: 14,
     paddingHorizontal: 9,
-    paddingVertical: 10,
+    paddingVertical: 8,
   },
   billSnapshotValue: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
   billSnapshotStatLabel: {
@@ -2215,8 +2219,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
     paddingHorizontal: 18,
-    marginTop: 10,
-    marginBottom: 10,
+    marginTop: 6,
+    marginBottom: 7,
   },
   sectionEyebrow: {
     fontSize: 9,
@@ -2252,7 +2256,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    paddingVertical: 11,
+    minHeight: 44,
+    paddingVertical: 8,
     borderRadius: 13,
   },
   segmentText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
