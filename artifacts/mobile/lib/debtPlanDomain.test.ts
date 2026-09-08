@@ -14,6 +14,7 @@ import {
   exactDebtPlanTotal,
   isValidExtraPaymentPlan,
   isPlannedDebtOccurrenceDate,
+  lenderMinimumRequiredAmount,
   parsePlannedDebtAmount,
   parsePlannedDebtOccurrenceDate,
   plannedDebtAmountError,
@@ -25,6 +26,12 @@ import {
 import { projectDatedSnowballMonth } from "./snowball";
 import { buildOverdueBillOccurrences } from "./overdueBills";
 import { occurrenceKey, reviewedBillOccurrenceSettlements } from "./reviewCenter";
+
+test("overdue debt requirements stop at the lender minimum, not optional snowball extra", () => {
+  assert.equal(lenderMinimumRequiredAmount(103, 35.41), 35.41);
+  assert.equal(lenderMinimumRequiredAmount(0, 35.41), 0);
+  assert.equal(lenderMinimumRequiredAmount(undefined, 35.41), 35.41);
+});
 
 test("dated debt cache signature changes when a remaining payment appears", () => {
   const base = {

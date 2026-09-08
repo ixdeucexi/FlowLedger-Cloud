@@ -121,6 +121,23 @@ export function configuredDebtMonthObligation(input: {
 }
 
 /**
+ * Returns the amount that should drive an overdue alert for one debt
+ * occurrence. Planned snowball extras are optional and must not keep an
+ * alert open after the lender minimum is paid. Historical zero/lower
+ * requirements remain respected when they are explicitly recorded.
+ */
+export function lenderMinimumRequiredAmount(
+  configuredAmount: number | undefined,
+  lenderMinimum: number,
+): number {
+  const minimum = cents(lenderMinimum);
+  const configured = Number(configuredAmount);
+  return Number.isFinite(configured) && configured >= 0
+    ? cents(Math.min(minimum, configured))
+    : minimum;
+}
+
+/**
  * Splits one exact Forecast commitment without redefining the lender minimum.
  * An omitted override schedules the required amount; an explicit zero skips
  * the cash outflow while the full requirement remains available to status

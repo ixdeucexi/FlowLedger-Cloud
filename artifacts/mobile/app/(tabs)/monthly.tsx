@@ -31,7 +31,7 @@ import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { DESKTOP_MODAL_HANDLE, DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR, DESKTOP_MODAL_WIDE } from "@/lib/desktopModal";
-import { configuredDebtAmountForRemainingPayment, parsePlannedDebtAmount } from "@/lib/debtPlanDomain";
+import { configuredDebtAmountForRemainingPayment, lenderMinimumRequiredAmount, parsePlannedDebtAmount } from "@/lib/debtPlanDomain";
 import { calendarBalanceIsVisible } from "@/lib/dailyCheckingClose";
 import { confirmedBillMatchId, isConfirmedBillMatch } from "@/lib/billMatching";
 import { nextPlannedDebtPayment } from "@/lib/billSurplusRouting";
@@ -144,6 +144,7 @@ function CalendarDebtPaymentCard({
   requiredMinimum,
   snowballMonthToDate,
   onEdit,
+  onChangeDate,
   onRemove,
   inlineEdit,
   retainedPayment,
@@ -156,6 +157,7 @@ function CalendarDebtPaymentCard({
   requiredMinimum?: number;
   snowballMonthToDate?: number;
   onEdit?: () => void;
+  onChangeDate?: () => void;
   onRemove?: () => void;
   retainedPayment?: ReturnType<typeof retainedDebtPaymentBreakdown>;
   inlineEdit?: {
@@ -343,7 +345,7 @@ function CalendarDebtPaymentCard({
         </View>
       ) : null}
 
-      {onEdit || inlineEdit || onRemove ? (
+      {onEdit || inlineEdit || onChangeDate || onRemove ? (
         <View style={styles.dayBillActions}>
           {onEdit || inlineEdit ? (
             <Pressable
@@ -354,6 +356,17 @@ function CalendarDebtPaymentCard({
             >
               <Feather name="edit-2" size={13} color={c.primary} />
               <Text style={[styles.dayBillActionText, { color: c.primary }]}>Edit</Text>
+            </Pressable>
+          ) : null}
+          {onChangeDate ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Change date for ${name}`}
+              onPress={onChangeDate}
+              style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.primary + "16", borderColor: c.primary + "35", opacity: pressed ? 0.74 : 1 }]}
+            >
+              <Feather name="calendar" size={13} color={c.primary} />
+              <Text style={[styles.dayBillActionText, { color: c.primary }]}>Change date</Text>
             </Pressable>
           ) : null}
           {onRemove ? (
@@ -2274,7 +2287,10 @@ export default function MonthlyScreen() {
                               )
                             : undefined;
                           const requiredAmount = bill.is_debt
-                            ? (debtOccurrence?.configuredObligation ?? Math.max(0, Number(bill.amount) || 0))
+                            ? lenderMinimumRequiredAmount(
+                              debtOccurrence?.configuredObligation,
+                              Math.max(0, Number(bill.amount) || 0),
+                            )
                             : amount;
                           const exactMatch = billOccurrenceMatches.get(occurrenceKey(bill.id, occurrenceDate));
                           const monthlyOverride = overrides.find(item => item.bill_id === bill.id && item.month === month && item.year === selectedYear);
@@ -2287,13 +2303,15 @@ export default function MonthlyScreen() {
                             monthlyPaidDate: monthlyOverride?.paid_date,
                           });
                           const paid = debtOccurrence?.paidAmount ?? occurrencePayment.paidAmount;
-                          const isPaid = debtOccurrence
-                            ? debtOccurrence.status === "settled"
+                          const isPaid = bill.is_debt
+                            ? paid + 0.005 >= requiredAmount
                             : occurrencePayment.isPaid;
-                          const isPartial = debtOccurrence
-                            ? debtOccurrence.status === "partial"
+                          const isPartial = bill.is_debt
+                            ? paid > 0.005 && !isPaid
                             : occurrencePayment.isPartial;
-                          const remaining = debtOccurrence?.remainingRequired ?? occurrencePayment.remainingAmount;
+                          const remaining = bill.is_debt
+                            ? Math.max(0, requiredAmount - paid)
+                            : (debtOccurrence?.remainingRequired ?? occurrencePayment.remainingAmount);
                           const optionalExtraRemaining = bill.is_debt
                             ? debtPaymentProgress(requiredAmount, amount, paid).optionalExtraRemaining
                             : 0;
@@ -2532,6 +2550,13 @@ export default function MonthlyScreen() {
                               } : editorParams && !canInlineEdit ? () => {
                                 openPlannedDebtPaymentEditor(payment.event);
                               } : undefined}
+                              onChangeDate={editorParams && sourceDebt && canEditHousehold
+                                && (sourceDebt.frequency === "monthly" || sourceDebt.frequency === "quarterly")
+                                ? () => {
+                                  setSelectedDate(null);
+                                  setDueDayPicker({ bill: sourceDebt, fromDate: editorParams.date });
+                                }
+                                : undefined}
                               inlineEdit={editorParams && canInlineEdit ? {
                                 canEdit: canEditHousehold,
                                 alreadyPaid: settledForOccurrence,

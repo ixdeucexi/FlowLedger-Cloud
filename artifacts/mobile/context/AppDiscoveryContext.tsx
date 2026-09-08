@@ -21,6 +21,7 @@ import {
 } from "@/lib/notificationCenter";
 import { pendingOccurrenceKeySet } from "@/lib/pendingPlanMatches";
 import { buildReviewQueue } from "@/lib/reviewCenter";
+import { lenderMinimumRequiredAmount } from "@/lib/debtPlanDomain";
 import { SETTINGS_SECTIONS } from "@/lib/settingsHub";
 import { supabase } from "@/lib/supabase";
 import {
@@ -300,8 +301,9 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
       const days = getBillOccurrencesInMonth(bill, month, year).sort((left, right) => left - right);
       if (!days.length) return;
       const debtSettlement = bill.is_debt ? debtSettlements.get(bill.id) : undefined;
-      const amount = (debtSettlement?.configuredObligation
-        ?? getBillMonthlyTotal(bill, month, year)) / days.length;
+      const amount = bill.is_debt
+        ? lenderMinimumRequiredAmount(undefined, Math.max(0, Number(bill.amount) || 0))
+        : getBillMonthlyTotal(bill, month, year) / days.length;
       let paid = debtSettlement?.paidAmount ?? getPaidAmount(bill.id, month, year);
       const exactByDay = new Map(debtSettlement?.occurrences?.map(occurrence => [
         Number(occurrence.occurrenceDate.slice(8, 10)),
@@ -309,7 +311,9 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
       ]) ?? []);
       days.forEach(day => {
         const exact = exactByDay.get(day);
-        const required = exact?.configuredObligation ?? amount;
+        const required = bill.is_debt
+          ? lenderMinimumRequiredAmount(exact?.configuredObligation, amount)
+          : exact?.configuredObligation ?? amount;
         const settled = exact
           ? Math.min(required, exact.paidAmount)
           : Math.min(required, Math.max(0, paid));

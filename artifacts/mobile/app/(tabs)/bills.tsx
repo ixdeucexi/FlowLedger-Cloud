@@ -31,6 +31,7 @@ import { confirmAction } from "@/lib/confirmAction";
 import type { BillEditableBaseline, BillEditableField } from "@/lib/billEditPersistence";
 import { effectiveDebtMinimum } from "@/lib/snowball";
 import { buildDebtPaymentPlanSummary, requiredDebtPlanTotal, snowballRolloverPlanTotal } from "@/lib/debtPaymentPlan";
+import { lenderMinimumRequiredAmount } from "@/lib/debtPlanDomain";
 import {
   orderActiveDebtsForStrategy,
   sortDebtsWithPaidLast,
@@ -345,8 +346,7 @@ export default function BillsScreen() {
               closed: bill.is_debt && bill.balance <= 0.009,
               occurrenceDays,
               plannedTotal: bill.is_debt
-                ? (debtSettlement?.configuredObligation
-                  ?? requiredDebtPlanTotal(bill, occurrenceDays.length))
+                ? requiredDebtPlanTotal(bill, occurrenceDays.length)
                 : getBillEffectiveMonthlyTotal(
                     bill,
                     currentMonth,
@@ -358,7 +358,10 @@ export default function BillsScreen() {
                 : getPaidAmount(bill.id, currentMonth, currentYear),
               occurrences: debtSettlement?.occurrences?.map(occurrence => ({
                 day: Number(occurrence.occurrenceDate.slice(8, 10)),
-                requiredAmount: occurrence.configuredObligation,
+                requiredAmount: lenderMinimumRequiredAmount(
+                  occurrence.configuredObligation,
+                  debtRequiredMinimum(bill),
+                ),
                 paidAmount: occurrence.paidAmount,
               })),
             };
@@ -389,7 +392,6 @@ export default function BillsScreen() {
     () => new Map(overdueBills.map((alert) => [alert.billId, alert])),
     [overdueBills],
   );
-  const firstOverdueBill = overdueBills[0] ?? null;
   const pendingByBill = useMemo(() => {
     const result = new Map<string, (typeof livePendingMatches)[number]>();
     livePendingMatches.forEach((match) => {
@@ -717,67 +719,69 @@ export default function BillsScreen() {
             </View>
           </View>
 
-          {activeTab === "bills" && firstOverdueBill ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`${firstOverdueBill.name} is past due. Review it on the calendar.`}
-              onPress={() =>
-                router.push({
-                  pathname: "/(tabs)/monthly",
-                  params: {
-                    openDate: firstOverdueBill.firstOccurrenceDate,
-                    openDateAt: String(Date.now()),
-                  },
-                } as any)
-              }
-              style={({ pressed }) => [
-                styles.overdueCard,
-                isDesktop && styles.desktopSection,
-                {
-                  backgroundColor: c.destructive + "12",
-                  borderColor: c.destructive + "70",
-                  opacity: pressed ? 0.82 : 1,
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.overdueIcon,
-                  { backgroundColor: c.destructive + "20" },
-                ]}
-              >
-                <Feather
-                  name="alert-triangle"
-                  size={19}
-                  color={c.destructive}
-                />
-              </View>
-              <View style={styles.overdueCopy}>
-                <Text style={[styles.overdueEyebrow, { color: c.destructive }]}>
-                  Past due · action needed
-                </Text>
-                <Text style={[styles.overdueTitle, { color: c.foreground }]}>
-                  {firstOverdueBill.name} still needs $
-                  {firstOverdueBill.remainingAmount.toFixed(2)}
-                </Text>
-                <Text
-                  style={[styles.overdueText, { color: c.mutedForeground }]}
+          {activeTab === "bills" && overdueBills.length > 0 ? (
+            <View style={styles.overdueAlerts}>
+              {overdueBills.map(overdueBill => (
+                <Pressable
+                  key={overdueBill.billId}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${overdueBill.name} is past due. Review it on the calendar.`}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/(tabs)/monthly",
+                      params: {
+                        openDate: overdueBill.firstOccurrenceDate,
+                        openDateAt: String(Date.now()),
+                      },
+                    } as any)
+                  }
+                  style={({ pressed }) => [
+                    styles.overdueCard,
+                    isDesktop && styles.desktopSection,
+                    {
+                      backgroundColor: c.destructive + "12",
+                      borderColor: c.destructive + "70",
+                      opacity: pressed ? 0.82 : 1,
+                    },
+                  ]}
                 >
-                  {new Date(
-                    `${firstOverdueBill.firstOccurrenceDate}T12:00:00`,
-                  ).toLocaleDateString("en-US", {
-                    month: "long",
-                    day: "numeric",
-                    year: "numeric",
-                  })}{" "}
-                  has passed. Tap to review or mark it paid.
-                  {overdueBills.length > 1
-                    ? ` ${overdueBills.length - 1} more ${overdueBills.length - 1 === 1 ? "bill needs" : "bills need"} action.`
-                    : ""}
-                </Text>
-              </View>
-              <Feather name="chevron-right" size={18} color={c.destructive} />
-            </Pressable>
+                  <View
+                    style={[
+                      styles.overdueIcon,
+                      { backgroundColor: c.destructive + "20" },
+                    ]}
+                  >
+                    <Feather
+                      name="alert-triangle"
+                      size={19}
+                      color={c.destructive}
+                    />
+                  </View>
+                  <View style={styles.overdueCopy}>
+                    <Text style={[styles.overdueEyebrow, { color: c.destructive }]}>
+                      Past due · action needed
+                    </Text>
+                    <Text style={[styles.overdueTitle, { color: c.foreground }]}>
+                      {overdueBill.name} still needs $
+                      {overdueBill.remainingAmount.toFixed(2)}
+                    </Text>
+                    <Text
+                      style={[styles.overdueText, { color: c.mutedForeground }]}
+                    >
+                      {new Date(
+                        `${overdueBill.firstOccurrenceDate}T12:00:00`,
+                      ).toLocaleDateString("en-US", {
+                        month: "long",
+                        day: "numeric",
+                        year: "numeric",
+                      })}{" "}
+                      has passed. Tap to review or mark it paid.
+                    </Text>
+                  </View>
+                  <Feather name="chevron-right" size={18} color={c.destructive} />
+                </Pressable>
+              ))}
+            </View>
           ) : null}
 
           {activeTab === "bills" ? (
@@ -2068,6 +2072,9 @@ const styles = StyleSheet.create({
     padding: 16,
     marginHorizontal: 16,
     marginBottom: 12,
+  },
+  overdueAlerts: {
+    marginBottom: 0,
   },
   overdueIcon: {
     width: 42,
