@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import Feather from "@expo/vector-icons/Feather";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 

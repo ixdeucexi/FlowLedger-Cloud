@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";

@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import Feather from "@expo/vector-icons/Feather";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useEffect, useMemo, useState } from "react";
 import { Image, Modal, Pressable, StyleSheet, View } from "react-native";

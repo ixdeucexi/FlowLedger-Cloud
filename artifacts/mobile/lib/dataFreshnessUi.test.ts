@@ -10,21 +10,18 @@ test("cached plan freshness comes from the successful query timestamp", () => {
   assert.doesNotMatch(context, /DataFreshnessLabel/);
 });
 
-test("financial workspaces show the shared exact freshness label", () => {
-  const sources = [
-    "app/(tabs)/index.tsx",
-    "app/(tabs)/bills.tsx",
-    "app/(tabs)/monthly.tsx",
-    "app/(tabs)/transactions.tsx",
-    "app/(tabs)/more.tsx",
-    "app/(tabs)/category-budget.tsx",
-    "app/snowball-plan.tsx",
-    "app/plan-simulator.tsx",
-    "app/(tabs)/flo.tsx",
-  ];
-
-  for (const source of sources) {
-    assert.match(readFileSync(source, "utf8"), /DataFreshnessLabel/, source);
-  }
-  assert.doesNotMatch(readFileSync("components/BasicFlo.tsx", "utf8"), /new Date\(asOf\)/);
+test("freshness component intentionally renders nothing without changing sync metadata", () => {
+  const source = readFileSync("components/DataFreshnessLabel.tsx", "utf8");
+  const { transpileModule, ModuleKind } =
+    require("typescript") as typeof import("typescript");
+  const compiled = transpileModule(source, {
+    compilerOptions: { module: ModuleKind.CommonJS },
+  }).outputText;
+  const component: { DataFreshnessLabel?: (props: object) => unknown } = {};
+  new Function("exports", compiled)(component);
+  assert.equal(component.DataFreshnessLabel!({}), null);
+  assert.equal(
+    component.DataFreshnessLabel!({ compact: true, inset: true }),
+    null,
+  );
 });

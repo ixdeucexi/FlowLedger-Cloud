@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import Feather from "@expo/vector-icons/Feather";
 import React, { useMemo, useState } from "react";
 import {
   Pressable,

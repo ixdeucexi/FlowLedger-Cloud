@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -581,7 +581,7 @@ function SnowballPlanScreen() {
 
                 <View style={[styles.safeMaximum, { backgroundColor: c.success + "10", borderColor: c.success + "38" }]}>
                   <View>
-                    <Text style={[styles.cardLabel, { color: c.mutedForeground }]}>MAXIMUM SAFE EXTRA</Text>
+                    <Text style={[styles.cardLabel, { color: c.mutedForeground }]}>ESTIMATED ROOM FOR EXTRA</Text>
                     <Text style={[styles.safeAmount, { color: c.success }]}>{money(safeMaximum)}</Text>
                   </View>
                   <View style={[styles.monthBadge, { backgroundColor: c.primary + "18" }]}>
@@ -589,6 +589,14 @@ function SnowballPlanScreen() {
                   </View>
                 </View>
 
+                <Text style={[styles.error, { color: c.mutedForeground }]}>
+                  {safeMaximum <= 0.005
+                    ? "Your current forecast has no room for extra debt payments. Keep required payments in your plan and review Bills or Forecast."
+                    : "Based on your recorded plan. Keep bills and required minimums covered first; extra debt payments are optional."}
+                </Text>
+                <Pressable accessibilityRole="button" onPress={() => router.push("/(tabs)/bills" as never)} style={styles.safeLink}>
+                  <Text style={[styles.safeLinkText, { color: c.primary }]}>Review bills</Text>
+                </Pressable>
                 <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>EXTRA PAYMENT</Text>
                 <View style={[styles.inputWrap, { backgroundColor: c.background, borderColor: requestedExtra > safeMaximum || requestedExtra > editTargetCapacity ? c.destructive : c.border }]}>
                   <Text style={[styles.dollar, { color: c.foreground }]}>$</Text>

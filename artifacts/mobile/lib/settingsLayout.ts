@@ -3,6 +3,10 @@ import type { TextStyle, ViewStyle } from "react-native";
 export const SETTINGS_STACK_BREAKPOINT = 480;
 export const SETTINGS_COMPACT_BREAKPOINT = 340;
 
+export function shouldStackQuickAccess(viewportWidth: number, fontScale = 1) {
+  return viewportWidth / Math.max(1, fontScale) < 300;
+}
+
 export type ForecastSafetyLayout = {
   stacked: boolean;
   fields: ViewStyle;
@@ -10,14 +14,26 @@ export type ForecastSafetyLayout = {
   input: TextStyle;
 };
 
-export function getForecastSafetyLayout(viewportWidth: number): ForecastSafetyLayout {
+export function getForecastSafetyLayout(
+  viewportWidth: number,
+): ForecastSafetyLayout {
   const stacked = viewportWidth < SETTINGS_STACK_BREAKPOINT;
 
   return {
     stacked,
     fields: stacked
-      ? { width: "100%", flexDirection: "column", alignItems: "stretch", gap: 12 }
-      : { width: "100%", flexDirection: "row", alignItems: "flex-start", gap: 10 },
+      ? {
+          width: "100%",
+          flexDirection: "column",
+          alignItems: "stretch",
+          gap: 12,
+        }
+      : {
+          width: "100%",
+          flexDirection: "row",
+          alignItems: "flex-start",
+          gap: 10,
+        },
     field: stacked
       ? { width: "100%", minWidth: 0 }
       : { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0 },

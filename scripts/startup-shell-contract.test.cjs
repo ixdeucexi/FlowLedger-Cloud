@@ -25,6 +25,14 @@ test("the release shell contract accepts the real template structure", () => {
   });
 });
 
+test("the approved floating-logo shell cannot silently restore the old tile", () => {
+  assert.match(valid, /src="\/startup-logo\.png"/);
+  const oldLogo = valid.replace('src="/startup-logo.png"', 'src="/icon-192.png"');
+  assert.throws(() => assertStartupShell(oldLogo, "fixture"), /reviewed startup release shell/);
+  const oldTile = valid.replace("object-fit: contain;", "object-fit: contain; border-radius: 48px;");
+  assert.throws(() => assertStartupShell(oldTile, "fixture"), /startup CSS/);
+});
+
 test("commented-out atomic hiding cannot satisfy the release shell contract", () => {
   const malformed = valid
     .replace("display: none !important;", "display: flex;")

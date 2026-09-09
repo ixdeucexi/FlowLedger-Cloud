@@ -11,6 +11,7 @@
     "outDir": ".test-dist"
   },
   "include": [
+    "lib/competitivePolish.test.ts",
     "lib/forecast.ts",
     "lib/forecastDisplay.ts",
     "lib/forecast.test.ts",

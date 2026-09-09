@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import Feather from "@expo/vector-icons/Feather";
 import { createPlaidLinkSession, type LinkExit, type LinkSuccess } from "react-native-plaid-link-sdk";
 import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";

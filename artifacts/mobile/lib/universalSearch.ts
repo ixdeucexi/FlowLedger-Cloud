@@ -29,6 +29,7 @@ export type UniversalSearchInput = {
 };
 
 export const APP_COMMANDS: readonly UniversalSearchResult[] = [
+  { id: "open-flo", kind: "Command", title: "Ask Flo", subtitle: "Get help understanding your plan", icon: "message-circle", route: "/(tabs)/flo", keywords: "assistant help bills debt" },
   { id: "add-bill", kind: "Command", title: "Add Bill", subtitle: "Create a recurring or one-time bill", icon: "file-plus", route: "/(tabs)", params: { action: "bill", add: "1" } },
   { id: "add-income", kind: "Command", title: "Add Income", subtitle: "Add an income source", icon: "arrow-down-left", route: "/(tabs)", params: { action: "income", add: "1" } },
   { id: "add-debt", kind: "Command", title: "Add Debt", subtitle: "Add a debt to your snowball", icon: "credit-card", route: "/(tabs)", params: { action: "debt", add: "1" } },

@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import Feather from "@expo/vector-icons/Feather";
 import * as AppleAuthentication from "expo-apple-authentication";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";

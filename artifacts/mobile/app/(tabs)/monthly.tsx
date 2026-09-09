@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import Feather from "@expo/vector-icons/Feather";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "@/lib/haptics";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";

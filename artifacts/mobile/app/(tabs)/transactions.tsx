@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import Feather from "@expo/vector-icons/Feather";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, {
   useCallback,
@@ -52,6 +52,7 @@ import type {
 import { useBudget } from "@/context/BudgetContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
+import { useLocalDay } from "@/hooks/useLocalDay";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { nextPlannedDebtPayment } from "@/lib/billSurplusRouting";
@@ -569,17 +570,18 @@ export function ActivityScreen() {
   const activityTopInset =
     Platform.OS === "android" ? Math.max(insets.top, 28) : insets.top;
   const listBottomPadding = insets.bottom + (Platform.OS === "web" ? 128 : 118);
+  const localDay = useLocalDay();
   const activeDateRange = useMemo(
     () =>
       resolveActivityDateRange(
         rangeFilter,
-        new Date(),
+        new Date(`${localDay}T12:00:00`),
         customStartDate,
         customEndDate,
       ),
-    [customEndDate, customStartDate, rangeFilter],
+    [customEndDate, customStartDate, rangeFilter, localDay],
   );
-  const currentActivityMonth = todayIsoDate().slice(0, 7);
+  const currentActivityMonth = localDay.slice(0, 7);
   const monthFilter =
     activeDateRange.startDate?.slice(0, 7) ?? currentActivityMonth;
   // BudgetContext already loads the complete, account-aware transaction ledger
@@ -593,11 +595,12 @@ export function ActivityScreen() {
   }, [transactionAccountIdentities, transactions]);
 
   const activityAccountIdentityById = useMemo(() => {
-    const byId = new Map<string, (typeof transactionAccountIdentities)[number]>();
+    const byId = new Map<
+      string,
+      (typeof transactionAccountIdentities)[number]
+    >();
     [...transactionAccountIdentities]
-      .sort(
-        (left, right) => Number(left.is_active) - Number(right.is_active),
-      )
+      .sort((left, right) => Number(left.is_active) - Number(right.is_active))
       .forEach((account) => {
         byId.set(account.id, account);
         if (account.plaid_account_id)
@@ -611,7 +614,7 @@ export function ActivityScreen() {
   // ── Build unified activity feed ───────────────────────────────────────────
   const allActivity = useMemo((): ActivityItem[] => {
     const items: ActivityItem[] = [];
-    const today = new Date();
+    const today = new Date(`${localDay}T12:00:00`);
     const currentMonth = today.getMonth();
     const currentYear = today.getFullYear();
     const snowballMatches = matchedOccurrenceAllocations(
@@ -861,6 +864,7 @@ export function ActivityScreen() {
 
     return items;
   }, [
+    localDay,
     activityTransactions,
     pendingBankTransactions,
     pendingPlanMatches,
@@ -919,7 +923,7 @@ export function ActivityScreen() {
   };
 
   const filtered = useMemo(() => {
-    const today = todayIsoDate();
+    const today = localDay;
     let list = allActivity.filter(
       (item) =>
         dateIsInActivityRange(item.date, activeDateRange) &&
@@ -948,6 +952,7 @@ export function ActivityScreen() {
     );
     return list;
   }, [
+    localDay,
     allActivity,
     activeDateRange,
     typeFilter,
@@ -960,9 +965,8 @@ export function ActivityScreen() {
   const sections = useMemo(() => groupByMonth(filtered), [filtered]);
 
   const runningBalanceById = useMemo(() => {
-    const today = todayIsoDate();
-    if (historyHasMore)
-      return new Map<string, number>();
+    const today = localDay;
+    if (historyHasMore) return new Map<string, number>();
     const hasConnectedChecking = connectedBankAccounts.some(
       (account) => account.is_active && account.account_subtype === "checking",
     );
@@ -1018,6 +1022,7 @@ export function ActivityScreen() {
       authoritativeCheckingLedger,
     );
   }, [
+    localDay,
     accounts,
     activeDateRange.endDate,
     activeDateRange.startDate,
@@ -1038,9 +1043,8 @@ export function ActivityScreen() {
           ? accounts.find((account) => account.id === item.rawTx?.account_id)
               ?.name
           : item.rawTx?.plaid_account_id
-            ? (activityAccountIdentityById.get(
-                item.rawTx.plaid_account_id,
-              )?.display_name ??
+            ? (activityAccountIdentityById.get(item.rawTx.plaid_account_id)
+                ?.display_name ??
               activityAccountIdentityById.get(item.rawTx.plaid_account_id)
                 ?.name)
             : undefined,
@@ -1059,8 +1063,8 @@ export function ActivityScreen() {
   }, [accounts, activityAccountIdentityById, filtered, runningBalanceById]);
 
   const activityReviewCount = useMemo(
-    () => buildReviewQueue(transactions, todayIsoDate()).length,
-    [transactions],
+    () => buildReviewQueue(transactions, localDay).length,
+    [transactions, localDay],
   );
   const unmatchedPendingActivity = useMemo(
     () =>
@@ -1223,25 +1227,24 @@ export function ActivityScreen() {
       title: activeDateRange.label,
       ...summary,
       latestWeeksOnly: !usesCompletePlannedSummary && weekRows.size > 12,
-      weeks:
-        usesCompletePlannedSummary
-          ? monthSummaryBasis.weeks
-          : Array.from(weekRows.entries())
-              .sort(([left], [right]) => right.localeCompare(left))
-              .slice(0, 12)
-              .map(([start, rows]) => {
-                const startDate = new Date(`${start}T12:00:00`);
-                const endDate = new Date(startDate);
-                endDate.setDate(endDate.getDate() + 6);
-                const weekSummary = summarizeActivityRange(rows);
-                return {
-                  startDay: startDate.getDate(),
-                  endDay: endDate.getDate(),
-                  label: `${startDate.toLocaleDateString(undefined, { month: "short", day: "numeric" })}–${endDate.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`,
-                  ...weekSummary,
-                  total: weekSummary.net,
-                };
-              }),
+      weeks: usesCompletePlannedSummary
+        ? monthSummaryBasis.weeks
+        : Array.from(weekRows.entries())
+            .sort(([left], [right]) => right.localeCompare(left))
+            .slice(0, 12)
+            .map(([start, rows]) => {
+              const startDate = new Date(`${start}T12:00:00`);
+              const endDate = new Date(startDate);
+              endDate.setDate(endDate.getDate() + 6);
+              const weekSummary = summarizeActivityRange(rows);
+              return {
+                startDay: startDate.getDate(),
+                endDay: endDate.getDate(),
+                label: `${startDate.toLocaleDateString(undefined, { month: "short", day: "numeric" })}–${endDate.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`,
+                ...weekSummary,
+                total: weekSummary.net,
+              };
+            }),
     };
   }, [
     activeDateRange.label,
@@ -3172,9 +3175,8 @@ export function ActivityScreen() {
                   (account) => account.id === item.rawTx?.account_id,
                 )?.name
               : item.rawTx?.plaid_account_id
-                ? (activityAccountIdentityById.get(
-                    item.rawTx.plaid_account_id,
-                  )?.display_name ??
+                ? (activityAccountIdentityById.get(item.rawTx.plaid_account_id)
+                    ?.display_name ??
                   activityAccountIdentityById.get(item.rawTx.plaid_account_id)
                     ?.name)
                 : undefined,

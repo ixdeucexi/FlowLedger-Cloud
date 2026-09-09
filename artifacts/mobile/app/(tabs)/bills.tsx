@@ -1,13 +1,15 @@
-﻿import { Feather } from "@expo/vector-icons";
+﻿import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  ActivityIndicator,
   Modal,
   Platform,
   Pressable,
-  ScrollView,
+  FlatList,
+  TextInput,
   StyleSheet,
   Text,
   View,
@@ -28,11 +30,20 @@ import { useBudget } from "@/context/BudgetContext";
 import { useAuth } from "@/context/AuthContext";
 import { useAppDiscovery } from "@/context/AppDiscoveryContext";
 import { useColors } from "@/hooks/useColors";
+import { useLocalDay } from "@/hooks/useLocalDay";
+import { matchesBillSearch } from "@/lib/billSearch";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { confirmAction } from "@/lib/confirmAction";
-import type { BillEditableBaseline, BillEditableField } from "@/lib/billEditPersistence";
+import type {
+  BillEditableBaseline,
+  BillEditableField,
+} from "@/lib/billEditPersistence";
 import { effectiveDebtMinimum } from "@/lib/snowball";
-import { buildDebtPaymentPlanSummary, requiredDebtPlanTotal, snowballRolloverPlanTotal } from "@/lib/debtPaymentPlan";
+import {
+  buildDebtPaymentPlanSummary,
+  requiredDebtPlanTotal,
+  snowballRolloverPlanTotal,
+} from "@/lib/debtPaymentPlan";
 import { lenderMinimumRequiredAmount } from "@/lib/debtPlanDomain";
 import {
   orderActiveDebtsForStrategy,
@@ -135,9 +146,27 @@ export default function BillsScreen() {
   } = useBudget();
 
   const [activeTab, setActiveTab] = useState<Tab>("bills");
+  const [debtReady, setDebtReady] = useState(false);
+  useEffect(() => {
+    setDebtReady(false);
+    if (activeTab !== "debt" || isDesktop) return;
+    let cancelled = false;
+    let secondFrame = 0;
+    const firstFrame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(() => {
+        if (!cancelled) setDebtReady(true);
+      });
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(firstFrame);
+      cancelAnimationFrame(secondFrame);
+    };
+  }, [activeTab, isDesktop]);
   const [modalVisible, setModalVisible] = useState(false);
   const [editBill, setEditBill] = useState<Bill | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  const [billSearch, setBillSearch] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("priority");
   const [debtInfoVisible, setDebtInfoVisible] = useState(false);
   const [categoryBudgets, setCategoryBudgets] = useState<
@@ -168,7 +197,8 @@ export default function BillsScreen() {
   const webTopPad = Platform.OS === "web" ? 4 : 0;
 
   // ── Bills data ──────────────────────────────────────────────────
-  const now = new Date();
+  const localDay = useLocalDay();
+  const now = new Date(`${localDay}T12:00:00`);
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
   const categoryBudgetScope = useMemo(
@@ -266,6 +296,7 @@ export default function BillsScreen() {
   const filteredBills = (
     filter === "stopped" ? stoppedNonDebtBills : activeNonDebtBills
   )
+    .filter((b) => matchesBillSearch(b, billSearch))
     .filter((b) => {
       if (filter === "stopped") return true;
       if (filter === "recurring") return b.is_recurring;
@@ -350,16 +381,12 @@ export default function BillsScreen() {
               occurrenceDays,
               plannedTotal: bill.is_debt
                 ? requiredDebtPlanTotal(bill, occurrenceDays.length)
-                : getBillEffectiveMonthlyTotal(
-                    bill,
-                    currentMonth,
-                    currentYear,
-                  ),
+                : getBillEffectiveMonthlyTotal(bill, currentMonth, currentYear),
               paidTotal: bill.is_debt
-                ? (debtSettlement?.paidAmount
-                  ?? getPaidAmount(bill.id, currentMonth, currentYear))
+                ? (debtSettlement?.paidAmount ??
+                  getPaidAmount(bill.id, currentMonth, currentYear))
                 : getPaidAmount(bill.id, currentMonth, currentYear),
-              occurrences: debtSettlement?.occurrences?.map(occurrence => ({
+              occurrences: debtSettlement?.occurrences?.map((occurrence) => ({
                 day: Number(occurrence.occurrenceDate.slice(8, 10)),
                 requiredAmount: lenderMinimumRequiredAmount(
                   occurrence.configuredObligation,
@@ -396,9 +423,13 @@ export default function BillsScreen() {
     [dismissedNotificationIds],
   );
   const visibleOverdueAlerts = useMemo(
-    () => overdueBills.filter(alert => !dismissedOverdueIds.has(
-      `bill-overdue:${alert.billId}:${alert.firstOccurrenceDate}`,
-    )),
+    () =>
+      overdueBills.filter(
+        (alert) =>
+          !dismissedOverdueIds.has(
+            `bill-overdue:${alert.billId}:${alert.firstOccurrenceDate}`,
+          ),
+      ),
     [dismissedOverdueIds, overdueBills],
   );
   const overdueByBill = useMemo(
@@ -459,8 +490,13 @@ export default function BillsScreen() {
   );
 
   // ── Debt data ───────────────────────────────────────────────────
-  const debtBills = visibleBills.filter((bill) => bill.is_debt);
+  // Keep debt-only projections out of Bills and the separate desktop screen.
+  const debtWorkEnabled = activeTab === "debt" && debtReady && !isDesktop;
+  const debtBills = debtWorkEnabled
+    ? visibleBills.filter((bill) => bill.is_debt)
+    : [];
   const { month: debtPlanMonth, year: debtPlanYear } = useMemo(() => {
+    if (!debtWorkEnabled) return { month: currentMonth, year: currentYear };
     for (let offset = 0; offset < 72; offset += 1) {
       const absoluteMonth = currentMonth + offset;
       const month = absoluteMonth % 12;
@@ -473,19 +509,24 @@ export default function BillsScreen() {
         return { month, year };
     }
     return { month: currentMonth, year: currentYear };
-  }, [bills, currentMonth, currentYear, getMonthlyBills]);
+  }, [debtWorkEnabled, bills, currentMonth, currentYear, getMonthlyBills]);
   const debtPlanIsFuture =
     debtPlanMonth !== currentMonth || debtPlanYear !== currentYear;
   const baseSnowballPreview = useMemo(
-    () => previewDebtSnowball(debtPlanMonth, debtPlanYear),
-    [bills, debtPlanMonth, debtPlanYear, previewDebtSnowball],
+    () =>
+      debtWorkEnabled ? previewDebtSnowball(debtPlanMonth, debtPlanYear) : null,
+    [debtWorkEnabled, bills, debtPlanMonth, debtPlanYear, previewDebtSnowball],
   );
-  const existingSnowball = getExtraPayment(debtPlanMonth, debtPlanYear);
-  const datedDebtPlan = getDebtPlanForMonth(debtPlanMonth, debtPlanYear);
-  const cashFlowSafeSnowballAmount = baseSnowballPreview.safeMaximum;
+  const existingSnowball = debtWorkEnabled
+    ? getExtraPayment(debtPlanMonth, debtPlanYear)
+    : null;
+  const datedDebtPlan = debtWorkEnabled
+    ? getDebtPlanForMonth(debtPlanMonth, debtPlanYear)
+    : null;
+  const cashFlowSafeSnowballAmount = baseSnowballPreview?.safeMaximum ?? 0;
 
   const debtPlanIds = new Set(
-    getMonthlyBills(debtPlanMonth, debtPlanYear)
+    (debtWorkEnabled ? getMonthlyBills(debtPlanMonth, debtPlanYear) : [])
       .filter((bill) => bill.is_debt)
       .map((bill) => bill.id),
   );
@@ -591,7 +632,8 @@ export default function BillsScreen() {
       dirtyFields?: readonly BillEditableField[],
       baseline?: BillEditableBaseline,
     ) => {
-      if ("id" in data) return updateBill(data as Bill, dirtyFields ?? [], baseline);
+      if ("id" in data)
+        return updateBill(data as Bill, dirtyFields ?? [], baseline);
       return addBill(data);
     },
     [addBill, updateBill],
@@ -623,1331 +665,1386 @@ export default function BillsScreen() {
   const subtitle =
     activeTab === "bills"
       ? `${totalCount} bill${totalCount !== 1 ? "s" : ""} · $${totalAmount.toFixed(0)}/mo recurring`
-      : `${debts.length} debt${debts.length !== 1 ? "s" : ""} · $${totalDebt.toLocaleString(undefined, { maximumFractionDigits: 0 })} total`;
+      : !debtWorkEnabled
+        ? "Preparing your payoff plan…"
+        : `${debts.length} debt${debts.length !== 1 ? "s" : ""} · $${totalDebt.toLocaleString(undefined, { maximumFractionDigits: 0 })} total`;
   const listBottomPadding = isDesktop
     ? 48
     : insets.bottom + (Platform.OS === "web" ? 128 : 118);
+
+  const renderBill = ({ item }: { item: Bill }) => {
+    const catColor = CAT_COLORS[item.category] ?? c.primary;
+    const stopped = isStoppedFutureBill(item);
+    const overdue = overdueByBill.get(item.id);
+    const pending = pendingByBill.get(item.id);
+    return (
+      <Pressable
+        key={item.id}
+        onPress={() => {
+          setEditBill(item);
+          setModalVisible(true);
+        }}
+        style={({ pressed }) => [
+          styles.card,
+          {
+            backgroundColor: c.card,
+            borderRadius: colors.radius,
+            opacity: pressed ? 0.88 : 1,
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.categoryIcon,
+            {
+              backgroundColor: catColor + "16",
+              borderColor: catColor + "30",
+            },
+          ]}
+        >
+          <Feather name="file-text" size={18} color={catColor} />
+        </View>
+        <View style={styles.cardBody}>
+          <View style={styles.cardTop}>
+            <View style={styles.cardLeft}>
+              <Text
+                style={[styles.billName, { color: c.foreground }]}
+                numberOfLines={1}
+              >
+                {item.name}
+              </Text>
+              <View style={styles.metaRow}>
+                <View
+                  style={[styles.tag, { backgroundColor: catColor + "18" }]}
+                >
+                  <Text style={[styles.tagText, { color: catColor }]}>
+                    {item.category}
+                  </Text>
+                </View>
+                <Text
+                  style={[styles.metaText, { color: c.mutedForeground }]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {stopped ? formatStoppedText(item) : formatBillDueText(item)}
+                </Text>
+              </View>
+              {stopped || overdue || pending || !item.is_recurring ? (
+                <View style={styles.cardStatusRow}>
+                  {stopped ? (
+                    <View style={[styles.tag, { backgroundColor: c.muted }]}>
+                      <Text
+                        style={[styles.tagText, { color: c.mutedForeground }]}
+                      >
+                        Stopped
+                      </Text>
+                    </View>
+                  ) : null}
+                  {overdue ? (
+                    <View
+                      style={[
+                        styles.tag,
+                        {
+                          backgroundColor: c.destructive + "18",
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.tagText, { color: c.destructive }]}>
+                        Past due · ${overdue.remainingAmount.toFixed(2)}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {pending ? (
+                    <View
+                      style={[
+                        styles.tag,
+                        {
+                          backgroundColor: colors.brand.blue + "18",
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[styles.tagText, { color: colors.brand.blue }]}
+                      >
+                        {pending.status === "ready_review"
+                          ? "Ready to review"
+                          : "Payment pending"}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {!item.is_recurring && (
+                    <View style={[styles.tag, { backgroundColor: c.muted }]}>
+                      <Text
+                        style={[styles.tagText, { color: c.mutedForeground }]}
+                      >
+                        One-time
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              ) : null}
+            </View>
+            <View style={styles.cardRight}>
+              <Text
+                style={[styles.amount, { color: c.foreground }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.72}
+              >
+                ${item.amount.toFixed(2)}
+              </Text>
+              <Text style={[styles.amountSub, { color: c.mutedForeground }]}>
+                {frequencyText(item)}
+              </Text>
+            </View>
+          </View>
+        </View>
+        {stopped ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Restart ${item.name}`}
+            onPress={(event) => {
+              event.stopPropagation?.();
+              handleRestartStoppedBill(item);
+            }}
+            style={({ pressed }) => [
+              styles.restartHint,
+              {
+                backgroundColor: c.primary + "18",
+                opacity: pressed ? 0.78 : 1,
+              },
+            ]}
+          >
+            <Feather name="refresh-cw" size={17} color={c.primary} />
+          </Pressable>
+        ) : (
+          <View style={styles.editHint}>
+            <Feather name="chevron-right" size={17} color={c.mutedForeground} />
+          </View>
+        )}
+      </Pressable>
+    );
+  };
+
+  const renderDebt = ({ item }: { item: Bill }) => {
+    const isPaidOff = item.balance <= 0.009;
+    const strategyRank = strategyRankById.get(item.id);
+    const isExcluded = !isPaidOff && item.include_in_snowball === false;
+    const isUnranked = !isPaidOff && strategyRank === undefined;
+    const priorityColor = isPaidOff
+      ? c.success
+      : isUnranked
+        ? c.mutedForeground
+        : (priorityColors[
+            Math.min((strategyRank ?? 1) - 1, priorityColors.length - 1)
+          ] ?? c.primary);
+    const effectiveMinimum = debtMonthlyMinimum(item);
+    const requiredMinimum = debtRequiredMinimum(item);
+    const forecastPayment = forecastPaymentByDebtId.get(item.id);
+    const forecastRollover = forecastRolloverByDebtId.get(item.id) ?? 0;
+    const monthsToPayoff =
+      item.balance > 0 && effectiveMinimum > 0
+        ? Math.ceil(item.balance / effectiveMinimum)
+        : 0;
+
+    return (
+      <Pressable
+        key={item.id}
+        onPress={() => {
+          setEditBill(item);
+          setModalVisible(true);
+        }}
+        style={({ pressed }) => [
+          styles.card,
+          styles.debtCard,
+          isDesktop && styles.desktopCard,
+          {
+            backgroundColor: c.card,
+            borderColor: priorityColor + "30",
+            borderRadius: 20,
+            opacity: pressed ? 0.88 : 1,
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.priorityBadge,
+            {
+              backgroundColor: priorityColor + "16",
+              borderColor: priorityColor + "32",
+            },
+          ]}
+        >
+          {isPaidOff ? (
+            <Feather name="check" size={17} color={priorityColor} />
+          ) : null}
+          <Text style={[styles.priorityNum, { color: priorityColor }]}>
+            {isPaidOff
+              ? "PAID"
+              : isExcluded
+                ? "OFF"
+                : isUnranked
+                  ? "WAIT"
+                  : `#${strategyRank}`}
+          </Text>
+        </View>
+
+        <View style={styles.cardBody}>
+          <View style={styles.cardTop}>
+            <View style={styles.cardLeft}>
+              <Text
+                style={[styles.debtName, { color: c.foreground }]}
+                numberOfLines={2}
+              >
+                {item.name}
+              </Text>
+              <View style={styles.metaRow}>
+                {item.interest_rate > 0 && (
+                  <View
+                    style={[
+                      styles.aprBadge,
+                      { backgroundColor: c.destructive + "20" },
+                    ]}
+                  >
+                    <Text style={[styles.aprText, { color: c.destructive }]}>
+                      {item.interest_rate}% APR
+                    </Text>
+                  </View>
+                )}
+                <Text
+                  style={[
+                    styles.metaText,
+                    {
+                      color: isPaidOff ? c.success : c.mutedForeground,
+                    },
+                  ]}
+                >
+                  {isPaidOff ? "Paid off" : formatBillDueText(item)}
+                </Text>
+                {monthsToPayoff > 0 && (
+                  <Text style={[styles.metaText, { color: c.mutedForeground }]}>
+                    ~{monthsToPayoff} mo left
+                  </Text>
+                )}
+              </View>
+            </View>
+            <View style={styles.cardRight}>
+              <Text
+                style={[
+                  styles.balance,
+                  {
+                    color: isPaidOff ? c.success : c.destructive,
+                  },
+                ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.68}
+              >
+                {isPaidOff
+                  ? "Paid"
+                  : `${item.balance.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+              </Text>
+              {!isPaidOff && (
+                <Text
+                  style={[styles.minPay, { color: c.mutedForeground }]}
+                  numberOfLines={2}
+                >
+                  ${requiredMinimum.toFixed(2)}/mo required
+                </Text>
+              )}
+              {!isPaidOff && forecastPayment !== undefined ? (
+                <Text
+                  style={[styles.metaText, { color: c.primary }]}
+                  numberOfLines={2}
+                >
+                  ${forecastPayment.toFixed(2)} total forecast
+                </Text>
+              ) : null}
+              {!isPaidOff && forecastRollover > 0.005 && (
+                <Text
+                  style={[styles.metaText, { color: c.success }]}
+                  numberOfLines={2}
+                >
+                  +${forecastRollover.toFixed(2)} snowball rollover · extra
+                </Text>
+              )}
+            </View>
+          </View>
+
+          {isPaidOff ? (
+            <View style={styles.progressSection}>
+              <View style={styles.progressHeader}>
+                <Text
+                  style={[styles.progressLabel, { color: c.mutedForeground }]}
+                >
+                  Payoff status
+                </Text>
+                <Text style={[styles.progressPct, { color: c.success }]}>
+                  Complete
+                </Text>
+              </View>
+              <View style={[styles.progressBg, { backgroundColor: c.muted }]}>
+                <View
+                  style={[
+                    styles.progressFill,
+                    {
+                      width: "100%" as any,
+                      backgroundColor: c.success,
+                    },
+                  ]}
+                />
+              </View>
+            </View>
+          ) : null}
+
+          <View
+            style={[
+              styles.strategyNote,
+              { backgroundColor: priorityColor + "12" },
+            ]}
+          >
+            <Feather name="zap" size={11} color={priorityColor} />
+            <Text style={[styles.strategyText, { color: c.mutedForeground }]}>
+              {isPaidOff
+                ? "Paid off — no longer in the active order"
+                : isExcluded
+                  ? "Not included in your payoff plan"
+                  : isUnranked
+                    ? `Not active in the ${MONTH_FULL[debtPlanMonth]} payoff order`
+                    : strategyRank === 1
+                      ? "Target first — put all extra here"
+                      : `Pay off #${(strategyRank ?? 1) - 1} first, then cascade here`}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.editHint}>
+          <Feather name="chevron-right" size={17} color={c.mutedForeground} />
+        </View>
+      </Pressable>
+    );
+  };
 
   if (isDesktop) return <DesktopBillsDebtsPage />;
 
   return (
     <View style={[styles.screen, { backgroundColor: c.background }]}>
       <PremiumBackdrop variant={activeTab === "debt" ? "purple" : "blue"} />
-      <ScrollView
+      <FlatList<Bill>
+        key={activeTab}
+        data={activeTab === "bills" ? filteredBills : debts}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <View style={{ marginHorizontal: 16, marginBottom: 10 }}>
+            {activeTab === "bills"
+              ? renderBill({ item })
+              : renderDebt({ item })}
+          </View>
+        )}
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        windowSize={7}
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator
         contentContainerStyle={{ paddingBottom: listBottomPadding }}
         scrollIndicatorInsets={{ bottom: listBottomPadding }}
-      >
-        <View style={isDesktop ? styles.desktopCanvas : undefined}>
-          {/* ── Header ── */}
-          <View
-            style={[
-              styles.header,
-              isDesktop && styles.desktopHeader,
-              { paddingTop: isDesktop ? 8 : insets.top + 12 + webTopPad },
-            ]}
-          >
-            <View style={styles.headerCopy}>
-              <Text style={[styles.pageEyebrow, { color: c.primary }]}>
-                {activeTab === "bills" ? "PLAN & PAY" : "PAYOFF PLAN"}
-              </Text>
-              <Text
+        ListHeaderComponent={
+          <>
+            <View style={isDesktop ? styles.desktopCanvas : undefined}>
+              {/* ── Header ── */}
+              <View
                 style={[
-                  styles.title,
-                  isDesktop && styles.desktopTitle,
-                  { color: c.foreground },
+                  styles.header,
+                  isDesktop && styles.desktopHeader,
+                  { paddingTop: isDesktop ? 8 : insets.top + 12 + webTopPad },
                 ]}
               >
-                {activeTab === "bills" ? "Bills" : "Debt Payoff"}
-              </Text>
-              <Text
-                style={[styles.subtitle, { color: c.mutedForeground }]}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
-                {subtitle}
-              </Text>
-            </View>
-            <CommandPlusButton
-              onPress={() => {
-                setEditBill(null);
-                setModalVisible(true);
-              }}
-              accessibilityLabel={
-                activeTab === "debt" ? "Add debt" : "Add bill"
-              }
-            />
-          </View>
-          <DataFreshnessLabel inset compact />
-
-          {/* Keep the Bills / Debt switch in one stable location for both views. */}
-          <View
-            style={[
-              styles.segmentWrap,
-              { paddingHorizontal: 16, marginBottom: 8 },
-            ]}
-          >
-            <View style={[styles.segment, { backgroundColor: c.muted }]}>
-              {(["bills", "debt"] as Tab[]).map((t) => (
-                <Pressable
-                  key={t}
-                  nativeID={t === "debt" ? "guided-tour-bills" : undefined}
-                  accessibilityRole="tab"
-                  accessibilityLabel={t === "bills" ? "Bills" : "Debt"}
-                  accessibilityState={{ selected: activeTab === t }}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setActiveTab(t);
-                  }}
-                  style={[
-                    styles.segmentBtn,
-                    {
-                      backgroundColor:
-                        activeTab === t ? c.primary : "transparent",
-                    },
-                  ]}
-                >
-                  <Feather
-                    name={t === "bills" ? "file-text" : "credit-card"}
-                    size={13}
-                    color={
-                      activeTab === t ? c.primaryForeground : c.mutedForeground
-                    }
-                  />
+                <View style={styles.headerCopy}>
+                  <Text style={[styles.pageEyebrow, { color: c.primary }]}>
+                    {activeTab === "bills" ? "PLAN & PAY" : "PAYOFF PLAN"}
+                  </Text>
                   <Text
                     style={[
-                      styles.segmentText,
-                      {
-                        color:
-                          activeTab === t
-                            ? c.primaryForeground
-                            : c.mutedForeground,
-                      },
+                      styles.title,
+                      isDesktop && styles.desktopTitle,
+                      { color: c.foreground },
                     ]}
                   >
-                    {t === "bills" ? "Bills" : "Debt"}
+                    {activeTab === "bills" ? "Bills" : "Debt Payoff"}
                   </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-
-          {activeTab === "bills" && visibleOverdueAlerts.length > 0 ? (
-            <View style={styles.overdueAlerts}>
-              {visibleOverdueAlerts.map(overdueBill => (
-                <View
-                  key={overdueBill.billId}
-                  style={[
-                    styles.overdueCard,
-                    isDesktop && styles.desktopSection,
-                    {
-                      backgroundColor: c.destructive + "12",
-                      borderColor: c.destructive + "70",
-                    },
-                  ]}
-                >
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`${overdueBill.name} is past due with $${overdueBill.remainingAmount.toFixed(2)} remaining. Review it on the calendar.`}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/(tabs)/monthly",
-                        params: {
-                          openDate: overdueBill.firstOccurrenceDate,
-                          openDateAt: String(Date.now()),
-                        },
-                      } as any)
-                    }
-                    style={({ pressed }) => [
-                      styles.overdueMain,
-                      { opacity: pressed ? 0.82 : 1 },
-                    ]}
+                  <Text
+                    style={[styles.subtitle, { color: c.mutedForeground }]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
                   >
-                    <View
+                    {subtitle}
+                  </Text>
+                </View>
+                <CommandPlusButton
+                  onPress={() => {
+                    setEditBill(null);
+                    setModalVisible(true);
+                  }}
+                  accessibilityLabel={
+                    activeTab === "debt" ? "Add debt" : "Add bill"
+                  }
+                />
+              </View>
+              <DataFreshnessLabel inset compact />
+
+              {/* Keep the Bills / Debt switch in one stable location for both views. */}
+              <View
+                style={[
+                  styles.segmentWrap,
+                  { paddingHorizontal: 16, marginBottom: 8 },
+                ]}
+              >
+                <View style={[styles.segment, { backgroundColor: c.muted }]}>
+                  {(["bills", "debt"] as Tab[]).map((t) => (
+                    <Pressable
+                      key={t}
+                      nativeID={t === "debt" ? "guided-tour-bills" : undefined}
+                      accessibilityRole="tab"
+                      accessibilityLabel={t === "bills" ? "Bills" : "Debt"}
+                      accessibilityState={{ selected: activeTab === t }}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setActiveTab(t);
+                      }}
                       style={[
-                        styles.overdueIcon,
-                        { backgroundColor: c.destructive + "20" },
+                        styles.segmentBtn,
+                        {
+                          backgroundColor:
+                            activeTab === t ? c.primary : "transparent",
+                        },
                       ]}
                     >
                       <Feather
-                        name="alert-triangle"
-                        size={19}
-                        color={c.destructive}
+                        name={t === "bills" ? "file-text" : "credit-card"}
+                        size={13}
+                        color={
+                          activeTab === t
+                            ? c.primaryForeground
+                            : c.mutedForeground
+                        }
                       />
-                    </View>
-                    <View style={styles.overdueCopy}>
-                      <Text style={[styles.overdueEyebrow, { color: c.destructive }]}>
-                        Past due · action needed
-                      </Text>
                       <Text
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                        style={[styles.overdueTitle, { color: c.foreground }]}
-                      >
-                        {overdueBill.name}
-                      </Text>
-                      <Text
-                        style={[styles.overdueText, { color: c.mutedForeground }]}
-                      >
-                        ${overdueBill.remainingAmount.toFixed(2)} remains ·{" "}
-                        {new Date(
-                          `${overdueBill.firstOccurrenceDate}T12:00:00`,
-                        ).toLocaleDateString("en-US", {
-                          month: "long",
-                          day: "numeric",
-                          year: "numeric",
-                        })}{" "}
-                        passed · tap to review or mark paid.
-                      </Text>
-                    </View>
-                    <Feather name="chevron-right" size={18} color={c.destructive} />
-                  </Pressable>
-                  <AccessibleIconButton
-                    accessibilityLabel={`Dismiss ${overdueBill.name} overdue alert`}
-                    icon="x"
-                    size={16}
-                    color={c.mutedForeground}
-                    onPress={() => dismissNotification(
-                      `bill-overdue:${overdueBill.billId}:${overdueBill.firstOccurrenceDate}`,
-                    )}
-                    style={styles.overdueDismiss}
-                  />
-                </View>
-              ))}
-            </View>
-          ) : null}
-
-          {activeTab === "bills" ? (
-            <View
-              style={[
-                styles.billSnapshotCard,
-                isDesktop && styles.desktopSection,
-                { backgroundColor: c.card, borderColor: c.border },
-              ]}
-            >
-              <View style={styles.billSnapshotHeader}>
-                <View style={styles.billSnapshotHeading}>
-                  <Text
-                    style={[styles.billSnapshotLabel, { color: c.primary }]}
-                  >
-                    Monthly plan
-                  </Text>
-                  <Text
-                    style={[styles.billSnapshotTitle, { color: c.foreground }]}
-                  >
-                    {MONTH_FULL[currentMonth]} {currentYear}
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.billSnapshotBadge,
-                    {
-                      backgroundColor:
-                        paidBillCount === currentNonDebtBills.length &&
-                        currentNonDebtBills.length > 0
-                          ? c.success + "18"
-                          : c.warning + "18",
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.billSnapshotBadgeText,
-                      {
-                        color:
-                          paidBillCount === currentNonDebtBills.length &&
-                          currentNonDebtBills.length > 0
-                            ? c.success
-                            : c.warning,
-                      },
-                    ]}
-                  >
-                    {paidBillCount}/{currentNonDebtBills.length} paid
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.billSnapshotHero}>
-                <View style={styles.billSnapshotAmountWrap}>
-                  <Text
-                    style={[
-                      styles.billSnapshotAmountLabel,
-                      { color: c.mutedForeground },
-                    ]}
-                  >
-                    Still to pay
-                  </Text>
-                  <Text
-                    style={[
-                      styles.billSnapshotAmount,
-                      {
-                        color:
-                          currentBillRemaining > 0 ? c.foreground : c.success,
-                      },
-                    ]}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.72}
-                  >
-                    ${currentBillRemaining.toFixed(0)}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.billSnapshotAmountSub,
-                      { color: c.mutedForeground },
-                    ]}
-                  >
-                    of ${currentBillTotal.toFixed(0)} planned
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.billSnapshotPaidTile,
-                    {
-                      backgroundColor: c.success + "10",
-                      borderColor: c.success + "28",
-                    },
-                  ]}
-                >
-                  <Feather name="check-circle" size={17} color={c.success} />
-                  <Text
-                    style={[styles.billSnapshotPaidValue, { color: c.success }]}
-                  >
-                    ${currentBillPaidAmount.toFixed(0)}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.billSnapshotPaidLabel,
-                      { color: c.mutedForeground },
-                    ]}
-                  >
-                    paid
-                  </Text>
-                </View>
-              </View>
-              <View
-                accessibilityRole="progressbar"
-                accessibilityLabel="Bill payment progress"
-                accessibilityValue={{
-                  min: 0,
-                  max: 100,
-                  now: Math.round(currentBillPaymentProgress),
-                }}
-                style={[styles.billProgressTrack, { backgroundColor: c.muted }]}
-              >
-                <View
-                  style={[
-                    styles.billProgressFill,
-                    {
-                      backgroundColor: c.success,
-                      width: `${currentBillPaymentProgress}%` as any,
-                    },
-                  ]}
-                />
-              </View>
-              <View style={styles.billSnapshotStats}>
-                <View
-                  style={[
-                    styles.billSnapshotStat,
-                    {
-                      backgroundColor: c.isDark
-                        ? "rgba(15,23,42,0.42)"
-                        : "rgba(248,250,252,0.96)",
-                      borderColor: c.isDark
-                        ? "rgba(148,163,184,0.10)"
-                        : "rgba(15,23,42,0.08)",
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[styles.billSnapshotValue, { color: c.primary }]}
-                  >
-                    {currentNonDebtBills.length}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.billSnapshotStatLabel,
-                      { color: c.mutedForeground },
-                    ]}
-                  >
-                    Scheduled
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.billSnapshotStat,
-                    {
-                      backgroundColor: c.isDark
-                        ? "rgba(15,23,42,0.42)"
-                        : "rgba(248,250,252,0.96)",
-                      borderColor: c.isDark
-                        ? "rgba(148,163,184,0.10)"
-                        : "rgba(15,23,42,0.08)",
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[styles.billSnapshotValue, { color: c.success }]}
-                  >
-                    {paidBillCount}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.billSnapshotStatLabel,
-                      { color: c.mutedForeground },
-                    ]}
-                  >
-                    Paid
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.billSnapshotStat,
-                    {
-                      backgroundColor: c.isDark
-                        ? "rgba(15,23,42,0.42)"
-                        : "rgba(248,250,252,0.96)",
-                      borderColor: c.isDark
-                        ? "rgba(148,163,184,0.10)"
-                        : "rgba(15,23,42,0.08)",
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[styles.billSnapshotValue, { color: c.warning }]}
-                  >
-                    {Math.max(0, currentNonDebtBills.length - paidBillCount)}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.billSnapshotStatLabel,
-                      { color: c.mutedForeground },
-                    ]}
-                  >
-                    Remaining
-                  </Text>
-                </View>
-              </View>
-            </View>
-          ) : null}
-
-          {/* ════════════════════ BILLS VIEW ════════════════════ */}
-          {activeTab === "bills" && (
-            <>
-              <View style={styles.sectionHeading}>
-                <View>
-                  <Text style={[styles.sectionEyebrow, { color: c.primary }]}>
-                    Upcoming
-                  </Text>
-                  <Text style={[styles.sectionTitle, { color: c.foreground }]}>
-                    Your bills
-                  </Text>
-                </View>
-                <Text
-                  style={[styles.sectionCount, { color: c.mutedForeground }]}
-                >
-                  {filteredBills.length} shown
-                </Text>
-              </View>
-              <View
-                style={[styles.filterRow, isDesktop && styles.desktopToolbar]}
-              >
-                {(["all", "recurring", "one-time", "stopped"] as Filter[]).map(
-                  (f) => (
-                    <Pressable
-                      key={f}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: filter === f }}
-                      onPress={() => setFilter(f)}
-                      style={[
-                        styles.filterChip,
-                        !isDesktop && styles.mobileFilterChip,
-                        {
-                          backgroundColor: filter === f ? c.primary : c.card,
-                          borderColor: filter === f ? c.primary : c.border,
-                        },
-                      ]}
-                    >
-                      <Text
-                        numberOfLines={1}
                         style={[
-                          styles.filterText,
+                          styles.segmentText,
                           {
                             color:
-                              filter === f
+                              activeTab === t
                                 ? c.primaryForeground
                                 : c.mutedForeground,
                           },
                         ]}
                       >
-                        {FILTER_LABELS[f]}
+                        {t === "bills" ? "Bills" : "Debt"}
                       </Text>
                     </Pressable>
-                  ),
-                )}
+                  ))}
+                </View>
               </View>
 
-              <View style={[styles.list, isDesktop && styles.desktopList]}>
-                {filteredBills.length === 0 ? (
-                  <EmptyState
-                    icon="file-text"
-                    title={
-                      filter === "stopped" ? "No Stopped Bills" : "No Bills"
-                    }
-                    message={
-                      filter === "stopped"
-                        ? "Bills you stop for the future will live here."
-                        : "Tap + to add your first bill."
-                    }
-                    actionLabel={filter === "stopped" ? undefined : "Add Bill"}
-                    onAction={
-                      filter === "stopped"
-                        ? undefined
-                        : () => {
-                            setEditBill(null);
-                            setModalVisible(true);
-                          }
-                    }
-                  />
-                ) : (
-                  filteredBills.map((item) => {
-                    const catColor = CAT_COLORS[item.category] ?? c.primary;
-                    const stopped = isStoppedFutureBill(item);
-                    const overdue = overdueByBill.get(item.id);
-                    const pending = pendingByBill.get(item.id);
-                    return (
+              {activeTab === "bills" && visibleOverdueAlerts.length > 0 ? (
+                <View style={styles.overdueAlerts}>
+                  {visibleOverdueAlerts.map((overdueBill) => (
+                    <View
+                      key={overdueBill.billId}
+                      style={[
+                        styles.overdueCard,
+                        isDesktop && styles.desktopSection,
+                        {
+                          backgroundColor: c.destructive + "12",
+                          borderColor: c.destructive + "70",
+                        },
+                      ]}
+                    >
                       <Pressable
-                        key={item.id}
-                        onPress={() => {
-                          setEditBill(item);
-                          setModalVisible(true);
-                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${overdueBill.name} is past due with $${overdueBill.remainingAmount.toFixed(2)} remaining. Review it on the calendar.`}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/(tabs)/monthly",
+                            params: {
+                              openDate: overdueBill.firstOccurrenceDate,
+                              openDateAt: String(Date.now()),
+                            },
+                          } as any)
+                        }
                         style={({ pressed }) => [
-                          styles.card,
-                          {
-                            backgroundColor: c.card,
-                            borderRadius: colors.radius,
-                            opacity: pressed ? 0.88 : 1,
-                          },
+                          styles.overdueMain,
+                          { opacity: pressed ? 0.82 : 1 },
                         ]}
                       >
                         <View
                           style={[
-                            styles.categoryIcon,
-                            {
-                              backgroundColor: catColor + "16",
-                              borderColor: catColor + "30",
-                            },
+                            styles.overdueIcon,
+                            { backgroundColor: c.destructive + "20" },
                           ]}
                         >
                           <Feather
-                            name="file-text"
-                            size={18}
-                            color={catColor}
+                            name="alert-triangle"
+                            size={19}
+                            color={c.destructive}
                           />
                         </View>
-                        <View style={styles.cardBody}>
-                          <View style={styles.cardTop}>
-                            <View style={styles.cardLeft}>
-                              <Text
-                                style={[
-                                  styles.billName,
-                                  { color: c.foreground },
-                                ]}
-                                numberOfLines={1}
-                              >
-                                {item.name}
-                              </Text>
-                              <View style={styles.metaRow}>
-                                <View
-                                  style={[
-                                    styles.tag,
-                                    { backgroundColor: catColor + "18" },
-                                  ]}
-                                >
-                                  <Text
-                                    style={[
-                                      styles.tagText,
-                                      { color: catColor },
-                                    ]}
-                                  >
-                                    {item.category}
-                                  </Text>
-                                </View>
-                                <Text
-                                  style={[
-                                    styles.metaText,
-                                    { color: c.mutedForeground },
-                                  ]}
-                                  numberOfLines={1}
-                                  ellipsizeMode="tail"
-                                >
-                                  {stopped
-                                    ? formatStoppedText(item)
-                                    : formatBillDueText(item)}
-                                </Text>
-                              </View>
-                              {stopped || overdue || pending || !item.is_recurring ? (
-                                <View style={styles.cardStatusRow}>
-                                  {stopped ? (
-                                    <View
-                                      style={[
-                                        styles.tag,
-                                        { backgroundColor: c.muted },
-                                      ]}
-                                    >
-                                      <Text
-                                        style={[
-                                          styles.tagText,
-                                          { color: c.mutedForeground },
-                                        ]}
-                                      >
-                                        Stopped
-                                      </Text>
-                                    </View>
-                                  ) : null}
-                                  {overdue ? (
-                                    <View
-                                      style={[
-                                        styles.tag,
-                                        {
-                                          backgroundColor:
-                                            c.destructive + "18",
-                                        },
-                                      ]}
-                                    >
-                                      <Text
-                                        style={[
-                                          styles.tagText,
-                                          { color: c.destructive },
-                                        ]}
-                                      >
-                                        Past due · $
-                                        {overdue.remainingAmount.toFixed(2)}
-                                      </Text>
-                                    </View>
-                                  ) : null}
-                                  {pending ? (
-                                    <View
-                                      style={[
-                                        styles.tag,
-                                        {
-                                          backgroundColor:
-                                            colors.brand.blue + "18",
-                                        },
-                                      ]}
-                                    >
-                                      <Text
-                                        style={[
-                                          styles.tagText,
-                                          { color: colors.brand.blue },
-                                        ]}
-                                      >
-                                        {pending.status === "ready_review"
-                                          ? "Ready to review"
-                                          : "Payment pending"}
-                                      </Text>
-                                    </View>
-                                  ) : null}
-                                  {!item.is_recurring && (
-                                    <View
-                                      style={[
-                                        styles.tag,
-                                        { backgroundColor: c.muted },
-                                      ]}
-                                    >
-                                      <Text
-                                        style={[
-                                          styles.tagText,
-                                          { color: c.mutedForeground },
-                                        ]}
-                                      >
-                                        One-time
-                                      </Text>
-                                    </View>
-                                  )}
-                                </View>
-                              ) : null}
-                            </View>
-                            <View style={styles.cardRight}>
-                              <Text
-                                style={[styles.amount, { color: c.foreground }]}
-                                numberOfLines={1}
-                                adjustsFontSizeToFit
-                                minimumFontScale={0.72}
-                              >
-                                ${item.amount.toFixed(2)}
-                              </Text>
-                              <Text
-                                style={[
-                                  styles.amountSub,
-                                  { color: c.mutedForeground },
-                                ]}
-                              >
-                                {frequencyText(item)}
-                              </Text>
-                            </View>
-                          </View>
-                        </View>
-                        {stopped ? (
-                          <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel={`Restart ${item.name}`}
-                            onPress={(event) => {
-                              event.stopPropagation?.();
-                              handleRestartStoppedBill(item);
-                            }}
-                            style={({ pressed }) => [
-                              styles.restartHint,
-                              {
-                                backgroundColor: c.primary + "18",
-                                opacity: pressed ? 0.78 : 1,
-                              },
+                        <View style={styles.overdueCopy}>
+                          <Text
+                            style={[
+                              styles.overdueEyebrow,
+                              { color: c.destructive },
                             ]}
                           >
-                            <Feather
-                              name="refresh-cw"
-                              size={17}
-                              color={c.primary}
-                            />
-                          </Pressable>
-                        ) : (
-                          <View style={styles.editHint}>
-                            <Feather
-                              name="chevron-right"
-                              size={17}
-                              color={c.mutedForeground}
-                            />
-                          </View>
-                        )}
+                            Past due · action needed
+                          </Text>
+                          <Text
+                            numberOfLines={1}
+                            ellipsizeMode="tail"
+                            style={[
+                              styles.overdueTitle,
+                              { color: c.foreground },
+                            ]}
+                          >
+                            {overdueBill.name}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.overdueText,
+                              { color: c.mutedForeground },
+                            ]}
+                          >
+                            ${overdueBill.remainingAmount.toFixed(2)} remains ·{" "}
+                            {new Date(
+                              `${overdueBill.firstOccurrenceDate}T12:00:00`,
+                            ).toLocaleDateString("en-US", {
+                              month: "long",
+                              day: "numeric",
+                              year: "numeric",
+                            })}{" "}
+                            passed · tap to review or mark paid.
+                          </Text>
+                        </View>
+                        <Feather
+                          name="chevron-right"
+                          size={18}
+                          color={c.destructive}
+                        />
                       </Pressable>
-                    );
-                  })
-                )}
-              </View>
-            </>
-          )}
+                      <AccessibleIconButton
+                        accessibilityLabel={`Dismiss ${overdueBill.name} overdue alert`}
+                        icon="x"
+                        size={16}
+                        color={c.mutedForeground}
+                        onPress={() =>
+                          dismissNotification(
+                            `bill-overdue:${overdueBill.billId}:${overdueBill.firstOccurrenceDate}`,
+                          )
+                        }
+                        style={styles.overdueDismiss}
+                      />
+                    </View>
+                  ))}
+                </View>
+              ) : null}
 
-          {/* ════════════════════ DEBT VIEW ════════════════════ */}
-          {activeTab === "debt" && (
-            <View style={[styles.list, isDesktop && styles.desktopList]}>
-              <View
-                style={[
-                  styles.debtOverviewCard,
-                  { backgroundColor: c.card, borderColor: c.border },
-                ]}
-              >
-                <View style={styles.debtOverviewHeader}>
-                  <View style={styles.debtOverviewHeaderCopy}>
-                    <Text style={[styles.sectionEyebrow, { color: c.primary }]}>
-                      Payoff overview
-                    </Text>
+              {activeTab === "bills" ? (
+                <View
+                  style={[
+                    styles.billSnapshotCard,
+                    isDesktop && styles.desktopSection,
+                    { backgroundColor: c.card, borderColor: c.border },
+                  ]}
+                >
+                  <View style={styles.billSnapshotHeader}>
+                    <View style={styles.billSnapshotHeading}>
+                      <Text
+                        style={[styles.billSnapshotLabel, { color: c.primary }]}
+                      >
+                        Monthly plan
+                      </Text>
+                      <Text
+                        style={[
+                          styles.billSnapshotTitle,
+                          { color: c.foreground },
+                        ]}
+                      >
+                        {MONTH_FULL[currentMonth]} {currentYear}
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.billSnapshotBadge,
+                        {
+                          backgroundColor:
+                            paidBillCount === currentNonDebtBills.length &&
+                            currentNonDebtBills.length > 0
+                              ? c.success + "18"
+                              : c.warning + "18",
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.billSnapshotBadgeText,
+                          {
+                            color:
+                              paidBillCount === currentNonDebtBills.length &&
+                              currentNonDebtBills.length > 0
+                                ? c.success
+                                : c.warning,
+                          },
+                        ]}
+                      >
+                        {paidBillCount}/{currentNonDebtBills.length} paid
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.billSnapshotHero}>
+                    <View style={styles.billSnapshotAmountWrap}>
+                      <Text
+                        style={[
+                          styles.billSnapshotAmountLabel,
+                          { color: c.mutedForeground },
+                        ]}
+                      >
+                        Still to pay
+                      </Text>
+                      <Text
+                        style={[
+                          styles.billSnapshotAmount,
+                          {
+                            color:
+                              currentBillRemaining > 0
+                                ? c.foreground
+                                : c.success,
+                          },
+                        ]}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.72}
+                      >
+                        ${currentBillRemaining.toFixed(0)}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.billSnapshotAmountSub,
+                          { color: c.mutedForeground },
+                        ]}
+                      >
+                        of ${currentBillTotal.toFixed(0)} planned
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.billSnapshotPaidTile,
+                        {
+                          backgroundColor: c.success + "10",
+                          borderColor: c.success + "28",
+                        },
+                      ]}
+                    >
+                      <Feather
+                        name="check-circle"
+                        size={17}
+                        color={c.success}
+                      />
+                      <Text
+                        style={[
+                          styles.billSnapshotPaidValue,
+                          { color: c.success },
+                        ]}
+                      >
+                        ${currentBillPaidAmount.toFixed(0)}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.billSnapshotPaidLabel,
+                          { color: c.mutedForeground },
+                        ]}
+                      >
+                        paid
+                      </Text>
+                    </View>
+                  </View>
+                  <View
+                    accessibilityRole="progressbar"
+                    accessibilityLabel="Bill payment progress"
+                    accessibilityValue={{
+                      min: 0,
+                      max: 100,
+                      now: Math.round(currentBillPaymentProgress),
+                    }}
+                    style={[
+                      styles.billProgressTrack,
+                      { backgroundColor: c.muted },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.billProgressFill,
+                        {
+                          backgroundColor: c.success,
+                          width: `${currentBillPaymentProgress}%` as any,
+                        },
+                      ]}
+                    />
+                  </View>
+                  <View style={styles.billSnapshotStats}>
+                    <View
+                      style={[
+                        styles.billSnapshotStat,
+                        {
+                          backgroundColor: c.isDark
+                            ? "rgba(15,23,42,0.42)"
+                            : "rgba(248,250,252,0.96)",
+                          borderColor: c.isDark
+                            ? "rgba(148,163,184,0.10)"
+                            : "rgba(15,23,42,0.08)",
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[styles.billSnapshotValue, { color: c.primary }]}
+                      >
+                        {currentNonDebtBills.length}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.billSnapshotStatLabel,
+                          { color: c.mutedForeground },
+                        ]}
+                      >
+                        Scheduled
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.billSnapshotStat,
+                        {
+                          backgroundColor: c.isDark
+                            ? "rgba(15,23,42,0.42)"
+                            : "rgba(248,250,252,0.96)",
+                          borderColor: c.isDark
+                            ? "rgba(148,163,184,0.10)"
+                            : "rgba(15,23,42,0.08)",
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[styles.billSnapshotValue, { color: c.success }]}
+                      >
+                        {paidBillCount}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.billSnapshotStatLabel,
+                          { color: c.mutedForeground },
+                        ]}
+                      >
+                        Paid
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.billSnapshotStat,
+                        {
+                          backgroundColor: c.isDark
+                            ? "rgba(15,23,42,0.42)"
+                            : "rgba(248,250,252,0.96)",
+                          borderColor: c.isDark
+                            ? "rgba(148,163,184,0.10)"
+                            : "rgba(15,23,42,0.08)",
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[styles.billSnapshotValue, { color: c.warning }]}
+                      >
+                        {Math.max(
+                          0,
+                          currentNonDebtBills.length - paidBillCount,
+                        )}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.billSnapshotStatLabel,
+                          { color: c.mutedForeground },
+                        ]}
+                      >
+                        Remaining
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              ) : null}
+
+              {/* ════════════════════ BILLS VIEW ════════════════════ */}
+              {activeTab === "bills" && (
+                <>
+                  <View style={styles.sectionHeading}>
+                    <View>
+                      <Text
+                        style={[styles.sectionEyebrow, { color: c.primary }]}
+                      >
+                        Upcoming
+                      </Text>
+                      <Text
+                        style={[styles.sectionTitle, { color: c.foreground }]}
+                      >
+                        Your bills
+                      </Text>
+                    </View>
                     <Text
                       style={[
-                        styles.debtOverviewLabel,
+                        styles.sectionCount,
                         { color: c.mutedForeground },
                       ]}
                     >
-                      Total remaining
+                      {filteredBills.length} shown
                     </Text>
                   </View>
                   <View
                     style={[
-                      styles.debtActiveBadge,
-                      { backgroundColor: c.primary + "14" },
+                      styles.filterRow,
+                      isDesktop && styles.desktopToolbar,
                     ]}
                   >
-                    <Text
-                      style={[styles.debtActiveBadgeText, { color: c.primary }]}
-                    >
-                      {activeDebtCount} active
-                    </Text>
+                    {(
+                      ["all", "recurring", "one-time", "stopped"] as Filter[]
+                    ).map((f) => (
+                      <Pressable
+                        key={f}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: filter === f }}
+                        onPress={() => setFilter(f)}
+                        style={[
+                          styles.filterChip,
+                          !isDesktop && styles.mobileFilterChip,
+                          {
+                            backgroundColor: filter === f ? c.primary : c.card,
+                            borderColor: filter === f ? c.primary : c.border,
+                          },
+                        ]}
+                      >
+                        <Text
+                          numberOfLines={1}
+                          style={[
+                            styles.filterText,
+                            {
+                              color:
+                                filter === f
+                                  ? c.primaryForeground
+                                  : c.mutedForeground,
+                            },
+                          ]}
+                        >
+                          {FILTER_LABELS[f]}
+                        </Text>
+                      </Pressable>
+                    ))}
                   </View>
-                </View>
-                <Text
-                  style={[styles.debtOverviewAmount, { color: c.foreground }]}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.72}
+
+                  <View
+                    style={[
+                      styles.searchRow,
+                      { backgroundColor: c.card, borderColor: c.border },
+                    ]}
+                  >
+                    <Feather
+                      name="search"
+                      size={18}
+                      color={c.mutedForeground}
+                    />
+                    <TextInput
+                      accessibilityLabel="Search bills by name or category"
+                      placeholder="Search bills or categories"
+                      placeholderTextColor={c.mutedForeground}
+                      value={billSearch}
+                      onChangeText={setBillSearch}
+                      autoCorrect={false}
+                      style={[styles.searchInput, { color: c.foreground }]}
+                    />
+                    {billSearch ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Clear bill search"
+                        onPress={() => setBillSearch("")}
+                        style={styles.searchClear}
+                      >
+                        <Feather name="x" size={18} color={c.mutedForeground} />
+                      </Pressable>
+                    ) : null}
+                  </View>
+                  <View style={[styles.list, isDesktop && styles.desktopList]}>
+                    {filteredBills.length === 0 ? (
+                      <EmptyState
+                        icon="file-text"
+                        title={
+                          billSearch.trim()
+                            ? "No matching bills"
+                            : filter === "stopped"
+                              ? "No Stopped Bills"
+                              : "No Bills"
+                        }
+                        message={
+                          billSearch.trim()
+                            ? "Try another name or category, or change the filter."
+                            : filter === "stopped"
+                              ? "Bills you stop for the future will live here."
+                              : "Tap + to add your first bill."
+                        }
+                        actionLabel={
+                          billSearch.trim()
+                            ? "Clear search"
+                            : filter === "stopped"
+                              ? undefined
+                              : "Add Bill"
+                        }
+                        onAction={
+                          billSearch.trim()
+                            ? () => setBillSearch("")
+                            : filter === "stopped"
+                              ? undefined
+                              : () => {
+                                  setEditBill(null);
+                                  setModalVisible(true);
+                                }
+                        }
+                      />
+                    ) : null}
+                  </View>
+                </>
+              )}
+
+              {/* ════════════════════ DEBT VIEW ════════════════════ */}
+              {activeTab === "debt" && !debtWorkEnabled ? (
+                <View
+                  accessibilityRole="progressbar"
+                  accessibilityLabel="Preparing your payoff plan"
+                  style={{ padding: 24, gap: 12, alignItems: "center" }}
                 >
-                  $
-                  {totalDebt.toLocaleString(undefined, {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 0,
-                  })}
-                </Text>
-                <View style={styles.debtOverviewStats}>
+                  <ActivityIndicator color={c.primary} />
+                  <Text style={{ color: c.mutedForeground }}>
+                    Preparing your payoff plan…
+                  </Text>
+                </View>
+              ) : null}
+              {debtWorkEnabled && (
+                <View style={[styles.list, isDesktop && styles.desktopList]}>
                   <View
                     style={[
-                      styles.debtOverviewStat,
-                      { backgroundColor: c.background, borderColor: c.border },
+                      styles.debtOverviewCard,
+                      { backgroundColor: c.card, borderColor: c.border },
                     ]}
                   >
+                    <View style={styles.debtOverviewHeader}>
+                      <View style={styles.debtOverviewHeaderCopy}>
+                        <Text
+                          style={[styles.sectionEyebrow, { color: c.primary }]}
+                        >
+                          Payoff overview
+                        </Text>
+                        <Text
+                          style={[
+                            styles.debtOverviewLabel,
+                            { color: c.mutedForeground },
+                          ]}
+                        >
+                          Total remaining
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.debtActiveBadge,
+                          { backgroundColor: c.primary + "14" },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.debtActiveBadgeText,
+                            { color: c.primary },
+                          ]}
+                        >
+                          {activeDebtCount} active
+                        </Text>
+                      </View>
+                    </View>
                     <Text
                       style={[
-                        styles.debtOverviewStatValue,
+                        styles.debtOverviewAmount,
                         { color: c.foreground },
                       ]}
                       numberOfLines={1}
                       adjustsFontSizeToFit
-                      minimumFontScale={0.7}
+                      minimumFontScale={0.72}
                     >
-                      ${totalMinPayments.toFixed(0)}
+                      $
+                      {totalDebt.toLocaleString(undefined, {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 0,
+                      })}
                     </Text>
-                    <Text
-                      style={[
-                        styles.debtOverviewStatLabel,
-                        { color: c.mutedForeground },
-                      ]}
-                    >
-                      Required / month
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.debtOverviewStat,
-                      { backgroundColor: c.background, borderColor: c.border },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.debtOverviewStatValue,
-                        { color: c.success },
-                      ]}
-                      numberOfLines={1}
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.7}
-                    >
-                      +${debtPaymentPlan.extraPayment.toFixed(0)}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.debtOverviewStatLabel,
-                        { color: c.mutedForeground },
-                      ]}
-                    >
-                      Extra planned
-                    </Text>
-                  </View>
-                </View>
-              </View>
-              <>
-                <PlanFeatureGate feature="debt_payoff" compact>
-                  {settings.debtPayoffEnabled && debts.length > 0 && (
-                    <View
-                      style={[
-                        styles.debtAlgoCard,
-                        {
-                          backgroundColor: c.card,
-                          borderColor: c.border,
-                          marginHorizontal: 0,
-                          borderRadius: 24,
-                        },
-                      ]}
-                    >
-                      <View style={styles.debtAlgoHeader}>
-                        <View
-                          style={[
-                            styles.dataIcon,
-                            { backgroundColor: c.primary + "18" },
-                          ]}
-                        >
-                          <Feather name="target" size={17} color={c.primary} />
-                        </View>
-                        <View style={styles.debtTargetCopy}>
-                          <Text
-                            style={[
-                              styles.debtAlgoEyebrow,
-                              { color: c.primary },
-                            ]}
-                          >
-                            Current target
-                          </Text>
-                          <Text
-                            style={[
-                              styles.debtAlgoTitle,
-                              { color: c.foreground },
-                            ]}
-                            numberOfLines={2}
-                          >
-                            {activeDebtTarget?.name ?? "No active target"}
-                          </Text>
-                        </View>
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel="How the snowball plan works"
-                          onPress={() => setDebtInfoVisible(true)}
-                          style={({ pressed }) => [
-                            styles.debtInfoButton,
-                            {
-                              borderColor: c.border,
-                              opacity: pressed ? 0.7 : 1,
-                            },
-                          ]}
-                        >
-                          <Feather name="info" size={17} color={c.primary} />
-                        </Pressable>
-                      </View>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={
-                          existingSnowball
-                            ? "Open Debt Payoff Planner and review payment"
-                            : "Open Debt Payoff Planner"
-                        }
-                        onPress={openSnowballPlanner}
-                        style={({ pressed }) => [
-                          styles.debtPlanApplyButton,
+                    <View style={styles.debtOverviewStats}>
+                      <View
+                        style={[
+                          styles.debtOverviewStat,
                           {
-                            backgroundColor: c.primary,
-                            opacity: pressed ? 0.8 : 1,
+                            backgroundColor: c.background,
+                            borderColor: c.border,
                           },
                         ]}
                       >
-                        <Feather
-                          name="arrow-right"
-                          size={16}
-                          color={c.primaryForeground}
-                        />
                         <Text
                           style={[
-                            styles.debtPlanApplyText,
-                            { color: c.primaryForeground },
+                            styles.debtOverviewStatValue,
+                            { color: c.foreground },
+                          ]}
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.7}
+                        >
+                          ${totalMinPayments.toFixed(0)}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.debtOverviewStatLabel,
+                            { color: c.mutedForeground },
                           ]}
                         >
-                          {existingSnowball
-                            ? "Review saved payoff plan"
-                            : "Open payoff planner"}
+                          Required / month
                         </Text>
-                      </Pressable>
-                      {existingSnowball ? (
+                      </View>
+                      <View
+                        style={[
+                          styles.debtOverviewStat,
+                          {
+                            backgroundColor: c.background,
+                            borderColor: c.border,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.debtOverviewStatValue,
+                            { color: c.success },
+                          ]}
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.7}
+                        >
+                          +${debtPaymentPlan.extraPayment.toFixed(0)}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.debtOverviewStatLabel,
+                            { color: c.mutedForeground },
+                          ]}
+                        >
+                          Extra planned
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                  <>
+                    <PlanFeatureGate feature="debt_payoff" compact>
+                      {settings.debtPayoffEnabled && debts.length > 0 && (
                         <View
                           style={[
-                            styles.debtPaymentSummary,
+                            styles.debtAlgoCard,
                             {
-                              backgroundColor: c.background + "88",
+                              backgroundColor: c.card,
                               borderColor: c.border,
+                              marginHorizontal: 0,
+                              borderRadius: 24,
                             },
                           ]}
                         >
-                          <View style={styles.debtPaymentStat}>
+                          <View style={styles.debtAlgoHeader}>
+                            <View
+                              style={[
+                                styles.dataIcon,
+                                { backgroundColor: c.primary + "18" },
+                              ]}
+                            >
+                              <Feather
+                                name="target"
+                                size={17}
+                                color={c.primary}
+                              />
+                            </View>
+                            <View style={styles.debtTargetCopy}>
+                              <Text
+                                style={[
+                                  styles.debtAlgoEyebrow,
+                                  { color: c.primary },
+                                ]}
+                              >
+                                Current target
+                              </Text>
+                              <Text
+                                style={[
+                                  styles.debtAlgoTitle,
+                                  { color: c.foreground },
+                                ]}
+                                numberOfLines={2}
+                              >
+                                {activeDebtTarget?.name ?? "No active target"}
+                              </Text>
+                            </View>
+                            <Pressable
+                              accessibilityRole="button"
+                              accessibilityLabel="How the snowball plan works"
+                              onPress={() => setDebtInfoVisible(true)}
+                              style={({ pressed }) => [
+                                styles.debtInfoButton,
+                                {
+                                  borderColor: c.border,
+                                  opacity: pressed ? 0.7 : 1,
+                                },
+                              ]}
+                            >
+                              <Feather
+                                name="info"
+                                size={17}
+                                color={c.primary}
+                              />
+                            </Pressable>
+                          </View>
+                          <Text
+                            style={[
+                              styles.debtAlgoCopy,
+                              { color: c.mutedForeground },
+                            ]}
+                          >
+                            Keep bills and required minimums covered first.
+                            Extra debt payments are optional.
+                          </Text>
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={
+                              existingSnowball
+                                ? "Open Debt Payoff Planner and review payment"
+                                : "Open Debt Payoff Planner"
+                            }
+                            onPress={openSnowballPlanner}
+                            style={({ pressed }) => [
+                              styles.debtPlanApplyButton,
+                              {
+                                backgroundColor: c.primary,
+                                opacity: pressed ? 0.8 : 1,
+                              },
+                            ]}
+                          >
+                            <Feather
+                              name="arrow-right"
+                              size={16}
+                              color={c.primaryForeground}
+                            />
                             <Text
                               style={[
-                                styles.debtPaymentStatLabel,
+                                styles.debtPlanApplyText,
+                                { color: c.primaryForeground },
+                              ]}
+                            >
+                              {existingSnowball
+                                ? "Review saved payoff plan"
+                                : "Open payoff planner"}
+                            </Text>
+                          </Pressable>
+                          {existingSnowball ? (
+                            <View
+                              style={[
+                                styles.debtPaymentSummary,
+                                {
+                                  backgroundColor: c.background + "88",
+                                  borderColor: c.border,
+                                },
+                              ]}
+                            >
+                              <View style={styles.debtPaymentStat}>
+                                <Text
+                                  style={[
+                                    styles.debtPaymentStatLabel,
+                                    { color: c.mutedForeground },
+                                  ]}
+                                >
+                                  EXTRA
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.debtPaymentStatValue,
+                                    { color: c.primary },
+                                  ]}
+                                  numberOfLines={1}
+                                  adjustsFontSizeToFit
+                                  minimumFontScale={0.7}
+                                >
+                                  +${debtPaymentPlan.extraPayment.toFixed(0)}
+                                </Text>
+                              </View>
+                              <View
+                                style={[
+                                  styles.debtPaymentStat,
+                                  styles.debtPaymentStatBorder,
+                                  { borderLeftColor: c.border },
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.debtPaymentStatLabel,
+                                    { color: c.mutedForeground },
+                                  ]}
+                                >
+                                  TOTAL
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.debtPaymentStatValue,
+                                    { color: c.success },
+                                  ]}
+                                  numberOfLines={1}
+                                  adjustsFontSizeToFit
+                                  minimumFontScale={0.7}
+                                >
+                                  ${debtPaymentPlan.totalPlanned.toFixed(0)}
+                                </Text>
+                              </View>
+                            </View>
+                          ) : null}
+                          {debtPlanIsFuture ? (
+                            <Text
+                              style={[
+                                styles.debtAlgoCopy,
                                 { color: c.mutedForeground },
                               ]}
                             >
-                              EXTRA
+                              Your next payoff order begins{" "}
+                              {MONTH_FULL[debtPlanMonth]} {debtPlanYear}.
+                            </Text>
+                          ) : null}
+                          {activeDebtTarget &&
+                          activeDebtRolloverAmount > 0.005 ? (
+                            <View
+                              style={[
+                                styles.rolloverCard,
+                                {
+                                  backgroundColor: c.success + "10",
+                                  borderColor: c.success + "24",
+                                },
+                              ]}
+                            >
+                              <Feather
+                                name="repeat"
+                                size={13}
+                                color={c.success}
+                              />
+                              <Text
+                                style={[
+                                  styles.rolloverText,
+                                  { color: c.foreground },
+                                ]}
+                              >
+                                ${activeDebtRolloverAmount.toFixed(2)} rolls to{" "}
+                                {activeDebtRolloverNames} on{" "}
+                                {activeDebtRolloverDate
+                                  ? `${MONTH_FULL[Number(activeDebtRolloverDate.slice(5, 7)) - 1]} ${Number(activeDebtRolloverDate.slice(8, 10))}`
+                                  : "the same day"}
+                                .
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+                      )}
+
+                      {settings.debtPayoffEnabled && (
+                        <View
+                          style={[
+                            styles.methodRow,
+                            { marginHorizontal: 0, marginTop: 10 },
+                          ]}
+                        >
+                          <View style={styles.methodHeading}>
+                            <Text
+                              style={[
+                                styles.sectionEyebrow,
+                                { color: c.primary },
+                              ]}
+                            >
+                              Payoff order
                             </Text>
                             <Text
                               style={[
-                                styles.debtPaymentStatValue,
-                                { color: c.primary },
+                                styles.sectionTitle,
+                                { color: c.foreground },
                               ]}
-                              numberOfLines={1}
-                              adjustsFontSizeToFit
-                              minimumFontScale={0.7}
                             >
-                              +${debtPaymentPlan.extraPayment.toFixed(0)}
+                              Your debts
                             </Text>
                           </View>
                           <View
                             style={[
-                              styles.debtPaymentStat,
-                              styles.debtPaymentStatBorder,
-                              { borderLeftColor: c.border },
+                              styles.sortToggle,
+                              { backgroundColor: c.muted, borderRadius: 14 },
                             ]}
                           >
-                            <Text
-                              style={[
-                                styles.debtPaymentStatLabel,
-                                { color: c.mutedForeground },
-                              ]}
-                            >
-                              TOTAL
-                            </Text>
-                            <Text
-                              style={[
-                                styles.debtPaymentStatValue,
-                                { color: c.success },
-                              ]}
-                              numberOfLines={1}
-                              adjustsFontSizeToFit
-                              minimumFontScale={0.7}
-                            >
-                              ${debtPaymentPlan.totalPlanned.toFixed(0)}
-                            </Text>
-                          </View>
-                        </View>
-                      ) : null}
-                      {debtPlanIsFuture ? (
-                        <Text
-                          style={[
-                            styles.debtAlgoCopy,
-                            { color: c.mutedForeground },
-                          ]}
-                        >
-                          Your next payoff order begins{" "}
-                          {MONTH_FULL[debtPlanMonth]} {debtPlanYear}.
-                        </Text>
-                      ) : null}
-                      {activeDebtTarget && activeDebtRolloverAmount > 0.005 ? (
-                        <View
-                          style={[
-                            styles.rolloverCard,
-                            {
-                              backgroundColor: c.success + "10",
-                              borderColor: c.success + "24",
-                            },
-                          ]}
-                        >
-                          <Feather name="repeat" size={13} color={c.success} />
-                          <Text
-                            style={[
-                              styles.rolloverText,
-                              { color: c.foreground },
-                            ]}
-                          >
-                            ${activeDebtRolloverAmount.toFixed(2)} rolls to{" "}
-                            {activeDebtRolloverNames} on{" "}
-                            {activeDebtRolloverDate
-                              ? `${MONTH_FULL[Number(activeDebtRolloverDate.slice(5, 7)) - 1]} ${Number(activeDebtRolloverDate.slice(8, 10))}`
-                              : "the same day"}
-                            .
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  )}
-
-                  {settings.debtPayoffEnabled && (
-                    <View
-                      style={[
-                        styles.methodRow,
-                        { marginHorizontal: 0, marginTop: 10 },
-                      ]}
-                    >
-                      <View style={styles.methodHeading}>
-                        <Text
-                          style={[styles.sectionEyebrow, { color: c.primary }]}
-                        >
-                          Payoff order
-                        </Text>
-                        <Text
-                          style={[styles.sectionTitle, { color: c.foreground }]}
-                        >
-                          Your debts
-                        </Text>
-                      </View>
-                      <View
-                        style={[
-                          styles.sortToggle,
-                          { backgroundColor: c.muted, borderRadius: 14 },
-                        ]}
-                      >
-                        {(
-                          ["priority", "balance", "interest"] as SortMode[]
-                        ).map((s) => (
-                          <Pressable
-                            key={s}
-                            onPress={() => setSortMode(s)}
-                            style={[
-                              styles.sortBtn,
-                              {
-                                backgroundColor:
-                                  sortMode === s ? c.card : "transparent",
-                                borderRadius: 11,
-                              },
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.sortBtnText,
-                                {
-                                  color:
-                                    sortMode === s
-                                      ? c.foreground
-                                      : c.mutedForeground,
-                                },
-                              ]}
-                            >
-                              {s === "priority"
-                                ? "Plan"
-                                : s === "balance"
-                                  ? "Balance"
-                                  : "APR"}
-                            </Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    </View>
-                  )}
-                </PlanFeatureGate>
-              </>
-              {debts.length === 0 ? (
-                <EmptyState
-                  icon="credit-card"
-                  title="No Debts Tracked"
-                  message="Add a debt to build your payoff plan."
-                  actionLabel="Add Debt"
-                  onAction={() => {
-                    setEditBill(null);
-                    setModalVisible(true);
-                  }}
-                />
-              ) : (
-                debts.map((item) => {
-                  const isPaidOff = item.balance <= 0.009;
-                  const strategyRank = strategyRankById.get(item.id);
-                  const isExcluded =
-                    !isPaidOff && item.include_in_snowball === false;
-                  const isUnranked = !isPaidOff && strategyRank === undefined;
-                  const priorityColor = isPaidOff
-                    ? c.success
-                    : isUnranked
-                      ? c.mutedForeground
-                      : (priorityColors[
-                          Math.min(
-                            (strategyRank ?? 1) - 1,
-                            priorityColors.length - 1,
-                          )
-                        ] ?? c.primary);
-                  const effectiveMinimum = debtMonthlyMinimum(item);
-                  const requiredMinimum = debtRequiredMinimum(item);
-                  const forecastPayment = forecastPaymentByDebtId.get(item.id);
-                  const forecastRollover =
-                    forecastRolloverByDebtId.get(item.id) ?? 0;
-                  const monthsToPayoff =
-                    item.balance > 0 && effectiveMinimum > 0
-                      ? Math.ceil(item.balance / effectiveMinimum)
-                      : 0;
-
-                  return (
-                    <Pressable
-                      key={item.id}
-                      onPress={() => {
-                        setEditBill(item);
-                        setModalVisible(true);
-                      }}
-                      style={({ pressed }) => [
-                        styles.card,
-                        styles.debtCard,
-                        isDesktop && styles.desktopCard,
-                        {
-                          backgroundColor: c.card,
-                          borderColor: priorityColor + "30",
-                          borderRadius: 20,
-                          opacity: pressed ? 0.88 : 1,
-                        },
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.priorityBadge,
-                          {
-                            backgroundColor: priorityColor + "16",
-                            borderColor: priorityColor + "32",
-                          },
-                        ]}
-                      >
-                        {isPaidOff ? (
-                          <Feather
-                            name="check"
-                            size={17}
-                            color={priorityColor}
-                          />
-                        ) : null}
-                        <Text
-                          style={[styles.priorityNum, { color: priorityColor }]}
-                        >
-                          {isPaidOff
-                            ? "PAID"
-                            : isExcluded
-                              ? "OFF"
-                              : isUnranked
-                                ? "WAIT"
-                                : `#${strategyRank}`}
-                        </Text>
-                      </View>
-
-                      <View style={styles.cardBody}>
-                        <View style={styles.cardTop}>
-                          <View style={styles.cardLeft}>
-                            <Text
-                              style={[styles.debtName, { color: c.foreground }]}
-                              numberOfLines={2}
-                            >
-                              {item.name}
-                            </Text>
-                            <View style={styles.metaRow}>
-                              {item.interest_rate > 0 && (
-                                <View
-                                  style={[
-                                    styles.aprBadge,
-                                    { backgroundColor: c.destructive + "20" },
-                                  ]}
-                                >
-                                  <Text
-                                    style={[
-                                      styles.aprText,
-                                      { color: c.destructive },
-                                    ]}
-                                  >
-                                    {item.interest_rate}% APR
-                                  </Text>
-                                </View>
-                              )}
-                              <Text
+                            {(
+                              ["priority", "balance", "interest"] as SortMode[]
+                            ).map((s) => (
+                              <Pressable
+                                key={s}
+                                onPress={() => setSortMode(s)}
                                 style={[
-                                  styles.metaText,
+                                  styles.sortBtn,
                                   {
-                                    color: isPaidOff
-                                      ? c.success
-                                      : c.mutedForeground,
+                                    backgroundColor:
+                                      sortMode === s ? c.card : "transparent",
+                                    borderRadius: 11,
                                   },
                                 ]}
                               >
-                                {isPaidOff
-                                  ? "Paid off"
-                                  : formatBillDueText(item)}
-                              </Text>
-                              {monthsToPayoff > 0 && (
                                 <Text
                                   style={[
-                                    styles.metaText,
-                                    { color: c.mutedForeground },
+                                    styles.sortBtnText,
+                                    {
+                                      color:
+                                        sortMode === s
+                                          ? c.foreground
+                                          : c.mutedForeground,
+                                    },
                                   ]}
                                 >
-                                  ~{monthsToPayoff} mo left
+                                  {s === "priority"
+                                    ? "Plan"
+                                    : s === "balance"
+                                      ? "Balance"
+                                      : "APR"}
                                 </Text>
-                              )}
-                            </View>
-                          </View>
-                          <View style={styles.cardRight}>
-                            <Text
-                              style={[
-                                styles.balance,
-                                {
-                                  color: isPaidOff ? c.success : c.destructive,
-                                },
-                              ]}
-                              numberOfLines={1}
-                              adjustsFontSizeToFit
-                              minimumFontScale={0.68}
-                            >
-                              {isPaidOff
-                                ? "Paid"
-                                : `$${item.balance.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
-                            </Text>
-                            {!isPaidOff && (
-                              <Text
-                                style={[
-                                  styles.minPay,
-                                  { color: c.mutedForeground },
-                                ]}
-                                numberOfLines={2}
-                              >
-                                ${requiredMinimum.toFixed(2)}/mo required
-                              </Text>
-                            )}
-                            {!isPaidOff && forecastPayment !== undefined ? (
-                              <Text
-                                style={[styles.metaText, { color: c.primary }]}
-                                numberOfLines={2}
-                              >
-                                ${forecastPayment.toFixed(2)} total forecast
-                              </Text>
-                            ) : null}
-                            {!isPaidOff && forecastRollover > 0.005 && (
-                              <Text
-                                style={[styles.metaText, { color: c.success }]}
-                                numberOfLines={2}
-                              >
-                                +${forecastRollover.toFixed(2)} snowball rollover · extra
-                              </Text>
-                            )}
+                              </Pressable>
+                            ))}
                           </View>
                         </View>
-
-                        {isPaidOff ? (
-                          <View style={styles.progressSection}>
-                            <View style={styles.progressHeader}>
-                              <Text
-                                style={[
-                                  styles.progressLabel,
-                                  { color: c.mutedForeground },
-                                ]}
-                              >
-                                Payoff status
-                              </Text>
-                              <Text
-                                style={[
-                                  styles.progressPct,
-                                  { color: c.success },
-                                ]}
-                              >
-                                Complete
-                              </Text>
-                            </View>
-                            <View
-                              style={[
-                                styles.progressBg,
-                                { backgroundColor: c.muted },
-                              ]}
-                            >
-                              <View
-                                style={[
-                                  styles.progressFill,
-                                  {
-                                    width: "100%" as any,
-                                    backgroundColor: c.success,
-                                  },
-                                ]}
-                              />
-                            </View>
-                          </View>
-                        ) : null}
-
-                        <View
-                          style={[
-                            styles.strategyNote,
-                            { backgroundColor: priorityColor + "12" },
-                          ]}
-                        >
-                          <Feather name="zap" size={11} color={priorityColor} />
-                          <Text
-                            style={[
-                              styles.strategyText,
-                              { color: c.mutedForeground },
-                            ]}
-                          >
-                            {isPaidOff
-                              ? "Paid off — no longer in the active order"
-                              : isExcluded
-                                ? "Not included in your payoff plan"
-                                : isUnranked
-                                  ? `Not active in the ${MONTH_FULL[debtPlanMonth]} payoff order`
-                                  : strategyRank === 1
-                                    ? "Target first — put all extra here"
-                                    : `Pay off #${(strategyRank ?? 1) - 1} first, then cascade here`}
-                          </Text>
-                        </View>
-                      </View>
-
-                      <View style={styles.editHint}>
-                        <Feather
-                          name="chevron-right"
-                          size={17}
-                          color={c.mutedForeground}
-                        />
-                      </View>
-                    </Pressable>
-                  );
-                })
+                      )}
+                    </PlanFeatureGate>
+                  </>
+                  {debts.length === 0 ? (
+                    <EmptyState
+                      icon="credit-card"
+                      title="No Debts Tracked"
+                      message="Add a debt to build your payoff plan."
+                      actionLabel="Add Debt"
+                      onAction={() => {
+                        setEditBill(null);
+                        setModalVisible(true);
+                      }}
+                    />
+                  ) : null}
+                </View>
               )}
             </View>
-          )}
-        </View>
-      </ScrollView>
+          </>
+        }
+      />
 
       <Modal
         animationType="fade"
@@ -2041,10 +2138,12 @@ export default function BillsScreen() {
                 >
                   After {activeDebtTarget.name} is paid off, its $
                   {debtRequiredMinimum(activeDebtTarget).toFixed(2)} original
-                  minimum{Number(activeDebtTarget.snowball_minimum_boost ?? 0) > 0.005
+                  minimum
+                  {Number(activeDebtTarget.snowball_minimum_boost ?? 0) > 0.005
                     ? ` plus $${Number(activeDebtTarget.snowball_minimum_boost).toFixed(2)} already rolling`
-                    : ""} continues to {nextStrategyTarget.name} as extra payoff
-                  money, not a new required minimum.
+                    : ""}{" "}
+                  continues to {nextStrategyTarget.name} as extra payoff money,
+                  not a new required minimum.
                 </Text>
               </View>
             ) : null}
@@ -2087,6 +2186,24 @@ export default function BillsScreen() {
 }
 
 const styles = StyleSheet.create({
+  searchRow: {
+    marginHorizontal: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderRadius: 16,
+    minHeight: 48,
+    paddingLeft: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  searchInput: { flex: 1, minWidth: 0, fontSize: 14, paddingVertical: 12 },
+  searchClear: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   screen: { flex: 1 },
   desktopCanvas: { width: "100%", paddingTop: 16 },
   desktopHeader: { width: "100%", paddingHorizontal: 18, paddingBottom: 10 },

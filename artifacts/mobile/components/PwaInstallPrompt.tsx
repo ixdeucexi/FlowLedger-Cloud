@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import Feather from "@expo/vector-icons/Feather";
 import React, { useEffect, useMemo, useState } from "react";
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 

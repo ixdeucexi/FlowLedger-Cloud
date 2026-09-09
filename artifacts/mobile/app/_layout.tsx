@@ -3,7 +3,7 @@ import { Inter_500Medium } from "@expo-google-fonts/inter/500Medium";
 import { Inter_600SemiBold } from "@expo-google-fonts/inter/600SemiBold";
 import { Inter_700Bold } from "@expo-google-fonts/inter/700Bold";
 import { Inter_800ExtraBold } from "@expo-google-fonts/inter/800ExtraBold";
-import { Feather } from "@expo/vector-icons";
+import Feather from "@expo/vector-icons/Feather";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useFonts } from "expo-font";
 import {
