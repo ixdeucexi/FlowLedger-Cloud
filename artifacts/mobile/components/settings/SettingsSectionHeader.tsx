@@ -43,13 +43,13 @@ export function SettingsSectionHeader({ section, onBack, backLabel = "More" }: S
 }
 
 const styles = StyleSheet.create({
-  container: { marginBottom: 24 },
-  backRow: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 10, alignSelf: "flex-start", paddingRight: 8 },
-  backText: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
-  headingRow: { flexDirection: "row", alignItems: "center", gap: 14 },
+  container: { marginBottom: 18 },
+  backRow: { minHeight: 40, flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 8, alignSelf: "flex-start", paddingRight: 8 },
+  backText: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  headingRow: { flexDirection: "row", alignItems: "center", gap: 11 },
   headingRowCompact: { alignItems: "flex-start", flexDirection: "column", gap: 8 },
-  icon: { width: 52, height: 52, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  icon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   headingCopy: { flex: 1, minWidth: 0 },
-  title: { fontSize: 29, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.8 },
-  description: { fontSize: 13, fontFamily: "Inter_500Medium", lineHeight: 19, marginTop: 3 },
+  title: { fontSize: 26, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.65 },
+  description: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 17, marginTop: 2 },
 });
