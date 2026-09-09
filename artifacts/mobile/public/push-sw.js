@@ -18,8 +18,8 @@ self.addEventListener("push", event => {
   event.waitUntil(Promise.all([
     self.registration.showNotification(payload.title || "FlowLedger", {
       body: payload.body || "New activity is ready to review.",
-      icon: "/icon-192.png",
-      badge: "/icon-192.png",
+      icon: "/notification-icon.png",
+      badge: "/notification-icon.png",
       tag: payload.tag || "flowledger-review",
       renotify: false,
       data: { url: payload.url || "/more?section=review" },
