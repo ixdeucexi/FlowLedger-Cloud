@@ -27,12 +27,8 @@ const styles = StyleSheet.create({
     width: STARTUP_LOGO_SIZE,
     height: STARTUP_LOGO_SIZE,
     flexShrink: 0,
-    borderRadius: 48,
     marginBottom: 18,
-    shadowColor: "#38bdf8",
-    shadowOpacity: 0.22,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
+    backgroundColor: "transparent",
   },
   status: {
     color: "#f8fafc",

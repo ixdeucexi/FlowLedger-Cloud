@@ -41,7 +41,6 @@ export function MoreHub({
   const colors = useColors();
   const { width: viewportWidth } = useWindowDimensions();
   const compactLayout = isCompactSettingsLayout(viewportWidth);
-  const stackQuickActions = viewportWidth < 430;
 
   return (
     <>
@@ -62,7 +61,7 @@ export function MoreHub({
 
       <View style={styles.groupBlock}>
         <Text style={[styles.groupTitle, { color: colors.foreground }]}>Quick access</Text>
-        <View style={[styles.quickGrid, stackQuickActions && styles.quickGridCompact]}>
+        <View style={styles.quickGrid}>
           {[
             { label: "Search", description: "Find anything", icon: "search" as const, onPress: onOpenSearch },
             { label: "Quick Actions", description: "Add or navigate", icon: "zap" as const, onPress: onOpenCommands },
@@ -75,18 +74,17 @@ export function MoreHub({
               onPress={action.onPress}
               style={({ pressed }) => [
                 styles.quickCard,
-                stackQuickActions && styles.quickCardCompact,
+                compactLayout && styles.quickCardCompact,
                 { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.72 : 1 },
               ]}
             >
-              <View style={[styles.quickIcon, { backgroundColor: colors.primary + "16" }]}>
+              <View style={[styles.quickIcon, compactLayout && styles.quickIconCompact, { backgroundColor: colors.primary + "16" }]}>
                 <Feather name={action.icon} size={19} color={colors.primary} />
               </View>
               <View style={styles.quickCopy}>
-                <Text style={[styles.quickLabel, { color: colors.foreground }]}>{action.label}</Text>
-                <Text style={[styles.quickDescription, { color: colors.mutedForeground }]}>{action.description}</Text>
+                <Text style={[styles.quickLabel, compactLayout && styles.quickLabelCompact, { color: colors.foreground }]} numberOfLines={2}>{action.label}</Text>
+                {!compactLayout ? <Text style={[styles.quickDescription, { color: colors.mutedForeground }]} numberOfLines={1}>{action.description}</Text> : null}
               </View>
-              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
             </Pressable>
           ))}
         </View>
@@ -162,14 +160,15 @@ const styles = StyleSheet.create({
   membershipPill: { maxWidth: 104, borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 },
   membershipText: { fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.35 },
   groupBlock: { marginBottom: 18 },
-  quickGrid: { flexDirection: "row", gap: 8 },
-  quickGridCompact: { flexDirection: "column" },
-  quickCard: { flex: 1, minHeight: 68, borderWidth: 1, borderRadius: 16, paddingHorizontal: 11, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 9 },
-  quickCardCompact: { flex: 0, minHeight: 62, width: "100%" },
+  quickGrid: { flexDirection: "row", gap: 8, justifyContent: "space-between" },
+  quickCard: { flexGrow: 1, flexShrink: 1, flexBasis: 0, maxWidth: 132, aspectRatio: 1, borderWidth: 1, borderRadius: 16, padding: 9, alignItems: "center", justifyContent: "center", gap: 6 },
+  quickCardCompact: { padding: 6, gap: 4 },
   quickIcon: { width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  quickCopy: { flex: 1, minWidth: 0 },
-  quickLabel: { fontFamily: "Inter_700Bold", fontSize: 13 },
-  quickDescription: { fontFamily: "Inter_500Medium", fontSize: 10, marginTop: 2 },
+  quickIconCompact: { width: 24, height: 24, borderRadius: 8 },
+  quickCopy: { width: "100%", minWidth: 0, alignItems: "center" },
+  quickLabel: { fontFamily: "Inter_700Bold", fontSize: 12, textAlign: "center" },
+  quickLabelCompact: { fontSize: 10 },
+  quickDescription: { fontFamily: "Inter_500Medium", fontSize: 9, marginTop: 2, textAlign: "center" },
   groupTitle: { fontSize: 16, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.2, marginBottom: 2, paddingHorizontal: 3 },
   groupDescription: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_500Medium", marginBottom: 8, paddingHorizontal: 3 },
   groupCard: { borderWidth: 1, borderRadius: 18, overflow: "hidden" },

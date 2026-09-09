@@ -120,12 +120,8 @@ const styles = StyleSheet.create({
   logo: {
     width: 118,
     height: 118,
-    borderRadius: 30,
     marginBottom: 22,
-    shadowColor: "#38bdf8",
-    shadowOpacity: 0.22,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
+    backgroundColor: "transparent",
   },
   title: {
     fontFamily: "Inter_800ExtraBold",
