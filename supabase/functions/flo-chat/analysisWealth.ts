@@ -119,6 +119,7 @@ export function wealthAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequ
     facts.savingsBalance=savings;
     lines.push(savings===null ? "I could not verify a savings-account balance." : `Your recorded savings-account balance is ${dollars(savings)}. Goal earmarks are not added again.`);
     const goals=rows("goals").filter(r=>!r.closed_at&&!r.archived_at&&r.goal_type!=="planned_expense"&&matches(r.name,request.entity));
+    if(goals.some(g=>numeric(g.current_amount)===null||numeric(g.target_amount)===null))missing.push("Goal target or current funding is unavailable");
     lines.push(...goals.slice(0,5).map(g=>`${label(g.name)}: ${numeric(g.current_amount)===null ? "unavailable" : dollars(Number(g.current_amount))} toward ${numeric(g.target_amount)===null ? "unavailable" : dollars(Number(g.target_amount))}${g.target_date?` by ${g.target_date}`:""}.`));
     if(request.domain==="emergency") {
       const activity=analyticTransactions(snapshot); const start=shiftMonth(snapshot.today,-3), end=dayAdd(monthStart(snapshot.today),-1);
@@ -134,10 +135,32 @@ export function wealthAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequ
         assumptions.push("This estimate uses all recorded expenses, not an inferred essential-only budget. Any earmarked or inaccessible savings should be deducted before treating it as an emergency fund.");
       }
     }
-    if(request.amount!==null && request.amount>0 && goals.length===1) {
+    if(request.amountRole==="contribution_amount" && request.amount!==null && request.amount>0 && goals.length===1) {
       const goalTarget=numeric(goals[0].target_amount),goalCurrent=numeric(goals[0].current_amount);
       if(goalTarget!==null&&goalCurrent!==null) {const periods=Math.ceil(Math.max(0,goalTarget-goalCurrent)/request.amount); facts.contributionPeriods=periods; lines.push(`At ${dollars(request.amount)} per contribution, that goal needs ${periods} contributions. This is a contribution scenario, not confirmation the amount is affordable.`);}
       else missing.push("Goal target or current funding is unavailable; a contribution count cannot be calculated");
+    }
+    if(request.purpose==="goal_timeline" || request.domain==="savings"&&request.operation==="plan") {
+      facts.timelineOutcome="not_estimable";facts.timelineDuration=null;
+      const exactGoals=goals.filter(g=>!request.entity||String(g.name).trim().toLowerCase()===request.entity.trim().toLowerCase());
+      const goal=request.entity&&exactGoals.length===1?exactGoals[0]:null;
+      const current=goal?numeric(goal.current_amount):null;
+      const goalTarget=request.amountRole==="target_balance"?request.amount:goal?numeric(goal.target_amount):null;
+      const contribution=request.contribution;
+      if(!goal||current===null||goalTarget===null) {
+        lines.unshift("I cannot estimate that goal's timeline until one specific goal and its recorded funding and target are known. A total savings balance is not the same as that goal's earmarked funds.");
+        missing.push("A unique goal with known funding and target is required for its timeline");
+      } else if(current>=goalTarget) {
+        facts.timelineOutcome="already_reached";facts.timelineDuration=0;
+        lines.unshift(`Your recorded ${label(goal.name)} funding already reaches the ${dollars(goalTarget)} target; no additional waiting time is needed.`);
+      } else if(contribution&&contribution.frequency!=="once") {
+        const periods=Math.ceil((goalTarget-current)/contribution.amount);
+        facts.timelineOutcome="duration";facts.timelineDuration=periods;facts.timelineUnit=contribution.frequency==="monthly"?"months":"household_paydays";
+        lines.unshift(`Scenario: ${label(goal.name)} needs ${periods} ${contribution.frequency==="monthly"?"monthly contributions":"household-payday contributions"} at your stated ${dollars(contribution.amount)} to reach ${dollars(goalTarget)} from its ${dollars(current)} earmarked funding. This is not confirmation those contributions are affordable.`);
+      } else {
+        lines.unshift(`I cannot estimate when ${label(goal.name)} will reach ${dollars(goalTarget)} without a contribution amount and frequency. Its ${dollars(goalTarget-current)} remaining target is not a per-contribution amount.`);
+        missing.push("State a contribution amount and frequency for a goal timeline");
+      }
     }
   }
   missing.push(...requireSources(snapshot,sources));

@@ -1,6 +1,9 @@
 /** The model supplies intent, never calculated financial facts. */
 export type AnalysisDomain = "money" | "forecast" | "purchase" | "spending" | "bills" | "subscriptions" | "income" | "debt" | "credit" | "savings" | "emergency" | "budget" | "stability" | "buffer" | "paycheck" | "progress" | "transactions" | "unusual" | "fees" | "health" | "review";
 export type AnalysisRequest = {
+  purpose?: "general" | "current_balance" | "forecast_balance" | "affordability" | "buffer_timeline" | "goal_timeline" | "debt_timeline";
+  amountRole?: "none" | "target_balance" | "contribution_amount" | "payment_amount" | "purchase_amount" | "threshold";
+  contribution?: { amount: number; frequency: "once" | "monthly" | "paycheck" } | null;
   domain: AnalysisDomain;
   operation: "summary" | "detail" | "compare" | "minimum" | "maximum" | "threshold" | "plan" | "scenario" | "search" | "average";
   groupBy?: "category" | "merchant" | "none";

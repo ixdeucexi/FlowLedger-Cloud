@@ -30,6 +30,7 @@ import {
 } from "./contract.ts";
 import { createFloTools, executeFloReadTools, summarizeToolPayload, type FloToolRuntime } from "./tools.ts";
 import { runFinancialAnalysis } from "./analysisPlanner.ts";
+import { isAppNavigationQuestion } from "./analysisSemantics.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -479,7 +480,7 @@ async function handleV3(
         const capabilityGuidance = floCapabilityGuidance(message);
         const existingRoute = deterministicFloRoute(message, now.slice(0, 10));
         const preserveVerifiedShortcut = existingRoute?.intent === "debt_snowball_target" || existingRoute?.intent === "named_debt_payment";
-        const appNavigationQuestion = /\b(?:how|where)\b.+\b(?:add|enter|record|edit|delete|open)\b/i.test(message);
+        const appNavigationQuestion = isAppNavigationQuestion(message);
         const analysisApiKey = Deno.env.get("OPENAI_API_KEY");
         const financialAnalysis = !forbiddenRequest.test(message) && !preserveVerifiedShortcut && !appNavigationQuestion && analysisApiKey
           ? await withinHardDeadline(runFinancialAnalysis({ runtime: toolRuntime, question: message, apiKey: analysisApiKey, modelId, conversationId:conversationId!,historyEnabled, safetyIdentifier: await stableSafetyIdentifier(userId, Deno.env.get("FLO_SAFETY_IDENTIFIER_SECRET")!) }), hardAnswerDeadlineMs)
