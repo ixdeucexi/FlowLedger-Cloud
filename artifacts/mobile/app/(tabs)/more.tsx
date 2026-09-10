@@ -11,6 +11,7 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
 } from "react";
@@ -67,7 +68,7 @@ import { useFeedbackBadge } from "@/context/FeedbackBadgeContext";
 import { useColors } from "@/hooks/useColors";
 import { useSetupReadiness } from "@/hooks/useSetupReadiness";
 import { useLocalDay } from "@/hooks/useLocalDay";
-import { goalFundingCushion, parseGoalContribution, goalContributionSnapshotMatches } from "@/lib/goalFundingReview";
+import { goalFundingCushion, parseGoalContribution, goalContributionSnapshotMatches, goalContributionStepReducer } from "@/lib/goalFundingReview";
 import { isCashFlowTransaction } from "@/lib/billMatching";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { dateOnlyToLocalDate, localDateString } from "@/lib/dateLabels";
@@ -99,6 +100,7 @@ import {
   readOnboardingPreferences,
 } from "@/lib/onboardingPreferences";
 import { readInterfacePreferences, updateInterfacePreferences } from "@/lib/interfacePreferences";
+import { createSettingsRestoreGuard, requestedSettingsSection, restoreSavedSettingsSection } from "@/lib/settingsNavigation";
 import {
   getForecastSafetyLayout,
   isCompactSettingsLayout,
@@ -519,6 +521,15 @@ export default function MoreScreen({
   );
   const [activeSettingsSection, setActiveSettingsSection] =
     useState<SettingsSectionId>(() => initialSection ?? "overview");
+  const settingsRestoreGuard = useRef(createSettingsRestoreGuard()).current;
+  const requestedSection = requestedSettingsSection(
+    routeParams.section,
+    initialSection,
+    Platform.OS === "web" && typeof window !== "undefined" ? window.location.search : undefined,
+  );
+  const settingsRequestKey = JSON.stringify([user?.id, activeHousehold?.householdId, requestedSection]);
+  const settingsRequestKeyRef = useRef(settingsRequestKey);
+  settingsRequestKeyRef.current = settingsRequestKey;
   const requestedReviewTransactionId = Array.isArray(
     routeParams.reviewTransactionId,
   )
@@ -537,6 +548,9 @@ export default function MoreScreen({
     settingsScrollRef.current?.scrollTo({ y: 0, animated: true });
   }, []);
   const openSettingsSection = useCallback((sectionId: SettingsSectionId) => {
+    // Invalidate synchronously: a preference promise can finish before the
+    // router commits its new params and the previous effect cleans up.
+    settingsRestoreGuard.invalidate();
     setActiveSettingsSection(sectionId);
     router.setParams({ section: sectionId === "overview" ? "" : sectionId });
     if (user && activeHousehold) {
@@ -544,7 +558,7 @@ export default function MoreScreen({
         settingsSection: sectionId,
       });
     }
-  }, [activeHousehold, router, user]);
+  }, [activeHousehold, router, settingsRestoreGuard, user]);
   useBackDismiss(activeSettingsSection !== "overview", () =>
     openSettingsSection("overview"),
   );
@@ -601,6 +615,8 @@ export default function MoreScreen({
   const [contributionGoalId, setContributionGoalId] = useState<string | null>(null);
   const [contributionText, setContributionText] = useState("");
   const [contributionAccountId, setContributionAccountId] = useState<string | null>(null);
+  const [contributionStep, dispatchContributionStep] = useReducer(goalContributionStepReducer, { stage: "entry" });
+  const [contributionError, setContributionError] = useState<string | null>(null);
   const [goalCushionReview, setGoalCushionReview] = useState<{ revision: unknown; date: string; householdId?: string; safetyFloor: number; amount: number | null; endDate: string } | null>(null);
   const subscriptionCreateInFlightRef = useRef(false);
   const goalContributionInFlightRef = useRef(false);
@@ -687,37 +703,25 @@ export default function MoreScreen({
   }, [payRaiseNoticeKey]);
 
   useEffect(() => {
-    const requestedSectionParam = Array.isArray(routeParams.section)
-      ? routeParams.section[0]
-      : routeParams.section;
-    let requestedSection = requestedSectionParam ?? initialSection;
-    if (
-      !requestedSection &&
-      Platform.OS === "web" &&
-      typeof window !== "undefined"
-    ) {
-      try {
-        requestedSection =
-          new URLSearchParams(window.location.search).get("section") ??
-          undefined;
-      } catch {
-        requestedSection = undefined;
-      }
-    }
-    if (isSettingsSectionId(requestedSection)) {
-      const safeSection = requestedSection as SettingsSectionId;
-      setActiveSettingsSection(safeSection);
+    const generation = settingsRestoreGuard.begin();
+    if (requestedSection !== undefined) {
+      setActiveSettingsSection(isSettingsSectionId(requestedSection) ? requestedSection : "overview");
       return;
     }
+    setActiveSettingsSection("overview");
     if (!user || !activeHousehold) return;
     let active = true;
-    void readInterfacePreferences(user.id, activeHousehold.householdId).then(preferences => {
-      if (active && isSettingsSectionId(preferences.settingsSection)) {
-        setActiveSettingsSection(preferences.settingsSection);
-      }
+    void restoreSavedSettingsSection({
+      read: () => readInterfacePreferences(user.id, activeHousehold.householdId),
+      isCurrent: () => active
+        && settingsRestoreGuard.isCurrent(generation)
+        && settingsRequestKeyRef.current === settingsRequestKey,
+      isSection: isSettingsSectionId,
+      apply: setActiveSettingsSection,
+      overview: "overview",
     });
     return () => { active = false; };
-  }, [activeHousehold?.householdId, initialSection, routeParams.section, user?.id]);
+  }, [activeHousehold?.householdId, requestedSection, settingsRequestKey, settingsRestoreGuard, user?.id]);
 
   useEffect(() => {
     const requestedAdd = Array.isArray(routeParams.add)
@@ -1788,10 +1792,7 @@ export default function MoreScreen({
     if (!goal || !householdId || !canEditHousehold || goalContributionBusy) return;
     const contribution = parseGoalContribution(contributionText, goal.target_amount - goal.current_amount);
     if (contribution === null) {
-      Alert.alert(
-        "Goal funding",
-        "Enter a positive amount with up to two decimal places, no more than the remaining target.",
-      );
+      setContributionError("Enter a positive amount with up to two decimal places, no more than the remaining target.");
       return;
     }
     const accountId = contributionAccountId;
@@ -1800,39 +1801,47 @@ export default function MoreScreen({
     const expected = { householdId, goalId, currentAmount: goal.current_amount, targetAmount: goal.target_amount, date: todayIso, revision: getPlanSimulationBaseline };
     const caution = sharedGoalCushion === null ? "The forecast needs review before estimating new savings. "
       : contribution > sharedGoalCushion ? "This exceeds the shared forecast cushion. Protect bills and required debt payments before setting aside new money. " : "";
-    confirmAction({
-      title: "Record money already set aside?",
+    setContributionError(null);
+    dispatchContributionStep({ type: "review", review: {
+      expected, amount: contribution, accountId,
       message: `${caution}Record $${contribution.toFixed(2)} toward ${goal.name} today, ${account ? `from ${account.name}` : "with no account assigned"}? This adds an Activity entry and updates goal progress; it does not transfer money. Do not record it again if it is already in Activity.`,
-      confirmText: "Record contribution",
-      onConfirm: async () => {
+    } });
+  };
+  const handleConfirmGoalContribution = async () => {
+        if (contributionStep.stage !== "review") return;
+        const { expected, amount: contribution, accountId } = contributionStep.review;
+        const { householdId, goalId, date, currentAmount } = expected;
         if (goalContributionInFlightRef.current) return;
         const current = goalMutationSnapshotRef.current;
         if (!goalContributionSnapshotMatches(expected, current)
           || (accountId && !current.accounts.some(item => item.id === accountId && item.is_active))) {
-          Alert.alert("Plan changed", "Review the current goal and amount, then confirm again.");
+          dispatchContributionStep({ type: "edit" });
+          setContributionError("Your plan changed. Review the current goal and amount, then confirm again.");
           return;
         }
         goalContributionInFlightRef.current = true;
+        dispatchContributionStep({ type: "record" });
+        setContributionError(null);
         const transactionId = stableUuidFromString(
           [
             "goal-funding",
             householdId,
-            goal.id,
-            todayIso,
-            goal.current_amount.toFixed(2),
+            goalId,
+            date,
+            currentAmount.toFixed(2),
             contribution.toFixed(2),
             accountId ?? "unassigned",
           ].join(":"),
         );
-        setGoalContributionBusy(goal.id);
+        setGoalContributionBusy(goalId);
         try {
           assertFinancialMutationOnline();
           await fundGoalAtomically({
-            goalId: goal.id,
+            goalId,
             transactionId,
             amount: contribution,
-            date: todayIso,
-            expectedCurrentAmount: goal.current_amount,
+            date,
+            expectedCurrentAmount: currentAmount,
             accountId,
           });
           if (goalMutationSnapshotRef.current.householdId === householdId) {
@@ -1841,17 +1850,15 @@ export default function MoreScreen({
           }
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (error) {
-          Alert.alert(
-            "Couldn’t fund goal",
-            error instanceof Error ? error.message : "Try again.",
-          );
+          if (goalMutationSnapshotRef.current.householdId === householdId) {
+            setContributionError(error instanceof Error ? error.message : "Couldn’t record contribution. Try again.");
+            dispatchContributionStep({ type: "retry" });
+          }
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
           goalContributionInFlightRef.current = false;
           setGoalContributionBusy(null);
         }
-      },
-    });
   };
 
   const handleSignOut = async () => {
@@ -4597,11 +4604,12 @@ export default function MoreScreen({
                           }}
                           disabled={Boolean(goalContributionBusy)}
                           onPress={() =>
-                            { setContributionGoalId(plan.goalId); setContributionText(""); setContributionAccountId(null); }
+                            { setContributionGoalId(plan.goalId); setContributionText(""); setContributionAccountId(null); setContributionError(null); dispatchContributionStep({ type: "reset" }); }
                           }
                           style={({ pressed }) => [
                             styles.growthInlineButton,
                             {
+                              minHeight: 44,
                               backgroundColor: c.primary + "18",
                               borderColor: c.primary + "44",
                               opacity: goalContributionBusy
@@ -4641,14 +4649,22 @@ export default function MoreScreen({
             </View>
             {contributionGoalId && <Modal visible transparent animationType="fade" onRequestClose={() => { if (!goalContributionBusy) setContributionGoalId(null); }}>
               <View style={{ flex: 1, justifyContent: "center", padding: 20, backgroundColor: "rgba(0,0,0,0.65)" }}>
-              <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: "90%", width: "100%", maxWidth: 520, alignSelf: "center", borderRadius: colors.radius, backgroundColor: c.card }} contentContainerStyle={{ padding: 20, gap: 12 }}>
+              <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0, maxHeight: "90%", width: "100%", maxWidth: 520, alignSelf: "center", borderRadius: colors.radius, backgroundColor: c.card }} contentContainerStyle={{ padding: 20, gap: 12 }}>
+              {contributionError && <Text accessibilityRole="alert" style={{ color: c.warning, fontSize: 15, lineHeight: 22 }}>{contributionError}</Text>}
+              {contributionStep.stage === "entry" ? <>
               <Text style={[styles.dataLabel, { color: c.foreground }]}>Record contribution: {goals.find(goal => goal.id === contributionGoalId)?.name}</Text>
               <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>Only record money already set aside and not already recorded in Activity. This does not move money between bank accounts.</Text>
-              <TextInput accessibilityLabel="Contribution amount" placeholder="Amount (0.00)" placeholderTextColor={c.mutedForeground} value={contributionText} onChangeText={setContributionText} keyboardType="decimal-pad" editable={!goalContributionBusy} style={{ color: c.foreground, borderWidth: 1, borderColor: c.border, padding: 12, borderRadius: 12 }} />
+              <TextInput accessibilityLabel="Contribution amount" placeholder="Amount (0.00)" placeholderTextColor={c.mutedForeground} value={contributionText} onChangeText={setContributionText} keyboardType="decimal-pad" editable={!goalContributionBusy} style={{ color: c.foreground, fontSize: 16, minHeight: 48, borderWidth: 1, borderColor: c.border, padding: 12, borderRadius: 12 }} />
               <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>Source account (optional)</Text>
-              {[{ id: null, name: "Unassigned — no account selected" }, ...activeAccounts].map(account => <Pressable key={account.id ?? "unassigned"} accessibilityRole="radio" accessibilityState={{ checked: contributionAccountId === account.id }} disabled={Boolean(goalContributionBusy)} onPress={() => setContributionAccountId(account.id)} style={{ paddingVertical: 12 }}><Text style={{ color: contributionAccountId === account.id ? c.primary : c.foreground }}>{contributionAccountId === account.id ? "✓ " : ""}{account.name}</Text></Pressable>)}
-              <Pressable accessibilityRole="button" disabled={Boolean(goalContributionBusy)} onPress={() => handleRecordGoalContribution(contributionGoalId)}><Text style={{ color: c.primary, paddingVertical: 12 }}>{goalContributionBusy ? "Recording…" : "Review and record"}</Text></Pressable>
-              <Pressable accessibilityRole="button" disabled={Boolean(goalContributionBusy)} onPress={() => setContributionGoalId(null)}><Text style={{ color: c.mutedForeground, paddingVertical: 12 }}>Cancel</Text></Pressable>
+              {[{ id: null, name: "Unassigned — no account selected" }, ...activeAccounts].map(account => <Pressable key={account.id ?? "unassigned"} accessibilityRole="radio" accessibilityState={{ checked: contributionAccountId === account.id }} disabled={Boolean(goalContributionBusy)} onPress={() => setContributionAccountId(account.id)} style={{ minHeight: 44, justifyContent: "center", paddingVertical: 12 }}><Text style={{ fontSize: 15, color: contributionAccountId === account.id ? c.primary : c.foreground }}>{contributionAccountId === account.id ? "✓ " : ""}{account.name}</Text></Pressable>)}
+              <Pressable accessibilityRole="button" style={{ minHeight: 44, justifyContent: "center" }} disabled={Boolean(goalContributionBusy)} onPress={() => handleRecordGoalContribution(contributionGoalId)}><Text style={{ fontSize: 16, color: c.primary, paddingVertical: 12 }}>Review and record</Text></Pressable>
+              </> : <>
+                <Text style={[styles.dataLabel, { color: c.foreground }]}>Record money already set aside?</Text>
+                <Text style={{ color: c.mutedForeground, fontSize: 16, lineHeight: 24 }}>{contributionStep.review.message}</Text>
+                <Pressable accessibilityRole="button" accessibilityState={{ busy: contributionStep.stage === "saving", disabled: contributionStep.stage === "saving" }} disabled={contributionStep.stage === "saving"} onPress={() => void handleConfirmGoalContribution()} style={{ minHeight: 48, padding: 12, borderRadius: 12, backgroundColor: c.primary, alignItems: "center", justifyContent: "center" }}><Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>{contributionStep.stage === "saving" ? "Recording…" : "Record contribution now"}</Text></Pressable>
+                <Pressable accessibilityRole="button" disabled={contributionStep.stage === "saving"} onPress={() => { dispatchContributionStep({ type: "edit" }); setContributionError(null); }} style={{ minHeight: 44, justifyContent: "center" }}><Text style={{ color: c.primary, fontSize: 16, paddingVertical: 12 }}>Back to edit</Text></Pressable>
+              </>}
+              <Pressable accessibilityRole="button" style={{ minHeight: 44, justifyContent: "center" }} disabled={Boolean(goalContributionBusy)} onPress={() => setContributionGoalId(null)}><Text style={{ fontSize: 16, color: c.mutedForeground, paddingVertical: 12 }}>Cancel</Text></Pressable>
               </ScrollView></View>
             </Modal>}
             {goalEditor && <GoalModal visible onClose={() => setGoalEditor(null)} editGoal={goalEditor === "new" ? null : goalEditor} initialMode="savings" lockedMode="savings" onSave={goal => "id" in goal ? updateGoal(goal) : addGoal(goal)} onDelete={deleteGoal} />}

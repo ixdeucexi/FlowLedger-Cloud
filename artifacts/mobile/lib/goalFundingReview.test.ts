@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { goalFundingCushion, parseGoalContribution, goalContributionSnapshotMatches } from "./goalFundingReview";
+import { goalFundingCushion, parseGoalContribution, goalContributionSnapshotMatches, goalContributionStepReducer, type GoalContributionStep } from "./goalFundingReview";
 import { buildGoalFundingPlans } from "./competitiveGrowth";
 
 function baseline(balances: number[], openingBalance = 500) {
@@ -45,7 +45,42 @@ test("goal UI preserves atomic recording and scopes estimate work to visible Goa
   assert.match(source, /getPlanSimulationBaseline\(3, todayIso\)/);
   assert.match(source, /goalContributionSnapshotMatches\(expected, current\)/);
   assert.match(source, /assertFinancialMutationOnline\(\);\s+await fundGoalAtomically/);
-  assert.match(source, /expectedCurrentAmount: goal.current_amount/);
+  assert.match(source, /expectedCurrentAmount: currentAmount/);
   assert.doesNotMatch(source, /safeMonthlyGoalFunding|safeMonthlyContribution|activeAccounts\[0\]\?\.id/);
   assert.match(source, /does not transfer money/);
+});
+
+test("one-modal contribution workflow reviews, edits, confirms once and retries without losing the captured amount", () => {
+  const review = { expected: { householdId: "h1", goalId: "g1", currentAmount: 0, targetAmount: 100, date: "2026-09-10", revision: {} }, amount: 25, accountId: "checking", message: "Record $25 already set aside." };
+  let state: GoalContributionStep = { stage: "entry" };
+  assert.equal(goalContributionStepReducer(state, { type: "record" }), state, "cannot record before review");
+  state = goalContributionStepReducer(state, { type: "review", review });
+  assert.deepEqual(state, { stage: "review", review });
+  state = goalContributionStepReducer(state, { type: "edit" });
+  assert.deepEqual(state, { stage: "entry" }, "back returns to draft without submitting");
+  const editedReview = { ...review, amount: 30 };
+  state = goalContributionStepReducer(state, { type: "review", review: editedReview });
+  state = goalContributionStepReducer(state, { type: "record" });
+  assert.deepEqual(state, { stage: "saving", review: editedReview });
+  assert.equal(goalContributionStepReducer(state, { type: "record" }), state, "double-confirm cannot start another transition");
+  assert.equal(goalContributionStepReducer(state, { type: "edit" }), state, "draft cannot change during save");
+  state = goalContributionStepReducer(state, { type: "retry" });
+  assert.deepEqual(state, { stage: "review", review: editedReview }, "retry preserves amount and idempotency inputs");
+  assert.deepEqual(goalContributionStepReducer(state, { type: "reset" }), { stage: "entry" });
+});
+
+test("entry and final confirmation are wired within the same modal, with no global confirmation overlay", () => {
+  const source = fs.readFileSync(path.join(process.cwd(), "app/(tabs)/more.tsx"), "utf8");
+  const handlers = source.slice(source.indexOf("const handleRecordGoalContribution"), source.indexOf("const handleSignOut"));
+  const modal = source.slice(source.indexOf("{contributionGoalId && <Modal"), source.indexOf("{goalEditor && <GoalModal"));
+  assert.doesNotMatch(handlers, /confirmAction\(|Alert\.alert\(/);
+  assert.match(handlers, /dispatchContributionStep\(\{ type: "review"/);
+  assert.match(handlers, /contributionStep\.stage !== "review"/);
+  assert.match(modal, /contributionStep\.stage === "entry"/);
+  assert.match(modal, /handleRecordGoalContribution\(contributionGoalId\)/);
+  assert.match(modal, /handleConfirmGoalContribution\(\)/);
+  assert.match(modal, /Back to edit/);
+  assert.match(modal, /Record contribution now/);
+  assert.equal((modal.match(/<Modal\b/g) ?? []).length, 1);
+  assert.doesNotMatch(modal, /setTimeout|confirmAction/);
 });

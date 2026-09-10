@@ -31,6 +31,14 @@ integration, authentication privilege, or debt-allocation changes.
 
 ## Verification and limits
 
+The first production candidate (`270eb96`) passed automated gates but failed the
+live contribution interaction: its input Modal covered the shared confirmation
+dialog. Production was immediately restored to the exact prior deployment.
+The replacement must use one modal for entry/review, pass an actual contribution
+browser test on an unpromoted production artifact, then be promoted unchanged.
+Signed-in review also reproduced a pre-existing Settings Back race; explicit
+empty section parameters now select overview without restoring stale preferences.
+
 The initial full verify run passed 1,189 tests, workspace typechecks, mobile web
 export, and release artifact checks. Independent review covers actual changed
 source and persistence failure/race cases; release preflight repeats full checks
@@ -52,4 +60,5 @@ Pre-release live deployment: `dpl_ExVEMXvXHF85jx26anpRT921nkRy`, source
 `e79b13a71e192f100d6777127e2478ccd983d89b`.
 
 Annotated remote rollback tag:
-`rollback/prod-before-account-safety-startup-20260909`.
+`rollback/prod-before-reviewed-account-safety-20260909` (verified after restoring
+the prior live deployment). The earlier pre-release tag is also retained.

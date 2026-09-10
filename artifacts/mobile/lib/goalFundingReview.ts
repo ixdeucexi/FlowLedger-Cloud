@@ -1,5 +1,29 @@
 import type { PlanSimulationBaseline } from "./planSimulator";
 
+export interface GoalContributionReview {
+  expected: { householdId: string; goalId: string; currentAmount: number; targetAmount: number; date: string; revision: unknown };
+  amount: number;
+  accountId: string | null;
+  message: string;
+}
+export type GoalContributionStep =
+  | { stage: "entry" }
+  | { stage: "review" | "saving"; review: GoalContributionReview };
+export type GoalContributionStepAction =
+  | { type: "review"; review: GoalContributionReview }
+  | { type: "edit" | "record" | "retry" | "reset" };
+
+/** Entry and confirmation deliberately share one native Modal surface. */
+export function goalContributionStepReducer(state: GoalContributionStep, action: GoalContributionStepAction): GoalContributionStep {
+  if (action.type === "reset") return { stage: "entry" };
+  if (action.type === "retry" && state.stage === "saving") return { stage: "review", review: state.review };
+  if (state.stage === "saving") return state;
+  if (action.type === "edit") return { stage: "entry" };
+  if (action.type === "review") return { stage: "review", review: action.review };
+  if (action.type === "record" && state.stage === "review") return { stage: "saving", review: state.review };
+  return state;
+}
+
 /** One shared, dated estimate—not a monthly allocation for every goal. */
 export function goalFundingCushion(baseline: PlanSimulationBaseline, safetyFloor: number): number | null {
   if (!baseline.days.length || !Number.isFinite(safetyFloor) || safetyFloor < 0
