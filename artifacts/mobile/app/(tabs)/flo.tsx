@@ -1082,7 +1082,7 @@ export default function FloScreen() {
         <FloLogo size={48} />
         <View style={styles.headerText}>
           <Text style={[styles.title, { color: colors.foreground }]}>Ask Flo</Text>
-          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{activeHousehold?.name ?? "Personal household"} · {floFreshnessSummary(groundingByMessageId)}</Text>
+          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{activeHousehold?.name ?? "Personal household"} · Your account assistant</Text>
           <DataFreshnessLabel compact />
         </View>
         <Feather name="message-circle" size={24} color={colors.primaryForeground} />
@@ -1250,18 +1250,10 @@ export default function FloScreen() {
 
 function describeCoverage(coverage?: Record<string, unknown>): string | undefined {
   if (!coverage) return undefined;
-  if (coverage.complete === false) return "Partial account coverage";
+  if (coverage.complete === false) return "Some details could not be verified";
   const tools = Number(coverage.tools);
   if (Number.isFinite(tools) && tools > 0) return `${tools} account source${tools === 1 ? "" : "s"} checked`;
   return coverage.complete === true ? "Complete for this question" : undefined;
-}
-
-function floFreshnessSummary(rows: Record<string, { dataAsOf?: string | null }>): string {
-  const latest = Object.values(rows).map(row => row.dataAsOf).filter((value): value is string => Boolean(value)).sort().at(-1);
-  if (!latest) return "account-aware answers";
-  const date = new Date(latest);
-  if (!Number.isFinite(date.getTime())) return "account-aware answers";
-  return `data checked ${date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
 }
 
 function decisionStillHasSource(decision: { status: string; scenario: { type?: string }; applied_change?: Record<string, unknown> | null; actual_amount?: number | null }, transactions: { id: string }[]) {

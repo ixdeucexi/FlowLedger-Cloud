@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { collectFloHistoryPages, floAnswerAsOf, floConversationForRequest, floEphemeralCleanupError, floFreshnessLabel, floProposalMatchesAuthoritative, isFloRequestGenerationCurrent, nextFloRequestGeneration, oldestFloSourceAsOf, safeFloSourceRoute, searchFloHistory } from "./floExperience";
+import { collectFloHistoryPages, floAnswerAsOf, floConversationForRequest, floEphemeralCleanupError, floFreshnessLabel, floSourceDescription, floProposalMatchesAuthoritative, isFloRequestGenerationCurrent, nextFloRequestGeneration, oldestFloSourceAsOf, safeFloSourceRoute, searchFloHistory } from "./floExperience";
 
 test("searchFloHistory matches titles and summaries without changing order", () => {
   const rows = [
@@ -56,6 +56,15 @@ test("saved Flo answers recover date-only precision from matching JSON evidence"
     assert.equal(oldestFloSourceAsOf(mixed), "2026-09-09");
     assert.equal(floAnswerAsOf("2026-09-09T00:00:00+00:00", mixed), "2026-09-09");
   }
+});
+
+test("Flo distinguishes app guidance, saved scenarios, and unknown source dates", () => {
+  assert.equal(floSourceDescription({ type: "help", label: "Plan Simulator", asOf: "2026-06-24" }), "App guidance");
+  assert.equal(floSourceDescription({ type: "account", label: "Checking", asOf: null }), "Update time unavailable");
+  assert.match(floSourceDescription({ type: "decision", label: "Test", recordId: "simulation:a", asOf: "2026-06-24" }), /^Saved scenario · As of /);
+  assert.match(floSourceDescription({ type: "debt", label: "Plan", id: "getDebtPlanHistory:a", asOf: "2026-06-24" }), /^Saved debt plan · As of /);
+  assert.match(floSourceDescription({ type: "decision", label: "Purchase", recordId: "decision:a", asOf: null }), /^Saved decision · Update time unavailable/);
+  assert.match(floSourceDescription({ type: "account", label: "Checking", freshness: "stale", asOf: "2026-06-24" }), /^Older record · As of /);
 });
 
 test("collectFloHistoryPages includes retained history beyond the first 50 rows", async () => {

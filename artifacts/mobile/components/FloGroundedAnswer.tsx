@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
-import { floAnswerAsOf, floFreshnessLabel, safeFloSourceRoute, type FloEvidenceRef, type FloReviewProposal } from "@/lib/floExperience";
+import { floAnswerAsOf, floFreshnessLabel, floSourceDescription, safeFloSourceRoute, type FloEvidenceRef, type FloReviewProposal } from "@/lib/floExperience";
 
 type Props = {
   text: string;
@@ -23,31 +23,33 @@ type Props = {
 export function FloGroundedAnswer({ text, sources, dataAsOf, partial, coverage, followUps = [], caveat, proposal, proposalConfirmed, onOpenSource, onFollowUp, onReviewProposal }: Props) {
   const c = useColors();
   const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [allSourcesOpen, setAllSourcesOpen] = useState(false);
   const freshnessAsOf = floAnswerAsOf(dataAsOf, sources);
+  const sourceDateSummary = sources.length > 1 ? "Dates shown per source" : sources.length === 1 ? floSourceDescription(sources[0]) : freshnessAsOf ? floFreshnessLabel(freshnessAsOf) : "Freshness unavailable";
 
   return (
     <View>
       <Text style={[styles.answer, { color: c.foreground }]}>{text}</Text>
-      {caveat ? <View accessibilityRole="alert" style={[styles.caveat, { backgroundColor: c.warning + "14", borderColor: c.warning + "55" }]}><Feather name="alert-triangle" size={15} color={c.warning} /><Text style={[styles.caveatText, { color: c.foreground }]}>{caveat}</Text></View> : null}
-      {sources.length || freshnessAsOf || partial ? (
+      {sources.length || freshnessAsOf || partial || caveat ? (
         <View style={[styles.grounding, { borderColor: partial ? c.warning : c.border, backgroundColor: partial ? c.warning + "0D" : c.muted + "70" }]}>
-          <Pressable accessibilityRole="button" accessibilityState={{ expanded: evidenceOpen }} accessibilityLabel="Show how Flo got this answer" onPress={() => setEvidenceOpen(open => !open)} style={styles.groundingHeader}>
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: evidenceOpen }} accessibilityLabel="Show how Flo got this answer" onPress={() => { setEvidenceOpen(open => !open); setAllSourcesOpen(false); }} style={styles.groundingHeader}>
             <Feather name={partial ? "alert-triangle" : "shield"} size={14} color={partial ? c.warning : c.success} />
             <View style={styles.groundingCopy}>
-              <Text style={[styles.groundingTitle, { color: c.foreground }]}>{partial ? "Some account data was unavailable" : "Grounded in your FlowLedger plan"}</Text>
-              <Text style={[styles.groundingMeta, { color: c.mutedForeground }]}>{freshnessAsOf ? floFreshnessLabel(freshnessAsOf) : "Freshness unavailable"}{coverage ? ` · ${coverage}` : ""}</Text>
+              <Text style={[styles.groundingTitle, { color: c.foreground }]}>{partial ? "Partial answer" : "Sources for this answer"}{sources.length ? ` · ${sources.length}` : ""}</Text>
+              <Text style={[styles.groundingMeta, { color: c.mutedForeground }]}>{sourceDateSummary}{coverage ? ` · ${coverage}` : ""}</Text>
             </View>
             <Feather name={evidenceOpen ? "chevron-up" : "chevron-down"} size={16} color={c.mutedForeground} />
           </Pressable>
+          {caveat ? <Text accessibilityRole="alert" style={[styles.caveatText, { color: c.mutedForeground }]}>{caveat}</Text> : null}
           {evidenceOpen ? (
             <View style={styles.evidenceList}>
-              {sources.map((source, index) => {
+              {(allSourcesOpen ? sources : sources.slice(0, 3)).map((source, index) => {
                 const route = safeFloSourceRoute(source.route);
                 const key = source.id ?? `${source.type}-${source.recordId ?? source.label}-${index}`;
                 const body = (
                   <>
                     <View style={[styles.sourceIcon, { backgroundColor: c.primary + "16" }]}><Feather name="database" size={12} color={c.primary} /></View>
-                    <View style={styles.sourceCopy}><Text style={[styles.sourceLabel, { color: c.foreground }]}>{source.label}</Text><Text style={[styles.sourceMeta, { color: c.mutedForeground }]}>{source.freshness ? `${source.freshness} · ` : ""}{floFreshnessLabel(source.asOf ?? dataAsOf)}</Text></View>
+                    <View style={styles.sourceCopy}><Text style={[styles.sourceLabel, { color: c.foreground }]}>{source.label}</Text><Text style={[styles.sourceMeta, { color: c.mutedForeground }]}>{floSourceDescription(source)}</Text></View>
                     {route ? <Feather name="arrow-up-right" size={14} color={c.primary} /> : null}
                   </>
                 );
@@ -55,6 +57,7 @@ export function FloGroundedAnswer({ text, sources, dataAsOf, partial, coverage, 
                   <Pressable key={key} accessibilityRole="link" accessibilityLabel={`Open source ${source.label}`} onPress={() => onOpenSource(route)} style={[styles.source, { borderColor: c.border }]}>{body}</Pressable>
                 ) : <View key={key} style={[styles.source, { borderColor: c.border }]}>{body}</View>;
               })}
+              {sources.length > 3 ? <Pressable accessibilityRole="button" accessibilityState={{ expanded: allSourcesOpen }} onPress={() => setAllSourcesOpen(open => !open)} style={styles.sourceToggle}><Text style={{ color: c.primary, fontFamily: "Inter_600SemiBold", fontSize: 12 }}>{allSourcesOpen ? "Show fewer sources" : `View all ${sources.length} sources`}</Text></Pressable> : null}
               {!sources.length ? <Text style={[styles.noSources, { color: c.mutedForeground }]}>Flo could not attach record-level sources to this answer.</Text> : null}
             </View>
           ) : null}
@@ -81,8 +84,8 @@ export function FloGroundedAnswer({ text, sources, dataAsOf, partial, coverage, 
 
 const styles = StyleSheet.create({
   answer: { fontSize: 15, lineHeight: 23, fontFamily: "Inter_400Regular" },
-  caveat: { minHeight: 44, marginTop: 10, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 9, flexDirection: "row", alignItems: "center", gap: 8 },
-  caveatText: { flex: 1, fontSize: 10, lineHeight: 15, fontFamily: "Inter_700Bold" },
+  caveatText: { paddingHorizontal: 11, paddingBottom: 10, fontSize: 11, lineHeight: 16, fontFamily: "Inter_400Regular" },
+  sourceToggle: { minHeight: 44, alignItems: "center", justifyContent: "center" },
   grounding: { marginTop: 12, borderWidth: 1, borderRadius: 14, overflow: "hidden" },
   groundingHeader: { minHeight: 50, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", gap: 8 },
   groundingCopy: { flex: 1 },

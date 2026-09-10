@@ -112,6 +112,15 @@ export function floFreshnessLabel(asOf?: string | null, now = new Date()): strin
   return `Updated ${parsed.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
 }
 
+export function floSourceDescription(source: FloEvidenceRef): string {
+  if (source.type === "help" || source.id?.startsWith("policy:")) return "App guidance";
+  const dated = source.asOf ? floFreshnessLabel(source.asOf) : "Update time unavailable";
+  if (source.recordId?.startsWith("simulation:")) return `Saved scenario · ${dated}`;
+  if (source.id?.startsWith("getDebtPlanHistory:")) return `Saved debt plan · ${dated}`;
+  if (source.recordId?.startsWith("decision:")) return `Saved decision · ${dated}`;
+  return source.freshness === "stale" ? `Older record · ${dated}` : dated;
+}
+
 export function oldestFloSourceAsOf(sources: Array<{ asOf?: string | null }>): string | undefined {
   let oldest: { value: string; timestamp: number } | undefined;
   for (const source of sources) {

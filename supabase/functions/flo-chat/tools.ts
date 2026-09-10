@@ -26,6 +26,7 @@ export type FloToolRuntime = {
   toolNames: string[];
   toolCache: Map<string, FloToolEnvelope>;
   memberRole?: string;
+  allowSavedPlans?: boolean;
   proposalDraft?: {
     kind: "recurring_bill_change";
     title: string;
@@ -382,8 +383,8 @@ export function createFloTools(runtime: FloToolRuntime) {
       }),
     }),
 
-    getDecisionsAndSimulations: tool({
-      description: "Read saved/planned decisions and saved simulator definitions. Simulator results are not persisted and cannot be invented.",
+    ...(runtime.allowSavedPlans === true ? { getDecisionsAndSimulations: tool({
+      description: "Read historical saved decisions and hypothetical simulator definitions only when explicitly requested. These records are NOT the current live plan. Saved result, status, and updated_at describe that saved record, not today's affordability or fresh forecast. Simulator results are not persisted and cannot be invented.",
       inputSchema: z.object({ status: z.string().nullable().default(null), limit: z.number().int().min(1).max(FLO_V3_MAX_ROWS).default(80) }),
       execute: async input => tracked(runtime, "getDecisionsAndSimulations", input, async () => {
         const limit = boundedLimit(input.limit, 80);
@@ -394,10 +395,11 @@ export function createFloTools(runtime: FloToolRuntime) {
         if (decisionRows.error || simulationRows.error) return { status: "unavailable", dataAsOf: null, coverage: { complete: false, returned: 0, limit, reason: decisionRows.error?.code ?? simulationRows.error?.code ?? "query_failed" }, evidence: [], records: [] };
         const all = [...(decisionRows.data ?? []).map((row: any) => ({ ...row, id: `decision:${row.id}`, source_id: row.id, record_kind: "decision" })), ...(simulationRows.data ?? []).map((row: any) => ({ ...row, id: `simulation:${row.id}`, source_id: row.id, record_kind: "simulation" }))];
         const complete = (decisionRows.count ?? all.length) <= (decisionRows.data?.length ?? 0) && (simulationRows.count ?? all.length) <= (simulationRows.data?.length ?? 0);
-        const evidence = buildEvidence("getDecisionsAndSimulations", "decision", "Decisions and simulations", all, runtime.now);
+        const evidence = buildEvidence("getDecisionsAndSimulations", "decision", "Saved decisions and simulations (not the live plan)", all, runtime.now)
+          .map(source => ({ ...source, label: `${source.recordId?.startsWith("simulation:") ? "Saved simulation" : "Saved decision"}: ${source.label}`.slice(0, 100) }));
         return { status: complete ? "ok" : "partial", dataAsOf: evidenceDataAsOf(evidence), coverage: { complete, returned: all.length, limit }, evidence, records: all };
       }),
-    }),
+    }) } : {}),
 
     getDebtPlanHistory: tool({
       description: "Read persisted debt snowball/avalanche extra payment plans and allocations. This does not recompute payoff projections.",

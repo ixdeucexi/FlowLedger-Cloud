@@ -5,6 +5,8 @@ import test from "node:test";
 
 import {
   aggregateCoverage,
+  allowsSavedPlanRead,
+  classifyFloFailure,
   boundedLimit,
   configuredDebtSummary,
   deterministicAnswerFromTools,
@@ -15,9 +17,11 @@ import {
   sourceAsOf,
   requiresConfiguredDebtRead,
   sanitizeContext,
+  safeOptionalFollowups,
   validateGroundedAnswer,
   verifiedFallbackFromTools,
   verifiedFallbackForTool,
+  verifiedEmptyAnswerFromTools,
 } from "./contract.ts";
 
 const evidence = [{ id: "account:a", type: "account", label: "Checking", recordId: "a", asOf: "2026-08-12T00:00:00.000Z", freshness: "current" }];
@@ -28,6 +32,92 @@ const payload = {
   evidence,
   records: [{ id: "a", name: "Checking", current_balance: 42.81, balance_as_of: "2026-08-12" }],
 };
+
+test("today's briefing requests current account, bill, income and settings records only", () => {
+  for (const question of ["What should I know about my plan today?", "What should I know about my money today?", "Review my current plan", "Show my plan today", "How is my plan looking today?"]) {
+    const route = deterministicFloRoute(question, "2026-09-10");
+    assert.equal(route?.intent, "current_plan_briefing", question);
+    assert.deepEqual(route.requests.map(item => item.name), ["getAccountOverview", "getBillsAndDebt", "getIncomeSchedule", "getHouseholdAndSettings"]);
+  }
+  for (const question of ["Review my current plan and my saved simulations", "What should I know about my plan today for groceries?", "Show my current plan for last month"]) assert.equal(deterministicFloRoute(question), null);
+});
+
+test("current-plan briefing stays grounded with debt, negative checking and a chosen cushion", () => {
+  const make = (name, records, summary) => ({ ...payload, records, summary, evidence: records.map(record => ({ ...evidence[0], id: `${name}:${record.id}`, recordId: record.id })) });
+  const accountSummary = { id: "summary", checkingBalance: -50 };
+  const billSummary = { id: "summary", billRecordCount: 2, debtBalance: 1000, configuredMinimums: 35 };
+  const names = ["getAccountOverview", "getBillsAndDebt", "getIncomeSchedule", "getHouseholdAndSettings"];
+  const results = [make(names[0], [accountSummary], accountSummary), make(names[1], [billSummary], billSummary), make(names[2], [{ id: "income", name: "Paycheck", amount: 1500 }]), make(names[3], [{ id: "settings", safety_floor: 200 }])];
+  const result = deterministicAnswerFromTools("current_plan_briefing", names, results);
+  assert.match(result.answer.answer, /Checking: -\$50.00/);
+  assert.match(result.answer.answer, /Recorded debt balance: \$1,000.00/);
+  assert.match(result.answer.answer, /chosen cushion: \$200.00/);
+  assert.match(result.answer.answer, /open Forecast/);
+  assert.match(result.answer.answer, /not lender-verified required minimums or a safe-to-spend calculation/);
+  assert.doesNotMatch(result.answer.answer, /next payday is|safe to spend is|saved plan amount/i);
+  assert.deepEqual(validateGroundedAnswer(result.answer, result.sources, results), { valid: true });
+});
+
+test("bundled launcher prompts use precise current overview aliases", () => {
+  for (const [question, intent] of [
+    ["What should I know about my bills and debts?", "bills_debt_overview"],
+    ["What should I know about my recent activity?", "activity_overview"],
+    ["What should I know about my category plan?", "budget_goal_overview"],
+    ["What should I know about my account?", "account_overview"],
+    ["What should I know about my debt payoff plan?", "debt_overview"],
+  ]) {
+    assert.equal(deterministicFloRoute(question)?.intent, intent);
+    assert.equal(deterministicFloRoute(`${question} Only last month.`), null);
+  }
+});
+
+test("saved plan tools require explicit historical or hypothetical intent", async () => {
+  for (const question of ["Show my saved plans", "Review my simulations", "What if I spend more?", "What were my previous decisions?"]) assert.equal(allowsSavedPlanRead(question), true);
+  for (const question of ["What should I know about my plan today?", "How is my money looking?", "Show my plan", "Review current plan, not saved simulations"]) assert.equal(allowsSavedPlanRead(question), false);
+  const source = await readFile(new URL("./tools.ts", import.meta.url), "utf8");
+  const withoutImports = source.replace(/^import[\s\S]*?from "[^"]+";\r?\n/gm, "").replace(/\bexport /g, "");
+  const schema = new Proxy(function () { return schema; }, { get: () => schema });
+  const create = new Function("z", "tool", "FLO_V3_MAX_ROWS", `${stripTypeScriptTypes(withoutImports)}; return createFloTools;`)(schema, definition => definition, 200);
+  assert.equal("getDecisionsAndSimulations" in create({ allowSavedPlans: false }), false);
+  assert.equal("getDecisionsAndSimulations" in create({ allowSavedPlans: true }), true);
+  assert.match(source, /Saved simulation/);
+  assert.match(source, /NOT the current live plan/);
+});
+
+test("unsafe optional followups are dropped independently without weakening claim checks", () => {
+  const followups = safeOptionalFollowups(["Review my bills", "Can I afford $100?", "Is my plan safe?", "Review my bills", null, ""]);
+  assert.deepEqual(followups, ["Review my bills"]);
+  const answer = { answer: "Current balance: $42.81.", claims: [{ kind: "amount", label: "Balance", field: "current_balance", value: "$42.81", evidenceIds: ["account:a"] }], caveat: null, evidenceIds: ["account:a"], followups };
+  assert.deepEqual(validateGroundedAnswer(answer, evidence, [payload]), { valid: true });
+  assert.equal(validateGroundedAnswer({ ...answer, claims: [{ ...answer.claims[0], value: "$99" }] }, evidence, [payload]).code, "unsupported_amount");
+});
+
+test("proven empty results get exact server-owned scoped text, not unchecked model prose", () => {
+  const empty = { ...payload, records: [], coverage: { complete: true, returned: 0, limit: 20, startDate: "2026-08-01", endDate: "2026-08-31" } };
+  const answer = verifiedEmptyAnswerFromTools(["getIncomeSchedule"], [empty]);
+  assert.ok(answer);
+  assert.match(answer.answer, /No matching income schedules/);
+  assert.match(answer.answer, /outside that check/);
+  assert.deepEqual(validateGroundedAnswer(answer, evidence, [empty]), { valid: true });
+  assert.equal(verifiedEmptyAnswerFromTools(["getIncomeSchedule"], [{ ...empty, status: "unavailable" }]), null);
+  assert.equal(verifiedEmptyAnswerFromTools(["getIncomeSchedule"], [{ ...empty, coverage: { ...empty.coverage, complete: false } }]), null);
+  assert.equal(verifiedEmptyAnswerFromTools(["getAccountOverview"], [payload]), null);
+  const summary = { id: "summary", transactionCount: 0, complete: true };
+  const noTransactions = { ...empty, status: "partial", summary, records: [summary], coverage: { ...empty.coverage, complete: false } };
+  assert.ok(verifiedEmptyAnswerFromTools(["searchTransactions"], [noTransactions]));
+  assert.equal(verifiedEmptyAnswerFromTools(["searchTransactions"], [{ ...noTransactions, summary: { ...summary, complete: false } }]), null);
+});
+
+test("failure telemetry classifies only safe enums without copying provider details", () => {
+  assert.equal(classifyFloFailure({ name: "AI_NoOutputGeneratedError", message: "sensitive provider body" }), "structured_output");
+  assert.equal(classifyFloFailure({ name: "AI_APICallError", statusCode: 429, responseBody: "secret" }), "provider_rate_limit");
+  assert.equal(classifyFloFailure({ name: "AI_APICallError", statusCode: 401 }), "provider_auth");
+  assert.equal(classifyFloFailure(new Error("unsupported_amount")), "claim_validation");
+  assert.equal(classifyFloFailure(new Error("tool_required")), "tool_coverage");
+  assert.equal(classifyFloFailure(new Error("answer_timeout")), "timeout");
+  assert.equal(classifyFloFailure(new Error("terminal_persistence_failed")), "persistence");
+  assert.equal(classifyFloFailure(new Error("sk-secret user question provider response")), "unknown");
+});
 
 test("card balance, minimum and rate questions require the configured debt source", () => {
   for (const question of [

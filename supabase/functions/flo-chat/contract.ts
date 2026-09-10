@@ -78,7 +78,7 @@ export type FloVerifiedFallback = {
   followups: string[];
 };
 
-export type FloDeterministicIntent = "forecast_overview" | "account_overview" | "bill_overview" | "debt_overview" | "debt_plan_history" | "income_overview" | "activity_overview" | "budget_goal_overview" | "connection_health";
+export type FloDeterministicIntent = "current_plan_briefing" | "forecast_overview" | "account_overview" | "bill_overview" | "bills_debt_overview" | "debt_overview" | "debt_plan_history" | "income_overview" | "activity_overview" | "budget_goal_overview" | "connection_health";
 
 export type FloDeterministicToolName =
   | "getAccountOverview"
@@ -111,6 +111,54 @@ export function requiresConfiguredDebtRead(question: string): boolean {
   const debtFact = /\b(?:balances?|minimums?|apr|interest(?:\s+rates?)?|owe|owing)\b/.test(normalized);
   const bareApr = /\bapr\b/.test(normalized) && !/\b(?:checking|savings|deposit|investment|debit|gift|prepaid)\b/.test(normalized);
   return (debtContext && debtFact) || bareApr;
+}
+
+export function allowsSavedPlanRead(question: string): boolean {
+  if (/\b(?:not|without|don't|do not|ignore|exclude)\b.{0,35}\b(?:saved|simulations?|hypothetical|experiments?)\b/i.test(question)) return false;
+  return /\b(?:saved|historical|history|previous|past)\b.*\b(?:plans?|decisions?|simulations?|scenarios?|experiments?)\b|\b(?:simulations?|simulator|hypothetical|what[- ]if|experiments?)\b/i.test(question);
+}
+
+const unsafeFollowup = /[$%\d]|\b(?:afford|safe|healthy|dangerous|stable|unstable)\b/i;
+export function safeOptionalFollowups(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+  return [...new Set(values.filter((value): value is string => typeof value === "string")
+    .map(value => value.trim()).filter(value => value.length > 0 && value.length <= 180 && !unsafeFollowup.test(value)))].slice(0, 6);
+}
+
+export type FloFailureClass = "timeout" | "provider_rate_limit" | "provider_auth" | "provider_unavailable" | "structured_output" | "claim_validation" | "tool_coverage" | "persistence" | "unknown";
+export function classifyFloFailure(error: unknown): FloFailureClass {
+  const item = error && typeof error === "object" ? error as { name?: unknown; message?: unknown; statusCode?: unknown } : {};
+  if (item.name === "AbortError" || item.name === "TimeoutError" || item.message === "answer_timeout") return "timeout";
+  if (["AI_NoOutputGeneratedError", "AI_NoObjectGeneratedError", "AI_TypeValidationError", "AI_JSONParseError"].includes(String(item.name))) return "structured_output";
+  if (item.name === "AI_APICallError") {
+    if (item.statusCode === 429) return "provider_rate_limit";
+    if (item.statusCode === 401 || item.statusCode === 403) return "provider_auth";
+    return "provider_unavailable";
+  }
+  if (["unsupported_amount", "unsupported_claim", "unsupported_date", "unstructured_numeric_claim", "unsafe_followup", "invalid_answer", "unverified_evidence", "unverified_claim", "grounding_failed", "answer_too_large"].includes(String(item.message))) return "claim_validation";
+  if (item.message === "tool_required") return "tool_coverage";
+  if (["terminal_persistence_failed", "proposal_persistence_failed", "audit_unavailable", "ephemeral_cleanup_failed"].includes(String(item.message))) return "persistence";
+  return "unknown";
+}
+
+export function verifiedEmptyAnswerFromTools(toolNames: string[], payloads: FloToolEnvelope[]): FloGroundedAnswer | null {
+  if (!payloads.length || toolNames.length !== payloads.length) return null;
+  const labels: Record<string, string> = { getAccountOverview: "accounts", getBillsAndDebt: "bills or debts", searchTransactions: "transactions", getIncomeSchedule: "income schedules", getBudgetsAndGoals: "budgets or goals", getDecisionsAndSimulations: "saved decisions or simulations", getDebtPlanHistory: "saved debt plans" };
+  const evidenceIds: string[] = [];
+  for (let index = 0; index < payloads.length; index++) {
+    const payload = payloads[index];
+    if (!labels[toolNames[index]] || payload.status === "unavailable" || !payload.evidence.length) return null;
+    const onlySummary = payload.records.every(record => record && typeof record === "object" && (record as Record<string, unknown>).id === "summary");
+    const summaryCount = toolNames[index] === "getAccountOverview" ? payload.summary?.accountCount
+      : toolNames[index] === "getBillsAndDebt" ? payload.summary?.billRecordCount
+      : toolNames[index] === "searchTransactions" ? payload.summary?.transactionCount : undefined;
+    const emptyRows = payload.coverage.complete && payload.coverage.returned === 0 && payload.records.length === 0;
+    const emptySummary = onlySummary && summaryCount === 0
+      && (payload.coverage.complete || (toolNames[index] === "searchTransactions" && payload.summary?.complete === true));
+    if (!emptyRows && !emptySummary) return null;
+    evidenceIds.push(...payload.evidence.map(source => source.id));
+  }
+  return { answer: `No matching ${[...new Set(toolNames.map(name => labels[name]))].join(" or ")} were found in the checked records. Check the linked source scope and date range; this does not establish that no records exist outside that check.`, claims: [], evidenceIds: [...new Set(evidenceIds)], caveat: null, followups: [] };
 }
 
 const helpSource = (id: string, label: string, route: string): FloSourceRef => ({
@@ -149,7 +197,23 @@ export function deterministicFloRoute(question: string, currentDate?: string): F
   // Shortcuts have fixed inputs and render overviews, not arbitrary answers.
   // Match the whole request so a merchant, period, status, or second question
   // cannot be silently discarded. Everything else uses the grounded tool path.
-  const normalized = question.trim().toLowerCase().replace(/[?!\.]+$/, "").replace(/\s+/g, " ");
+  const aliases: Record<string, string> = {
+    "what should i know about my recent activity": "show recent activity",
+    "what should i know about my category plan": "show my budgets",
+    "what should i know about my account": "show my accounts",
+    "what should i know about my debt payoff plan": "show my debt overview",
+  };
+  const normalizedQuestion = question.trim().toLowerCase().replace(/[?!\.]+$/, "").replace(/\s+/g, " ");
+  const normalized = aliases[normalizedQuestion] ?? normalizedQuestion;
+  if (normalized === "what should i know about my bills and debts") return { intent: "bills_debt_overview", requests: [{ name: "getBillsAndDebt", input: { debtOnly: false, includeClosed: false, query: null } }] };
+  if (/^(?:what should i know about my (?:plan|money)(?: today)?|(?:show(?: me)?|review|summarize|tell me about) my (?:current plan|plan today)|(?:my )?(?:current plan|today's plan)(?: overview| summary| briefing)?|how is my plan (?:looking |doing )?today)$/.test(normalized)) {
+    return { intent: "current_plan_briefing", requests: [
+      { name: "getAccountOverview", input: { includeArchived: false } },
+      { name: "getBillsAndDebt", input: { debtOnly: false, includeClosed: false, query: null } },
+      { name: "getIncomeSchedule", input: { query: null } },
+      { name: "getHouseholdAndSettings", input: {} },
+    ] };
+  }
   if (/^(?:(?:what should i know about|show(?: me)?|review|summarize|tell me about) (?:my |the )?forecast|(?:my |the )?forecast(?: overview| summary| snapshot)?)$/.test(normalized)) {
     return {
       intent: "forecast_overview",
@@ -233,7 +297,38 @@ export function deterministicAnswerFromTools(
   const settings = directPayload(toolNames, payloads, "getHouseholdAndSettings");
   const connections = directPayload(toolNames, payloads, "getConnectionHealth");
 
-  if (intent === "forecast_overview") {
+  if (intent === "current_plan_briefing") {
+    sentences.push("Your recorded plan");
+    const accountSource = sourceForRecord(accounts, "summary");
+    const checking = directCurrency(accounts?.summary?.checkingBalance);
+    if (checking && addClaim("amount", "Checking balance", "checkingBalance", checking, accountSource)) sentences.push(`Checking: ${checking}.`);
+    else sentences.push("Checking: not fully verified. Review Accounts.");
+    const billSource = sourceForRecord(bills, "summary");
+    const count = money(bills?.summary?.billRecordCount);
+    const debtBalance = directCurrency(bills?.summary?.debtBalance);
+    const configuredPayments = directCurrency(bills?.summary?.configuredMinimums);
+    if (count !== null && addClaim("count", "Configured bill and debt records", "billRecordCount", String(count), billSource)) sentences.push(`Bills and debts: ${count} configured records.`);
+    if (debtBalance && addClaim("amount", "Recorded debt balance", "debtBalance", debtBalance, billSource)) sentences.push(`Recorded debt balance: ${debtBalance}.`);
+    if (configuredPayments && addClaim("amount", "Configured debt payments", "configuredMinimums", configuredPayments, billSource)) sentences.push(`Configured debt payments: ${configuredPayments}.`);
+    const incomeRows = ((income?.records ?? []) as Array<Record<string, unknown>>).slice(0, 1);
+    for (const row of incomeRows) {
+      const source = sourceForRecord(income, row.id);
+      const amount = directCurrency(row.amount);
+      const name = String(row.name ?? "Income").slice(0, 100);
+      if (!source || !amount) continue;
+      addClaim("entity", "Income", "name", name, source);
+      addClaim("amount", "Configured income amount", "amount", amount, source);
+      sentences.push(`Income: ${name}, ${amount} per configured payment.`);
+    }
+    if (income?.status === "ok" && income.coverage.complete && income.records.length === 0) {
+      income.evidence.forEach(useSource);
+      sentences.push("Income: none on file. Add income in Settings.");
+    }
+    const settingsRow = (settings?.records as Array<Record<string, unknown>> | undefined)?.find(row => row.id === "settings");
+    const floor = directCurrency(settingsRow?.safety_floor);
+    if (floor && addClaim("amount", "Chosen cushion", "safety_floor", floor, sourceForRecord(settings, "settings"))) sentences.push(`Your chosen cushion: ${floor}.`);
+    sentences.push("These are configured records, not lender-verified required minimums or a safe-to-spend calculation. For exact due dates and safe extra payments, open Forecast or Debt Payoff Planner.");
+  } else if (intent === "forecast_overview") {
     sentences.push("I checked the current records feeding your Forecast.");
     const accountSummary = accounts?.summary as Record<string, unknown> | undefined;
     const accountSource = useSource(sourceForRecord(accounts, "summary"));
@@ -286,9 +381,9 @@ export function deterministicAnswerFromTools(
       items.push(`${name}: ${balance}`);
     }
     sentences.push(items.length ? `Your verified active account balances are ${items.join("; ")}.` : "I checked your active accounts, but no current balance was available to list.");
-  } else if (intent === "bill_overview") {
+  } else if (intent === "bill_overview" || intent === "bills_debt_overview") {
     const rows = ((bills?.records as Array<Record<string, unknown>> | undefined) ?? [])
-      .filter(record => record.id !== "summary" && record.is_debt !== true)
+      .filter(record => record.id !== "summary" && (intent === "bills_debt_overview" || record.is_debt !== true))
       .slice(0, 4);
     const items: string[] = [];
     for (const record of rows) {
@@ -304,7 +399,7 @@ export function deterministicAnswerFromTools(
       if (frequency) addClaim("status", "Frequency", "frequency", frequency, source);
       items.push(`${name}: ${amount}${frequency ? ` ${frequency}` : ""}`);
     }
-    sentences.push(items.length ? `Your verified configured bills include ${items.join("; ")}.` : "I checked your configured bills, but no active bill record was available to list.");
+    sentences.push(items.length ? `Your verified configured ${intent === "bills_debt_overview" ? "bills and debt payments" : "bills"} include ${items.join("; ")}.` : `I checked your configured ${intent === "bills_debt_overview" ? "bills and debts" : "bills"}, but no active record was available to list.`);
   } else if (intent === "debt_overview") {
     const summary = bills?.summary as Record<string, unknown> | undefined;
     const summarySource = useSource(sourceForRecord(bills, "summary"));
@@ -433,7 +528,7 @@ export function deterministicAnswerFromTools(
     ? "Some requested records were unavailable, incomplete, or missing a reliable freshness timestamp."
     : null;
   return {
-    answer: { answer: sentences.join(" "), claims, caveat, evidenceIds: sources.map(source => source.id), followups: [] },
+    answer: { answer: sentences.join(intent === "current_plan_briefing" ? "\n" : " "), claims, caveat, evidenceIds: sources.map(source => source.id), followups: [] },
     sources,
     dataAsOf: aggregate.dataAsOf,
     coverage: aggregate.coverage,
@@ -712,7 +807,7 @@ export function validateGroundedAnswer(
     return { valid: false, code: "unverified_evidence" };
   }
   if (answer.followups.length > 6 || answer.claims.length > 12) return { valid: false, code: "answer_too_large" };
-  if (answer.followups.some(value => /[$%\d]|\b(?:afford|safe|healthy|dangerous|stable|unstable)\b/i.test(value))) return { valid: false, code: "unsafe_followup" };
+  if (answer.followups.some(value => unsafeFollowup.test(value))) return { valid: false, code: "unsafe_followup" };
   if (answer.claims.some(claim => !claim.evidenceIds.length || claim.evidenceIds.some(id => !knownIds.has(id)))) {
     return { valid: false, code: "unverified_claim" };
   }
