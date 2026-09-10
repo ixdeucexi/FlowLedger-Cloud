@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { stripTypeScriptTypes } from "node:module";
 import test from "node:test";
+import { currentFloMonth, recordedSnowballTarget } from "./snowballTarget.ts";
 
 import {
   aggregateCoverage,
@@ -35,6 +36,132 @@ const payload = {
   evidence,
   records: [{ id: "a", name: "Checking", current_balance: 42.81, balance_as_of: "2026-08-12" }],
 };
+
+test("snowball target routes advertised current requests but preserves historical and compound questions", () => {
+  for (const question of ["Show me my debt snowball target.", "What is my snowball target?", "Which debt is my snowball target?"]) {
+    const route = deterministicFloRoute(question);
+    assert.equal(route?.intent, "debt_snowball_target");
+    assert.deepEqual(route.requests, [{ name: "getCurrentSnowballTarget", input: {} }]);
+  }
+  for (const question of ["What was my snowball target last month?", "What is my snowball target and how much extra can I safely pay?", "Show my saved snowball target history"]) assert.notEqual(deterministicFloRoute(question)?.intent, "debt_snowball_target");
+});
+
+test("named debt balance and minimum question returns configured facts without fabricating lender minimums", () => {
+  const route = deterministicFloRoute("What is my CORE Test Card balance and minimum payment?");
+  assert.equal(route?.intent, "named_debt_payment");
+  assert.deepEqual(route.requests[0].input, { debtOnly: true, includeClosed: true, query: "core test card" });
+  assert.notEqual(deterministicFloRoute("What is my CORE Test Card balance and minimum payment last month?")?.intent, "named_debt_payment");
+  const row = { id: "a", name: "CORE Test Card", is_debt: true, balance: 1000, amount: 35 };
+  const checked = { ...payload, records: [row], summary: { query: "core test card", queryComplete: true }, evidence: [{ ...evidence[0], id: "getBillsAndDebt:a", type: "debt" }] };
+  const result = deterministicAnswerFromTools("named_debt_payment", ["getBillsAndDebt"], [checked]);
+  assert.match(result.answer.answer, /Recorded balance: \$1,000.00/);
+  assert.match(result.answer.answer, /Configured payment: \$35.00/);
+  assert.match(result.answer.answer, /not a verified lender-required minimum/);
+  assert.deepEqual(result.answer.claims.map(claim => claim.field), ["name", "balance", "amount"]);
+  assert.deepEqual(validateGroundedAnswer(result.answer, result.sources, [checked]), { valid: true });
+  for (const invalid of [
+    { ...checked, records: [{ ...row, name: "CORE Test Card Two" }] },
+    { ...checked, records: [row, { ...row, id: "b" }] },
+    { ...checked, summary: { ...checked.summary, queryComplete: false } },
+    { ...checked, summary: { ...checked.summary, query: null } },
+  ]) {
+    const unresolved = deterministicAnswerFromTools("named_debt_payment", ["getBillsAndDebt"], [invalid]);
+    assert.match(unresolved.answer.answer, /could not identify one exact debt record/);
+    assert.doesNotMatch(unresolved.answer.answer, /\$1,000/);
+  }
+  const unknownPayment = { ...checked, records: [{ ...row, amount: null }] };
+  assert.match(deterministicAnswerFromTools("named_debt_payment", ["getBillsAndDebt"], [unknownPayment]).answer.answer, /Configured payment: unavailable/);
+});
+
+const debtRow = (id, balance, extra = {}) => ({ id, name: `Debt ${id}`, is_debt: true, balance, interest_rate: 18, include_in_snowball: true, frequency: "monthly", due_day: 15, ...extra });
+const targetMonth = { year: 2026, month: 8 };
+test("target selection uses canonical order across ten debts, APR ties and record ID ties", () => {
+  const ten = Array.from({ length: 10 }, (_, index) => debtRow(String(index), 1000 - index * 50));
+  assert.equal(recordedSnowballTarget(ten, targetMonth, true, []).targetId, "9");
+  assert.equal(recordedSnowballTarget([debtRow("b", 50), debtRow("a", 50)], targetMonth, true, []).targetId, "a");
+  assert.equal(recordedSnowballTarget([debtRow("a", 50, { interest_rate: 18.001 }), debtRow("b", 50, { interest_rate: 18.002 })], targetMonth, true, []).targetId, "b");
+  assert.equal(recordedSnowballTarget([debtRow("a", 20), debtRow("b", 50, { interest_rate: null })], targetMonth, true, []).targetId, "a");
+  assert.equal(recordedSnowballTarget([debtRow("a", 20), debtRow("b", 20, { interest_rate: null })], targetMonth, true, []).reason, "missing_tiebreak_apr");
+});
+
+test("snowball eligibility excludes stopped, future, excluded and paid-off debt without treating missing balances as zero", () => {
+  const rows = [debtRow("stopped", 1, { end_date: "2026-08-31" }), debtRow("future", 1, { start_date: "2026-10-01" }), debtRow("excluded", 1, { include_in_snowball: false }), debtRow("paid", 0), debtRow("active", 50)];
+  assert.equal(recordedSnowballTarget(rows, targetMonth, true, []).targetId, "active");
+  assert.equal(recordedSnowballTarget([...rows, debtRow("unknown", null)], targetMonth, true, []).reason, "missing_balance");
+  assert.equal(recordedSnowballTarget(rows, targetMonth, false, []).reason, "incomplete_records");
+  assert.equal(recordedSnowballTarget([], targetMonth, true, []).state, "no_debts");
+  assert.equal(recordedSnowballTarget([rows[2]], targetMonth, true, []).state, "all_excluded");
+  assert.equal(recordedSnowballTarget([rows[0]], targetMonth, true, []).state, "none_current");
+  assert.equal(recordedSnowballTarget([rows[3]], targetMonth, true, []).state, "paid_off");
+});
+
+test("month selection respects local timezone at UTC month boundary and rejects unknown zones", () => {
+  assert.deepEqual(currentFloMonth("2026-10-01T01:00:00Z", "America/Chicago"), { year: 2026, month: 8, date: "2026-09-30" });
+  assert.deepEqual(currentFloMonth("2026-10-01T01:00:00Z", "Asia/Tokyo"), { year: 2026, month: 9, date: "2026-10-01" });
+  assert.equal(currentFloMonth("2026-10-01T01:00:00Z", "fake-zone"), null);
+  assert.equal(currentFloMonth("2026-10-01T01:00:00Z", undefined), null);
+  assert.equal(recordedSnowballTarget([], null, true, []).reason, "month_unknown");
+});
+
+test("canonical moved occurrences include inactive debts without blocking ordinary active overrides", () => {
+  const rows = [debtRow("stopped", 20, { end_date: "2026-08-31" }), debtRow("active", 50)];
+  const movedIn = [{ bill_id: "stopped", from_date: "2026-08-15", to_date: "2026-09-15", updated_at: "2026-09-01T00:00:00Z" }];
+  assert.equal(recordedSnowballTarget(rows, targetMonth, true, movedIn).targetId, "stopped");
+  assert.equal(recordedSnowballTarget(rows, targetMonth, true, [{ bill_id: "active", custom_due_day: 18 }]).targetId, "active");
+  assert.equal(recordedSnowballTarget(rows, targetMonth, true, [{ bill_id: "stopped", custom_due_day: 18 }]).state, "unavailable");
+  assert.equal(recordedSnowballTarget([rows[1]], targetMonth, true, [{ bill_id: "active", from_date: "2026-09-15", to_date: "2026-10-15" }]).targetId, "active");
+});
+
+test("target answer names the exact verified debt and never substitutes saved-plan history", () => {
+  const row = debtRow("a", 250);
+  const summary = { id: "summary", state: "target", targetId: "a" };
+  const checked = { ...payload, records: [row, summary], summary, evidence: [ { ...evidence[0], id: "getCurrentSnowballTarget:a" }, { ...evidence[0], id: "getCurrentSnowballTarget:summary", recordId: "summary" } ] };
+  const answer = deterministicAnswerFromTools("debt_snowball_target", ["getCurrentSnowballTarget"], [checked]);
+  assert.match(answer.answer.answer, /target is Debt a, with \$250.00 remaining/);
+  assert.match(answer.answer.answer, /recorded-balance/);
+  assert.deepEqual(validateGroundedAnswer(answer.answer, answer.sources, [checked]), { valid: true });
+});
+
+test("actual snowball tool scopes every query and feeds complete canonical selection into the grounded answer", async () => {
+  const source = await readFile(new URL("./tools.ts", import.meta.url), "utf8");
+  const withoutImports = source.replace(/^import[\s\S]*?from "[^"]+";\r?\n/gm, "").replace(/\bexport /g, "");
+  const schema = new Proxy(function () { return schema; }, { get: () => schema });
+  const create = new Function("z", "tool", "FLO_V3_MAX_ROWS", "currentFloMonth", "recordedSnowballTarget", "sourceAsOf", "oldestSourceAsOf", "freshness", `${stripTypeScriptTypes(withoutImports)}; return createFloTools;`)(schema, definition => definition, 200, currentFloMonth, recordedSnowballTarget, sourceAsOf, oldestSourceAsOf, () => "unknown");
+  const records = Array.from({ length: 10 }, (_, index) => debtRow(String(index), 1000 - index * 50));
+  const results = { bills: { data: records, count: 10, error: null }, bill_date_moves: { data: [], count: 0, error: null }, monthly_overrides: { data: [], count: 0, error: null } };
+  const filters = [];
+  const client = { from(table) {
+    const query = new Proxy({}, { get(_target, key) {
+      if (key === "then") return (resolve, reject) => Promise.resolve(results[table]).then(resolve, reject);
+      return (...args) => { if (key === "eq") filters.push([table, ...args]); return query; };
+    } });
+    return query;
+  } };
+  const runtime = () => ({ client, householdId: "qa-only", userId: "qa-owner", now: "2026-10-01T01:00:00Z", timezone: "America/Chicago", toolResults: [], toolResultNames: [], toolNames: [], toolCache: new Map() });
+  const checked = await create(runtime()).getCurrentSnowballTarget.execute({});
+  assert.equal(checked.summary.targetId, "9");
+  assert.equal(checked.coverage.startDate, "2026-09-30");
+  for (const table of Object.keys(results)) assert.ok(filters.some(filter => filter[0] === table && filter[1] === "household_id" && filter[2] === "qa-only"));
+  const answer = deterministicAnswerFromTools("debt_snowball_target", ["getCurrentSnowballTarget"], [checked]);
+  assert.deepEqual(validateGroundedAnswer(answer.answer, answer.sources, [checked]), { valid: true });
+  results.bills.count = 11;
+  const partial = await create(runtime()).getCurrentSnowballTarget.execute({});
+  assert.equal(partial.summary.state, "unavailable");
+  assert.equal(partial.coverage.complete, false);
+});
+
+test("income how-to is immediate static guidance with the existing Income settings route", async () => {
+  const help = floCapabilityGuidance("How do I add income?");
+  assert.match(help.answer, /Open Settings, choose Plan settings, then Income/);
+  assert.match(help.answer, /Add Income Source/);
+  assert.equal(help.source.route, "/(tabs)/more?section=money");
+  assert.equal(floCapabilityGuidance("How do I add income and how much did I get last month?"), null);
+  const more = await readFile(new URL("../../../artifacts/mobile/app/(tabs)/more.tsx", import.meta.url), "utf8");
+  const safeRoutes = await readFile(new URL("../../../artifacts/mobile/lib/floExperience.ts", import.meta.url), "utf8");
+  assert.match(more, /activeSettingsSection === "money"/);
+  assert.match(more, /Add Income Source/);
+  assert.match(safeRoutes, /"\/\(tabs\)\/more"/);
+});
 
 test("today's briefing requests current account, bill, income and settings records only", () => {
   for (const question of ["What should I know about my plan today?", "What should I know about my money today?", "Review my current plan", "Show my plan today", "How is my plan looking today?"]) {
@@ -682,7 +809,7 @@ test("every account tool uses exact active-household filters and never legacy nu
   assert.match(source, /select\("id,date,amount[^"]*plaid_account_id/);
   assert.match(source, /row\.pending !== true && \(row\.source === "plaid" \|\| row\.review_status !== "transfer"\)/);
   assert.doesNotMatch(source, /record\.date \?\? record\.created_at/);
-  assert.doesNotMatch(source, /from\("bills"\)[\s\S]{0,500}select\([^\n]*updated_at/);
+  assert.doesNotMatch(source, /from\("bills"\)\s*\.select\("[^"]*updated_at/);
   assert.match(source, /\(tabs\)\/transactions/);
   assert.doesNotMatch(source, /route: "\/(activity|bills|forecast|settings)"/);
 });

@@ -78,9 +78,10 @@ export type FloVerifiedFallback = {
   followups: string[];
 };
 
-export type FloDeterministicIntent = "current_plan_briefing" | "forecast_overview" | "account_overview" | "bill_overview" | "bills_debt_overview" | "debt_overview" | "debt_plan_history" | "income_overview" | "activity_overview" | "budget_goal_overview" | "connection_health";
+export type FloDeterministicIntent = "named_debt_payment" | "debt_snowball_target" | "current_plan_briefing" | "forecast_overview" | "account_overview" | "bill_overview" | "bills_debt_overview" | "debt_overview" | "debt_plan_history" | "income_overview" | "activity_overview" | "budget_goal_overview" | "connection_health";
 
 export type FloDeterministicToolName =
+  | "getCurrentSnowballTarget"
   | "getAccountOverview"
   | "getBillsAndDebt"
   | "getIncomeSchedule"
@@ -193,6 +194,9 @@ const helpSource = (id: string, label: string, route: string): FloSourceRef => (
 
 export function floCapabilityGuidance(question: string): FloCapabilityGuidance | null {
   const normalized = question.trim().toLowerCase();
+  if (/^(?:how (?:do|can) i add (?:an? )?income(?: source)?|where (?:do|can) i add (?:an? )?income(?: source)?)[?!.]*$/.test(normalized)) {
+    return { answer: "Open Settings, choose Plan settings, then Income. Tap Add Income Source, enter the name, amount and payment schedule, and save. This adds your income source; it does not move money.", source: helpSource("add-income", "Income settings", "/(tabs)/more?section=money") };
+  }
   if (/\bflow\s*score\b/.test(normalized)) {
     return {
       answer: "Flo cannot verify the exact Flow Score breakdown in chat yet. Open How FlowLedger Works to see the factors the live Dashboard uses and what each part means.",
@@ -226,6 +230,14 @@ export function deterministicFloRoute(question: string, currentDate?: string): F
   };
   const normalizedQuestion = question.trim().toLowerCase().replace(/[?!\.]+$/, "").replace(/\s+/g, " ");
   const normalized = aliases[normalizedQuestion] ?? normalizedQuestion;
+  const namedDebtPayment = /^(?:what is|show(?: me)?) my (.+?) balance and (?:configured |minimum )payment$/.exec(normalized);
+  if (namedDebtPayment) {
+    const name = namedDebtPayment[1].trim();
+    if (name.length <= 80 && safeSearchTerm(name) === name && !/\b(?:last|previous|next) (?:month|week|year)\b|\b\d{4}-\d{2}-\d{2}\b/.test(name)) {
+      return { intent: "named_debt_payment", requests: [{ name: "getBillsAndDebt", input: { debtOnly: true, includeClosed: true, query: name } }] };
+    }
+  }
+  if (/^(?:show(?: me)? my (?:debt )?snowball target|what(?:'s| is) my (?:debt )?snowball target|which debt is my snowball target)$/.test(normalized)) return { intent: "debt_snowball_target", requests: [{ name: "getCurrentSnowballTarget", input: {} }] };
   if (normalized === "what should i know about my bills and debts") return { intent: "bills_debt_overview", requests: [{ name: "getBillsAndDebt", input: { debtOnly: false, includeClosed: false, query: null } }] };
   if (/^(?:what should i know about my (?:plan|money)(?: today)?|(?:show(?: me)?|review|summarize|tell me about) my (?:current plan|plan today)|(?:my )?(?:current plan|today's plan)(?: overview| summary| briefing)?|how is my plan (?:looking |doing )?today)$/.test(normalized)) {
     return { intent: "current_plan_briefing", requests: [
@@ -318,7 +330,56 @@ export function deterministicAnswerFromTools(
   const settings = directPayload(toolNames, payloads, "getHouseholdAndSettings");
   const connections = directPayload(toolNames, payloads, "getConnectionHealth");
 
-  if (intent === "current_plan_briefing") {
+  if (intent === "named_debt_payment") {
+    const query = typeof bills?.summary?.query === "string" ? bills.summary.query.trim().toLowerCase() : "";
+    const matches = ((bills?.records ?? []) as Array<Record<string, unknown>>).filter(row => row.is_debt === true && typeof row.name === "string" && row.name.trim().toLowerCase() === query);
+    if (query && bills?.summary?.queryComplete === true && matches.length === 1) {
+      const row = matches[0];
+      const source = sourceForRecord(bills, row.id);
+      const name = String(row.name);
+      if (source) {
+        addClaim("entity", "Debt", "name", name, source);
+        sentences.push(name);
+        const balance = directCurrency(row.balance);
+        const configuredPayment = directCurrency(row.amount);
+        if (balance && addClaim("amount", "Recorded balance", "balance", balance, source)) sentences.push(`Recorded balance: ${balance}.`);
+        else sentences.push("Recorded balance: unavailable.");
+        if (configuredPayment && addClaim("amount", "Configured payment", "amount", configuredPayment, source)) sentences.push(`Configured payment: ${configuredPayment}.`);
+        else sentences.push("Configured payment: unavailable.");
+        sentences.push("The configured payment is the amount saved in FlowLedger, not a verified lender-required minimum or remaining amount due. Check your current statement for the required minimum.");
+      }
+    }
+    if (!sentences.length) sentences.push("I could not identify one exact debt record with complete search coverage. Open Bills to check the name or choose the correct debt; I have not substituted another account's balance or payment.");
+    useSource(helpSource("configured-debt-payment", "Bills and debt", "/(tabs)/bills"));
+  } else if (intent === "debt_snowball_target") {
+    const payload = directPayload(toolNames, payloads, "getCurrentSnowballTarget");
+    const summary = payload?.summary;
+    const summarySource = sourceForRecord(payload, "summary");
+    if (summary?.state === "target") {
+      const row = (payload?.records as Array<Record<string, unknown>>).find(record => record.id === summary.targetId);
+      const source = sourceForRecord(payload, row?.id);
+      const balance = directCurrency(row?.balance);
+      if (row && source && balance) {
+        const name = String(row.name).slice(0, 100);
+        addClaim("entity", "Snowball target", "name", name, source);
+        addClaim("amount", "Recorded balance", "balance", balance, source);
+        sentences.push(`Your recorded-balance snowball target is ${name}, with ${balance} remaining.`);
+        sentences.push("This uses the payoff engine's smallest-balance ordering for included debts active this month. Equal balances use higher APR, then the record ID. Open Debt Payoff Planner for the dated plan and a safe extra-payment amount.");
+      }
+    } else {
+      const messages: Record<string, string> = {
+        no_debts: "No debt records are on file. Add a debt in Bills to build your snowball plan.",
+        all_excluded: "Your recorded debts are excluded from Snowball. Open Bills to choose which debts to include.",
+        none_current: "No included debt is active in the current month. Review start and end dates in Bills.",
+        paid_off: "The included debts active this month have no positive recorded balance. Review Bills if a balance needs updating.",
+        unavailable: "I cannot verify your current snowball target from the available records. Review Debt Payoff Planner; missing balances, incomplete records, or changed occurrences can affect the choice.",
+      };
+      const state = String(summary?.state ?? "unavailable");
+      if (summarySource) addClaim("status", "Target availability", "state", state, summarySource);
+      sentences.push(messages[state] ?? messages.unavailable);
+    }
+    useSource(helpSource("snowball-target", "Debt Payoff Planner", "/snowball-plan"));
+  } else if (intent === "current_plan_briefing") {
     sentences.push("Your recorded plan");
     const accountSource = sourceForRecord(accounts, "summary");
     const checking = directCurrency(accounts?.summary?.checkingBalance);
@@ -646,6 +707,7 @@ export function verifiedFallbackFromTools(
   if (!payloads.length || toolNames.length !== payloads.length) return null;
   const normalized = question.toLowerCase();
   const deterministicIntentForTool = (toolName: string, payload: FloToolEnvelope): FloDeterministicIntent | null => {
+    if (toolName === "getCurrentSnowballTarget") return "debt_snowball_target";
     if (toolName === "getAccountOverview") return "account_overview";
     if (toolName === "getBillsAndDebt") {
       const rows = (payload.records as Array<Record<string, unknown>>).filter(record => record.id !== "summary");

@@ -13,6 +13,7 @@ import {
   type FloSourceRef,
   type FloToolEnvelope,
 } from "./contract.ts";
+import { currentFloMonth, recordedSnowballTarget } from "./snowballTarget.ts";
 
 type UserClient = any;
 
@@ -21,6 +22,7 @@ export type FloToolRuntime = {
   householdId: string;
   userId: string;
   now: string;
+  timezone?: string;
   toolResults: FloToolEnvelope[];
   toolResultNames: string[];
   toolNames: string[];
@@ -181,6 +183,35 @@ function centsTotal(values: unknown[]) {
 
 export function createFloTools(runtime: FloToolRuntime) {
   return {
+    getCurrentSnowballTarget: tool({
+      description: "Verify the current recorded-balance Snowball target using the canonical payoff ordering over complete active-household debt records. Use for which debt is my snowball target, not saved debt history. Uses the user's current local month. This is not the next dated allocation, a historical target, or an affordable extra-payment amount. If unavailable, explain the limitation instead of substituting saved plans.",
+      inputSchema: z.object({}),
+      execute: async input => tracked(runtime, "getCurrentSnowballTarget", input, async () => {
+        const month = currentFloMonth(runtime.now, runtime.timezone);
+        const limit = FLO_V3_MAX_ROWS;
+        let result: ReturnType<typeof recordedSnowballTarget> = { state: "unavailable", reason: "month_unknown" };
+        let debtRows: Array<Record<string, unknown>> = [];
+        if (month) {
+          const startDate = `${month.year}-${String(month.month + 1).padStart(2, "0")}-01`;
+          const endDate = new Date(Date.UTC(month.year, month.month + 1, 0)).toISOString().slice(0, 10);
+          const [debts, moves, overrides] = await Promise.all([
+            runtime.client.from("bills").select("id,name,is_debt,balance,interest_rate,include_in_snowball,frequency,due_day,start_date,end_date,last_reviewed_at", { count: "exact" }).eq("household_id", runtime.householdId).eq("is_debt", true).order("id").limit(limit),
+            runtime.client.from("bill_date_moves").select("id,bill_id,from_date,to_date,created_at,updated_at", { count: "exact" }).eq("household_id", runtime.householdId).or(`and(from_date.gte.${startDate},from_date.lte.${endDate}),and(to_date.gte.${startDate},to_date.lte.${endDate})`).limit(limit),
+            runtime.client.from("monthly_overrides").select("id,bill_id,custom_due_day", { count: "exact" }).eq("household_id", runtime.householdId).eq("year", month.year).eq("month", month.month).limit(limit),
+          ]);
+          debtRows = debts.data ?? [];
+          const complete = [debts, moves, overrides].every(query => !query.error && typeof query.count === "number" && query.count <= (query.data?.length ?? 0));
+          const changes = [...(moves.data ?? []), ...(overrides.data ?? []).filter((row: any) => row.custom_due_day != null)];
+          result = recordedSnowballTarget(debtRows, month, complete, changes);
+        }
+        const summary = { id: "summary", ...result };
+        const selected = result.targetId ? debtRows.find(row => row.id === result.targetId) : null;
+        const records = selected ? [selected, summary] : [summary];
+        const evidence = buildEvidence("getCurrentSnowballTarget", "debt", "Current recorded-balance snowball target", records, runtime.now, month?.date, month?.date);
+        const complete = result.state !== "unavailable";
+        return { status: complete ? "ok" : "partial", dataAsOf: evidenceDataAsOf(evidence), coverage: { complete, returned: records.length, limit, startDate: month?.date, endDate: month?.date, reason: result.reason, exclusions: ["Uses currently recorded balances and current-month inclusion, not projected dated allocation or an affordable extra payment."] }, evidence, records, summary };
+      }),
+    }),
     getFlowLedgerHelp: tool({
       description: "Read allowlisted FlowLedger feature and navigation help. Use only for how-to or where-is navigation questions. Never use it for questions about what is in the user's account, Forecast, balances, bills, debt, income, or activity.",
       inputSchema: z.object({ topic: z.enum(["flo", "accounts", "transactions", "bills_debt", "forecast", "simulator", "settings", "households"]) }),
@@ -312,7 +343,7 @@ export function createFloTools(runtime: FloToolRuntime) {
         if (term) query = query.ilike("name", `%${term}%`);
         const result = await rowsEnvelope(runtime, "getBillsAndDebt", input.debtOnly ? "debt" : "bill", input.debtOnly ? "Debt accounts" : "Bills and debt", limit, () => query);
         if (result.status === "unavailable") return result;
-        result.summary = configuredDebtSummary(result.records as Array<Record<string, unknown>>, result.coverage.complete);
+        result.summary = { ...configuredDebtSummary(result.records as Array<Record<string, unknown>>, result.coverage.complete), query: term ?? null, queryComplete: result.coverage.complete };
         if (result.summary.debtBalance === null || result.summary.configuredMinimums === null) {
           result.status = "partial";
           result.coverage = { ...result.coverage, complete: false, reason: result.coverage.reason ?? "debt_totals_unavailable", exclusions: [...(result.coverage.exclusions ?? []), "Debt totals with missing amounts or incomplete record coverage are unavailable rather than treated as zero."] };

@@ -149,6 +149,7 @@ function toolProgressMessage(toolName: string): string {
     getDebtPlanHistory: "Reviewing your saved debt plans",
     getConnectionHealth: "Checking your account connections",
     getHouseholdAndSettings: "Reviewing your household settings",
+    getCurrentSnowballTarget: "Finding your current snowball target",
     draftRecurringBillChange: "Preparing a change for your review",
   };
   return messages[toolName] ?? "Verifying your FlowLedger records";
@@ -445,7 +446,7 @@ async function handleV3(
   // narrow it to `never` in the outer catch path.
   const latestVerifiedFallback: { current: FloVerifiedFallback | null } = { current: null };
   const toolRuntime: FloToolRuntime = {
-    client, householdId, userId, now, toolResults: [], toolResultNames: [], toolNames: [], toolCache: new Map(), memberRole: membership.role, allowSavedPlans: allowsSavedPlanRead(message),
+    client, householdId, userId, now, timezone: typeof body.timezone === "string" ? body.timezone : undefined, toolResults: [], toolResultNames: [], toolNames: [], toolCache: new Map(), memberRole: membership.role, allowSavedPlans: allowsSavedPlanRead(message),
     onToolResult: async (toolName, result, parameters) => {
       emitProgress(toolProgressMessage(toolName));
       const resultHash = await crypto.subtle.digest("SHA-256", encoder.encode(JSON.stringify(result)))
