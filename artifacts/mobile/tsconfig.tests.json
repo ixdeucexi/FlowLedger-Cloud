@@ -11,7 +11,6 @@
     "outDir": ".test-dist"
   },
   "include": [
-    "lib/floLauncherPosition.test.ts",
     "lib/settingsNavigation.test.ts",
     "lib/stabilityActions.test.ts",
     "lib/moneyFormInput.test.ts",

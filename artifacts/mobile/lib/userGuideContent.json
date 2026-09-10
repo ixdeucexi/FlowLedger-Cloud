@@ -169,7 +169,7 @@
           { "title": "Ask about the plan", "body": "Check upcoming bills, recent changes, and items needing review.", "icon": "help-circle" },
           { "title": "Check sources", "body": "Use freshness and source details when Flo provides them.", "icon": "link" },
           { "title": "Review before confirming", "body": "Inspect every proposed plan change before applying it.", "icon": "eye" },
-          { "title": "Move or hide Flo", "body": "Drag the Flo icon to move it. Tap X to hide it for this session, or Undo to bring it back.", "icon": "eye-off" }
+          { "title": "Show or hide Flo", "body": "Hold the Flo icon to hide it; tap Undo to restore it. Toggle the floating icon in Settings or Dashboard Configure.", "icon": "eye-off" }
         ]
       }
     ],

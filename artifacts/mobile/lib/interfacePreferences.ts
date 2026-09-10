@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { clearFloLauncherPreferenceStoresForUser } from "./floLauncherVisibility";
 import type { DashboardLayoutPreference } from "./dashboardCustomization";
 import type { NotificationCenterState } from "./notificationCenter";
 
@@ -22,6 +23,7 @@ export type ActivityPresentationState = {
 };
 
 export type InterfacePreferences = {
+  floLauncherEnabled?: boolean;
   lastRoute?: string;
   sidebarCollapsed?: boolean;
   settingsSection?: string;
@@ -42,13 +44,15 @@ export function interfacePreferenceKey(userId: string, householdId: string) {
 export async function readInterfacePreferences(
   userId: string,
   householdId: string,
+  throwOnError = false,
 ): Promise<InterfacePreferences> {
   try {
     const raw = await AsyncStorage.getItem(interfacePreferenceKey(userId, householdId));
     if (!raw) return {};
     const parsed = JSON.parse(raw) as unknown;
     return parsed && typeof parsed === "object" ? parsed as InterfacePreferences : {};
-  } catch {
+  } catch (error) {
+    if (throwOnError) throw error;
     return {};
   }
 }
@@ -59,11 +63,12 @@ export async function updateInterfacePreferences(
   userId: string,
   householdId: string,
   update: Partial<InterfacePreferences> | ((current: InterfacePreferences) => InterfacePreferences),
+  strictRead = false,
 ) {
   const key = interfacePreferenceKey(userId, householdId);
   const previous = writeQueues.get(key) ?? Promise.resolve();
   const next = previous.catch(() => undefined).then(async () => {
-    const current = await readInterfacePreferences(userId, householdId);
+    const current = await readInterfacePreferences(userId, householdId, strictRead);
     const merged = typeof update === "function" ? update(current) : { ...current, ...update };
     await AsyncStorage.setItem(key, JSON.stringify(merged));
   });
@@ -76,6 +81,7 @@ export async function updateInterfacePreferences(
 }
 
 export async function clearInterfacePreferencesForUser(userId: string) {
+  clearFloLauncherPreferenceStoresForUser(userId);
   try {
     const prefix = `${PREFERENCE_PREFIX}:${cleanScopePart(userId)}:`;
     const keys = (await AsyncStorage.getAllKeys()).filter(key => key.startsWith(prefix));

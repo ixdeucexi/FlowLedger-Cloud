@@ -1,4 +1,5 @@
 import Feather from "@expo/vector-icons/Feather";
+import { FloLauncherSetting } from "@/components/FloLauncherSetting";
 import React, { useEffect } from "react";
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -76,6 +77,7 @@ export function DashboardCustomizer({ visible, layout, onChange, onReset, onClos
           </View>
 
           <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+            <FloLauncherSetting />
             {layout.order.map((id, index) => {
               const widget = DASHBOARD_WIDGETS[id];
               const visibleWidget = !layout.hidden.includes(id);

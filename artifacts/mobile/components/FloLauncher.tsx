@@ -1,41 +1,13 @@
 import Feather from "@expo/vector-icons/Feather";
-import * as Haptics from "@/lib/haptics";
 import { usePathname, useRouter } from "expo-router";
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
-import {
-  PanResponder,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type ViewStyle,
-} from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
 import { FloLogo } from "@/components/FloLogo";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
-import {
-  dismissFloLauncher,
-  isFloLauncherDismissed,
-  restoreFloLauncher,
-  subscribeFloLauncherVisibility,
-} from "@/lib/floLauncherVisibility";
-import {
-  clampFloPosition,
-  createFloDragSession,
-  floLauncherBounds,
-  readFloPosition,
-  rememberFloPosition,
-  type FloPoint,
-} from "@/lib/floLauncherPosition";
+import { useFloLauncherPreference } from "@/hooks/useFloLauncherPreference";
+import * as Haptics from "@/lib/haptics";
 
 const UNDO_DURATION_MS = 5000;
 
@@ -114,251 +86,145 @@ export function FloLauncher({ desktop }: { desktop: boolean }) {
   const c = useColors();
   const router = useRouter();
   const pathname = usePathname();
-  const { isFeatureLocked } = useMembership();
-  const dismissed = useSyncExternalStore(
-    subscribeFloLauncherVisibility,
-    isFloLauncherDismissed,
-    () => false,
-  );
-  const [showUndo, setShowUndo] = useState(false);
   const insets = useSafeAreaInsets();
-  const [frame, setFrame] = useState({ width: 0, height: 0 });
-  const [position, setPosition] = useState<FloPoint>({ x: 0, y: 0 });
-  const positionRef = useRef(position);
-  const dragSession = useRef(createFloDragSession()).current;
-  const footprint = {
-    width: dismissed && showUndo ? 208 : desktop ? 240 : 106,
-    height: 54,
-  };
-  const bounds = floLauncherBounds(frame, footprint, insets, desktop);
-  const place = (point: FloPoint, remember = true) => {
-    const next = clampFloPosition(point, bounds);
-    positionRef.current = next;
-    setPosition(next);
-    if (remember) rememberFloPosition(next, bounds);
-  };
-  const gestureContext = useRef({ bounds, place });
-  gestureContext.current = { bounds, place };
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponderCapture: (event) => {
-          dragSession.begin(positionRef.current, {
-            x: event.nativeEvent.pageX,
-            y: event.nativeEvent.pageY,
-          });
-          return false;
-        },
-        onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponderCapture: (event) =>
-          dragSession.shouldStartPointerDrag({
-            x: event.nativeEvent.pageX,
-            y: event.nativeEvent.pageY,
-          }),
-        onPanResponderGrant: (event) => {
-          dragSession.suppressActivation();
-          const point = dragSession.movePointer(
-            { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY },
-            gestureContext.current.bounds,
-          );
-          if (point) gestureContext.current.place(point);
-        },
-        onPanResponderMove: (event) => {
-          const point = dragSession.movePointer(
-            { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY },
-            gestureContext.current.bounds,
-          );
-          if (point) gestureContext.current.place(point);
-        },
-        onPanResponderRelease: () =>
-          gestureContext.current.place(
-            dragSession.finish(gestureContext.current.bounds),
-          ),
-        onPanResponderTerminate: () =>
-          gestureContext.current.place(
-            dragSession.cancel(gestureContext.current.bounds),
-          ),
-        onPanResponderTerminationRequest: () => true,
-      }),
-    [dragSession],
+  const { isFeatureLocked } = useMembership();
+  const preference = useFloLauncherPreference();
+  const currentScope = useRef(preference.scope);
+  currentScope.current = preference.scope;
+  const held = useRef(false);
+  const [undoScope, setUndoScope] = useState<typeof preference.scope | null>(
+    null,
   );
-
+  const showUndo = undoScope === preference.scope && !preference.enabled;
   useEffect(() => {
-    const next = readFloPosition(bounds);
-    positionRef.current = next;
-    setPosition(next);
-  }, [bounds.minX, bounds.maxX, bounds.minY, bounds.maxY]);
-
-  useEffect(() => {
-    if (!showUndo) return;
-    const timer = setTimeout(() => setShowUndo(false), UNDO_DURATION_MS);
+    if (!undoScope) return;
+    const timer = setTimeout(() => setUndoScope(null), UNDO_DURATION_MS);
     return () => clearTimeout(timer);
-  }, [showUndo]);
+  }, [undoScope]);
 
-  if (isFeatureLocked("flo_account_chat") || pathname.endsWith("/flo"))
+  if (
+    !preference.ready ||
+    isFeatureLocked("flo_account_chat") ||
+    pathname.endsWith("/flo") ||
+    (!preference.enabled && !showUndo)
+  )
     return null;
   const context = CONTEXT_BY_PATH[pathname] ?? {
     label: "Ask Flo",
     prompt: "What should I know about my account?",
     entityType: "account",
   };
-
-  const hideLauncher = () => {
-    dragSession.suppressActivation();
-    setShowUndo(true);
-    dismissFloLauncher();
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(
-      () => undefined,
-    );
-  };
-
-  const undoDismissal = () => {
-    setShowUndo(false);
-    restoreFloLauncher();
+  const saveVisibility = async (enabled: boolean) => {
+    const scope = preference.scope;
+    const saved = await preference.setEnabled(enabled);
+    if (scope !== currentScope.current) return;
+    if (!saved) {
+      Alert.alert(
+        "Flo shortcut",
+        "Couldn't save this change. Your previous setting is unchanged. Please try again.",
+      );
+      return;
+    }
+    setUndoScope(enabled ? null : scope);
     void Haptics.selectionAsync().catch(() => undefined);
   };
-
-  if (dismissed && !showUndo) return null;
-  const fits =
-    frame.width >= footprint.width && frame.height >= footprint.height;
 
   return (
     <View
       pointerEvents="box-none"
-      style={styles.overlay}
-      onLayout={({ nativeEvent: { layout } }) =>
-        setFrame((previous) =>
-          previous.width === layout.width && previous.height === layout.height
-            ? previous
-            : { width: layout.width, height: layout.height },
-        )
-      }
+      style={[
+        styles.slot,
+        {
+          right: (desktop ? 24 : 16) + insets.right,
+          bottom: (desktop ? 24 : 98) + insets.bottom,
+        },
+      ]}
     >
-      {fits ? (
-        <View
-          pointerEvents="box-none"
+      {preference.error ? (
+        <Text
+          accessibilityRole="alert"
+          style={{
+            color: c.foreground,
+            backgroundColor: c.card,
+            maxWidth: 220,
+            padding: 8,
+          }}
+        >
+          {preference.error}
+        </Text>
+      ) : null}
+      {showUndo ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Undo hiding the Flo shortcut"
+          disabled={preference.saving}
+          onPress={() => {
+            void saveVisibility(true);
+          }}
           style={[
-            styles.slot,
+            styles.undoButton,
+            { backgroundColor: c.card, borderColor: c.primary + "70" },
+          ]}
+        >
+          <Feather name="eye-off" size={16} color={c.mutedForeground} />
+          <Text style={{ color: c.mutedForeground }}>Flo hidden</Text>
+          <Text style={{ color: c.primary, fontFamily: "Inter_700Bold" }}>
+            {preference.saving ? "Saving…" : "Undo"}
+          </Text>
+        </Pressable>
+      ) : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={context.label}
+          accessibilityHint="Tap to open Flo. Hold to hide this shortcut. Turn it back on in Settings or Customize Dashboard."
+          delayLongPress={650}
+          disabled={preference.saving}
+          onPressIn={() => {
+            held.current = false;
+          }}
+          onLongPress={() => {
+            held.current = true;
+            void saveVisibility(false);
+          }}
+          onPress={() => {
+            if (held.current) return;
+            router.push({
+              pathname: "/(tabs)/flo",
+              params: {
+                prompt: context.prompt,
+                promptId: `context-${Date.now()}`,
+                sourceRoute: pathname,
+                entityType: context.entityType,
+              },
+            } as never);
+          }}
+          style={({ pressed }) => [
+            styles.button,
+            desktop && styles.buttonDesktop,
             {
-              left: clampFloPosition(position, bounds).x,
-              top: clampFloPosition(position, bounds).y,
-              width: footprint.width,
-              height: footprint.height,
+              backgroundColor: c.card,
+              borderColor: c.primary + "70",
+              opacity: pressed || preference.saving ? 0.7 : 1,
             },
           ]}
         >
-          {dismissed ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Undo hiding the Flo shortcut"
-              onPress={undoDismissal}
-              style={({ pressed }) => [
-                styles.undoButton,
-                {
-                  backgroundColor: c.card,
-                  borderColor: c.primary + "70",
-                  opacity: pressed ? 0.78 : 1,
-                },
-              ]}
-            >
-              <Feather name="eye-off" size={16} color={c.mutedForeground} />
-              <Text style={[styles.undoCopy, { color: c.mutedForeground }]}>
-                Flo hidden
-              </Text>
-              <Text style={[styles.undoAction, { color: c.primary }]}>
-                Undo
-              </Text>
-            </Pressable>
-          ) : (
-            <>
-              <View
-                {...panResponder.panHandlers}
-                style={Platform.OS === "web" ? styles.dragHandleWeb : undefined}
-              >
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={context.label}
-                  accessibilityHint="Tap to open Flo. Drag this shortcut to move it. Use the adjacent X button to hide it."
-                  delayLongPress={650}
-                  onPressIn={(event) => {
-                    dragSession.pressIn(positionRef.current, event.nativeEvent);
-                  }}
-                  onLongPress={() => dragSession.suppressActivation()}
-                  onPress={() => {
-                    if (!dragSession.canActivate()) return;
-                    router.push({
-                      pathname: "/(tabs)/flo",
-                      params: {
-                        prompt: context.prompt,
-                        promptId: `context-${Date.now()}`,
-                        sourceRoute: pathname,
-                        entityType: context.entityType,
-                      },
-                    } as never);
-                  }}
-                  style={({ pressed }) => [
-                    styles.button,
-                    desktop && styles.buttonDesktop,
-                    {
-                      backgroundColor: c.card,
-                      borderColor: c.primary + "70",
-                      opacity: pressed ? 0.78 : 1,
-                    },
-                  ]}
-                >
-                  <FloLogo size={desktop ? 30 : 34} />
-                  {desktop ? (
-                    <Text style={[styles.label, { color: c.foreground }]}>
-                      {context.label}
-                    </Text>
-                  ) : null}
-                  {desktop ? (
-                    <Feather
-                      name="arrow-up-right"
-                      size={15}
-                      color={c.primary}
-                    />
-                  ) : null}
-                </Pressable>
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Hide Flo shortcut"
-                accessibilityHint="Hides this shortcut until the app reopens. Flo remains available in Quick Actions."
-                onPress={hideLauncher}
-                style={[
-                  styles.closeButton,
-                  { backgroundColor: c.card, borderColor: c.primary },
-                ]}
-              >
-                <Feather name="x" size={20} color={c.foreground} />
-              </Pressable>
-            </>
-          )}
-        </View>
-      ) : null}
+          <FloLogo size={desktop ? 30 : 34} />
+          {desktop ? (
+            <Text style={[styles.label, { color: c.foreground }]}>
+              {context.label}
+            </Text>
+          ) : null}
+          {desktop ? (
+            <Feather name="arrow-up-right" size={15} color={c.primary} />
+          ) : null}
+        </Pressable>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: { ...StyleSheet.absoluteFillObject, zIndex: 35 },
-  dragHandleWeb: { touchAction: "none", userSelect: "none" } as ViewStyle,
-  slot: {
-    position: "absolute",
-    zIndex: 35,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  closeButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 2,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  slot: { position: "absolute", zIndex: 35 },
   button: {
     width: 54,
     height: 54,
@@ -381,21 +247,13 @@ const styles = StyleSheet.create({
   },
   label: { flex: 1, fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   undoButton: {
-    width: 208,
     minHeight: 48,
     borderRadius: 16,
     borderWidth: 1,
     paddingHorizontal: 13,
     flexDirection: "row",
+    gap: 7,
     alignItems: "center",
     justifyContent: "center",
-    gap: 7,
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
   },
-  undoCopy: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
-  undoAction: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
 });
