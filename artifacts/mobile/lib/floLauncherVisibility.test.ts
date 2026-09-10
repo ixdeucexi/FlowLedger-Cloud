@@ -159,6 +159,8 @@ test("fixed launcher hold suppresses navigation and every preference surface use
   assert.match(launcher, /key="flo-undo"/);
   assert.match(launcher, /key="flo-launcher"/);
   assert.match(launcher, /if \(!undoPress.consume\(\)\) return/);
+  assert.match(launcher, /onPointerDown=/);
+  assert.match(launcher, /undoPress.pressIn\(Platform.OS, event.nativeEvent\)/);
   assert.match(launcher, /UNDO_DURATION_MS = 5000/);
   assert.match(launcher, /held.current = true/);
   assert.match(launcher, /if \(held.current\) return/);
@@ -192,4 +194,22 @@ test("Undo rejects the hiding touch release and requires a fresh pointer or keyb
   gate.begin();
   gate.reset();
   assert.equal(gate.consume(), false);
+});
+
+test("web compatibility mousedown after held touch cannot arm Undo", () => {
+  const gate = createFloUndoPressGate();
+  gate.reset();
+  gate.pressIn("web", { type: "mousedown" });
+  assert.equal(gate.consume(), false);
+  gate.pressIn("web", { type: "touchstart" });
+  assert.equal(gate.consume(), false);
+  gate.begin(); // genuine new pointerdown, mouse or touch
+  gate.pressIn("web", { type: "mousedown" });
+  assert.equal(gate.consume(), true);
+  gate.pressIn("web", { key: "Enter" });
+  assert.equal(gate.consume(), true);
+  gate.pressIn("web", { key: " " });
+  assert.equal(gate.consume(), true);
+  gate.pressIn("ios", { type: "touchstart" });
+  assert.equal(gate.consume(), true);
 });

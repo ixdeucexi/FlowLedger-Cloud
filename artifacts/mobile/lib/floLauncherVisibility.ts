@@ -14,6 +14,19 @@ export function createFloUndoPressGate() {
     begin() {
       started = true;
     },
+    pressIn(platform: string, event: object) {
+      // Browsers synthesize mousedown after a touch ends. Only a real
+      // pointerdown (begin) or keyboard press can arm web Undo.
+      if (
+        platform !== "web" ||
+        ("key" in event &&
+          (event.key === "Enter" ||
+            event.key === " " ||
+            event.key === "Spacebar"))
+      ) {
+        started = true;
+      }
+    },
     consume() {
       const accepted = started;
       started = false;

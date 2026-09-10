@@ -1,7 +1,14 @@
 import Feather from "@expo/vector-icons/Feather";
 import { usePathname, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FloLogo } from "@/components/FloLogo";
 import { useMembership } from "@/context/MembershipContext";
@@ -162,8 +169,11 @@ export function FloLauncher({ desktop }: { desktop: boolean }) {
           accessibilityRole="button"
           accessibilityLabel="Undo hiding the Flo shortcut"
           disabled={preference.saving}
-          onPressIn={() => {
-            undoPress.begin();
+          onPointerDown={() => {
+            if (Platform.OS === "web") undoPress.begin();
+          }}
+          onPressIn={(event) => {
+            undoPress.pressIn(Platform.OS, event.nativeEvent);
           }}
           onPress={() => {
             // A touch ending on the newly rendered Undo is not a new press.
