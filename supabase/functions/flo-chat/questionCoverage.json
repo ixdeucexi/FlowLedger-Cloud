@@ -1,7 +1,7 @@
 {
   "version": 2,
   "auditDate": "2026-09-10",
-  "evaluationStatus": "Finite representative corpus. Final v14 targeted repairs passed independently, but all 74 questions were not rerun on v14. No universal natural-language all-pass is claimed. Per-family statuses describe source capability, not blanket passing results; production status is tracked in the linked receipt.",
+  "evaluationStatus": "Finite representative corpus. Final v14 targeted repairs passed independently, but all 74 questions were not rerun on v14. No universal natural-language all-pass is claimed. Untested phrasings remain release-unverified. Per-family statuses describe source capability, not blanket passing results; production status is tracked in the linked receipt.",
   "liveEvaluationProgress": {
     "asOfDate": "2026-09-10",
     "source": "tmp/flo-live-results-20260910.jsonl plus main/SENTINEL progress reports; not a final receipt",
@@ -15,10 +15,10 @@
     "offlineChecks": {"edgeTestsPassed": 271, "denoCheck": "passed", "qualifier": "Offline result does not establish universal live intent correctness"},
     "finalReviewQaSha256": "49ceacd7e4908a5fbb14020989fcf7e879b5c19761663a76a3fbf262857b9bf9",
     "eventualReceiptPath": "docs/flo-live-evaluation-20260910.md",
-    "productionStatus": "Conditional approval pending clean QA restoration, commit and artifact parity; final production status is authoritative in docs/flo-live-evaluation-20260910.md",
-    "qaAllowance": "Temporary QA-account-only cap increase explicitly approved; restore and verify normal cap before production promotion",
+    "productionStatus": "flo-chat v36 ACTIVE, clean source f5b91da; exact runtime parity and authentication/normal-limit checks passed. Full receipt: docs/flo-live-evaluation-20260910.md",
+    "qaAllowance": "Restored before production promotion; review v15 and production v36 enforce the normal daily limit, without resetting counters",
     "allNaturalLanguageCasesPassed": false,
-    "finalReleaseReceiptAvailable": false
+    "finalReleaseReceiptAvailable": true
   },
   "userHeadingCoverage": {
     "currentmoney": [

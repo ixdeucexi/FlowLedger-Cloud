@@ -1,6 +1,6 @@
 # Flo live evaluation — September 10, 2026
 
-Status: final candidate verification passed; production promotion and postflight pending.
+Status: released; production parity and authorization/normal-limit postflight passed.
 
 ## Scope and environment
 
@@ -29,9 +29,9 @@ All 42 remote runtime files matched the packaged candidate; the local package al
 
 The user approved a temporary QA allowance for live evaluation using the existing model/provider connection. The allowance is confined to the exact QA user on the review function, expires at 18:00 UTC, and leaves other users, production, minute throttling and usage counters unchanged. It must be removed and clean-package parity verified before production promotion. No customer financial records were changed for these tests.
 
-Production remains v35 while evaluation is pending. Its verified rollback reference is `rollback/prod-before-flo-completion-20260910-1624`, at `6cf9cef6cca65333d7f91e363bcfc4abec428c9c`. The exact production function package has also been retained for rollback.
+Production remained v35 throughout candidate evaluation. Its verified rollback reference is `rollback/prod-before-flo-completion-20260910-1624`, at `6cf9cef6cca65333d7f91e363bcfc4abec428c9c`. The exact v35 production function package is retained for rollback.
 
-Final live results, QA-allowance restoration, production version and independent release decision must be recorded below before this document is considered a release receipt.
+The final verification and production release evidence follows.
 
 ## Final candidate verification
 
@@ -45,3 +45,12 @@ Final live results, QA-allowance restoration, production version and independent
 ## Remaining data boundaries
 
 Named-account future forecasts, manual-card credit limits, and historical debt-principal/connected-bank balance observations are not invented when the existing schema or retained sources lack them. Manual configured debt APRs remain available through debt queries; aggregate card comparisons require identified card records. Savings-goal earmarks are not added to account balances. Sparse or stale data can legitimately produce an unavailable forecast, affordability amount or goal timeline. These are explicit limitations, not generic fabricated answers.
+
+## Production receipt
+
+- Implementation commit: `f5b91da01fcf879f1ed06fadb5c5b7fd203ea6ac`, pushed to `origin/dev`. The clean-source release check passed. The regenerated committed package matched the tested clean package exactly.
+- SENTINEL approved production after the final live retests, independent source review and verified QA-allowance removal.
+- Deployed `flo-chat` v36, ACTIVE with JWT verification enabled, SHA `5f50966d5c00c887ea9f329164be473bf63eac3841a8b2472a9cdc492d1bed78`. Its 42 runtime files exactly match the clean tested package and clean review v15. No QA override is present.
+- Postflight: unauthenticated POST returned HTTP 401. At 17:37:20.835 UTC the authenticated QA account correctly received HTTP 429 `usage_limited`, period `day`, because its test usage exceeds the restored ordinary limit. Production answer generation was not bypass-tested after restoring that limit; functional evidence is from the exact matching review artifact.
+- Rollback remains `rollback/prod-before-flo-completion-20260910-1624` plus the exact retained v35 runtime package, SHA `4cbe130c4398c0163cee65043cebf5f291e131d4f8152c5e00e5c163b02c2320`.
+- Backend-only release. No frontend/PWA deployment, migrations, customer financial mutations, or model/provider changes.

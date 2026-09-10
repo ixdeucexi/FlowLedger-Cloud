@@ -19,8 +19,8 @@ The latest main-reported offline checks pass 271 Edge tests and Deno checking. E
 - The subsequent `review-v13` targeted 14-case run still had two routing errors.
 - Final candidate `review-v14` passed 14 targeted cases and two follow-ups, independently confirmed by SENTINEL at **2026-09-10 17:34:27.677 UTC**. This verifies that targeted repair set, not a fresh run of all 74 corpus questions on v14.
 - Final review QA SHA-256: `49ceacd7e4908a5fbb14020989fcf7e879b5c19761663a76a3fbf262857b9bf9`.
-- Production approval is conditional on clean QA-setting restoration, commit and artifact parity checks. Final production status is tracked in [the live evaluation receipt](flo-live-evaluation-20260910.md), not inferred from these candidate results.
-- A temporary **QA-account-only** daily-cap increase was explicitly approved for this evaluation. It must be restored before production promotion and the restoration recorded in the final receipt. The earlier exhausted-cap/no-change note is historical and superseded by this authorization.
+- The clean package is live as `flo-chat` v36 after QA-setting restoration, clean commit and exact runtime parity checks. See [the live evaluation receipt](flo-live-evaluation-20260910.md) for deployment and postflight evidence.
+- The explicitly approved temporary **QA-account-only** daily-cap increase was removed before production promotion. Both review and production enforce the normal daily limit; accumulated QA usage was not reset.
 
 Evidence: `tmp/flo-live-results-20260910.jsonl` plus main/SENTINEL audit reports. See [the live evaluation receipt](flo-live-evaluation-20260910.md) for final restoration, commit, parity and deployment evidence. Per-family statuses are not blanket passing results: only candidate-specific receipts establish correct intent and a relevant, grounded answer. Missing observed debt-principal history remains a genuine data limit, not permission to infer principal change from payments. This finite corpus does not establish universal question coverage or completion of every possible financial-coaching request.
 
