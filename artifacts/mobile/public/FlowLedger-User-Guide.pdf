@@ -122,7 +122,7 @@ endobj
 endobj
 15 0 obj
 <<
-/Author (FlowLedger) /CreationDate (D:20260910011138-05'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:25e4401546c967872c517e24891b22812fd1c7feef0b384c1a889a0c5bb012b8) /ModDate (D:20260910011138-05'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+/Author (FlowLedger) /CreationDate (D:20260910023830-05'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:3c42083f45bc450a1e09d4f64db4c58d941cf9a2a63bdad1022be962cf70142c) /ModDate (D:20260910023830-05'00') /Producer (ReportLab PDF Library - \(opensource\)) 
   /Subject (Current Dashboard, Activity, Bills, Forecast, payoff, Flo, and Settings guidance) /Title (FlowLedger User Guide) /Trapped /False
 >>
 endobj
@@ -1472,7 +1472,7 @@ endstream
 endobj
 23 0 obj
 <<
-/Length 6642
+/Length 6983
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -1633,24 +1633,24 @@ n
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 338 592 Tm (Ask about the plan) Tj T* ET
+BT 1 0 0 1 338 592 Tm (Ask about a date) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 327 577 Tm (Check upcoming bills, recent changes, and items needing) Tj T* ET
-BT 1 0 0 1 327 566 Tm (review.) Tj T* ET
+BT 1 0 0 1 327 577 Tm (Ask for your balance on a future date, upcoming bills,) Tj T* ET
+BT 1 0 0 1 327 566 Tm (spending, debt payments, or a cash-buffer plan.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-329 496 m
-554 496 l
-562.8448 496 570 503.1552 570 512 c
+329 479 m
+554 479 l
+562.8448 479 570 486.1552 570 495 c
 570 529 l
 570 537.8448 562.8448 545 554 545 c
 329 545 l
 320.1552 545 313 537.8448 313 529 c
-313 512 l
-313 503.1552 320.1552 496 329 496 c
+313 495 l
+313 486.1552 320.1552 479 329 479 c
 h
 B*
 .654902 .427451 1 rg
@@ -1663,69 +1663,73 @@ n
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 338 530 Tm (Check sources) Tj T* ET
+BT 1 0 0 1 338 530 Tm (Separate facts from forecasts) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 327 515 Tm (Use freshness and source details when Flo provides them.) Tj T* ET
+BT 1 0 0 1 327 515 Tm (Flo calculates from recorded data. Expected paychecks and) Tj T* ET
+BT 1 0 0 1 327 504 Tm (spending estimates are not guaranteed funds. Missing) Tj T* ET
+BT 1 0 0 1 327 493 Tm (information is called out.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-329 440 m
-554 440 l
-562.8448 440 570 447.1552 570 456 c
-570 473 l
-570 481.8448 562.8448 489 554 489 c
-329 489 l
-320.1552 489 313 481.8448 313 473 c
-313 456 l
-313 447.1552 320.1552 440 329 440 c
+329 406 m
+554 406 l
+562.8448 406 570 413.1552 570 422 c
+570 456 l
+570 464.8448 562.8448 472 554 472 c
+329 472 l
+320.1552 472 313 464.8448 313 456 c
+313 422 l
+313 413.1552 320.1552 406 329 406 c
 h
 B*
 .654902 .427451 1 rg
 n
-331 472 m
-331 474.2091 329.2091 476 327 476 c
-324.7909 476 323 474.2091 323 472 c
-323 469.7909 324.7909 468 327 468 c
-329.2091 468 331 469.7909 331 472 c
+331 455 m
+331 457.2091 329.2091 459 327 459 c
+324.7909 459 323 457.2091 323 455 c
+323 452.7909 324.7909 451 327 451 c
+329.2091 451 331 452.7909 331 455 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 338 474 Tm (Review before confirming) Tj T* ET
+BT 1 0 0 1 338 457 Tm (Try a what-if) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 327 459 Tm (Inspect every proposed plan change before applying it.) Tj T* ET
+BT 1 0 0 1 327 442 Tm (Test a purchase, savings transfer, or extra debt payment) Tj T* ET
+BT 1 0 0 1 327 431 Tm (without changing records. Review any separate proposed) Tj T* ET
+BT 1 0 0 1 327 420 Tm (change before confirming it.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-329 378 m
-554 378 l
-562.8448 378 570 385.1552 570 394 c
-570 417 l
-570 425.8448 562.8448 433 554 433 c
-329 433 l
-320.1552 433 313 425.8448 313 417 c
-313 394 l
-313 385.1552 320.1552 378 329 378 c
+329 344 m
+554 344 l
+562.8448 344 570 351.1552 570 360 c
+570 383 l
+570 391.8448 562.8448 399 554 399 c
+329 399 l
+320.1552 399 313 391.8448 313 383 c
+313 360 l
+313 351.1552 320.1552 344 329 344 c
 h
 B*
 .654902 .427451 1 rg
 n
-331 416 m
-331 418.2091 329.2091 420 327 420 c
-324.7909 420 323 418.2091 323 416 c
-323 413.7909 324.7909 412 327 412 c
-329.2091 412 331 413.7909 331 416 c
+331 382 m
+331 384.2091 329.2091 386 327 386 c
+324.7909 386 323 384.2091 323 382 c
+323 379.7909 324.7909 378 327 378 c
+329.2091 378 331 379.7909 331 382 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 338 418 Tm (Show or hide Flo) Tj T* ET
+BT 1 0 0 1 338 384 Tm (Show or hide Flo) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 327 403 Tm (Hold the Flo icon to hide it; tap Undo to restore it. Toggle) Tj T* ET
-BT 1 0 0 1 327 392 Tm (the floating icon in Settings or Dashboard Configure.) Tj T* ET
+BT 1 0 0 1 327 369 Tm (Hold the Flo icon to hide it; tap Undo to restore it. Toggle) Tj T* ET
+BT 1 0 0 1 327 358 Tm (the floating icon in Settings or Dashboard Configure.) Tj T* ET
 .062745 .094118 .168627 rg
 .654902 .427451 1 RG
 .8 w
@@ -2677,13 +2681,13 @@ xref
 0000022480 00000 n 
 0000028732 00000 n 
 0000035328 00000 n 
-0000042022 00000 n 
-0000047928 00000 n 
-0000054377 00000 n 
+0000042363 00000 n 
+0000048269 00000 n 
+0000054718 00000 n 
 trailer
 <<
 /ID 
-[<c66682e9cae487284dc3fc59f066eec9><c66682e9cae487284dc3fc59f066eec9>]
+[<a297f8444786b31ba1d86754699fd47c><a297f8444786b31ba1d86754699fd47c>]
 % ReportLab generated PDF document -- digest (opensource)
 
 /Info 15 0 R
@@ -2691,5 +2695,5 @@ trailer
 /Size 27
 >>
 startxref
-63831
+64172
 %%EOF

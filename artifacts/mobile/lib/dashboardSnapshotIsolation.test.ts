@@ -107,11 +107,11 @@ test("Dashboard current period ignores Forecast's browsed year", () => {
 });
 
 test("progressive carryover preserves bank-anchor reconciliation precedence", () => {
-  const budgetContext = readFileSync("context/BudgetContext.tsx", "utf8");
+  const budgetContext = readFileSync("lib/financialProjection.ts", "utf8");
   const carryover = budgetContext.slice(
     budgetContext.indexOf("const computeCarryover"),
     budgetContext.indexOf("const carryover = computeCarryover"),
-  );
+  ).replace(/\s+/g, " ");
   const bankFutureBranch = carryover.indexOf(
     "toYear > bankYear || (toYear === bankYear && toMonth > bankMonthIndex)",
   );

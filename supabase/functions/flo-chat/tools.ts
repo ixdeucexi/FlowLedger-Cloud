@@ -437,7 +437,7 @@ export function createFloTools(runtime: FloToolRuntime) {
       inputSchema: z.object({ year: z.number().int().min(2000).max(2200).nullable().default(null), month: z.number().int().min(0).max(11).nullable().default(null) }),
       execute: async input => tracked(runtime, "getDebtPlanHistory", input, async () => {
         const limit = 100;
-        let query = runtime.client.from("extra_payments").select("id,month,year,amount,allocations,payment_date,sources,created_at", { count: "exact" }).eq("household_id", runtime.householdId).order("year", { ascending: false }).order("month", { ascending: false }).limit(limit);
+        let query = runtime.client.from("extra_payments").select("id,month,year,amount,allocations,payment_date,sources", { count: "exact" }).eq("household_id", runtime.householdId).order("year", { ascending: false }).order("month", { ascending: false }).limit(limit);
         if (input.year !== null) query = query.eq("year", input.year);
         if (input.month !== null) query = query.eq("month", input.month);
         return rowsEnvelope(runtime, "getDebtPlanHistory", "debt", "Debt payment plans", limit, () => query);

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { performance } from "node:perf_hooks";
 import test from "node:test";
+import { createFinancialProjection } from "./financialProjection";
+import type { FinancialProjectionSnapshot } from "./financialProjectionTypes";
+import projectionGolden from "./financialProjection.golden.json";
 
 import {
   buildDashboardFinancialSnapshot,
@@ -28,6 +31,28 @@ import {
 
 const PERFORMANCE_BUDGET_MS = 50;
 const REPETITIONS = 5;
+
+test("isolated shared engine preserves 20k preparation and cached month responsiveness", context => {
+  const snapshot = structuredClone(projectionGolden.cases[0].snapshot) as unknown as FinancialProjectionSnapshot;
+  snapshot.transactions = productionShapedLedger(20_000) as FinancialProjectionSnapshot["transactions"];
+  let projection: ReturnType<typeof createFinancialProjection> | undefined;
+  const preparation = measureColdAndRepeated(() => {
+    projection = createFinancialProjection(snapshot, { now: new Date(projectionGolden.now), timeZone: projectionGolden.timeZone });
+  });
+  assert.ok(projection);
+  const engine = projection;
+  const daily = engine.getDailyBalances(8, 2026);
+  const cashFlow = engine.getCashFlow(8, 2026);
+  const cached = measureMax(() => {
+    for (let index = 0; index < 20; index++) {
+      assert.equal(engine.getDailyBalances(8, 2026), daily);
+      assert.equal(engine.getCashFlow(8, 2026), cashFlow);
+    }
+  });
+  assert.ok(preparation.max < PERFORMANCE_BUDGET_MS, `shared engine preparation took ${preparation.max.toFixed(1)}ms`);
+  assert.ok(cached < PERFORMANCE_BUDGET_MS, `shared cached reads took ${cached.toFixed(1)}ms`);
+  context.diagnostic(`shared 20k engine cold=${preparation.cold.toFixed(1)}ms, repeated-max=${preparation.repeatedMax.toFixed(1)}ms, cached-months=${cached.toFixed(1)}ms`);
+});
 
 function measure(work: () => void): number {
   const startedAt = performance.now();

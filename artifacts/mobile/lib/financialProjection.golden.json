@@ -1,0 +1,1463 @@
+{
+  "legacyCommit": "316845dec9c227a5e959b75193eb9b5f8de76b1c",
+  "legacySourceHash": "08a1a8f5f6d392c4372e7bc0f7689c66f151073c8a5a62c8fd95e9661dafc146",
+  "capturedFrom": "Unmodified BudgetContext callbacks evaluated with identity useMemo/useCallback; not the new factory.",
+  "now": "2026-09-10T03:00:00.000Z",
+  "timeZone": "America/Chicago",
+  "cases": [
+    {
+      "name": "baseline-goal-decision-income-history",
+      "snapshot": {
+        "settings": {
+          "zeroBasedBudgetEnabled": false,
+          "debtPayoffEnabled": true,
+          "paymentMethod": "snowball",
+          "starting_balance": 500,
+          "starting_balance_date": "2026-09-01",
+          "safety_floor": 200,
+          "forecast_horizon_months": 6,
+          "onboarding_completed": true
+        },
+        "bills": [
+          {
+            "id": "rent",
+            "name": "rent",
+            "amount": 900,
+            "category": "Other",
+            "priority": 1,
+            "is_debt": false,
+            "balance": 0,
+            "interest_rate": 0,
+            "due_day": 1,
+            "is_recurring": true,
+            "frequency": "monthly",
+            "created_at": "2026-08-01T12:00:00.000Z",
+            "start_date": "2026-08-01"
+          },
+          {
+            "id": "card-small",
+            "name": "card-small",
+            "amount": 35,
+            "category": "Other",
+            "priority": 1,
+            "is_debt": true,
+            "balance": 120,
+            "interest_rate": 18,
+            "due_day": 12,
+            "is_recurring": true,
+            "frequency": "monthly",
+            "created_at": "2026-08-01T12:00:00.000Z",
+            "start_date": "2026-08-01"
+          },
+          {
+            "id": "card-large",
+            "name": "card-large",
+            "amount": 50,
+            "category": "Other",
+            "priority": 1,
+            "is_debt": true,
+            "balance": 800,
+            "interest_rate": 22,
+            "due_day": 18,
+            "is_recurring": true,
+            "frequency": "monthly",
+            "created_at": "2026-08-01T12:00:00.000Z",
+            "start_date": "2026-08-01"
+          }
+        ],
+        "overrides": [],
+        "billDateMoves": [],
+        "transactions": [],
+        "deletedTransactions": [],
+        "incomes": [
+          {
+            "id": "pay",
+            "name": "Paycheck",
+            "amount": 1500,
+            "frequency": "biweekly",
+            "start_date": "2026-09-04",
+            "next_payment_date": "2026-09-04",
+            "amount_history": [
+              {
+                "effective_from": "2026-10-01",
+                "amount": 1600
+              }
+            ],
+            "excluded_dates": [
+              "2026-10-02"
+            ]
+          }
+        ],
+        "goals": [
+          {
+            "id": "goal",
+            "name": "Repair",
+            "target_amount": 100,
+            "current_amount": 25,
+            "target_date": "2026-09-22",
+            "goal_type": "planned_expense",
+            "created_at": "2026-08-01T12:00:00.000Z"
+          }
+        ],
+        "extraPayments": [],
+        "decisions": [
+          {
+            "id": "decision",
+            "name": "Trip",
+            "decision_type": "one_time_purchase",
+            "scenario": {
+              "name": "Trip",
+              "type": "one_time_purchase",
+              "amount": 80,
+              "date": "2026-09-25"
+            },
+            "result": {},
+            "status": "calendar",
+            "calendar_date": "2026-09-25",
+            "created_at": "2026-08-01T12:00:00.000Z"
+          }
+        ],
+        "accounts": [],
+        "connectedBankAccounts": [],
+        "transactionAccountIdentities": [],
+        "pendingBankTransactions": [],
+        "pendingPlanMatches": []
+      },
+      "expectedHash": "52c6ad99e2fe5c15f58f0bc0b20c82313667a2ef32433a37765c2eeec95bd010",
+      "summary": [
+        {
+          "month": 8,
+          "cashFlow": {
+            "monthlyIncome": 3000,
+            "totalBillsDue": 985,
+            "totalPaid": 0,
+            "netTransactions": 0,
+            "goalAllocations": 75,
+            "remaining": 1860
+          },
+          "closing": 2360,
+          "minimum": -400,
+          "plannedPayment": 85,
+          "eventCount": 7
+        },
+        {
+          "month": 9,
+          "cashFlow": {
+            "monthlyIncome": 3200,
+            "totalBillsDue": 985,
+            "totalPaid": 0,
+            "netTransactions": 0,
+            "goalAllocations": 0,
+            "remaining": 2215
+          },
+          "closing": 4575,
+          "minimum": 1425,
+          "plannedPayment": 85,
+          "eventCount": 5
+        },
+        {
+          "month": 10,
+          "cashFlow": {
+            "monthlyIncome": 3200,
+            "totalBillsDue": 985,
+            "totalPaid": 0,
+            "netTransactions": 0,
+            "goalAllocations": 0,
+            "remaining": 2215
+          },
+          "closing": 6790,
+          "minimum": 3640,
+          "plannedPayment": 85,
+          "eventCount": 5
+        }
+      ]
+    },
+    {
+      "name": "reviewed-partial-required-snapshot-overrides",
+      "snapshot": {
+        "settings": {
+          "zeroBasedBudgetEnabled": false,
+          "debtPayoffEnabled": true,
+          "paymentMethod": "snowball",
+          "starting_balance": 500,
+          "starting_balance_date": "2026-09-01",
+          "safety_floor": 200,
+          "forecast_horizon_months": 6,
+          "onboarding_completed": true
+        },
+        "bills": [
+          {
+            "id": "rent",
+            "name": "rent",
+            "amount": 900,
+            "category": "Other",
+            "priority": 1,
+            "is_debt": false,
+            "balance": 0,
+            "interest_rate": 0,
+            "due_day": 1,
+            "is_recurring": true,
+            "frequency": "monthly",
+            "created_at": "2026-08-01T12:00:00.000Z",
+            "start_date": "2026-08-01"
+          },
+          {
+            "id": "card-small",
+            "name": "card-small",
+            "amount": 35,
+            "category": "Other",
+            "priority": 1,
+            "is_debt": true,
+            "balance": 120,
+            "interest_rate": 18,
+            "due_day": 12,
+            "is_recurring": true,
+            "frequency": "monthly",
+            "created_at": "2026-08-01T12:00:00.000Z",
+            "start_date": "2026-08-01"
+          },
+          {
+            "id": "card-large",
+            "name": "card-large",
+            "amount": 50,
+            "category": "Other",
+            "priority": 1,
+            "is_debt": true,
+            "balance": 800,
+            "interest_rate": 22,
+            "due_day": 18,
+            "is_recurring": true,
+            "frequency": "monthly",
+            "created_at": "2026-08-01T12:00:00.000Z",
+            "start_date": "2026-08-01"
+          }
+        ],
+        "overrides": [
+          {
+            "id": "ov-rent",
+            "bill_id": "rent",
+            "month": 8,
+            "year": 2026,
+            "paid_amount": 400,
+            "actual_amount": 400,
+            "paid_date": "2026-09-03",
+            "custom_due_day": 3
+          },
+          {
+            "id": "ov-card",
+            "bill_id": "card-small",
+            "month": 8,
+            "year": 2026,
+            "paid_amount": 35,
+            "required_debt_amount": 35,
+            "planned_debt_amount": 60,
+            "paid_date": "2026-09-12"
+          }
+        ],
+        "billDateMoves": [],
+        "transactions": [
+          {
+            "id": "partial",
+            "date": "2026-09-12",
+            "amount": -35,
+            "category": "Other",
+            "note": "partial",
+            "review_status": "matched",
+            "review_allocations": [
+              {
+                "type": "bill",
+                "targetId": "card-small",
+                "amount": 35,
+                "plannedAmount": 60,
+                "occurrenceDate": "2026-09-12",
+                "settlement": "partial"
+              }
+            ]
+          }
+        ],
+        "deletedTransactions": [],
+        "incomes": [
+          {
+            "id": "pay",
+            "name": "Paycheck",
+            "amount": 1500,
+            "frequency": "biweekly",
+            "start_date": "2026-09-04",
+            "next_payment_date": "2026-09-04",
+            "amount_history": [
+              {
+                "effective_from": "2026-10-01",
+                "amount": 1600
+              }
+            ],
+            "excluded_dates": [
+              "2026-10-02"
+            ]
+          }
+        ],
+        "goals": [
+          {
+            "id": "goal",
+            "name": "Repair",
+            "target_amount": 100,
+            "current_amount": 25,
+            "target_date": "2026-09-22",
+            "goal_type": "planned_expense",
+            "created_at": "2026-08-01T12:00:00.000Z"
+          }
+        ],
+        "extraPayments": [],
+        "decisions": [
+          {
+            "id": "decision",
+            "name": "Trip",
+            "decision_type": "one_time_purchase",
+            "scenario": {
+              "name": "Trip",
+              "type": "one_time_purchase",
+              "amount": 80,
+              "date": "2026-09-25"
+            },
+            "result": {},
+            "status": "calendar",
+            "calendar_date": "2026-09-25",
+            "created_at": "2026-08-01T12:00:00.000Z"
+          }
+        ],
+        "accounts": [],
+        "connectedBankAccounts": [],
+        "transactionAccountIdentities": [],
+        "pendingBankTransactions": [],
+        "pendingPlanMatches": []
+      },
+      "expectedHash": "62b90065ef9c6be6e08ae1f09270bf3ad4e0ed066ca41626eb316672774aa11b",
+      "summary": [
+        {
+          "month": 8,
+          "cashFlow": {
+            "monthlyIncome": 3000,
+            "totalBillsDue": 975,
+            "totalPaid": 35,
+            "netTransactions": -35,
+            "goalAllocations": 75,
+            "remaining": 1835
+          },
+          "closing": 2835,
+          "minimum": 100,
+          "plannedPayment": 75,
+          "eventCount": 8
+        },
+        {
+          "month": 9,
+          "cashFlow": {
+            "monthlyIncome": 3200,
+            "totalBillsDue": 985,
+            "totalPaid": 0,
+            "netTransactions": 0,
+            "goalAllocations": 0,
+            "remaining": 2215
+          },
+          "closing": 5050,
+          "minimum": 1900,
+          "plannedPayment": 85,
+          "eventCount": 5
+        },
+        {
+          "month": 10,
+          "cashFlow": {
+            "monthlyIncome": 3200,
+            "totalBillsDue": 985,
+            "totalPaid": 0,
+            "netTransactions": 0,
+            "goalAllocations": 0,
+            "remaining": 2215
+          },
+          "closing": 7265,
+          "minimum": 4115,
+          "plannedPayment": 85,
+          "eventCount": 5
+        }
+      ]
+    },
+    {
+      "name": "moved-across-month-weekly-occurrences",
+      "snapshot": {
+        "settings": {
+          "zeroBasedBudgetEnabled": false,
+          "debtPayoffEnabled": true,
+          "paymentMethod": "snowball",
+          "starting_balance": 500,
+          "starting_balance_date": "2026-09-01",
+          "safety_floor": 200,
+          "forecast_horizon_months": 6,
+          "onboarding_completed": true
+        },
+        "bills": [
+          {
+            "id": "rent",
+            "name": "rent",
+            "amount": 900,
+            "category": "Other",
+            "priority": 1,
+            "is_debt": false,
+            "balance": 0,
+            "interest_rate": 0,
+            "due_day": 1,
+            "is_recurring": true,
+            "frequency": "monthly",
+            "created_at": "2026-08-01T12:00:00.000Z",
+            "start_date": "2026-08-01"
+          },
+          {
+            "id": "card-small",
+            "name": "card-small",
+            "amount": 35,
+            "category": "Other",
+            "priority": 1,
+            "is_debt": true,
+            "balance": 120,
+            "interest_rate": 18,
+            "due_day": 12,
+            "is_recurring": true,
+            "frequency": "monthly",
+            "created_at": "2026-08-01T12:00:00.000Z",
+            "start_date": "2026-08-01"
+          },
+          {
+            "id": "card-large",
+            "name": "card-large",
+            "amount": 50,
+            "category": "Other",
+            "priority": 1,
+            "is_debt": true,
+            "balance": 800,
+            "interest_rate": 22,
+            "due_day": 18,
+            "is_recurring": true,
+            "frequency": "monthly",
+            "created_at": "2026-08-01T12:00:00.000Z",
+            "start_date": "2026-08-01"
+          },
+          {
+            "id": "weekly",
+            "name": "weekly",
+            "amount": 20,
+            "category": "Other",
+            "priority": 1,
+            "is_debt": false,
+            "balance": 0,
+            "interest_rate": 0,
+            "due_day": 15,
+            "is_recurring": true,
+            "frequency": "weekly",
+            "created_at": "2026-08-01T12:00:00.000Z",
+            "start_date": "2026-08-01",
+            "day_of_week": 2
+          }
+        ],
+        "overrides": [],
+        "billDateMoves": [
+          {
+            "id": "move",
+            "bill_id": "rent",
+            "from_date": "2026-09-01",
+            "to_date": "2026-10-02",
+            "created_at": "2026-08-01T12:00:00.000Z"
+          }
+        ],
+        "transactions": [],
+        "deletedTransactions": [],
+        "incomes": [
+          {
+            "id": "pay",
+            "name": "Paycheck",
+            "amount": 1500,
+            "frequency": "biweekly",
+            "start_date": "2026-09-04",
+            "next_payment_date": "2026-09-04",
+            "amount_history": [
+              {
+                "effective_from": "2026-10-01",
+                "amount": 1600
+              }
+            ],
+            "excluded_dates": [
+              "2026-10-02"
+            ]
+          }
+        ],
+        "goals": [
+          {
+            "id": "goal",
+            "name": "Repair",
+            "target_amount": 100,
+            "current_amount": 25,
+            "target_date": "2026-09-22",
+            "goal_type": "planned_expense",
+            "created_at": "2026-08-01T12:00:00.000Z"
+          }
+        ],
+        "extraPayments": [],
+        "decisions": [
+          {
+            "id": "decision",
+            "name": "Trip",
+            "decision_type": "one_time_purchase",
+            "scenario": {
+              "name": "Trip",
+              "type": "one_time_purchase",
+              "amount": 80,
+              "date": "2026-09-25"
+            },
+            "result": {},
+            "status": "calendar",
+            "calendar_date": "2026-09-25",
+            "created_at": "2026-08-01T12:00:00.000Z"
+          }
+        ],
+        "accounts": [],
+        "connectedBankAccounts": [],
+        "transactionAccountIdentities": [],
+        "pendingBankTransactions": [],
+        "pendingPlanMatches": []
+      },
+      "expectedHash": "bd0ccd7959d6280cd0913f30aab354e103a71ecb5809470cb28268b8924d3394",
+      "summary": [
+        {
+          "month": 8,
+          "cashFlow": {
+            "monthlyIncome": 3000,
+            "totalBillsDue": 185,
+            "totalPaid": 0,
+            "netTransactions": 0,
+            "goalAllocations": 75,
+            "remaining": 2660
+          },
+          "closing": 3160,
+          "minimum": 480,
+          "plannedPayment": 85,
+          "eventCount": 11
+        },
+        {
+          "month": 9,
+          "cashFlow": {
+            "monthlyIncome": 3200,
+            "totalBillsDue": 1965,
+            "totalPaid": 0,
+            "netTransactions": 0,
+            "goalAllocations": 0,
+            "remaining": 1235
+          },
+          "closing": 4395,
+          "minimum": 1285,
+          "plannedPayment": 85,
+          "eventCount": 10
+        },
+        {
+          "month": 10,
+          "cashFlow": {
+            "monthlyIncome": 3200,
+            "totalBillsDue": 1065,
+            "totalPaid": 0,
+            "netTransactions": 0,
+            "goalAllocations": 0,
+            "remaining": 2135
+          },
+          "closing": 6530,
+          "minimum": 3420,
+          "plannedPayment": 85,
+          "eventCount": 9
+        }
+      ]
+    },
+    {
+      "name": "connected-anchor-deleted-posted-reviewed-income",
+      "snapshot": {
+        "settings": {
+          "zeroBasedBudgetEnabled": false,
+          "debtPayoffEnabled": true,
+          "paymentMethod": "snowball",
+          "starting_balance": 500,
+          "starting_balance_date": "2026-09-01",
+          "safety_floor": 200,
+          "forecast_horizon_months": 6,
+          "onboarding_completed": true
+        },
+        "bills": [
+          {
+            "id": "rent",
+            "name": "rent",
+            "amount": 900,
+            "category": "Other",
+            "priority": 1,
+            "is_debt": false,
+            "balance": 0,
+            "interest_rate": 0,
+            "due_day": 1,
+            "is_recurring": true,
+            "frequency": "monthly",
+            "created_at": "2026-08-01T12:00:00.000Z",
+            "start_date": "2026-08-01"
+          },
+          {
+            "id": "card-small",
+            "name": "card-small",
+            "amount": 35,
+            "category": "Other",
+            "priority": 1,
+            "is_debt": true,
+            "balance": 120,
+            "interest_rate": 18,
+            "due_day": 12,
+            "is_recurring": true,
+            "frequency": "monthly",
+            "created_at": "2026-08-01T12:00:00.000Z",
+            "start_date": "2026-08-01"
+          },
+          {
+            "id": "card-large",
+            "name": "card-large",
+            "amount": 50,
+            "category": "Other",
+            "priority": 1,
+            "is_debt": true,
+            "balance": 800,
+            "interest_rate": 22,
+            "due_day": 18,
+            "is_recurring": true,
+            "frequency": "monthly",
+            "created_at": "2026-08-01T12:00:00.000Z",
+            "start_date": "2026-08-01"
+          }
+        ],
+        "overrides": [],
+        "billDateMoves": [],
+        "transactions": [
+          {
+            "id": "posted",
+            "date": "2026-09-08",
+            "amount": -40,
+            "category": "Other",
+            "note": "posted",
+            "source": "plaid",
+            "plaid_account_id": "pa",
+            "plaid_transaction_id": "posted-t"
+          },
+          {
+            "id": "income-posted",
+            "date": "2026-09-04",
+            "amount": 1500,
+            "category": "Other",
+            "note": "income-posted",
+            "source": "plaid",
+            "plaid_account_id": "pa",
+            "review_status": "matched",
+            "review_allocations": [
+              {
+                "type": "income",
+                "targetId": "pay",
+                "amount": 1500,
+                "plannedAmount": 1500,
+                "occurrenceDate": "2026-09-04",
+                "settlement": "exact"
+              }
+            ]
+          }
+        ],
+        "deletedTransactions": [
+          {
+            "id": "deleted-posted",
+            "date": "2026-09-07",
+            "amount": -80,
+            "category": "Other",
+            "note": "deleted-posted",
+            "source": "plaid",
+            "plaid_account_id": "pa",
+            "deleted_at": "2026-09-09T00:00:00.000Z"
+          }
+        ],
+        "incomes": [
+          {
+            "id": "pay",
+            "name": "Paycheck",
+            "amount": 1500,
+            "frequency": "biweekly",
+            "start_date": "2026-09-04",
+            "next_payment_date": "2026-09-04",
+            "amount_history": [
+              {
+                "effective_from": "2026-10-01",
+                "amount": 1600
+              }
+            ],
+            "excluded_dates": [
+              "2026-10-02"
+            ]
+          }
+        ],
+        "goals": [
+          {
+            "id": "goal",
+            "name": "Repair",
+            "target_amount": 100,
+            "current_amount": 25,
+            "target_date": "2026-09-22",
+            "goal_type": "planned_expense",
+            "created_at": "2026-08-01T12:00:00.000Z"
+          }
+        ],
+        "extraPayments": [],
+        "decisions": [
+          {
+            "id": "decision",
+            "name": "Trip",
+            "decision_type": "one_time_purchase",
+            "scenario": {
+              "name": "Trip",
+              "type": "one_time_purchase",
+              "amount": 80,
+              "date": "2026-09-25"
+            },
+            "result": {},
+            "status": "calendar",
+            "calendar_date": "2026-09-25",
+            "created_at": "2026-08-01T12:00:00.000Z"
+          }
+        ],
+        "accounts": [],
+        "connectedBankAccounts": [
+          {
+            "id": "bank",
+            "plaid_account_id": "pa",
+            "name": "Checking",
+            "account_type": "depository",
+            "account_subtype": "checking",
+            "current_balance": 780,
+            "current_balance_available": true,
+            "available_balance": 745,
+            "is_active": true,
+            "updated_at": "2026-09-08T15:00:00.000Z"
+          }
+        ],
+        "transactionAccountIdentities": [
+          {
+            "id": "bank",
+            "plaid_account_id": "pa",
+            "name": "Checking",
+            "account_type": "depository",
+            "account_subtype": "checking",
+            "current_balance": 780,
+            "current_balance_available": true,
+            "available_balance": 745,
+            "is_active": true,
+            "updated_at": "2026-09-08T15:00:00.000Z"
+          }
+        ],
+        "pendingBankTransactions": [],
+        "pendingPlanMatches": []
+      },
+      "expectedHash": "82c3ef9a76735b07d9d99894be825284b2afc0dd8a6cc90af74bfb5e5f345f21",
+      "summary": [
+        {
+          "month": 8,
+          "cashFlow": {
+            "monthlyIncome": 1500,
+            "totalBillsDue": 985,
+            "totalPaid": 0,
+            "netTransactions": 1380,
+            "goalAllocations": 75,
+            "remaining": 1740
+          },
+          "closing": 2040,
+          "minimum": 500,
+          "plannedPayment": 85,
+          "eventCount": 9
+        },
+        {
+          "month": 9,
+          "cashFlow": {
+            "monthlyIncome": 3200,
+            "totalBillsDue": 985,
+            "totalPaid": 0,
+            "netTransactions": 0,
+            "goalAllocations": 0,
+            "remaining": 2215
+          },
+          "closing": 4255,
+          "minimum": 1105,
+          "plannedPayment": 85,
+          "eventCount": 5
+        },
+        {
+          "month": 10,
+          "cashFlow": {
+            "monthlyIncome": 3200,
+            "totalBillsDue": 985,
+            "totalPaid": 0,
+            "netTransactions": 0,
+            "goalAllocations": 0,
+            "remaining": 2215
+          },
+          "closing": 6470,
+          "minimum": 3320,
+          "plannedPayment": 85,
+          "eventCount": 5
+        }
+      ]
+    },
+    {
+      "name": "pending-matched-debt-no-double-charge",
+      "snapshot": {
+        "settings": {
+          "zeroBasedBudgetEnabled": false,
+          "debtPayoffEnabled": true,
+          "paymentMethod": "snowball",
+          "starting_balance": 500,
+          "starting_balance_date": "2026-09-01",
+          "safety_floor": 200,
+          "forecast_horizon_months": 6,
+          "onboarding_completed": true
+        },
+        "bills": [
+          {
+            "id": "rent",
+            "name": "rent",
+            "amount": 900,
+            "category": "Other",
+            "priority": 1,
+            "is_debt": false,
+            "balance": 0,
+            "interest_rate": 0,
+            "due_day": 1,
+            "is_recurring": true,
+            "frequency": "monthly",
+            "created_at": "2026-08-01T12:00:00.000Z",
+            "start_date": "2026-08-01"
+          },
+          {
+            "id": "card-small",
+            "name": "card-small",
+            "amount": 35,
+            "category": "Other",
+            "priority": 1,
+            "is_debt": true,
+            "balance": 120,
+            "interest_rate": 18,
+            "due_day": 12,
+            "is_recurring": true,
+            "frequency": "monthly",
+            "created_at": "2026-08-01T12:00:00.000Z",
+            "start_date": "2026-08-01"
+          },
+          {
+            "id": "card-large",
+            "name": "card-large",
+            "amount": 50,
+            "category": "Other",
+            "priority": 1,
+            "is_debt": true,
+            "balance": 800,
+            "interest_rate": 22,
+            "due_day": 18,
+            "is_recurring": true,
+            "frequency": "monthly",
+            "created_at": "2026-08-01T12:00:00.000Z",
+            "start_date": "2026-08-01"
+          }
+        ],
+        "overrides": [],
+        "billDateMoves": [],
+        "transactions": [
+          {
+            "id": "posted",
+            "date": "2026-09-08",
+            "amount": -40,
+            "category": "Other",
+            "note": "posted",
+            "source": "plaid",
+            "plaid_account_id": "pa",
+            "plaid_transaction_id": "posted-t"
+          },
+          {
+            "id": "income-posted",
+            "date": "2026-09-04",
+            "amount": 1500,
+            "category": "Other",
+            "note": "income-posted",
+            "source": "plaid",
+            "plaid_account_id": "pa",
+            "review_status": "matched",
+            "review_allocations": [
+              {
+                "type": "income",
+                "targetId": "pay",
+                "amount": 1500,
+                "plannedAmount": 1500,
+                "occurrenceDate": "2026-09-04",
+                "settlement": "exact"
+              }
+            ]
+          }
+        ],
+        "deletedTransactions": [
+          {
+            "id": "deleted-posted",
+            "date": "2026-09-07",
+            "amount": -80,
+            "category": "Other",
+            "note": "deleted-posted",
+            "source": "plaid",
+            "plaid_account_id": "pa",
+            "deleted_at": "2026-09-09T00:00:00.000Z"
+          }
+        ],
+        "incomes": [
+          {
+            "id": "pay",
+            "name": "Paycheck",
+            "amount": 1500,
+            "frequency": "biweekly",
+            "start_date": "2026-09-04",
+            "next_payment_date": "2026-09-04",
+            "amount_history": [
+              {
+                "effective_from": "2026-10-01",
+                "amount": 1600
+              }
+            ],
+            "excluded_dates": [
+              "2026-10-02"
+            ]
+          }
+        ],
+        "goals": [
+          {
+            "id": "goal",
+            "name": "Repair",
+            "target_amount": 100,
+            "current_amount": 25,
+            "target_date": "2026-09-22",
+            "goal_type": "planned_expense",
+            "created_at": "2026-08-01T12:00:00.000Z"
+          }
+        ],
+        "extraPayments": [],
+        "decisions": [
+          {
+            "id": "decision",
+            "name": "Trip",
+            "decision_type": "one_time_purchase",
+            "scenario": {
+              "name": "Trip",
+              "type": "one_time_purchase",
+              "amount": 80,
+              "date": "2026-09-25"
+            },
+            "result": {},
+            "status": "calendar",
+            "calendar_date": "2026-09-25",
+            "created_at": "2026-08-01T12:00:00.000Z"
+          }
+        ],
+        "accounts": [],
+        "connectedBankAccounts": [
+          {
+            "id": "bank",
+            "plaid_account_id": "pa",
+            "name": "Checking",
+            "account_type": "depository",
+            "account_subtype": "checking",
+            "current_balance": 780,
+            "current_balance_available": true,
+            "available_balance": 745,
+            "is_active": true,
+            "updated_at": "2026-09-08T15:00:00.000Z"
+          }
+        ],
+        "transactionAccountIdentities": [
+          {
+            "id": "bank",
+            "plaid_account_id": "pa",
+            "name": "Checking",
+            "account_type": "depository",
+            "account_subtype": "checking",
+            "current_balance": 780,
+            "current_balance_available": true,
+            "available_balance": 745,
+            "is_active": true,
+            "updated_at": "2026-09-08T15:00:00.000Z"
+          }
+        ],
+        "pendingBankTransactions": [
+          {
+            "plaid_transaction_id": "pending-card",
+            "plaid_account_id": "pa",
+            "transaction_date": "2026-09-09",
+            "amount": 35,
+            "name": "Card pending",
+            "category": "Debt"
+          }
+        ],
+        "pendingPlanMatches": [
+          {
+            "id": "pending-match",
+            "pending_plaid_transaction_id": "pending-card",
+            "pending_account_id": "pa",
+            "target_type": "bill",
+            "target_id": "card-small",
+            "target_name": "card-small",
+            "occurrence_date": "2026-09-12",
+            "planned_amount": 35,
+            "pending_amount": 35,
+            "pending_transaction_date": "2026-09-09",
+            "status": "active",
+            "created_at": "2026-08-01T12:00:00.000Z",
+            "updated_at": "2026-08-01T12:00:00.000Z"
+          }
+        ]
+      },
+      "expectedHash": "8ea2aec4930b410aed7d24b39c6c01946c861f241cb4137751e8ac94ef197a3d",
+      "summary": [
+        {
+          "month": 8,
+          "cashFlow": {
+            "monthlyIncome": 1500,
+            "totalBillsDue": 985,
+            "totalPaid": 0,
+            "netTransactions": 1380,
+            "goalAllocations": 75,
+            "remaining": 1740
+          },
+          "closing": 2040,
+          "minimum": 500,
+          "plannedPayment": 85,
+          "eventCount": 9
+        },
+        {
+          "month": 9,
+          "cashFlow": {
+            "monthlyIncome": 3200,
+            "totalBillsDue": 985,
+            "totalPaid": 0,
+            "netTransactions": 0,
+            "goalAllocations": 0,
+            "remaining": 2215
+          },
+          "closing": 4255,
+          "minimum": 1105,
+          "plannedPayment": 85,
+          "eventCount": 5
+        },
+        {
+          "month": 10,
+          "cashFlow": {
+            "monthlyIncome": 3200,
+            "totalBillsDue": 985,
+            "totalPaid": 0,
+            "netTransactions": 0,
+            "goalAllocations": 0,
+            "remaining": 2215
+          },
+          "closing": 6470,
+          "minimum": 3320,
+          "plannedPayment": 85,
+          "eventCount": 5
+        }
+      ]
+    },
+    {
+      "name": "payoff-rollover-extra-targeted-principal",
+      "snapshot": {
+        "settings": {
+          "zeroBasedBudgetEnabled": false,
+          "debtPayoffEnabled": true,
+          "paymentMethod": "snowball",
+          "starting_balance": 500,
+          "starting_balance_date": "2026-09-01",
+          "safety_floor": 200,
+          "forecast_horizon_months": 6,
+          "onboarding_completed": true
+        },
+        "bills": [
+          {
+            "id": "rent",
+            "name": "rent",
+            "amount": 900,
+            "category": "Other",
+            "priority": 1,
+            "is_debt": false,
+            "balance": 0,
+            "interest_rate": 0,
+            "due_day": 1,
+            "is_recurring": true,
+            "frequency": "monthly",
+            "created_at": "2026-08-01T12:00:00.000Z",
+            "start_date": "2026-08-01"
+          },
+          {
+            "id": "card-small",
+            "name": "card-small",
+            "amount": 35,
+            "category": "Other",
+            "priority": 1,
+            "is_debt": true,
+            "balance": 20,
+            "interest_rate": 18,
+            "due_day": 12,
+            "is_recurring": true,
+            "frequency": "monthly",
+            "created_at": "2026-08-01T12:00:00.000Z",
+            "start_date": "2026-08-01"
+          },
+          {
+            "id": "card-large",
+            "name": "card-large",
+            "amount": 50,
+            "category": "Other",
+            "priority": 1,
+            "is_debt": true,
+            "balance": 800,
+            "interest_rate": 22,
+            "due_day": 18,
+            "is_recurring": true,
+            "frequency": "monthly",
+            "created_at": "2026-08-01T12:00:00.000Z",
+            "start_date": "2026-08-01",
+            "snowball_minimum_boost": 35
+          }
+        ],
+        "overrides": [],
+        "billDateMoves": [],
+        "transactions": [],
+        "deletedTransactions": [],
+        "incomes": [
+          {
+            "id": "pay",
+            "name": "Paycheck",
+            "amount": 1500,
+            "frequency": "biweekly",
+            "start_date": "2026-09-04",
+            "next_payment_date": "2026-09-04",
+            "amount_history": [
+              {
+                "effective_from": "2026-10-01",
+                "amount": 1600
+              }
+            ],
+            "excluded_dates": [
+              "2026-10-02"
+            ]
+          }
+        ],
+        "goals": [
+          {
+            "id": "goal",
+            "name": "Repair",
+            "target_amount": 100,
+            "current_amount": 25,
+            "target_date": "2026-09-22",
+            "goal_type": "planned_expense",
+            "created_at": "2026-08-01T12:00:00.000Z"
+          }
+        ],
+        "extraPayments": [
+          {
+            "id": "extra",
+            "month": 8,
+            "year": 2026,
+            "amount": 50,
+            "payment_date": "2026-09-19",
+            "allocations": [
+              {
+                "billId": "card-small",
+                "billName": "card-small",
+                "payment": 20,
+                "balanceBefore": 20,
+                "balanceAfter": 0,
+                "paidOff": true
+              },
+              {
+                "billId": "card-large",
+                "billName": "card-large",
+                "payment": 30,
+                "balanceBefore": 800,
+                "balanceAfter": 770,
+                "paidOff": false
+              }
+            ],
+            "sources": [
+              {
+                "type": "manual",
+                "amount": 50
+              }
+            ]
+          }
+        ],
+        "decisions": [
+          {
+            "id": "decision",
+            "name": "Trip",
+            "decision_type": "one_time_purchase",
+            "scenario": {
+              "name": "Trip",
+              "type": "one_time_purchase",
+              "amount": 80,
+              "date": "2026-09-25"
+            },
+            "result": {},
+            "status": "calendar",
+            "calendar_date": "2026-09-25",
+            "created_at": "2026-08-01T12:00:00.000Z"
+          }
+        ],
+        "accounts": [],
+        "connectedBankAccounts": [],
+        "transactionAccountIdentities": [],
+        "pendingBankTransactions": [],
+        "pendingPlanMatches": []
+      },
+      "expectedHash": "f28903fb5ff406d0ffa4a74bd1906f956b1ae4e2120abf924b8140f5922515c0",
+      "summary": [
+        {
+          "month": 8,
+          "cashFlow": {
+            "monthlyIncome": 3000,
+            "totalBillsDue": 1070,
+            "totalPaid": 0,
+            "netTransactions": 0,
+            "goalAllocations": 75,
+            "remaining": 1775
+          },
+          "closing": 2275,
+          "minimum": -400,
+          "plannedPayment": 170,
+          "eventCount": 10
+        },
+        {
+          "month": 9,
+          "cashFlow": {
+            "monthlyIncome": 3200,
+            "totalBillsDue": 1020,
+            "totalPaid": 0,
+            "netTransactions": 0,
+            "goalAllocations": 0,
+            "remaining": 2180
+          },
+          "closing": 4455,
+          "minimum": 1375,
+          "plannedPayment": 120,
+          "eventCount": 5
+        },
+        {
+          "month": 10,
+          "cashFlow": {
+            "monthlyIncome": 3200,
+            "totalBillsDue": 1020,
+            "totalPaid": 0,
+            "netTransactions": 0,
+            "goalAllocations": 0,
+            "remaining": 2180
+          },
+          "closing": 6635,
+          "minimum": 3555,
+          "plannedPayment": 120,
+          "eventCount": 5
+        }
+      ]
+    },
+    {
+      "name": "manual-anchor-transfer-preservation",
+      "snapshot": {
+        "settings": {
+          "zeroBasedBudgetEnabled": false,
+          "debtPayoffEnabled": true,
+          "paymentMethod": "snowball",
+          "starting_balance": 500,
+          "starting_balance_date": "2026-09-01",
+          "safety_floor": 200,
+          "forecast_horizon_months": 6,
+          "onboarding_completed": true
+        },
+        "bills": [
+          {
+            "id": "rent",
+            "name": "rent",
+            "amount": 900,
+            "category": "Other",
+            "priority": 1,
+            "is_debt": false,
+            "balance": 0,
+            "interest_rate": 0,
+            "due_day": 1,
+            "is_recurring": true,
+            "frequency": "monthly",
+            "created_at": "2026-08-01T12:00:00.000Z",
+            "start_date": "2026-08-01"
+          },
+          {
+            "id": "card-small",
+            "name": "card-small",
+            "amount": 35,
+            "category": "Other",
+            "priority": 1,
+            "is_debt": true,
+            "balance": 120,
+            "interest_rate": 18,
+            "due_day": 12,
+            "is_recurring": true,
+            "frequency": "monthly",
+            "created_at": "2026-08-01T12:00:00.000Z",
+            "start_date": "2026-08-01"
+          },
+          {
+            "id": "card-large",
+            "name": "card-large",
+            "amount": 50,
+            "category": "Other",
+            "priority": 1,
+            "is_debt": true,
+            "balance": 800,
+            "interest_rate": 22,
+            "due_day": 18,
+            "is_recurring": true,
+            "frequency": "monthly",
+            "created_at": "2026-08-01T12:00:00.000Z",
+            "start_date": "2026-08-01"
+          }
+        ],
+        "overrides": [],
+        "billDateMoves": [],
+        "transactions": [
+          {
+            "id": "manual-cash",
+            "date": "2026-09-09",
+            "amount": -12,
+            "category": "Other",
+            "note": "manual-cash"
+          },
+          {
+            "id": "transfer",
+            "date": "2026-09-09",
+            "amount": -100,
+            "category": "Other",
+            "note": "transfer",
+            "transfer_group_id": "transfer",
+            "review_status": "transfer"
+          }
+        ],
+        "deletedTransactions": [],
+        "incomes": [
+          {
+            "id": "pay",
+            "name": "Paycheck",
+            "amount": 1500,
+            "frequency": "biweekly",
+            "start_date": "2026-09-04",
+            "next_payment_date": "2026-09-04",
+            "amount_history": [
+              {
+                "effective_from": "2026-10-01",
+                "amount": 1600
+              }
+            ],
+            "excluded_dates": [
+              "2026-10-02"
+            ]
+          }
+        ],
+        "goals": [
+          {
+            "id": "goal",
+            "name": "Repair",
+            "target_amount": 100,
+            "current_amount": 25,
+            "target_date": "2026-09-22",
+            "goal_type": "planned_expense",
+            "created_at": "2026-08-01T12:00:00.000Z"
+          }
+        ],
+        "extraPayments": [],
+        "decisions": [
+          {
+            "id": "decision",
+            "name": "Trip",
+            "decision_type": "one_time_purchase",
+            "scenario": {
+              "name": "Trip",
+              "type": "one_time_purchase",
+              "amount": 80,
+              "date": "2026-09-25"
+            },
+            "result": {},
+            "status": "calendar",
+            "calendar_date": "2026-09-25",
+            "created_at": "2026-08-01T12:00:00.000Z"
+          }
+        ],
+        "accounts": [
+          {
+            "id": "manual",
+            "name": "Checking",
+            "account_type": "checking",
+            "current_balance": 1000,
+            "balance_as_of": "2026-09-08",
+            "is_active": true,
+            "created_at": "2026-08-01T12:00:00.000Z"
+          }
+        ],
+        "connectedBankAccounts": [],
+        "transactionAccountIdentities": [],
+        "pendingBankTransactions": [],
+        "pendingPlanMatches": []
+      },
+      "expectedHash": "5f8996549f738e142a10ca997e0fe095795c9042d7091e99f8ddc29027d7cb68",
+      "summary": [
+        {
+          "month": 8,
+          "cashFlow": {
+            "monthlyIncome": 3000,
+            "totalBillsDue": 985,
+            "totalPaid": 0,
+            "netTransactions": -12,
+            "goalAllocations": 75,
+            "remaining": 1848
+          },
+          "closing": 2248,
+          "minimum": -400,
+          "plannedPayment": 85,
+          "eventCount": 9
+        },
+        {
+          "month": 9,
+          "cashFlow": {
+            "monthlyIncome": 3200,
+            "totalBillsDue": 985,
+            "totalPaid": 0,
+            "netTransactions": 0,
+            "goalAllocations": 0,
+            "remaining": 2215
+          },
+          "closing": 4463,
+          "minimum": 1313,
+          "plannedPayment": 85,
+          "eventCount": 5
+        },
+        {
+          "month": 10,
+          "cashFlow": {
+            "monthlyIncome": 3200,
+            "totalBillsDue": 985,
+            "totalPaid": 0,
+            "netTransactions": 0,
+            "goalAllocations": 0,
+            "remaining": 2215
+          },
+          "closing": 6678,
+          "minimum": 3528,
+          "plannedPayment": 85,
+          "eventCount": 5
+        }
+      ]
+    }
+  ]
+}

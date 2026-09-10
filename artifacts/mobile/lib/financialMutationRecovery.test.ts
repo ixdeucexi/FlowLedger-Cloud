@@ -451,7 +451,7 @@ test("core create retries reuse client ids and publish the shared recovery lifec
   const context = readFileSync("context/BudgetContext.tsx", "utf8");
   const sections = [
     ["const addBill", "const updateBill"],
-    ["const saveExtraPayment", "const getExtraPayment"],
+    ["const saveExtraPayment", "const deleteExtraPayment"],
     ["const addTransaction", "const updateTransaction"],
     ["const addIncome", "const updateIncome"],
     ["const addGoal", "const updateGoal"],

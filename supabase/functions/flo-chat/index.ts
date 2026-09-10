@@ -29,6 +29,7 @@ import {
   type FloVerifiedFallback,
 } from "./contract.ts";
 import { createFloTools, executeFloReadTools, summarizeToolPayload, type FloToolRuntime } from "./tools.ts";
+import { runFinancialAnalysis } from "./analysisPlanner.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -101,8 +102,8 @@ function withApprovedCors(response: Response, approvedCors: Record<string, strin
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
-function cleanText(value: unknown): string {
-  return String(value ?? "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim().slice(0, 4000);
+function cleanText(value: unknown, limit = 4000): string {
+  return String(value ?? "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim().slice(0, limit);
 }
 
 async function withinHardDeadline<T>(work: Promise<T>, timeoutMs: number): Promise<T> {
@@ -476,10 +477,24 @@ async function handleV3(
         emitProgress("Checking your FlowLedger records");
 
         const capabilityGuidance = floCapabilityGuidance(message);
+        const existingRoute = deterministicFloRoute(message, now.slice(0, 10));
+        const preserveVerifiedShortcut = existingRoute?.intent === "debt_snowball_target" || existingRoute?.intent === "named_debt_payment";
+        const appNavigationQuestion = /\b(?:how|where)\b.+\b(?:add|enter|record|edit|delete|open)\b/i.test(message);
+        const analysisApiKey = Deno.env.get("OPENAI_API_KEY");
+        const financialAnalysis = !forbiddenRequest.test(message) && !preserveVerifiedShortcut && !appNavigationQuestion && analysisApiKey
+          ? await withinHardDeadline(runFinancialAnalysis({ runtime: toolRuntime, question: message, apiKey: analysisApiKey, modelId, conversationId:conversationId!,historyEnabled, safetyIdentifier: await stableSafetyIdentifier(userId, Deno.env.get("FLO_SAFETY_IDENTIFIER_SECRET")!) }), hardAnswerDeadlineMs)
+          : null;
         if (forbiddenRequest.test(message)) {
           answer = { answer: securityRefusal, claims: [{ kind: "status", label: "Flo access", field: "status", value: "restricted", evidenceIds: ["policy:account-only"] }], caveat: null, evidenceIds: ["policy:account-only"], followups: ["Ask me about your active household plan."] };
           sources = [{ id: "policy:account-only", type: "household", label: "Flo privacy boundary", asOf: now, freshness: "current" }];
           aggregate = { partial: false, dataAsOf: now, coverage: { complete: true, tools: 0, partialTools: 0, exclusions: [], reasons: [], dateRanges: [] } };
+        } else if (financialAnalysis) {
+          answer = financialAnalysis.answer;
+          sources = financialAnalysis.sources;
+          aggregate = financialAnalysis.aggregate;
+          inputTokens = financialAnalysis.usage?.inputTokens ?? null;
+          outputTokens = financialAnalysis.usage?.outputTokens ?? null;
+          deterministicIntent = "financial_analysis";
         } else if (capabilityGuidance) {
           answer = { answer: capabilityGuidance.answer, claims: [], caveat: null, evidenceIds: [capabilityGuidance.source.id], followups: [] };
           sources = [capabilityGuidance.source];
@@ -574,7 +589,7 @@ async function handleV3(
           }
         }
 
-        answer.answer = cleanText(answer.answer);
+        answer.answer = cleanText(answer.answer, deterministicIntent === "financial_analysis" ? 12000 : 4000);
         const answerEnvelope = { ...answer, dataAsOf: aggregate.dataAsOf, coverage: aggregate.coverage, partial: aggregate.partial };
         failureStage = "persistence";
         await finalizeFloResponse(server!, {

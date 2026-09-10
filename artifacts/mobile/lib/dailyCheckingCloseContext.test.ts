@@ -5,6 +5,8 @@ import test from "node:test";
 
 const root = process.cwd();
 const budgetContext = fs.readFileSync(path.resolve(root, "context/BudgetContext.tsx"), "utf8");
+const projection = fs.readFileSync(path.resolve(root, "lib/financialProjection.ts"), "utf8");
+const projectionInput = fs.readFileSync(path.resolve(root, "lib/financialProjectionInput.ts"), "utf8");
 const monthly = fs.readFileSync(path.resolve(root, "app/(tabs)/monthly.tsx"), "utf8");
 const calendar = fs.readFileSync(path.resolve(root, "components/CalendarView.tsx"), "utf8");
 const desktop = fs.readFileSync(path.resolve(root, "components/desktop/DesktopCalendarPage.tsx"), "utf8");
@@ -13,14 +15,11 @@ const flo = fs.readFileSync(path.resolve(root, "app/(tabs)/flo.tsx"), "utf8");
 const simulator = fs.readFileSync(path.resolve(root, "app/plan-simulator.tsx"), "utf8");
 
 test("core daily balances remain projected while only the calendar getter overlays actual closes", () => {
-  const projectedBuilder = budgetContext.slice(
-    budgetContext.indexOf("const buildDailyBalances = useCallback"),
-    budgetContext.indexOf("const getDailyBalances = useCallback"),
+  const projectedBuilder = projection.slice(
+    projection.indexOf("const buildDailyBalances ="),
+    projection.indexOf("const getDailyBalances ="),
   );
-  const projectedGetter = budgetContext.slice(
-    budgetContext.indexOf("const getDailyBalances = useCallback"),
-    budgetContext.indexOf("const getCalendarDailyBalances = useCallback"),
-  );
+  const projectedGetter = projection.slice(projection.indexOf("const getDailyBalances ="));
   const calendarGetter = budgetContext.slice(
     budgetContext.indexOf("const getCalendarDailyBalances = useCallback"),
     budgetContext.indexOf("const getPlanSimulationBaseline = useCallback"),
@@ -150,9 +149,9 @@ test("web secondary and debt maintenance cannot begin before the startup release
 });
 
 test("nullable Plaid balances keep an explicit unavailable bit before forecasting", () => {
-  const normalizer = budgetContext.slice(
-    budgetContext.indexOf("function normalizeConnectedBankRows"),
-    budgetContext.indexOf("function normalizeDailyCheckingCloseRows"),
+  const normalizer = projectionInput.slice(
+    projectionInput.indexOf("function normalizeConnectedBankRows"),
+    projectionInput.indexOf("function normalizeAccountRow"),
   );
   assert.match(normalizer, /account\.current_balance != null && Number\.isFinite\(currentBalance\)/);
   assert.match(normalizer, /current_balance_available: currentBalanceAvailable/);

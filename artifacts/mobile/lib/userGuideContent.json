@@ -166,9 +166,9 @@
       {
         "title": "Ask Flo",
         "items": [
-          { "title": "Ask about the plan", "body": "Check upcoming bills, recent changes, and items needing review.", "icon": "help-circle" },
-          { "title": "Check sources", "body": "Use freshness and source details when Flo provides them.", "icon": "link" },
-          { "title": "Review before confirming", "body": "Inspect every proposed plan change before applying it.", "icon": "eye" },
+          { "title": "Ask about a date", "body": "Ask for your balance on a future date, upcoming bills, spending, debt payments, or a cash-buffer plan.", "icon": "help-circle" },
+          { "title": "Separate facts from forecasts", "body": "Flo calculates from recorded data. Expected paychecks and spending estimates are not guaranteed funds. Missing information is called out.", "icon": "link" },
+          { "title": "Try a what-if", "body": "Test a purchase, savings transfer, or extra debt payment without changing records. Review any separate proposed change before confirming it.", "icon": "eye" },
           { "title": "Show or hide Flo", "body": "Hold the Flo icon to hide it; tap Undo to restore it. Toggle the floating icon in Settings or Dashboard Configure.", "icon": "eye-off" }
         ]
       }
