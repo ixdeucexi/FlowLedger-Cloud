@@ -1,3 +1,5 @@
+import { dateOnlyToLocalDate } from "./dateLabels";
+
 export type FloHistoryItem = {
   id: string;
   title: string;
@@ -96,6 +98,10 @@ export function safeFloSourceRoute(route?: string): string | null {
 
 export function floFreshnessLabel(asOf?: string | null, now = new Date()): string {
   if (!asOf) return "Freshness unavailable";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(asOf)) {
+    const dateOnly = dateOnlyToLocalDate(asOf);
+    return dateOnly ? `As of ${dateOnly.toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : "Freshness unavailable";
+  }
   const parsed = new Date(asOf);
   if (!Number.isFinite(parsed.getTime())) return "Freshness unavailable";
   const minutes = Math.max(0, Math.round((now.getTime() - parsed.getTime()) / 60_000));
@@ -112,9 +118,17 @@ export function oldestFloSourceAsOf(sources: Array<{ asOf?: string | null }>): s
     if (!source.asOf) continue;
     const timestamp = Date.parse(source.asOf);
     if (!Number.isFinite(timestamp)) continue;
-    if (!oldest || timestamp < oldest.timestamp) oldest = { value: source.asOf, timestamp };
+    if (!oldest || timestamp < oldest.timestamp || (timestamp === oldest.timestamp && /^\d{4}-\d{2}-\d{2}$/.test(source.asOf))) oldest = { value: source.asOf, timestamp };
   }
   return oldest?.value;
+}
+
+export function floAnswerAsOf(dataAsOf: string | null | undefined, sources: Array<{ asOf?: string | null }>): string | undefined {
+  const oldest = oldestFloSourceAsOf(sources);
+  // The persisted envelope is timestamptz, but JSON evidence retains the
+  // original date-only precision. Restore it only for the same observation.
+  if (oldest && /^\d{4}-\d{2}-\d{2}$/.test(oldest) && Date.parse(oldest) === Date.parse(dataAsOf ?? "")) return oldest;
+  return dataAsOf ?? oldest;
 }
 
 export function exportFloHistoryText(

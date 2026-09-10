@@ -2,11 +2,14 @@ import { z } from "npm:zod@4.4.3";
 import { tool } from "npm:ai@7.0.59";
 import {
   boundedLimit,
+  configuredDebtSummary,
   FLO_V3_MAX_ROWS,
   freshness,
   isDateOnly,
   money,
+  oldestSourceAsOf,
   safeSearchTerm,
+  sourceAsOf,
   type FloSourceRef,
   type FloToolEnvelope,
 } from "./contract.ts";
@@ -47,15 +50,16 @@ function canonicalToolKey(name: string, parameters: Record<string, unknown>): st
 type QueryResult = { data: any[] | null; error: { code?: string; message?: string } | null; count?: number | null };
 
 function iso(value: unknown): string | null {
-  const parsed = Date.parse(String(value ?? ""));
-  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+  return sourceAsOf(value);
 }
 function routeFor(type: string, recordId?: string): string | undefined {
   if (type === "transaction") return "/(tabs)/transactions";
-  if (type === "debt") return recordId ? `/(tabs)/bills?debtId=${encodeURIComponent(recordId)}` : "/(tabs)/bills";
+  if (type === "debt") return recordId && recordId !== "summary" ? `/(tabs)/bills?debtId=${encodeURIComponent(recordId)}` : "/(tabs)/bills";
   if (type === "bill") return "/(tabs)/bills";
   if (type === "forecast" || type === "decision") return "/(tabs)/monthly";
-  if (type === "goal" || type === "budget") return "/(tabs)/bills";
+  if (type === "goal") return "/(tabs)/more?section=goals";
+  if (type === "budget") return "/(tabs)/category-budget";
+  if (type === "income") return "/(tabs)/more?section=money";
   if (type === "account" || type === "connection") return "/(tabs)/more";
   return undefined;
 }
@@ -91,8 +95,7 @@ function buildEvidence(
 }
 
 function evidenceDataAsOf(evidence: FloSourceRef[]): string | null {
-  const values = evidence.map(source => source.asOf ? Date.parse(source.asOf) : Number.NaN).filter(Number.isFinite);
-  return values.length ? new Date(Math.min(...values)).toISOString() : null;
+  return oldestSourceAsOf(evidence.map(source => source.asOf));
 }
 
 async function tracked(
@@ -141,10 +144,9 @@ async function rowsEnvelope(
   const records = data ?? [];
   const complete = typeof count === "number" ? count <= records.length : records.length < limit;
   const evidence = buildEvidence(name, type, label, records, runtime.now, startDate, endDate);
-  const timestamps = evidence.map(source => source.asOf ? Date.parse(source.asOf) : Number.NaN).filter(Number.isFinite);
   return {
     status: complete ? "ok" : "partial",
-    dataAsOf: timestamps.length ? new Date(Math.min(...timestamps)).toISOString() : null,
+    dataAsOf: evidenceDataAsOf(evidence),
     coverage: { complete, returned: records.length, limit, startDate, endDate, ...(complete ? {} : { reason: "result_limit" }) },
     evidence,
     records,
@@ -198,7 +200,7 @@ export function createFloTools(runtime: FloToolRuntime) {
     }),
 
     getAccountOverview: tool({
-      description: "Read active or archived FlowLedger accounts and balances for the active household. Use this before answering any balance or account question.",
+      description: "Read active or archived cash/connected FlowLedger accounts and balances for the active household. This is NOT a complete debt or credit-card inventory: manually entered cards and loans live in getBillsAndDebt. For a named card, debt balance, minimum payment, APR, or interest question, also read getBillsAndDebt before answering or concluding it is missing. Never substitute a checking balance for a requested card balance.",
       inputSchema: z.object({ includeArchived: z.boolean().default(false) }),
       execute: async ({ includeArchived }) => tracked(runtime, "getAccountOverview", { includeArchived }, async () => {
         const limit = 100;
@@ -228,9 +230,9 @@ export function createFloTools(runtime: FloToolRuntime) {
         const missingLiquidBalances = missingCheckingBalances + missingSavingsBalances;
         const missingLiabilityBalances = liabilities.filter(account => money(account.current_balance) === null).length;
         const exclusions = connectedKinds.size ? ["A manual checking or savings account is excluded only when a connected account of that same type is available, preventing double-counting."] : [];
-        const accountTimestamps = records.map(account => account.updated_at ?? account.balance_as_of ?? account.last_reconciled_at).filter(Boolean).map(value => Date.parse(String(value))).filter(Number.isFinite);
+        const accountTimestamps = records.map(account => sourceAsOf(account.updated_at ?? account.balance_as_of ?? account.last_reconciled_at)).filter((value): value is string => value !== null);
         const missingAccountTimestamps = records.length - accountTimestamps.length;
-        const dataAsOf = accountTimestamps.length ? new Date(Math.min(...accountTimestamps)).toISOString() : null;
+        const dataAsOf = oldestSourceAsOf(accountTimestamps);
         const summary = { id: "summary", record_kind: "canonical_account_summary", updated_at: accountTimestamps.length ? dataAsOf : null, checkingBalance: missingCheckingBalances ? null : (centsTotal(checking.map(account => account.current_balance)) ?? 0), savingsBalance: missingSavingsBalances ? null : (centsTotal(savings.map(account => account.current_balance)) ?? 0), liquidAssets: missingLiquidBalances ? null : (centsTotal(liquidAssets.map(account => account.current_balance)) ?? 0), liabilities: missingLiabilityBalances ? null : (centsTotal(liabilities.map(account => account.current_balance)) ?? 0), accountCount: records.length, connectedAccountCount: connectedAccounts.length, missingCheckingBalances, missingSavingsBalances, missingLiquidBalances, missingLiabilityBalances, missingAccountTimestamps, exclusions };
         const exactCount = Number(manual.count ?? manual.data?.length ?? 0) + Number(connected.count ?? connected.data?.length ?? 0);
         const complete = exactCount <= Number(manual.data?.length ?? 0) + Number(connected.data?.length ?? 0);
@@ -296,7 +298,7 @@ export function createFloTools(runtime: FloToolRuntime) {
     }),
 
     getBillsAndDebt: tool({
-      description: "Read canonical configured bills or debt balances for the active household. Do not derive occurrences or forecast totals from this tool alone.",
+      description: "Read canonical configured bills and debts, including manually entered credit cards and loans absent from getAccountOverview. REQUIRED for named-card/debt balances, minimum payments, APR, or interest questions: use debtOnly and a name query when appropriate. For debt rows balance is configured debt balance, amount is configured payment amount, and interest_rate is the recorded APR percentage; do not assert that a configured amount is a current lender-verified minimum. Do not substitute a checking account or conclude a card is missing without this read. Do not derive occurrences, paid/overdue status, or forecast totals from this tool alone. next_payment_date is a configured recurrence anchor, not a verified next occurrence. Use getBillPlanDetails for recorded monthly overrides and date moves; direct exact upcoming-occurrence questions to Forecast when not verifiable.",
       inputSchema: z.object({ debtOnly: z.boolean().default(false), includeClosed: z.boolean().default(false), query: z.string().nullable().default(null) }),
       execute: async input => tracked(runtime, "getBillsAndDebt", input, async () => {
         const limit = FLO_V3_MAX_ROWS;
@@ -304,13 +306,16 @@ export function createFloTools(runtime: FloToolRuntime) {
           .select("id,name,amount,category,priority,is_debt,balance,interest_rate,due_day,day_of_week,next_payment_date,start_date,end_date,is_recurring,frequency,include_in_snowball,snowball_minimum_boost,last_reviewed_at,smart_priority,created_at", { count: "exact" })
           .eq("household_id", runtime.householdId).order("is_debt", { ascending: false }).order("priority", { ascending: true }).limit(limit);
         if (input.debtOnly) query = query.eq("is_debt", true);
-        if (!input.includeClosed) query = query.or("is_debt.eq.false,balance.gt.0.009");
+        if (!input.includeClosed) query = query.or("is_debt.eq.false,balance.gt.0.009,balance.is.null");
         const term = safeSearchTerm(input.query);
         if (term) query = query.ilike("name", `%${term}%`);
         const result = await rowsEnvelope(runtime, "getBillsAndDebt", input.debtOnly ? "debt" : "bill", input.debtOnly ? "Debt accounts" : "Bills and debt", limit, () => query);
         if (result.status === "unavailable") return result;
-        const debtRows = (result.records as any[]).filter(row => row.is_debt === true);
-        result.summary = { id: "summary", record_kind: "configured_debt_summary", debtBalance: centsTotal(debtRows.map(row => row.balance)) ?? 0, configuredMinimums: centsTotal(debtRows.map(row => row.amount)) ?? 0, activeDebtCount: debtRows.filter(row => Number(row.balance) > 0.009).length, billRecordCount: result.records.length, occurrenceObligationsAvailable: false };
+        result.summary = configuredDebtSummary(result.records as Array<Record<string, unknown>>, result.coverage.complete);
+        if (result.summary.debtBalance === null || result.summary.configuredMinimums === null) {
+          result.status = "partial";
+          result.coverage = { ...result.coverage, complete: false, reason: result.coverage.reason ?? "debt_totals_unavailable", exclusions: [...(result.coverage.exclusions ?? []), "Debt totals with missing amounts or incomplete record coverage are unavailable rather than treated as zero."] };
+        }
         result.records.push(result.summary);
         result.evidence.push(...buildEvidence("getBillsAndDebt", input.debtOnly ? "debt" : "bill", "Configured debt totals", [result.summary], runtime.now));
         return result;
@@ -346,7 +351,7 @@ export function createFloTools(runtime: FloToolRuntime) {
     }),
 
     getIncomeSchedule: tool({
-      description: "Read configured income schedules, amount histories, and excluded pay dates for the active household.",
+      description: "Read configured income schedules, amount histories, and excluded pay dates for the active household. next_payment_date is a configured recurrence anchor that may be in the past, not a verified upcoming payday. This tool does not expand recurrence, exclusions, or amount history into occurrences; direct exact upcoming payday questions to Forecast when not verifiable.",
       inputSchema: z.object({ query: z.string().nullable().default(null) }),
       execute: async input => tracked(runtime, "getIncomeSchedule", input, async () => {
         const limit = 100;
@@ -370,7 +375,9 @@ export function createFloTools(runtime: FloToolRuntime) {
         if (budgetRows.error || goalRows.error) return { status: "unavailable", dataAsOf: null, coverage: { complete: false, returned: 0, limit: FLO_V3_MAX_ROWS, reason: budgetRows.error?.code ?? goalRows.error?.code ?? "query_failed" }, evidence: [], records: [] };
         const all = [...(budgetRows.data ?? []).map((row: any) => ({ ...row, id: `budget:${row.id}`, source_id: row.id, record_kind: "budget" })), ...(goalRows.data ?? []).map((row: any) => ({ ...row, id: `goal:${row.id}`, source_id: row.id, record_kind: "goal" }))];
         const complete = (budgetRows.count ?? all.length) <= (budgetRows.data?.length ?? 0) && (goalRows.count ?? all.length) <= (goalRows.data?.length ?? 0);
-        const evidence = buildEvidence("getBudgetsAndGoals", "budget", "Budgets and goals", all, runtime.now);
+        const evidence = all.length
+          ? all.flatMap(record => buildEvidence("getBudgetsAndGoals", record.record_kind, "Budgets and goals", [record], runtime.now))
+          : buildEvidence("getBudgetsAndGoals", "budget", "Budgets and goals", [], runtime.now);
         return { status: complete ? "ok" : "partial", dataAsOf: evidenceDataAsOf(evidence), coverage: { complete, returned: all.length, limit: FLO_V3_MAX_ROWS }, evidence, records: all };
       }),
     }),

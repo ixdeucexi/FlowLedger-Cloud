@@ -103,6 +103,16 @@ export type FloDeterministicAnswer = {
   partial: boolean;
 };
 
+export function requiresConfiguredDebtRead(question: string): boolean {
+  const normalized = question.toLowerCase();
+  if (/\bminimum\s+(?:monthly\s+)?payments?\b/.test(normalized)) return true;
+  const debtContext = /\b(?:debt|debts|loan|loans|credit\s+cards?)\b/.test(normalized)
+    || (/\bcards?\b/.test(normalized) && !/\b(?:debit|gift|prepaid)\s+cards?\b/.test(normalized));
+  const debtFact = /\b(?:balances?|minimums?|apr|interest(?:\s+rates?)?|owe|owing)\b/.test(normalized);
+  const bareApr = /\bapr\b/.test(normalized) && !/\b(?:checking|savings|deposit|investment|debit|gift|prepaid)\b/.test(normalized);
+  return (debtContext && debtFact) || bareApr;
+}
+
 const helpSource = (id: string, label: string, route: string): FloSourceRef => ({
   id: `help:${id}`,
   type: "help",
@@ -136,16 +146,11 @@ export function floCapabilityGuidance(question: string): FloCapabilityGuidance |
 }
 
 export function deterministicFloRoute(question: string, currentDate?: string): FloDeterministicRoute | null {
-  const normalized = question.trim().toLowerCase();
-  const recommendation = /\b(?:safe|safely|afford|should i (?:pay|spend|buy)|can i (?:pay|spend|buy)|extra payment|move money)\b/.test(normalized);
-  if (recommendation) return null;
-
-  const forecastExplanation = /\b(?:why|what caused|what changed|explain how|how (?:did|was|is))\b/.test(normalized)
-    || /\b(?:on|for) \d{4}-\d{2}-\d{2}\b/.test(normalized);
-  const simpleForecast = /\b(?:what should i know about|show(?: me)?|review|summarize|tell me about|what does|what(?:'s| is) in) (?:my |the )?forecast\b/.test(normalized)
-    || /\bforecast (?:overview|summary|snapshot)\b/.test(normalized)
-    || /^(?:my |the )?forecast\??$/.test(normalized);
-  if ((!forecastExplanation && (simpleForecast || /\bprojected (?:balance|close|cash flow)\b/.test(normalized))) || /\b(?:bills?|payments?) (?:are )?due next\b|\bwhat(?:'s| is) coming up\b/.test(normalized)) {
+  // Shortcuts have fixed inputs and render overviews, not arbitrary answers.
+  // Match the whole request so a merchant, period, status, or second question
+  // cannot be silently discarded. Everything else uses the grounded tool path.
+  const normalized = question.trim().toLowerCase().replace(/[?!\.]+$/, "").replace(/\s+/g, " ");
+  if (/^(?:(?:what should i know about|show(?: me)?|review|summarize|tell me about) (?:my |the )?forecast|(?:my |the )?forecast(?: overview| summary| snapshot)?)$/.test(normalized)) {
     return {
       intent: "forecast_overview",
       requests: [
@@ -155,31 +160,29 @@ export function deterministicFloRoute(question: string, currentDate?: string): F
       ],
     };
   }
-  if (/\b(?:debt|snowball|avalanche|extra payment)\b/.test(normalized) && /\b(?:history|saved plans?|past plans?|previous plans?|allocations?)\b/.test(normalized)) {
+  if (/^(?:show(?: me)? |review |list )?(?:my |the )?(?:debt plan history|saved debt plans)$/.test(normalized)) {
     return { intent: "debt_plan_history", requests: [{ name: "getDebtPlanHistory", input: { year: null, month: null } }] };
   }
-  if (/\b(?:debt|debts|snowball|avalanche)\b/.test(normalized) && /\b(?:balance|balances|total|owe|owing|overview|snapshot|list|which|how much)\b/.test(normalized)) {
+  if (/^(?:how much debt do i owe|(?:show(?: me)? |review |list )?(?:my |the )?(?:debts|debt overview|debt balances|debt snapshot))$/.test(normalized)) {
     return { intent: "debt_overview", requests: [{ name: "getBillsAndDebt", input: { debtOnly: true, includeClosed: false, query: null } }] };
   }
-  if (/\bbills?\b/.test(normalized) && /\b(?:overview|snapshot|list|show|what|which|have|how many|how much)\b/.test(normalized)) {
+  if (/^(?:what bills do i have|(?:show(?: me)? |review |list )?(?:my |the )?(?:bills|bill overview|bill snapshot))$/.test(normalized)) {
     return { intent: "bill_overview", requests: [{ name: "getBillsAndDebt", input: { debtOnly: false, includeClosed: false, query: null } }] };
   }
-  if (/\b(?:account|accounts|checking|savings)\b/.test(normalized) && /\b(?:balance|balances|total|overview|snapshot|list|which|how much)\b/.test(normalized)) {
+  if (/^(?:what are my account balances|(?:show(?: me)? |review |list )?(?:my |the )?(?:accounts|account balances|account overview|account snapshot))$/.test(normalized)) {
     return { intent: "account_overview", requests: [{ name: "getAccountOverview", input: { includeArchived: false } }] };
   }
-  if (/\b(?:income|paycheck|paychecks|payday)\b/.test(normalized) && /\b(?:next|when|amount|schedule|overview|snapshot|list|which|how much)\b/.test(normalized)) {
+  if (/^(?:show(?: me)? |review |list )?(?:my |the )?(?:configured income|income overview|income schedule|income snapshot)$/.test(normalized)) {
     return { intent: "income_overview", requests: [{ name: "getIncomeSchedule", input: { query: null } }] };
   }
-  if (/\b(?:activity|transactions?|spending|spend|spent|purchases?)\b/.test(normalized) && /\b(?:recent|latest|overview|snapshot|list|show|what|how much|this month)\b/.test(normalized)) {
-    const monthStart = isDateOnly(currentDate) ? `${currentDate.slice(0, 7)}-01` : null;
-    const thisMonth = /\bthis month\b/.test(normalized) && monthStart;
-    return { intent: "activity_overview", requests: [{ name: "searchTransactions", input: { startDate: thisMonth ? monthStart : null, endDate: thisMonth ? currentDate : null, query: null, category: null, pending: null, reviewStatus: null, includeDeleted: false, limit: 20 } }] };
+  if (/^(?:show(?: me)? |review |list )?(?:my |the )?(?:recent activity|recent transactions|activity overview|activity snapshot)$/.test(normalized)) {
+    return { intent: "activity_overview", requests: [{ name: "searchTransactions", input: { startDate: null, endDate: null, query: null, category: null, pending: null, reviewStatus: null, includeDeleted: false, limit: 20 } }] };
   }
-  if (/\b(?:budget|budgets|goal|goals|savings goal)\b/.test(normalized) && /\b(?:overview|snapshot|list|show|what|how much|progress|current|status|doing)\b/.test(normalized)) {
+  if (/^(?:show(?: me)? |review |list )?(?:my |the )?(?:current )?(?:goals|budgets|budgets and goals|goal overview|budget overview)$/.test(normalized)) {
     const exactDate = isDateOnly(currentDate) ? currentDate : null;
     return { intent: "budget_goal_overview", requests: [{ name: "getBudgetsAndGoals", input: { year: exactDate ? Number(exactDate.slice(0, 4)) : null, month: exactDate ? Number(exactDate.slice(5, 7)) - 1 : null, includeClosed: false } }] };
   }
-  if (/\b(?:plaid|bank|account)\b/.test(normalized) && /\b(?:connect|connection|sync|linked|refresh|status|health)\b/.test(normalized)) {
+  if (/^(?:is my bank connection healthy|(?:show(?: me)? |review )?(?:my |the )?bank connection (?:status|health))$/.test(normalized)) {
     return { intent: "connection_health", requests: [{ name: "getConnectionHealth", input: {} }] };
   }
   return null;
@@ -265,10 +268,10 @@ export function deterministicAnswerFromTools(
       if (!source || !amount) continue;
       addClaim("entity", "Scheduled item", "name", name, source);
       addClaim("amount", "Scheduled amount", "amount", amount, source);
-      addClaim("date", "Scheduled date", "next_payment_date", date, source);
+      addClaim("date", "Configured schedule anchor", "next_payment_date", date, source);
       upcomingText.push(`${name} ${amount} on ${date}`);
     }
-    if (upcomingText.length) sentences.push(`Next on the schedule: ${upcomingText.join("; ")}.`);
+    if (upcomingText.length) sentences.push(`Configured schedule anchors (not verified upcoming occurrences): ${upcomingText.join("; ")}.`);
     sentences.push("Open Forecast to review the exact daily projected closes and every calendar item.");
   } else if (intent === "account_overview") {
     const rows = ((accounts?.records as Array<Record<string, unknown>> | undefined) ?? []).filter(record => record.record_kind !== "canonical_account_summary").slice(0, 5);
@@ -350,10 +353,10 @@ export function deterministicAnswerFromTools(
       if (!source || !amount) continue;
       addClaim("entity", "Income", "name", name, source);
       addClaim("amount", "Income amount", "amount", amount, source);
-      addClaim("date", "Next payment date", "next_payment_date", date, source);
+      addClaim("date", "Configured income anchor", "next_payment_date", date, source);
       items.push(`${name}: ${amount} on ${date}`);
     }
-    sentences.push(items.length ? `Your next verified income dates are ${items.join("; ")}.` : "I checked your income schedule, but no next payment date was available.");
+    sentences.push(items.length ? `Your configured income anchors are ${items.join("; ")}. These are saved schedule anchors, not verified upcoming paydays. Open Forecast for occurrences after repeats and excluded dates are applied.` : "I checked your configured income, but no dated schedule anchor was available.");
   } else if (intent === "activity_overview") {
     const summary = activity?.summary as Record<string, unknown> | undefined;
     const summarySource = useSource(sourceForRecord(activity, "summary"));
@@ -480,8 +483,8 @@ export function verifiedFallbackForTool(
     searchTransactions: { label: "Activity", route: "/(tabs)/transactions", answer: "I checked your recent Activity records, but the full explanation did not finish. Open Activity to review them, or tap Retry." },
     getBillsAndDebt: { label: "Bills and debt", route: "/(tabs)/bills", answer: "I checked your bills and debt records, but the full explanation did not finish. Open Bills to review them, or tap Retry." },
     getBillPlanDetails: { label: "Forecast", route: "/(tabs)/monthly", answer: "I checked the planned payment records, but the full explanation did not finish. Open Forecast to review the plan, or tap Retry." },
-    getIncomeSchedule: { label: "Income", route: "/(tabs)/bills", answer: "I checked your income schedule, but the full explanation did not finish. Open Bills to review it, or tap Retry." },
-    getBudgetsAndGoals: { label: "Budgets and goals", route: "/(tabs)/bills", answer: "I checked your budgets and goals, but the full explanation did not finish. Open Bills to review them, or tap Retry." },
+    getIncomeSchedule: { label: "Income", route: "/(tabs)/more?section=money", answer: "I checked your configured income, but the full explanation did not finish. Open Income in Settings to review it, or tap Retry." },
+    getBudgetsAndGoals: { label: "Goals", route: "/(tabs)/more?section=goals", answer: "I checked your budgets and goals, but the full explanation did not finish. Review Goals in Settings or Category Budget, or tap Retry." },
     getDecisionsAndSimulations: { label: "Plan Simulator", route: "/plan-simulator", answer: "I checked your saved plans and simulations, but the full explanation did not finish. Open Plan Simulator to review them, or tap Retry." },
     getDebtPlanHistory: { label: "Debt Payoff Planner", route: "/snowball-plan", answer: "I checked your debt-plan history, but the full explanation did not finish. Open the Debt Payoff Planner to review it, or tap Retry." },
     getConnectionHealth: { label: "Connected accounts", route: "/(tabs)/more", answer: "I checked your connection records, but the full explanation did not finish. Open Accounts to review connection status, or tap Retry." },
@@ -526,9 +529,13 @@ export function verifiedFallbackFromTools(
 ): FloVerifiedFallback | null {
   if (!payloads.length || toolNames.length !== payloads.length) return null;
   const normalized = question.toLowerCase();
-  const deterministicIntentForTool = (toolName: string): FloDeterministicIntent | null => {
+  const deterministicIntentForTool = (toolName: string, payload: FloToolEnvelope): FloDeterministicIntent | null => {
     if (toolName === "getAccountOverview") return "account_overview";
-    if (toolName === "getBillsAndDebt") return /\b(?:debt|owe|snowball|avalanche)\b/.test(normalized) ? "debt_overview" : "bill_overview";
+    if (toolName === "getBillsAndDebt") {
+      const rows = (payload.records as Array<Record<string, unknown>>).filter(record => record.id !== "summary");
+      return requiresConfiguredDebtRead(question) || /\b(?:debt|owe|snowball|avalanche)\b/.test(normalized)
+        || (rows.length > 0 && rows.every(record => record.is_debt === true)) ? "debt_overview" : "bill_overview";
+    }
     if (toolName === "getIncomeSchedule") return "income_overview";
     if (toolName === "searchTransactions") return "activity_overview";
     if (toolName === "getBudgetsAndGoals") return "budget_goal_overview";
@@ -538,7 +545,7 @@ export function verifiedFallbackFromTools(
   };
   const individual = payloads.map((payload, index) => {
     const toolName = toolNames[index];
-    const intent = deterministicIntentForTool(toolName);
+    const intent = deterministicIntentForTool(toolName, payload);
     const direct = intent
       ? deterministicAnswerFromTools(intent, [toolName as FloDeterministicToolName], [payload])
       : null;
@@ -562,7 +569,7 @@ export function verifiedFallbackFromTools(
   const aggregate = aggregateCoverage(payloads);
   return {
     ...primary,
-    answer: combinedAnswer,
+    answer: `I could not complete the full answer to your question. These are the records I could verify, not confirmation that every requested filter or detail was checked. ${combinedAnswer}`,
     sources,
     dataAsOf: aggregate.dataAsOf,
     coverage: {
@@ -585,6 +592,22 @@ export function isDateOnly(value: unknown): value is string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = Date.parse(`${value}T00:00:00Z`);
   return Number.isFinite(parsed) && new Date(parsed).toISOString().slice(0, 10) === value;
+}
+
+export function sourceAsOf(value: unknown): string | null {
+  if (isDateOnly(value)) return value;
+  // A source without an explicit timezone is not a verified instant.
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/i.test(value)) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
+
+export function oldestSourceAsOf(values: unknown[]): string | null {
+  const normalized = values.map(sourceAsOf).filter((value): value is string => value !== null);
+  // ISO ordering compares calendar days, then instants. On the same day a
+  // date-only source sorts first, preserving its coarser precision rather than
+  // inventing midnight. No date-only value is emitted as a timestamp.
+  return normalized.sort()[0] ?? null;
 }
 
 export function boundedLimit(value: unknown, fallback = 50): number {
@@ -611,8 +634,31 @@ export function safeSearchTerm(value: unknown): string | undefined {
 }
 
 export function money(value: unknown): number | null {
+  if (typeof value !== "number" && typeof value !== "string") return null;
+  if (typeof value === "string" && !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(value.trim())) return null;
   const parsed = Number(value);
-  return Number.isFinite(parsed) ? Math.round(parsed * 100) / 100 : null;
+  const rounded = Math.round(parsed * 100) / 100;
+  return Number.isFinite(rounded) ? rounded : null;
+}
+
+export function configuredDebtSummary(records: Array<Record<string, unknown>>, complete: boolean) {
+  const debts = records.filter(row => row.is_debt === true);
+  const balances = debts.map(row => money(row.balance));
+  const minimums = debts.map(row => money(row.amount));
+  const total = (values: Array<number | null>): number | null => {
+    if (!complete || values.some(value => value === null)) return null;
+    return money(values.reduce<number>((sum, value) => sum + value!, 0));
+  };
+  return {
+    id: "summary",
+    record_kind: "configured_debt_summary",
+    debtBalance: total(balances),
+    configuredMinimums: total(minimums),
+    activeDebtCount: complete && balances.every(value => value !== null)
+      ? balances.filter(value => value! > 0.009).length : null,
+    billRecordCount: complete ? records.length : null,
+    occurrenceObligationsAvailable: false,
+  };
 }
 
 export function freshness(asOf: unknown, now = Date.now()): FloSourceRef["freshness"] {
@@ -707,10 +753,9 @@ export function validateGroundedAnswer(
 
 export function aggregateCoverage(payloads: FloToolEnvelope[]) {
   const partial = payloads.length === 0 || payloads.some(payload => payload.status !== "ok" || !payload.coverage.complete);
-  const dates = payloads.map(payload => payload.dataAsOf ? Date.parse(payload.dataAsOf) : Number.NaN).filter(Number.isFinite);
   return {
     partial,
-    dataAsOf: dates.length ? new Date(Math.min(...dates)).toISOString() : null,
+    dataAsOf: oldestSourceAsOf(payloads.map(payload => payload.dataAsOf)),
     coverage: {
       complete: !partial,
       tools: payloads.length,

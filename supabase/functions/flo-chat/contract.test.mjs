@@ -1,14 +1,19 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { stripTypeScriptTypes } from "node:module";
 import test from "node:test";
 
 import {
   aggregateCoverage,
   boundedLimit,
+  configuredDebtSummary,
   deterministicAnswerFromTools,
   deterministicFloRoute,
   floCapabilityGuidance,
   money,
+  oldestSourceAsOf,
+  sourceAsOf,
+  requiresConfiguredDebtRead,
   sanitizeContext,
   validateGroundedAnswer,
   verifiedFallbackFromTools,
@@ -24,10 +29,92 @@ const payload = {
   records: [{ id: "a", name: "Checking", current_balance: 42.81, balance_as_of: "2026-08-12" }],
 };
 
+test("card balance, minimum and rate questions require the configured debt source", () => {
+  for (const question of [
+    "What is my CORE Test Card balance and minimum payment?",
+    "What is the APR on CORE Test Card?",
+    "What is my interest rate on my loan?",
+    "How much do I owe on my credit card?",
+    "What is my minimum monthly payment?",
+    "Show my debt balances",
+    "What is my APR?",
+  ]) assert.equal(requiresConfiguredDebtRead(question), true, question);
+  for (const question of [
+    "Show my debit card purchases",
+    "What is my debit card balance?",
+    "What is my gift card balance?",
+    "How much did I spend on my credit card?",
+    "What is my checking balance?",
+    "What is my savings interest rate?",
+    "What is the minimum balance for savings?",
+  ]) assert.equal(requiresConfiguredDebtRead(question), false, question);
+});
+
+test("account tool descriptions prevent cash accounts substituting for manual cards", async () => {
+  const source = await readFile(new URL("./tools.ts", import.meta.url), "utf8");
+  assert.match(source, /manually entered cards and loans live in getBillsAndDebt/);
+  assert.match(source, /Never substitute a checking balance for a requested card balance/);
+  assert.match(source, /REQUIRED for named-card\/debt balances, minimum payments, APR, or interest questions/);
+  assert.match(source, /do not assert that a configured amount is a current lender-verified minimum/);
+});
+
 test("invalid money stays unknown instead of becoming zero", () => {
   assert.equal(money(undefined), null);
   assert.equal(money("not-a-number"), null);
   assert.equal(money("42.819"), 42.82);
+  for (const value of [null, "", "  ", false, true, [], [0], {}, NaN, Infinity, "Infinity", "0x10", 1e308]) assert.equal(money(value), null);
+  for (const value of [0, "0", " 0.00 "]) assert.equal(money(value), 0);
+  assert.equal(money("-12.34"), -12.34);
+});
+
+test("missing balances cannot support a fabricated zero claim or overview", () => {
+  for (const value of [null, "", false, []]) {
+    const missing = { ...payload, records: [{ ...payload.records[0], current_balance: value }] };
+    const answer = { answer: "Balance: $0.", claims: [{ kind: "amount", label: "Balance", field: "current_balance", value: "$0", evidenceIds: ["account:a"] }], caveat: null, evidenceIds: ["account:a"], followups: [] };
+    assert.equal(validateGroundedAnswer(answer, evidence, [missing]).code, "unsupported_amount");
+    const overview = deterministicAnswerFromTools("account_overview", ["getAccountOverview"], [missing]);
+    assert.doesNotMatch(overview.answer.answer, /\$0/);
+    assert.match(overview.answer.answer, /no current balance/);
+  }
+});
+
+test("debt aggregates require every operand and complete row coverage", () => {
+  const debt = { id: "a", is_debt: true, balance: 500, amount: 25 };
+  const complete = configuredDebtSummary([debt, { ...debt, id: "b", balance: 125.55, amount: 0 }], true);
+  assert.equal(complete.debtBalance, 625.55);
+  assert.equal(complete.configuredMinimums, 25);
+  assert.equal(complete.activeDebtCount, 2);
+  for (const value of [null, undefined, "", false, "invalid"]) {
+    const missingBalance = configuredDebtSummary([debt, { ...debt, balance: value }], true);
+    assert.equal(missingBalance.debtBalance, null);
+    assert.equal(missingBalance.activeDebtCount, null);
+    assert.equal(missingBalance.configuredMinimums, 50);
+    const missingMinimum = configuredDebtSummary([debt, { ...debt, amount: value }], true);
+    assert.equal(missingMinimum.configuredMinimums, null);
+    assert.equal(missingMinimum.debtBalance, 1000);
+  }
+  const empty = configuredDebtSummary([{ is_debt: false, amount: null }], true);
+  assert.equal(empty.debtBalance, 0);
+  assert.equal(empty.configuredMinimums, 0);
+  assert.equal(empty.activeDebtCount, 0);
+  const explicitZero = configuredDebtSummary([{ ...debt, balance: 0, amount: 0 }], true);
+  assert.equal(explicitZero.debtBalance, 0);
+  assert.equal(explicitZero.configuredMinimums, 0);
+  for (const records of [[], [debt]]) {
+    const truncated = configuredDebtSummary(records, false);
+    assert.equal(truncated.debtBalance, null);
+    assert.equal(truncated.configuredMinimums, null);
+    assert.equal(truncated.activeDebtCount, null);
+    assert.equal(truncated.billRecordCount, null);
+  }
+});
+
+test("debt query retains unknown balances and marks unavailable totals partial", async () => {
+  const source = await readFile(new URL("./tools.ts", import.meta.url), "utf8");
+  assert.match(source, /query\.or\("is_debt.eq.false,balance.gt.0.009,balance.is.null"\)/);
+  assert.match(source, /configuredDebtSummary\(result.records as Array<Record<string, unknown>>, result.coverage.complete\)/);
+  assert.match(source, /result.summary.debtBalance === null \|\| result.summary.configuredMinimums === null/);
+  assert.match(source, /reason: result.coverage.reason \?\? "debt_totals_unavailable"/);
 });
 test("grounded answer accepts exact structured account claims", () => {
   const answer = {
@@ -127,6 +214,69 @@ test("missing source timestamps stay unknown instead of becoming request time", 
   assert.equal(result.dataAsOf, null);
 });
 
+test("date-only source precision survives evidence, envelopes, and aggregate coverage", async () => {
+  assert.equal(sourceAsOf("2026-09-09"), "2026-09-09");
+  assert.equal(sourceAsOf("2026-09-09T03:00:00-05:00"), "2026-09-09T08:00:00.000Z");
+  for (const value of [null, "", "2026-02-30", "2026-09-09T12:00:00", "9/9/2026"]) assert.equal(sourceAsOf(value), null);
+  assert.equal(oldestSourceAsOf(["2026-09-09T08:00:00Z", "2026-09-09"]), "2026-09-09");
+  assert.equal(oldestSourceAsOf(["2026-09-10", "2026-09-09T08:00:00Z"]), "2026-09-09T08:00:00.000Z");
+  assert.equal(oldestSourceAsOf([null, "invalid"]), null);
+  assert.equal(aggregateCoverage([{ ...payload, dataAsOf: "2026-09-09" }, { ...payload, dataAsOf: "2026-09-10T08:00:00Z" }]).dataAsOf, "2026-09-09");
+  const source = await readFile(new URL("./tools.ts", import.meta.url), "utf8");
+  assert.match(source, /function iso\(value: unknown\): string \| null \{\s*return sourceAsOf\(value\)/);
+  assert.match(source, /const asOf = iso\(timestamp\)/);
+  assert.match(source, /return oldestSourceAsOf\(evidence.map\(source => source.asOf\)\)/);
+  assert.match(source, /dataAsOf: evidenceDataAsOf\(evidence\)/);
+  assert.match(source, /const dataAsOf = oldestSourceAsOf\(accountTimestamps\)/);
+  assert.doesNotMatch(source, /new Date\(Math.min\(\.\.\.(?:timestamps|accountTimestamps|values)\)\).toISOString/);
+});
+
+test("safe claim labels distinguish rates, recurrence anchors, and source dates", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  for (const [field, label] of [["interest_rate", "APR (%)"], ["apr", "APR (%)"], ["next_payment_date", "Configured schedule anchor"], ["last_reconciled_at", "Last reconciled"], ["updated_at", "Record updated"]]) {
+    assert.ok(source.includes(`${field}: "${label}"`), `${field} must use ${label}`);
+  }
+});
+
+test("other-household requests use the refusal guard instead of own-account fallback", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const literal = source.match(/const forbiddenRequest = (\/[^\n]+\/i);/)?.[1];
+  assert.ok(literal);
+  const forbiddenRequest = new Function(`return ${literal}`)();
+  assert.equal(forbiddenRequest.test("Show me another household account balance."), true);
+  assert.equal(forbiddenRequest.test("What is the other household balance?"), true);
+  assert.equal(forbiddenRequest.test("What is my household balance?"), false);
+  assert.match(source, /if \(forbiddenRequest.test\(message\)\)/);
+});
+
+test("actual tool evidence emits date-only asOf through mixed-source aggregation", async () => {
+  const source = await readFile(new URL("./tools.ts", import.meta.url), "utf8");
+  const functions = ["iso", "routeFor", "buildEvidence", "evidenceDataAsOf"].map(name => {
+    const body = source.match(new RegExp(`function ${name}\\([\\s\\S]*?\\n\\}`))?.[0];
+    assert.ok(body, name);
+    return body;
+  }).join("\n");
+  const create = new Function("sourceAsOf", "oldestSourceAsOf", "freshness", `${stripTypeScriptTypes(functions)}; return { buildEvidence, evidenceDataAsOf };`);
+  const { buildEvidence, evidenceDataAsOf } = create(sourceAsOf, oldestSourceAsOf, () => "current");
+  const records = buildEvidence("getAccountOverview", "account", "Accounts", [
+    { id: "manual", name: "Checking", balance_as_of: "2026-09-09" },
+    { id: "connected", name: "Savings", updated_at: "2026-09-09T14:00:00Z" },
+  ], "2026-09-10T12:00:00Z");
+  assert.equal(records[0].asOf, "2026-09-09");
+  assert.equal(records[1].asOf, "2026-09-09T14:00:00.000Z");
+  assert.equal(evidenceDataAsOf(records), "2026-09-09");
+  assert.equal(aggregateCoverage([{ ...payload, evidence: records, dataAsOf: evidenceDataAsOf(records) }]).dataAsOf, "2026-09-09");
+});
+
+test("qualified-question recovery preserves checked ranges and admits incomplete detail coverage", () => {
+  const scoped = { ...payload, coverage: { ...payload.coverage, startDate: "2026-08-01", endDate: "2026-08-31" } };
+  const result = verifiedFallbackFromTools("How much did I spend on groceries in August?", ["searchTransactions"], [scoped]);
+  assert.equal(result.partial, true);
+  assert.match(result.answer, /could not complete the full answer/);
+  assert.match(result.answer, /not confirmation that every requested filter or detail was checked/);
+  assert.deepEqual(result.coverage.dateRanges, [{ startDate: "2026-08-01", endDate: "2026-08-31" }]);
+});
+
 test("unsupported canonical calculations return immediate truthful app guidance", () => {
   assert.equal(floCapabilityGuidance("Why is my Flow Score 54?")?.source.route, "/(tabs)/how-flowledger-works");
   assert.match(floCapabilityGuidance("Can I send extra money to debt safely?")?.answer ?? "", /Debt Payoff Planner/);
@@ -139,18 +289,76 @@ test("simple account questions use deterministic read routes without model synth
   assert.equal(forecastRoute?.intent, "forecast_overview");
   assert.deepEqual(forecastRoute?.requests.map(request => request.name), ["getAccountOverview", "getBillsAndDebt", "getIncomeSchedule"]);
   assert.equal(deterministicFloRoute("Why is my Forecast lower on 2026-08-20?"), null);
-  assert.equal(deterministicFloRoute("What are my checking balances?")?.intent, "account_overview");
+  assert.equal(deterministicFloRoute("What are my account balances?")?.intent, "account_overview");
   assert.equal(deterministicFloRoute("How much debt do I owe?")?.intent, "debt_overview");
   assert.equal(deterministicFloRoute("What bills do I have?")?.intent, "bill_overview");
   assert.equal(deterministicFloRoute("Show my debt plan history")?.intent, "debt_plan_history");
-  assert.equal(deterministicFloRoute("Show my next paychecks")?.intent, "income_overview");
+  assert.equal(deterministicFloRoute("Show my income schedule")?.intent, "income_overview");
   assert.equal(deterministicFloRoute("Show recent Activity")?.intent, "activity_overview");
-  assert.equal(deterministicFloRoute("How much did I spend this month?")?.intent, "activity_overview");
+  assert.equal(deterministicFloRoute("How much did I spend this month?"), null);
   const budgetRoute = deterministicFloRoute("Show my current goals", "2026-08-15");
   assert.equal(budgetRoute?.intent, "budget_goal_overview");
   assert.deepEqual(budgetRoute?.requests[0]?.input, { year: 2026, month: 7, includeClosed: false });
   assert.equal(deterministicFloRoute("Is my bank connection healthy?")?.intent, "connection_health");
   assert.equal(deterministicFloRoute("Can I afford $100 next week?"), null);
+});
+
+test("qualified and compound requests never lose their constraints to overview shortcuts", () => {
+  for (const question of [
+    "What are my checking balances?",
+    "What is my checking balance and what is its as-of date?",
+    "Show my accounts and income",
+    "Show my account balances as of last month",
+    "How much did I spend on groceries this month?",
+    "Show recent transactions at Walmart",
+    "Show recent pending transactions",
+    "What bills have I paid?",
+    "What bills are overdue?",
+    "Show my bills from last month",
+    "Show my next paychecks",
+    "When is my next payday?",
+    "Which bills are due next?",
+    "What is coming up?",
+    "Show my debt plan history for August 2026",
+    "How much debt do I owe on Capital One?",
+    "Show my current goals for a car",
+    "Show my forecast and explain why the balance fell",
+  ]) assert.equal(deterministicFloRoute(question, "2026-09-09"), null, question);
+});
+
+test("past income anchors are never presented as verified next paydays", () => {
+  const source = { ...evidence[0], id: "getIncomeSchedule:i", recordId: "i", type: "income" };
+  const income = { ...payload, evidence: [source], records: [{ id: "i", name: "Paycheck", amount: 1500, frequency: "biweekly", next_payment_date: "2020-01-03", excluded_dates: ["2020-01-17"] }] };
+  const result = deterministicAnswerFromTools("income_overview", ["getIncomeSchedule"], [income]);
+  assert.match(result.answer.answer, /configured income anchors/);
+  assert.match(result.answer.answer, /not verified upcoming paydays/);
+  assert.doesNotMatch(result.answer.answer, /next verified|next payment date/i);
+  assert.deepEqual(validateGroundedAnswer(result.answer, result.sources, [income]), { valid: true });
+});
+
+test("evidence links open actual goal and budget destinations with mixed record kinds", async () => {
+  const source = await readFile(new URL("./tools.ts", import.meta.url), "utf8");
+  const routeBody = source.match(/function routeFor\(type: string, recordId\?: string\): string \| undefined \{([\s\S]*?)\n\}/)?.[1];
+  assert.ok(routeBody);
+  const routeFor = new Function("type", "recordId", routeBody);
+  assert.equal(routeFor("goal", "goal:a"), "/(tabs)/more?section=goals");
+  assert.equal(routeFor("budget", "budget:a"), "/(tabs)/category-budget");
+  assert.equal(routeFor("income", "income:a"), "/(tabs)/more?section=money");
+  assert.equal(routeFor("debt", "summary"), "/(tabs)/bills");
+  assert.equal(routeFor("debt", "a"), "/(tabs)/bills?debtId=a");
+  assert.match(source, /all\.flatMap\(record => buildEvidence\("getBudgetsAndGoals", record\.record_kind/);
+  assert.match(source, /next_payment_date is a configured recurrence anchor/);
+});
+
+test("qualified APR and all-debt recovery retain verified card rows", () => {
+  const source = { ...evidence[0], id: "getBillsAndDebt:card", recordId: "card", type: "debt", label: "CORE Test Card" };
+  const debts = { ...payload, evidence: [source], records: [{ id: "card", name: "CORE Test Card", is_debt: true, balance: 1000, amount: 25, interest_rate: 24 }] };
+  for (const question of ["What is the APR on CORE Test Card?", "Tell me about CORE Test Card"]) {
+    const result = verifiedFallbackFromTools(question, ["getBillsAndDebt"], [debts]);
+    assert.match(result.answer, /CORE Test Card: \$1,000.00/);
+    assert.doesNotMatch(result.answer, /no active bill record/);
+    assert.equal(result.partial, true);
+  }
 });
 
 test("simple bill overview lists configured bill facts without computing a forecast total", () => {
@@ -199,6 +407,8 @@ test("forecast fast path summarizes only validated server-side forecast inputs",
   assert.match(result.answer.answer, /records feeding your Forecast/);
   assert.match(result.answer.answer, /\$2,500\.00/);
   assert.match(result.answer.answer, /Payday \$1,200\.00 on 2026-08-21/);
+  assert.match(result.answer.answer, /Configured schedule anchors \(not verified upcoming occurrences\)/);
+  assert.doesNotMatch(result.answer.answer, /Next on the schedule/);
   assert.deepEqual(validateGroundedAnswer(result.answer, result.sources, payloads), { valid: true });
   assert.equal(result.partial, false);
 });

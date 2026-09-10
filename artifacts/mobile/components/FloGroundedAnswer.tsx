@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
-import { floFreshnessLabel, oldestFloSourceAsOf, safeFloSourceRoute, type FloEvidenceRef, type FloReviewProposal } from "@/lib/floExperience";
+import { floAnswerAsOf, floFreshnessLabel, safeFloSourceRoute, type FloEvidenceRef, type FloReviewProposal } from "@/lib/floExperience";
 
 type Props = {
   text: string;
@@ -23,7 +23,7 @@ type Props = {
 export function FloGroundedAnswer({ text, sources, dataAsOf, partial, coverage, followUps = [], caveat, proposal, proposalConfirmed, onOpenSource, onFollowUp, onReviewProposal }: Props) {
   const c = useColors();
   const [evidenceOpen, setEvidenceOpen] = useState(false);
-  const freshnessAsOf = dataAsOf ?? oldestFloSourceAsOf(sources);
+  const freshnessAsOf = floAnswerAsOf(dataAsOf, sources);
 
   return (
     <View>

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { collectFloHistoryPages, floConversationForRequest, floEphemeralCleanupError, floFreshnessLabel, floProposalMatchesAuthoritative, isFloRequestGenerationCurrent, nextFloRequestGeneration, oldestFloSourceAsOf, safeFloSourceRoute, searchFloHistory } from "./floExperience";
+import { collectFloHistoryPages, floAnswerAsOf, floConversationForRequest, floEphemeralCleanupError, floFreshnessLabel, floProposalMatchesAuthoritative, isFloRequestGenerationCurrent, nextFloRequestGeneration, oldestFloSourceAsOf, safeFloSourceRoute, searchFloHistory } from "./floExperience";
 
 test("searchFloHistory matches titles and summaries without changing order", () => {
   const rows = [
@@ -35,6 +35,27 @@ test("oldestFloSourceAsOf uses the least fresh valid supporting source", () => {
     {},
   ]), "2026-08-10T09:00:00.000Z");
   assert.equal(oldestFloSourceAsOf([{ asOf: "invalid" }]), undefined);
+});
+
+test("Flo date-only evidence preserves the recorded calendar day without inventing an update time", () => {
+  assert.equal(floFreshnessLabel("2026-09-09", new Date("2026-09-10T01:00:00Z")),
+    `As of ${new Date(2026, 8, 9, 12).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`);
+  assert.equal(floFreshnessLabel("2026-02-30"), "Freshness unavailable");
+});
+
+test("saved Flo answers recover date-only precision from matching JSON evidence", () => {
+  const sources = [{ asOf: "2026-09-09" }];
+  const restored = floAnswerAsOf("2026-09-09T00:00:00+00:00", sources);
+  assert.equal(restored, "2026-09-09");
+  assert.match(floFreshnessLabel(restored), /^As of /);
+  assert.equal(floAnswerAsOf("2026-09-08T12:00:00Z", sources), "2026-09-08T12:00:00Z");
+  assert.equal(floAnswerAsOf(null, sources), "2026-09-09");
+  assert.equal(floAnswerAsOf(null, []), undefined);
+  const timestampSource = { asOf: "2026-09-09T00:00:00Z" };
+  for (const mixed of [[timestampSource, ...sources], [...sources, timestampSource]]) {
+    assert.equal(oldestFloSourceAsOf(mixed), "2026-09-09");
+    assert.equal(floAnswerAsOf("2026-09-09T00:00:00+00:00", mixed), "2026-09-09");
+  }
 });
 
 test("collectFloHistoryPages includes retained history beyond the first 50 rows", async () => {
