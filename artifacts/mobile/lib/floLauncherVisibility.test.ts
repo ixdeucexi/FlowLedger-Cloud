@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   createFloLauncherPreferenceStore,
+  createFloUndoPressGate,
   scopedFloLauncherPreferenceStore,
   clearFloLauncherPreferenceStoresForUser,
 } from "./floLauncherVisibility";
@@ -155,6 +156,9 @@ test("fixed launcher hold suppresses navigation and every preference surface use
     /PanResponder|floLauncherPosition|name="x"|dragHandle/,
   );
   assert.match(launcher, /delayLongPress=\{650\}/);
+  assert.match(launcher, /key="flo-undo"/);
+  assert.match(launcher, /key="flo-launcher"/);
+  assert.match(launcher, /if \(!undoPress.consume\(\)\) return/);
   assert.match(launcher, /UNDO_DURATION_MS = 5000/);
   assert.match(launcher, /held.current = true/);
   assert.match(launcher, /if \(held.current\) return/);
@@ -173,4 +177,19 @@ test("fixed launcher hold suppresses navigation and every preference surface use
     read("hooks/useDashboardLayoutPreferences.ts"),
     /floLauncherEnabled/,
   );
+});
+
+test("Undo rejects the hiding touch release and requires a fresh pointer or keyboard press", () => {
+  const gate = createFloUndoPressGate();
+  gate.reset();
+  assert.equal(gate.consume(), false);
+  assert.equal(gate.consume(), false);
+  gate.begin();
+  assert.equal(gate.consume(), true);
+  assert.equal(gate.consume(), false);
+  gate.begin();
+  assert.equal(gate.consume(), true);
+  gate.begin();
+  gate.reset();
+  assert.equal(gate.consume(), false);
 });

@@ -7,6 +7,7 @@ import { FloLogo } from "@/components/FloLogo";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { useFloLauncherPreference } from "@/hooks/useFloLauncherPreference";
+import { createFloUndoPressGate } from "@/lib/floLauncherVisibility";
 import * as Haptics from "@/lib/haptics";
 
 const UNDO_DURATION_MS = 5000;
@@ -92,6 +93,7 @@ export function FloLauncher({ desktop }: { desktop: boolean }) {
   const currentScope = useRef(preference.scope);
   currentScope.current = preference.scope;
   const held = useRef(false);
+  const undoPress = useRef(createFloUndoPressGate()).current;
   const [undoScope, setUndoScope] = useState<typeof preference.scope | null>(
     null,
   );
@@ -125,6 +127,7 @@ export function FloLauncher({ desktop }: { desktop: boolean }) {
       );
       return;
     }
+    undoPress.reset();
     setUndoScope(enabled ? null : scope);
     void Haptics.selectionAsync().catch(() => undefined);
   };
@@ -155,10 +158,19 @@ export function FloLauncher({ desktop }: { desktop: boolean }) {
       ) : null}
       {showUndo ? (
         <Pressable
+          key="flo-undo"
           accessibilityRole="button"
           accessibilityLabel="Undo hiding the Flo shortcut"
           disabled={preference.saving}
+          onPressIn={() => {
+            undoPress.begin();
+          }}
           onPress={() => {
+            // A touch ending on the newly rendered Undo is not a new press.
+            if (!undoPress.consume()) return;
+            void saveVisibility(true);
+          }}
+          onAccessibilityTap={() => {
             void saveVisibility(true);
           }}
           style={[
@@ -174,6 +186,7 @@ export function FloLauncher({ desktop }: { desktop: boolean }) {
         </Pressable>
       ) : (
         <Pressable
+          key="flo-launcher"
           accessibilityRole="button"
           accessibilityLabel={context.label}
           accessibilityHint="Tap to open Flo. Hold to hide this shortcut. Turn it back on in Settings or Customize Dashboard."

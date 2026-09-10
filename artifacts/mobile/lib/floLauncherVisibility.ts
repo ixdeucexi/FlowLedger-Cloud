@@ -5,6 +5,23 @@ export type FloLauncherPreferenceState = {
   error: string | null;
 };
 
+export function createFloUndoPressGate() {
+  let started = false;
+  return {
+    reset() {
+      started = false;
+    },
+    begin() {
+      started = true;
+    },
+    consume() {
+      const accepted = started;
+      started = false;
+      return accepted;
+    },
+  };
+}
+
 const stores = new Map<
   string,
   ReturnType<typeof createFloLauncherPreferenceStore>
