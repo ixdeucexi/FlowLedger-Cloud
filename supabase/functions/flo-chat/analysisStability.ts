@@ -1,13 +1,18 @@
 import { buildAnalysisForecast, projectionSources } from "./analysisProjection.ts";
 import { aggregateSpending, analyticTransactions } from "./analysisSpending.ts";
+import { scheduleAnalysis } from "./analysisSchedule.ts";
 import { dayAdd, dollars, label, matches, monthEnd, monthStart, numeric, round, shiftMonth, sum, type AnalysisRequest, type AnalysisResult, type AnalysisSnapshot } from "./analysisTypes.ts";
 
 export function stabilityAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequest): AnalysisResult {
   const timeline=request.purpose==="buffer_timeline" || request.domain==="buffer"&&request.operation==="plan";
-  if(timeline&&request.amount===null&&(!request.target||request.target==="none"))return {text:"What cash-buffer amount do you want to reach, or do you mean one paycheck or one month ahead?",facts:{timelineOutcome:"not_estimable"},sources:[],assumptions:[],missing:["A buffer target is needed; no target or contribution amount was inferred"],scenario:false};
+  const proposed=timeline?request.contribution:null;
+  const contributionFacts:AnalysisResult["facts"]=proposed?{explicitContribution:proposed.amount,contributionFrequency:proposed.frequency}:{};
+  const contributionNote=proposed?`You proposed ${dollars(proposed.amount)} ${proposed.frequency==="paycheck"?"per paycheck":proposed.frequency==="monthly"?"per month":"once"}. This is your stated contribution, not verified spare money or confirmation it is affordable.`:null;
+  if(timeline&&request.amount===null&&(!request.target||request.target==="none"))return {text:"What cash-buffer amount do you want to reach, or do you mean one paycheck or one month ahead?",facts:{timelineOutcome:"not_estimable",...contributionFacts},sources:[],assumptions:contributionNote?[contributionNote]:[],missing:["A buffer target is needed; no target or contribution amount was inferred"],scenario:false};
   const forecast=buildAnalysisForecast(snapshot,request.endDate??monthEnd(shiftMonth(snapshot.today,2)));
   const missing=[...forecast.missing,...forecast.affordabilityMissing];
   const assumptions=["This plan uses recorded obligations and expected paychecks. Estimated spending is included only when a three-month baseline is available. No balances or plans are changed."];
+  if(contributionNote)assumptions.push(contributionNote);
   const days=forecast.days, floor=forecast.input.settings.safety_floor;
   const events=days.flatMap(d=>d.events).filter(e=>e.date>=snapshot.today&&!["actual","applied","finalized"].includes(e.status));
   const income=events.filter(e=>e.kind==="scheduled_income"&&e.amount>0);
@@ -15,7 +20,7 @@ export function stabilityAnalysis(snapshot: AnalysisSnapshot, request: AnalysisR
   const nextDate=payDates[0];
   const nextPay=sum(income.filter(e=>e.date===nextDate).map(e=>e.amount));
   const needsPaycheckTarget=request.amount===null&&request.target!=="month_ahead";
-  if(needsPaycheckTarget&&(!nextDate||nextPay<=0))return {text:"I cannot determine a paycheck-sized buffer target because no positive future paycheck is scheduled. State an explicit cash target or add the expected income schedule.",facts:timeline?{timelineOutcome:"not_estimable",timelineDuration:null}:{},sources:projectionSources,assumptions:[],missing:["A positive expected paycheck is required to derive the target; zero was not assumed"],scenario:false};
+  if(needsPaycheckTarget&&(!nextDate||nextPay<=0))return {text:"I cannot determine a paycheck-sized buffer target because no positive future paycheck is scheduled. State an explicit cash target or add the expected income schedule.",facts:timeline?{timelineOutcome:"not_estimable",timelineDuration:null,...contributionFacts}:{},sources:projectionSources,assumptions:contributionNote?[contributionNote]:[],missing:["A positive expected paycheck is required to derive the target; zero was not assumed"],scenario:false};
   const low=days.reduce((a,b)=>a.estimatedBalance<=b.estimatedBalance?a:b);
   const scheduledBuffer=round(Math.max(0,Math.min(forecast.availableNow??0,low.estimatedBalance)-floor));
   const bufferVerified=forecast.historyAvailable&&forecast.anchorDate===snapshot.today&&forecast.availableNow!==null&&!missing.length;
@@ -28,9 +33,13 @@ export function stabilityAnalysis(snapshot: AnalysisSnapshot, request: AnalysisR
   const nextMonthObligations=-sum(events.filter(e=>e.amount<0&&e.date>=nextMonth&&e.date<=nextMonthEnd).map(e=>e.amount));
   const monthTarget=round(nextMonthObligations+forecast.dailyEstimate*Number(nextMonthEnd.slice(-2)));
   const target=request.amount??(request.target==="month_ahead"?monthTarget:nextPay);
+  const incompleteMonthTarget=request.target==="month_ahead"&&request.amount===null&&!forecast.historyAvailable;
   const remaining=free===null?null:round(Math.max(0,target-free));
-  const facts:AnalysisResult["facts"]={currentPlanBuffer:free,cashCushion:floor,nextPayday:nextDate??null,nextPaycheck:nextPay,oneMonthTarget:monthTarget,target,remaining,minimumBalance:low.estimatedBalance,minimumDate:low.date};
+  const facts:AnalysisResult["facts"]={currentPlanBuffer:free,cashCushion:floor,nextPayday:nextDate??null,nextPaycheck:nextPay,oneMonthTarget:monthTarget,target,remaining,minimumBalance:low.estimatedBalance,minimumDate:low.date,...contributionFacts};
+  if(!forecast.historyAvailable)facts.oneMonthTarget=null;
+  if(incompleteMonthTarget){facts.target=null;facts.monthScheduledObligations=nextMonthObligations;missing.push("The full month-ahead target is unknown without everyday living costs; scheduled obligations are only one portion");}
   const lines=[free===null?`Your available cash buffer cannot yet be verified. The recorded plan's lowest projected balance is ${dollars(low.estimatedBalance)} on ${low.date}, with a ${dollars(floor)} cushion.`:`Your checked plan has ${dollars(free)} of additional cash buffer above the ${dollars(floor)} cushion. Its lowest projected balance is ${dollars(low.estimatedBalance)} on ${low.date}.`];
+  if(contributionNote)lines.push(contributionNote);
   if(!forecast.historyAvailable) missing.push("A full classified spending baseline is missing, so these buffer amounts are scheduled-plan estimates only");
   if(!nextDate&&needsPaycheckTarget) missing.push("An expected paycheck date and amount are needed for a paycheck-ahead plan");
   const nextEnd=payDates[1]?dayAdd(payDates[1],-1):nextMonthEnd;
@@ -40,7 +49,7 @@ export function stabilityAnalysis(snapshot: AnalysisSnapshot, request: AnalysisR
     lines.push(`Your next expected paycheck is ${dollars(nextPay)} on ${nextDate}. ${dollars(committed)} (${facts.paycheckCommittedPercent}%) of that amount corresponds to recorded obligations through ${nextEnd}, before additional everyday spending.`);
   }
   if(["buffer","stability","paycheck","health"].includes(request.domain)) {
-    lines.push(`A ${request.target==="month_ahead"?"month-ahead":"paycheck/buffer"} target is ${dollars(target)}${remaining===null?"; the remaining amount cannot be verified until the available buffer is known":`, needing another ${dollars(remaining)} beyond that available buffer`}.`);
+    lines.push(incompleteMonthTarget?`The scheduled-obligation portion of getting one month ahead is ${dollars(nextMonthObligations)}. The full target is unknown until everyday living costs are included.`:`A ${request.target==="month_ahead"?"month-ahead":"paycheck/buffer"} target is ${dollars(target)}${remaining===null?"; the remaining amount cannot be verified until the available buffer is known":`, needing another ${dollars(remaining)} beyond that available buffer`}.`);
     const monthsOfHistory=[1,2,3].every(offset=>activity.rows.some(r=>r.date>=shiftMonth(snapshot.today,-offset)&&r.date<=monthEnd(shiftMonth(snapshot.today,-offset))))&&!activity.missing.length&&!prior.unresolved&&!prior.unclassifiedDebt;
     if(monthsOfHistory) {
       const surplus=round(monthlyIncome-monthlyExpense);
@@ -100,7 +109,7 @@ export function stabilityAnalysis(snapshot: AnalysisSnapshot, request: AnalysisR
       lines.unshift(`The checked scenario needs about ${facts.monthsToTargetScenario} months to build ${dollars(target)} of additional cash buffer above your ${dollars(floor)} cushion, targeting ${facts.targetMonthScenario}. This uses recorded surplus, not an assumed contribution equal to your target.`);
     } else {
       const reason=free===null?"the available buffer, living-expense baseline or older obligations cannot yet be verified":"the checked plan has no positive sustainable contribution capacity";
-      lines.unshift(`I cannot estimate how long it will take to reach ${dollars(target)} of additional cash buffer yet because ${reason}. The target is above your ${dollars(floor)} cushion, not your savings-account balance.`);
+      lines.unshift(incompleteMonthTarget?"I cannot estimate when you will be one month ahead yet: the full target is unknown without everyday living costs.":`I cannot estimate how long it will take to reach ${dollars(target)} of additional cash buffer yet because ${reason}. The target is above your ${dollars(floor)} cushion, not your savings-account balance.`);
       missing.push(`Buffer timeline unavailable: ${reason}`);
     }
   }
@@ -108,9 +117,15 @@ export function stabilityAnalysis(snapshot: AnalysisSnapshot, request: AnalysisR
 }
 
 export function scenarioAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequest): AnalysisResult {
-  const scenario=request.scenario;
+  let scenario=request.scenario;
   if(!scenario) throw new Error("A scenario change is required");
-  const end=request.endDate??(scenario.repeat==="once"?scenario.date:monthEnd(shiftMonth(scenario.date,1)));
+  if(scenario.kind==="income_change"&&request.dateEvent==="next_payday") {
+    const schedule=scheduleAnalysis(snapshot,{...request,domain:"income",purpose:"general",startDate:snapshot.today,endDate:null,entity:scenario.entity,dateEvent:"next_payday"});
+    if(schedule.missing.length||typeof schedule.facts.nextPayday!=="string")return {...schedule,scenario:true};
+    scenario={...scenario,date:schedule.facts.nextPayday};
+    if(request.endDate&&request.endDate<scenario.date)return {text:"The requested window ends before the next scheduled paycheck. Choose a window including that income event.",facts:{},sources:projectionSources,assumptions:[],missing:["The income scenario's effective payday is outside the requested window"],scenario:true};
+  }
+  let end=request.endDate??(scenario.repeat==="once"?scenario.date:monthEnd(shiftMonth(scenario.date,1)));
   const configuredEnd=monthEnd(shiftMonth(snapshot.today,Number(snapshot.sources.household_settings?.rows[0]?.forecast_horizon_months??1)-1));
   const obligationWindow=monthEnd(shiftMonth(scenario.date,1));
   const assessmentEnd=(obligationWindow>end?obligationWindow:end)>configuredEnd?configuredEnd:(obligationWindow>end?obligationWindow:end);
@@ -126,9 +141,22 @@ export function scenarioAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
     else {
       const selected=named.filter(e=>e.kind==="bill"&&e.amount<0).slice(0,scenario.repeat==="once"?1:undefined);
       if(!selected.length) missing.push("No matching unpaid scheduled bill occurrence exists in the checked window");
+      if(!request.endDate&&scenario.repeat==="once"&&selected[0])end=scenario.kind==="move_bill"&&scenario.date>selected[0].date?scenario.date:selected[0].date;
       if(scenario.kind==="move_bill"&&scenario.repeat!=="once") return {text:"Choose one bill occurrence and its new date. Recurring date changes need individual dates to avoid stacking payments on one day.",facts:{},sources:projectionSources,assumptions:[],missing:["A single source occurrence is required for a bill-date scenario"],scenario:true};
       for(const event of selected) {
-        if(scenario.kind==="bill_increase") changes.push({date:event.date,amount:-scenario.amount});
+        if(scenario.kind==="bill_increase") {
+          if(scenario.amountMode==="absolute") {
+            const configured=numeric(event.configuredOccurrenceAmount),settled=numeric(event.settledOccurrenceAmount);
+            if(configured===null||settled===null||configured<0||settled<0||Math.abs(Math.max(0,configured-settled)+event.amount)>0.01) {
+              missing.push("The configured bill amount and prior settlement cannot be reconciled for this price-change scenario");
+              continue;
+            }
+            // Replace the full occurrence price, preserving money already paid.
+            // A price below the settlement clears the remainder, not a refund.
+            const remaining=Math.max(0,scenario.amount-settled);
+            changes.push({date:event.date,amount:round(-remaining-event.amount)});
+          } else changes.push({date:event.date,amount:-scenario.amount});
+        }
         else { changes.push({date:event.date,amount:-event.amount}); if(scenario.kind==="move_bill") changes.push({date:scenario.date,amount:event.amount}); }
       }
     }
@@ -151,8 +179,10 @@ export function scenarioAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
   const lowest=altered.reduce((a,b)=>a.scenarioBalance<=b.scenarioBalance?a:b);
   const baseLow=forecast.days.reduce((a,b)=>a.estimatedBalance<=b.estimatedBalance?a:b);
   const last=altered.find(d=>d.date===end)!;
+  const changedDates=[...new Set(changes.map(change=>change.date))].sort();
+  const timingAssumption=`The scenario applies on ${changedDates.slice(0,6).join(", ")}${changedDates.length>6?` and ${changedDates.length-6} later dates`:""} (${scenario.repeat==="once"?"one occurrence":"repeated scheduled occurrences"}).`;
   missing.push(...forecast.affordabilityMissing);
   if(forecast.anchorDate!==snapshot.today)missing.push("Refresh the balance observation before judging this scenario affordable");
   const safety=lowest.scenarioBalance<forecast.input.settings.safety_floor ? "This scenario falls below your configured cash cushion." : forecast.historyAvailable&&!missing.length ? "The scenario stays above the configured cushion under the checked assumptions, but this is not a guarantee of affordability." : "Recorded flows stay above the cushion, but affordability cannot be confirmed until everyday spending, current funds, and older obligations are verified.";
-  return {text:`Scenario only — nothing was changed.\n\nBy ${end}, the projected balance would be ${dollars(last.scenarioBalance)}, compared with ${dollars(last.estimatedBalance)} in the baseline. Looking beyond the change through ${assessmentEnd}, the scenario's lowest balance is ${dollars(lowest.scenarioBalance)} on ${lowest.date}; the baseline low is ${dollars(baseLow.estimatedBalance)}.\n\n${safety}`,facts:{scenarioEndBalance:last.scenarioBalance,baselineEndBalance:last.estimatedBalance,scenarioLow:lowest.scenarioBalance,scenarioLowDate:lowest.date,assessmentEndDate:assessmentEnd},sources:projectionSources,assumptions:["Changes are applied to a copy of the canonical forecast. Savings transfers reduce checking but do not reduce net worth. Extra debt payments here show cash impact; interest/payoff changes require the separate debt projection.",forecast.historyAvailable?`Additional spending estimate: ${dollars(forecast.dailyEstimate)}/day.`:"No reliable everyday-spending baseline is available."],missing,scenario:true};
+  return {text:`Scenario only — nothing was changed.\n\nBy ${end}, the projected balance would be ${dollars(last.scenarioBalance)}, compared with ${dollars(last.estimatedBalance)} in the baseline. Looking beyond the change through ${assessmentEnd}, the scenario's lowest balance is ${dollars(lowest.scenarioBalance)} on ${lowest.date}; the baseline low is ${dollars(baseLow.estimatedBalance)}.\n\n${safety}`,facts:{scenarioEndBalance:last.scenarioBalance,baselineEndBalance:last.estimatedBalance,scenarioLow:lowest.scenarioBalance,scenarioLowDate:lowest.date,assessmentEndDate:assessmentEnd},sources:projectionSources,assumptions:[timingAssumption,"Changes are applied to a copy of the canonical forecast. Savings transfers reduce checking but do not reduce net worth. Extra debt payments here show cash impact; interest/payoff changes require the separate debt projection.",forecast.historyAvailable?`Additional spending estimate: ${dollars(forecast.dailyEstimate)}/day.`:"No reliable everyday-spending baseline is available."],missing,scenario:true};
 }

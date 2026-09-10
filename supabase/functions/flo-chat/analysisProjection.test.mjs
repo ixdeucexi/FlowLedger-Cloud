@@ -18,6 +18,15 @@ test('complete snapshot uses canonical engine and preserves observed versus proj
  const result=forecastAnalysis(s,request()); assert.equal(result.facts.observedBalance,5000); assert.notEqual(result.facts.projectedBalance,5000);
  assert.match(result.text,/recorded checking\/cash balance/); assert.equal(result.facts.safeToSpendUnderPlan,null); assert.doesNotMatch(result.text,/purchase fits/);
 });
+
+test('today safe-to-spend reserves tomorrow obligations independently of the balance reporting date',()=>{
+  const s=snapshot();s.sources.household_settings.rows[0].starting_balance=1000;s.sources.incomes.rows=[];s.sources.monthly_overrides.rows=[];s.sources.bills.rows=[{...s.sources.bills.rows[0],due_day:11,start_date:s.today,created_at:s.capturedAt}];
+  s.sources.transactions.rows=[6,7,8].map(m=>({id:`food${m}`,date:`2026-0${m}-02`,amount:-30,category:'Food'}));
+  for(const domain of ['money','forecast','purchase']){
+    const r=forecastAnalysis(s,request({domain,purpose:'affordability',operation:'summary',startDate:s.today,endDate:s.today,amount:domain==='purchase'?250:null}));
+    assert.deepEqual(r.missing,[]);assert.equal(r.facts.projectedBalance,1000);assert.equal(r.facts.targetDate,s.today);assert.equal(r.facts.safeToSpendUnderPlan,0);assert.equal(r.facts.affordabilityAssessmentThrough,'2026-10-31');assert.ok(r.facts.affordabilityMinimumBalance<200);assert.match(r.text,/affordability check continues beyond/);assert.doesNotMatch(r.text,/Up to \$800/);
+  }
+});
 test('requested start filters totals and minimum search, never clamps historical windows',()=>{
  const s=snapshot(); const r=forecastAnalysis(s,request({startDate:'2026-09-20'})); assert.equal(r.facts.obligations,0); assert.equal(r.facts.expectedIncome,1500); assert.ok(r.facts.minimumDate>='2026-09-20');
  assert.throws(()=>forecastAnalysis(s,request({startDate:'2026-08-01',endDate:'2026-08-31'})),/historical/);

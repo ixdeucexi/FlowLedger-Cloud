@@ -19,6 +19,9 @@ export function recurringAnalysis(snapshot:AnalysisSnapshot,request:AnalysisRequ
     const base=scheduleAnalysis(snapshot,{...request,domain:"bills",startDate:boundedStart,endDate:end,dateEvent:"none"});
     if(start<earliest)base.missing.push("Earlier obligations extend beyond this 24-month settlement check; the overdue list is incomplete");
     if(overdue&&origins.some(d=>!validDate(d)))base.missing.push("A bill start date is unavailable; complete overdue coverage cannot be verified");
+    if(overdue&&!request.startDate&&rows("bills").some(b=>(!request.entity||matches(b.name,request.entity))&&!validDate(b.start_date)))base.missing.push("A bill has no explicit obligation start date. Record creation is not proof of when bills began; earlier-month overdue coverage is unverified. Provide an explicit historical window to check retained settlements.");
+    const uncertainHistoricalOrigin=rows("bills").some(b=>(!request.entity||matches(b.name,request.entity))&&!validDate(b.start_date)&&(!validDate(String(b.created_at??"").slice(0,10))||boundedStart<monthStart(String(b.created_at).slice(0,10))));
+    if(uncertainHistoricalOrigin){base.missing.push("A bill's obligation start date is unknown before its record-creation month; historical payment status cannot be confirmed from a back-projected schedule");base.text=`This is a configured-schedule comparison, not confirmation those bills were actually owed or unpaid in the historical window. The original bill start date is unverified.\n\n${base.text}`;}
     const count=base.facts.occurrenceCount,left=base.facts.remainingObligations;
     if(typeof count==="number"&&typeof left==="number"&&!base.missing.length) {
       base.facts.allRecordedDueSettled=count?left===0:null;
@@ -34,14 +37,17 @@ export function recurringAnalysis(snapshot:AnalysisSnapshot,request:AnalysisRequ
     return {text:`${paid.length} monthly bill records have recorded payments in ${start}–${end}.\n\n${paid.slice(0,8).map(r=>`${label(r.bill.name)}: ${dollars(Number(r.paid_amount))}, payment date ${r.paid_date}.`).join("\n")}`,facts:{recordedPaymentCount:paid.length,recordedPayments:sum(paid.map(r=>Number(r.paid_amount)))},sources:["monthly_overrides","bills"],assumptions:["This reports reviewed monthly payment records; it does not claim every normal bill was paid or sum bank transactions a second time."],missing,scenario:false};
   }
   let scheduleRequest={...request};
+  let cutoffSources:string[]=[];
   if(request.dateEvent==="after_bill")return {text:"For a balance after a bill, ask how much will remain after that named bill is paid. For a bill list, provide the end date to check.",facts:{},sources:["bills"],assumptions:[],missing:["A bill-list cutoff relative to another bill needs an explicit date"],scenario:false};
   if(request.dateEvent!=="none") {
     const payday=scheduleAnalysis(snapshot,{...request,domain:"income",entity:null,dateEvent:"next_payday"});
     const next=payday.facts.nextPayday;
     if(typeof next!=="string"||payday.missing.length)return payday;
+    cutoffSources=payday.sources;
     scheduleRequest={...request,dateEvent:"none",endDate:request.dateEvent==="before_payday"?dayAdd(next,-1):next};
   }
   const base=scheduleAnalysis(snapshot,scheduleRequest);
+  base.sources=[...new Set([...base.sources,...cutoffSources])];
   if(base.missing.length)return base;
   if(!request.startDate||request.startDate===snapshot.today) {
     const overdueEnd=dayAdd(snapshot.today,-1);
@@ -70,6 +76,11 @@ export function recurringAnalysis(snapshot:AnalysisSnapshot,request:AnalysisRequ
     candidates.push({name:recent.at(-1)!.merchant,cadence,latest,prior,monthly:round(latest*(cadence==="weekly"?52/12:1)),date:recent.at(-1)!.date});
   }
   if(candidates.length) base.text+=`\n\nRecurring merchant patterns to review: ${candidates.slice(0,6).map(c=>`${c.name}: ${dollars(c.latest)} ${c.cadence}, last posted ${c.date}${c.latest>c.prior?`, up ${dollars(c.latest-c.prior)} from its previous charge`:""}`).join("; ")}.`;
+  const increased=candidates.filter(c=>c.latest>c.prior);
+  base.facts.comparableRecurringMerchantCount=candidates.length;
+  base.facts.increasedRecurringMerchantCount=candidates.length?increased.length:null;
+  base.text+=candidates.length?`\n\n${increased.length} of ${candidates.length} comparable recorded merchant patterns increased on their latest charge. This does not cover charges without enough repeated history.`:"\n\nThere is not enough repeated merchant-charge history to assess price increases. No observed comparison is not proof that prices stayed the same.";
+  if(!candidates.length&&["compare","search"].includes(request.operation))base.missing.push("Repeated merchant-charge history is insufficient to assess changes or repeated-charge patterns");
   if(request.domain==="subscriptions") {
     const configured=rows("bills").filter(b=>!b.is_debt&&b.is_recurring&&(!b.end_date||b.end_date>=snapshot.today)&&(!b.start_date||b.start_date<=snapshot.today)&&/subscription|entertainment|stream|software/i.test(b.category??"")&&matches(b.name,request.entity));
     const valid=configured.filter(b=>numeric(b.amount)!==null);
@@ -79,7 +90,9 @@ export function recurringAnalysis(snapshot:AnalysisSnapshot,request:AnalysisRequ
     if(valid.length!==configured.length)base.missing.push("A configured subscription amount is missing");
     const names=new Map<string,number>();configured.forEach(b=>names.set(String(b.name).trim().toLowerCase(),(names.get(String(b.name).trim().toLowerCase())??0)+1));
     const repeated=[...names].filter(([,count])=>count>1);
+    base.facts.repeatedConfiguredSubscriptionNames=repeated.length;
     if(repeated.length)base.text+=`\n\nRepeated configured names to review: ${repeated.map(([name,count])=>`${label(name)} (${count} records)`).join(", ")}. Matching names are not proof of duplicate services.`;
+    else base.text+="\n\nNo repeated subscription names appear in the configured bill records. This does not rule out duplicate services, differently named subscriptions or unrecorded charges.";
     base.assumptions.push("Merchant patterns are possible recurring charges, not confirmed subscriptions. They are not added to the configured subscription total, which avoids counting the same bill twice.");
   }
   base.sources=[...new Set([...base.sources,"transactions","plaid_transactions","plaid_accounts","goals"])];base.missing.push(...history.missing);

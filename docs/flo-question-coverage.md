@@ -2,7 +2,7 @@
 
 Source audit: 2026-09-10, following the reported “How long will it take to have 1000 buffer” regression. This is an implementation/evaluation map, **not a passing end-to-end report**. Every natural-language example below is unverified against the current production interpreter unless a separate dated evaluation receipt records otherwise. Calculator unit tests do not establish that a user's sentence reaches that calculator.
 
-Scope: the account, date-specific forecast, affordability, bill, income, spending, debt, savings, budget, buffer, historical progress, scenario and review families requested in this task. This is a finite representative corpus, not a claim to enumerate every possible question or guarantee all answers. No live AI calls or user financial queries were performed for this audit.
+Scope: the account, date-specific forecast, affordability, bill, income, spending, debt, savings, budget, buffer, historical progress, scenario and review families requested in this task. This is a finite representative corpus, not a claim to enumerate every possible question or guarantee all answers. The original source audit performed no live AI calls; subsequent candidate evaluations are recorded separately below.
 
 Machine-readable evaluation input: [questionCoverage.json](../supabase/functions/flo-chat/questionCoverage.json). Its status distinguishes implemented primitives, missing user data, missing features and semantic routing risks. The JSON adds explicit last-merchant-payment and credit-ranking cases to the grouped matrix below. It is not an execution receipt.
 
@@ -10,7 +10,19 @@ Machine-readable evaluation input: [questionCoverage.json](../supabase/functions
 
 The candidate now implements purpose/amount-role guards and timeline outcomes; constrained paycheck, budget and 30/90-day guidance; named debt payoff events; metric-aware credit/debt rankings; retained-history last-payment search; bounded cross-month bill settlement; and manual-account historical observations. The JSON statuses reflect these source-level changes. **All natural-language corpus cases remain unverified in this document.**
 
-The frozen candidate passes 214 Edge tests and Deno checking. SENTINEL independently reran 68 relevant tests and returned an offline PASS after ranking, overdue-list, fee-account identity and checklist-coverage repairs. This is not a live deployment result or proof that all user questions route correctly. Production remains gated on live conversational evaluation; the QA daily allowance is exhausted and has not been bypassed.
+The latest main-reported offline checks pass 271 Edge tests and Deno checking. Earlier candidate counts are historical and do not certify subsequent revisions. Offline success is not a live deployment result or proof that all user questions route correctly.
+
+### Final candidate evaluation summary — 2026-09-10
+
+- The first live 74-question candidate run failed 17 cases, including semantic misrouting. It did not pass the release gate.
+- The complete `review-v12-corpus` attempt was audited firsthand: 73 responses and one orphan SSE error, plus five semantic failures and a latent unsafe risk-horizon issue. It was not a passing 74-question run.
+- The subsequent `review-v13` targeted 14-case run still had two routing errors.
+- Final candidate `review-v14` passed 14 targeted cases and two follow-ups, independently confirmed by SENTINEL at **2026-09-10 17:34:27.677 UTC**. This verifies that targeted repair set, not a fresh run of all 74 corpus questions on v14.
+- Final review QA SHA-256: `49ceacd7e4908a5fbb14020989fcf7e879b5c19761663a76a3fbf262857b9bf9`.
+- Production approval is conditional on clean QA-setting restoration, commit and artifact parity checks. Final production status is tracked in [the live evaluation receipt](flo-live-evaluation-20260910.md), not inferred from these candidate results.
+- A temporary **QA-account-only** daily-cap increase was explicitly approved for this evaluation. It must be restored before production promotion and the restoration recorded in the final receipt. The earlier exhausted-cap/no-change note is historical and superseded by this authorization.
+
+Evidence: `tmp/flo-live-results-20260910.jsonl` plus main/SENTINEL audit reports. See [the live evaluation receipt](flo-live-evaluation-20260910.md) for final restoration, commit, parity and deployment evidence. Per-family statuses are not blanket passing results: only candidate-specific receipts establish correct intent and a relevant, grounded answer. Missing observed debt-principal history remains a genuine data limit, not permission to infer principal change from payments. This finite corpus does not establish universal question coverage or completion of every possible financial-coaching request.
 
 | Area | Current implementation and boundary |
 | --- | --- |
@@ -79,7 +91,7 @@ Code paths below are under `supabase/functions/flo-chat/`. “Available” means
 | 35 | What if I move Rent from September 15 to September 20? | Named occurrence removal + addition on copy | Available one-off move scenario; real mutation is a separate authorized workflow. |
 | 36 | Should I put $100 toward debt or savings? | Two comparable cash scenarios plus debt/buffer consequences | Existing primitives available, but no demonstrated composed recommendation/priority result. Protect minimums/cushion; don't output just balances. |
 
-## Evaluation protocol (not yet executed)
+## Evaluation protocol and interpretation of results
 
 Use fixed fictional fixtures: (A) current dated balances, three completed classified income/expense months, bills, multiple debts and goals; (B) sparse history; (C) missing/stale balance; (D) already-met target; (E) shortfall/no positive surplus; (F) ambiguous same-name entities; (G) linked credit purchases plus checking card repayments/transfers/refunds; (H) valid month-level income history and timestamp exclusion. Keep household/record identities fictional.
 
@@ -90,6 +102,6 @@ For each corpus question record expected purpose/domain, amount role, amount, da
 
 First regression set: ID 25 verbatim, “When can I build a $1,000 cushion?”, “How many paychecks until I have a thousand-dollar buffer?”, then contrasting “What is my buffer now?”, “When does checking first reach $1000?”, “How long to save $1000 for Vacation?”, “I can contribute $100 per paycheck,” and “What if I spend $1000?” Include already-met and insufficient-data fixtures. Do not conflate these purposes.
 
-Existing `analysis*.test.mjs` mostly constructs typed requests directly. Those tests are necessary for arithmetic and integrity but do not prove interpreter routing. A live QA account's exhausted daily cap must not be bypassed or silently reset; stage permitted evaluation separately or record it as unexecuted.
+Existing `analysis*.test.mjs` mostly constructs typed requests directly. Those tests are necessary for arithmetic and integrity but do not prove interpreter routing. The approved temporary QA-only cap increase supports the current evaluation; do not extend it to ordinary users or retain it through production promotion. Restore and verify the normal QA cap before release.
 
 Release claim must identify which corpus cases actually passed, which have an explicit honest data limitation, and which remain unsupported. Do not claim “all kinds of questions,” “entire list verified,” or completion of the full financial-coaching specification based on this source audit.

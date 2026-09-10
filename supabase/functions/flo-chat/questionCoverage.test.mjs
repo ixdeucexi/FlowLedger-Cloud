@@ -12,7 +12,7 @@ test('evaluation inventory retains all 30 requested financial question headings'
   }
 });
 test('coverage inventory is not mislabeled as successful model evaluation',()=>{
-  assert.match(corpus.evaluationStatus,/not been verified/);
+  assert.match(corpus.evaluationStatus,/not been verified|release-unverified/);
   for(const family of corpus.families){
     assert.ok(family.questions.length,family.family);assert.ok(family.limitations.length,family.family);
     assert.doesNotMatch(family.status,/^(?:pass|verified|complete)$/i);

@@ -3,7 +3,7 @@ import { scheduleAnalysis } from "./analysisSchedule.ts";
 import { analyticTransactions, aggregateSpending } from "./analysisSpending.ts";
 import { dayAdd, dollars, label, monthEnd, monthStart, round, shiftMonth, sum, validDate, type AnalysisRequest, type AnalysisResult, type AnalysisSnapshot } from "./analysisTypes.ts";
 
-export const isGuidancePurpose = (purpose: AnalysisRequest["purpose"]) => ["paycheck_allocation","action_plan","budget_plan"].includes(purpose ?? "");
+export const isGuidancePurpose = (purpose: AnalysisRequest["purpose"]) => ["paycheck_allocation","action_plan","budget_plan","allocation_choice"].includes(purpose ?? "");
 
 /** Read-only guidance built on the canonical forecast; reserves are not independent spending maxima. */
 export function guidanceAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequest): AnalysisResult {
@@ -14,6 +14,7 @@ export function guidanceAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
   const normalized=projectionInput(snapshot);
   const assumptions=["Read-only draft: no payments, transfers, budgets or dates were changed. Expected deposits are not guaranteed bank funds.","The cash cushion is a balance reserve, not a monthly expense. Any spare capacity is one shared amount: choose between buffer, extra debt or other goals; do not add independent maxima."];
   if(normalized.missing.length) {
+    if(request.purpose==="allocation_choice")return {text:"I cannot verify spare money for either option yet. Protect required bills, everyday spending and your cash cushion first; update the missing records before choosing debt or savings.",facts:{safeSharedCapacity:null,allocationChoice:"unverified"},sources:projectionSources,assumptions,missing:normalized.missing,scenario:false};
     const schedules=[scheduleAnalysis(snapshot,{...request,domain:"income",purpose:"general",operation:"summary",startDate:start,endDate:end,dateEvent:"none",entity:null}),scheduleAnalysis(snapshot,{...request,domain:"bills",purpose:"general",operation:"summary",startDate:start,endDate:end,dateEvent:"none",entity:null})];
     return {text:[`${start}: verify the checking observation, unresolved activity and missing plan inputs before committing money.`,...schedules.filter(r=>!r.missing.length).map(r=>r.text),`${end}: review posted payments and update the plan. A safe allocation cannot be calculated until the missing inputs are resolved.`].join("\n\n"),facts:{startDate:start,endDate:end,safeSharedCapacity:null,planStatus:"needs_review"},sources:projectionSources,assumptions,missing:[...normalized.missing,...schedules.flatMap(r=>r.missing)],scenario:false};
   }
@@ -39,7 +40,14 @@ export function guidanceAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
   const capacity=verified?round(Math.max(0,Math.min(forecast.availableNow!,low.estimatedBalance)-floor)):null;
   const facts:AnalysisResult["facts"]={startDate:start,endDate:end,safeSharedCapacity:capacity,cashCushion:floor,minimumProjectedBalance:low.estimatedBalance,minimumDate:low.date,householdCushionShortfall:round(Math.max(0,floor-low.estimatedBalance)),planStatus:verified?"checked_draft":"needs_review"};
   const lines:string[]=[];
-  if(request.purpose==="paycheck_allocation") {
+  if(request.purpose==="allocation_choice") {
+    const amount=request.amount;
+    if(amount===null||amount<=0)return {text:"How much are you considering putting toward debt or savings?",facts:{},sources:[],assumptions:[],missing:["An explicit positive amount is needed"],scenario:false};
+    facts.proposedAllocation=amount;
+    if(capacity===null){facts.allocationChoice="unverified";lines.push(`I cannot verify that ${dollars(amount)} is spare money for either option. Protect required bills, everyday spending and the cash cushion first; refresh the missing records before allocating it.`);}
+    else if(amount>capacity){facts.allocationChoice="exceeds_capacity";facts.capacityShortfall=round(amount-capacity);lines.push(`Do not commit the full ${dollars(amount)} to either option based on this check. The one shared optional capacity is ${dollars(capacity)} through ${end}, so the proposed amount exceeds it by ${dollars(amount-capacity)}. Keep required bills, living costs and the cash cushion reserved.`);}
+    else {facts.allocationChoice="priority_needed";lines.push(`The ${dollars(amount)} fits within one shared optional capacity of ${dollars(capacity)} through ${end} under the checked records. It is not ${dollars(amount)} for debt plus another ${dollars(amount)} for savings. Keeping it in accessible savings preserves cash for surprises; extra debt payment reduces the amount owed but leaves less cash available. I need your savings priority and the debt's verified terms to recommend which matters more; this check does not establish an optimal choice.`);}
+  } else if(request.purpose==="paycheck_allocation") {
     const paydays=[...new Set(allEvents.filter(e=>e.kind==="scheduled_income"&&e.amount>0).map(e=>e.date))].sort();
     const payday=paydays[0],following=paydays[1];
     if(!payday||!following){missing.push("Two upcoming positive household paycheck dates are needed to bound the next pay cycle");facts.safeSharedCapacity=null;facts.planStatus="needs_review";}

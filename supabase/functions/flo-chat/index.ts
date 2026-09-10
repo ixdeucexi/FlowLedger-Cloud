@@ -30,7 +30,7 @@ import {
 } from "./contract.ts";
 import { createFloTools, executeFloReadTools, summarizeToolPayload, type FloToolRuntime } from "./tools.ts";
 import { runFinancialAnalysis } from "./analysisPlanner.ts";
-import { isAppNavigationQuestion } from "./analysisSemantics.ts";
+import { isAppNavigationQuestion, safeAnalysisFailureCodes } from "./analysisSemantics.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -613,7 +613,8 @@ async function handleV3(
         let code = publicFailureCode(error);
         const failureClass = classifyFloFailure(error);
         const failureReason = safeFloFailureReason(error);
-        console.warn("[flo-chat] answer path interrupted", { requestId, code, failureClass, failureReason, failureStage, durationMs: Date.now() - started, tools: Array.from(new Set(toolRuntime.toolNames)) });
+        const semanticFailureCodes = safeAnalysisFailureCodes(error);
+        console.warn("[flo-chat] answer path interrupted", { requestId, code, failureClass, failureReason, semanticFailureCodes, failureStage, durationMs: Date.now() - started, tools: Array.from(new Set(toolRuntime.toolNames)) });
         if (latestVerifiedFallback.current && verifiedFallbackCodes.has(code)) {
           const fallback = latestVerifiedFallback.current;
           const fallbackAnswer: FloGroundedAnswer = {
@@ -633,7 +634,7 @@ async function handleV3(
               coverage: fallback.coverage, partial: true, toolNames: toolRuntime.toolNames,
               durationMs: Date.now() - started, inputTokens, outputTokens,
               terminalEventType: "answer",
-              terminalParameters: { sourceCount: fallback.sources.length, recoveredFrom: code, deterministic: true, failureClass, failureReason, failureStage, droppedFollowupCount },
+              terminalParameters: { sourceCount: fallback.sources.length, recoveredFrom: code, deterministic: true, failureClass, failureReason, semanticFailureCodes, failureStage, droppedFollowupCount },
               rowCount: fallback.sources.length, terminalStatus: "partial", ephemeral,
             });
             emitEvent("verified-fallback", { fallback });
@@ -658,7 +659,7 @@ async function handleV3(
             proposal: null, answer: null, followups: [], dataAsOf: aggregate.dataAsOf,
             coverage: aggregate.coverage, partial: true, toolNames: toolRuntime.toolNames,
             durationMs: Date.now() - started, inputTokens, outputTokens,
-            terminalEventType: "failure", terminalParameters: { failureClass, failureReason, failureStage, droppedFollowupCount }, rowCount: sources.length,
+            terminalEventType: "failure", terminalParameters: { failureClass, failureReason, semanticFailureCodes, failureStage, droppedFollowupCount }, rowCount: sources.length,
             terminalStatus: "error", ephemeral,
           });
           terminalErrorPersisted = true;

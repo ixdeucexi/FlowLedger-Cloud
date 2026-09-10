@@ -23,6 +23,12 @@ test("calendar validation and household midnight",()=>{
  assert.equal(validDate("2026-02-30"),false);
  assert.match(validateAnalysisRequest(req({endDate:"2026-02-30"}),"2026-09-10"),/invalid/);
 });
+test("forecast minimum and threshold lead with the requested result",()=>{
+ const low=forecastAnalysis(snapshot(),req({operation:'minimum'}));
+ assert.match(low.text,/^The lowest projected end balance/);
+ const threshold=forecastAnalysis(snapshot(),req({operation:'threshold',amount:1500}));
+ assert.match(threshold.text,/^The first projected end balance at or above \$1,500.00 is 2026-09-11/);
+});
 test("spending excludes transfers and credit repayments, refunds reduce spending",()=>{
  const s=snapshot({plaid_accounts:[{id:"credit",account_type:"credit",is_active:true}],transactions:[
  {id:"cash",date:"2026-09-10",amount:-50,category:"Food",note:"Grocer"},

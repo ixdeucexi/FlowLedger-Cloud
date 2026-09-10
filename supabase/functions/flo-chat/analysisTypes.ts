@@ -1,7 +1,7 @@
 /** The model supplies intent, never calculated financial facts. */
 export type AnalysisDomain = "money" | "forecast" | "purchase" | "spending" | "bills" | "subscriptions" | "income" | "debt" | "credit" | "savings" | "emergency" | "budget" | "stability" | "buffer" | "paycheck" | "progress" | "transactions" | "unusual" | "fees" | "health" | "review";
 export type AnalysisRequest = {
-  purpose?: "general" | "current_balance" | "forecast_balance" | "affordability" | "buffer_timeline" | "goal_timeline" | "debt_timeline" | "paycheck_allocation" | "action_plan" | "budget_plan" | "transaction_last" | "balance_history" | "bill_settlement" | "bills_overdue";
+  purpose?: "general" | "current_balance" | "forecast_balance" | "affordability" | "buffer_timeline" | "goal_timeline" | "debt_timeline" | "paycheck_allocation" | "action_plan" | "budget_plan" | "allocation_choice" | "transaction_last" | "balance_history" | "bill_settlement" | "bills_overdue";
   planDays?: 30 | 90 | null;
   metric?: "balance" | "apr" | "utilization" | "amount" | null;
   amountRole?: "none" | "target_balance" | "contribution_amount" | "payment_amount" | "purchase_amount" | "threshold";
@@ -21,7 +21,7 @@ export type AnalysisRequest = {
   comparisonEnd: string | null;
   target: "none" | "paycheck_ahead" | "month_ahead" | "three_months" | "six_months";
   debtMethod: "snowball" | "avalanche";
-  scenario: { kind: "purchase" | "income_change" | "extra_debt" | "save" | "bill_increase" | "cancel_bill" | "move_bill"; amount: number; date: string; sourceDate?: string | null; entity: string | null; repeat: "once" | "monthly" | "paycheck" } | null;
+  scenario: { kind: "purchase" | "income_change" | "extra_debt" | "save" | "bill_increase" | "cancel_bill" | "move_bill"; amount: number; amountMode?: "delta" | "absolute" | null; date: string; sourceDate?: string | null; entity: string | null; repeat: "once" | "monthly" | "paycheck" } | null;
 };
 
 export type SourceRows = { rows: Record<string, any>[]; complete: boolean; reason?: string };

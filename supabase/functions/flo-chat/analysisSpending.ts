@@ -66,8 +66,9 @@ export function aggregateSpending(rows: AnalyticTransaction[], start: string, en
 export function spendingAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequest): AnalysisResult {
   const all = analyticTransactions(snapshot);
   const lastPayment=request.purpose==="transaction_last";
-  const start = request.startDate ?? (lastPayment?all.rows.map(r=>r.date).sort()[0]??snapshot.today:monthStart(snapshot.today));
-  const requestedEnd = request.endDate ?? snapshot.today;
+  const defaultMonthlyIncome=request.domain==="income"&&request.operation==="average"&&request.startDate===null&&request.endDate===null;
+  const start = request.startDate ?? (defaultMonthlyIncome?monthStart(shiftMonth(snapshot.today,-3)):lastPayment?all.rows.map(r=>r.date).sort()[0]??snapshot.today:monthStart(snapshot.today));
+  const requestedEnd = request.endDate ?? (defaultMonthlyIncome?dayAdd(monthStart(snapshot.today),-1):snapshot.today);
   const end = requestedEnd < snapshot.today ? requestedEnd : snapshot.today;
   if(start>end)return {text:"That range is in the future. Recorded spending and received income can only be reviewed through today; ask for a forecast for future money.",facts:{},sources:["transactions","plaid_transactions"],assumptions:[],missing:["The requested range has no elapsed dates"],scenario:false};
   const filtered = all.rows.filter(r => matches(r.merchant, request.merchant ?? (request.domain === "transactions" ? request.entity : null)) && matches(r.category, request.category));
@@ -96,7 +97,7 @@ export function spendingAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
       let covered=completeStart&&completeEnd&&months>0&&!current.unresolved&&!all.missing.length;
       for(let month=monthStart(start);month<=end;month=shiftMonth(month,1))if(!current.rows.some(r=>r.date.slice(0,7)===month.slice(0,7)))covered=false;
       if(covered){facts.averageMonthlyIncome=round(total/months);lines.push(`Average per calendar month in that recorded range: ${dollars(total/months)}.`);}
-      else missing.push("Use complete calendar months for a normal monthly-income average");
+      else missing.push(!completeStart||!completeEnd?"Use complete calendar months for a normal monthly-income average":"Recorded classified history does not cover every selected month; a normal monthly-income average cannot be established");
     }
   } else if (request.domain === "transactions") {
     const found = current.rows.filter(r => request.amount === null || (request.operation === "threshold" ? Math.abs(r.amount) >= request.amount : Math.abs(Math.abs(r.amount) - request.amount) < .005)).sort((a, b) => b.date.localeCompare(a.date));

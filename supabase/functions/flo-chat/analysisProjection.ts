@@ -148,8 +148,10 @@ export function forecastAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
   const configuredEnd = monthEnd(shiftMonth(snapshot.today, Number(snapshot.sources.household_settings?.rows[0]?.forecast_horizon_months ?? 1) - 1));
   const preliminaryEnd = request.endDate ?? (request.dateEvent !== "none" ? configuredEnd : monthEnd(start));
   if (preliminaryEnd > configuredEnd) throw new Error(`The requested date is beyond the configured forecast ending ${configuredEnd}`);
-  const purchaseRiskEnd = request.domain === "purchase" ? [monthEnd(shiftMonth(preliminaryEnd,1)),configuredEnd].sort()[0] : preliminaryEnd;
-  let forecast = buildAnalysisForecast(snapshot, purchaseRiskEnd);
+  // Every emitted safe-to-spend figure must protect later obligations, even
+  // when the requested balance/reporting window is only today.
+  const affordabilityRiskEnd = [monthEnd(shiftMonth(preliminaryEnd,1)),configuredEnd].sort()[0];
+  let forecast = buildAnalysisForecast(snapshot, affordabilityRiskEnd);
   const upcoming = forecast.days.flatMap(d => d.events).filter(e => e.date >= start && !["actual", "applied", "finalized"].includes(e.status));
   if (request.entity && (request.domain === "income" || request.dateEvent !== "none")) {
     const candidates = request.dateEvent === "after_bill" ? forecast.input.bills : forecast.input.incomes;
@@ -180,10 +182,12 @@ export function forecastAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
   const events = contextDays.flatMap(d=>d.events).filter(e=>e.date >= contextStart && e.date <= end && !["actual", "applied", "finalized"].includes(e.status));
   const obligations = -sum(events.filter(e=>e.amount < 0).map(e=>e.amount)) || 0;
   const income = sum(events.filter(e=>e.amount > 0 && e.kind === "scheduled_income" && exactName(e.name, request.domain === "income" ? request.entity : null)).map(e=>e.amount));
-  const riskEnd = request.domain === "purchase" ? purchaseRiskEnd : end;
-  const throughLow = Math.min(...forecast.days.filter(d => d.date <= riskEnd).map(d => d.estimatedBalance));
+  const riskEnd = affordabilityRiskEnd;
+  const riskLow = forecast.days.filter(d => d.date <= riskEnd).reduce((a,b)=>a.estimatedBalance<=b.estimatedBalance?a:b);
+  const throughLow = riskLow.estimatedBalance;
   const safe = forecast.historyAvailable && !forecast.missing.length && !forecast.affordabilityMissing.length && forecast.availableNow !== null && forecast.anchorDate === snapshot.today ? round(Math.max(0, Math.min(forecast.availableNow, throughLow) - floor)) : null;
   const facts: AnalysisResult["facts"] = { startDate:start, contextStartDate:contextStart, projectedBalance: last.balance, projectedAfterEstimatedSpending: forecast.historyAvailable ? last.estimatedBalance : null, safeToSpendUnderPlan: safe, obligations, expectedIncome: income, minimumProjectedBalance: lowest.estimatedBalance, minimumDate: lowest.date, targetDate: end, cashCushion: floor, nextPayday: nextPayday ?? null, observedBalance: forecast.current, balanceAsOf: forecast.anchorDate, conservativeAvailableNow:forecast.availableNow };
+  facts.affordabilityAssessmentThrough=riskEnd;facts.affordabilityMinimumBalance=riskLow.estimatedBalance;facts.affordabilityMinimumDate=riskLow.date;
   const assumptions = ["Forecasts reuse FlowLedger's current bills, date moves, income schedule, debt allocations, pending-payment matches, and planned goals. Future deposits are expected, not guaranteed. Same-day end balances do not establish the order a bank will post payments.", forecast.historyAvailable ? `Estimated additional daily spending is ${dollars(forecast.dailyEstimate)}, based on the last three completed months of recorded non-bill-linked spending; this may overlap unlinked recurring charges.` : "No reliable three-month spending baseline is available. This is a scheduled-plan projection, not assurance that unrecorded living expenses are covered."];
   const missing = [...forecast.missing,...forecast.affordabilityMissing];
   const lines: string[] = [];
@@ -204,8 +208,10 @@ export function forecastAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
     const projectedLine = `Your projected end-of-day account balance on ${end} is ${dollars(last.balance)}${forecast.historyAvailable ? `, or ${dollars(last.estimatedBalance)} after estimated everyday spending` : " under the recorded plan"}.`;
     lines.push(...(request.domain === "money" && request.operation === "detail" ? [observedLine, projectedLine] : [projectedLine, observedLine]));
     lines.push(`Between ${contextStart} and ${end}, the lowest projected balance is ${dollars(lowest.estimatedBalance)} on ${lowest.date}. That window includes ${dollars(income)} of expected income and ${dollars(obligations)} of remaining obligations.`);
-    lines.push(safe === null ? "A safe-to-spend amount is unavailable without a reliable spending baseline, verified funds and resolved older obligations." : `Up to ${dollars(safe)} of additional spending fits this checked plan while keeping your ${dollars(floor)} cushion through ${riskEnd}, capped by recorded funds after pending outflows. This is not a guarantee of available bank funds.`);
+    lines.push(safe === null ? "A safe-to-spend amount is unavailable without a reliable spending baseline, verified funds and resolved older obligations." : riskLow.estimatedBalance<floor?`No additional spending is supported by this check: the plan already falls below your ${dollars(floor)} cushion through ${riskEnd}.`:`Up to ${dollars(safe)} of additional spending fits this checked plan while keeping your ${dollars(floor)} cushion through ${riskEnd}, capped by recorded funds after pending outflows. This is not a guarantee of available bank funds.`);
+    if(riskEnd!==end)lines.push(`The affordability check continues beyond the displayed balance date through ${riskEnd}; its lowest projected balance is ${dollars(riskLow.estimatedBalance)} on ${riskLow.date}. Bills beyond that assessment horizon are not included.`);
     if (lowest.estimatedBalance < floor) lines.push(`Your plan falls ${dollars(floor-lowest.estimatedBalance)} below your cushion. Protect essential bills and reduce or move optional outflows before that date.`);
+    else if(riskLow.estimatedBalance<floor)lines.push(`Later obligations take the plan ${dollars(floor-riskLow.estimatedBalance)} below your cushion on ${riskLow.date}; today's balance is not all spare money.`);
   }
   if (request.amount !== null && request.domain === "purchase") {
     facts.purchaseAmount = request.amount;
@@ -235,8 +241,9 @@ export function forecastAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
   if (request.operation === "threshold" && request.amount !== null) {
     const hit = days.find(d=>d.estimatedBalance >= request.amount!);
     const below = days.find(d=>d.estimatedBalance < request.amount!);
-    lines.push(hit ? `The first projected end balance at or above ${dollars(request.amount)} is ${hit.date}.` : `No projected end balance reaches ${dollars(request.amount)} by ${end}.`, below ? `The first end balance below that threshold is ${below.date}.` : "No projected end balance falls below that threshold in this window.");
+    lines.unshift(hit ? `The first projected end balance at or above ${dollars(request.amount)} is ${hit.date}.` : `No projected end balance reaches ${dollars(request.amount)} by ${end}.`, below ? `The first end balance below that threshold is ${below.date}.` : "No projected end balance falls below that threshold in this window.");
   }
+  if (request.operation === "minimum") lines.unshift(`The lowest projected end balance between ${contextStart} and ${end} is ${dollars(lowest.estimatedBalance)} on ${lowest.date}${forecast.historyAvailable ? " after estimated everyday spending" : " under the recorded schedule"}.`);
   if (request.operation === "maximum") {
     const maximum=days.reduce((a,b)=>a.estimatedBalance>=b.estimatedBalance?a:b);
     facts.maximumProjectedBalance=maximum.estimatedBalance;facts.maximumDate=maximum.date;

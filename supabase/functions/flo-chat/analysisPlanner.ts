@@ -13,14 +13,14 @@ import { currentBalanceAnalysis } from "./analysisAccounts.ts";
 import { localDay, validDate, type AnalysisRequest, type AnalysisResult, type AnalysisSnapshot } from "./analysisTypes.ts";
 import { aggregateCoverage, freshness, oldestSourceAsOf, type FloGroundedAnswer, type FloToolEnvelope, type FloSourceRef } from "./contract.ts";
 import type { FloToolRuntime } from "./tools.ts";
-import { analysisInterpreterPrompt, interpretAnalysisQuestion, isTimelinePurpose, validateRequestSemantics } from "./analysisSemantics.ts";
+import { analysisInterpreterPrompt, analysisInterpretationError, deterministicAnalysisPlan, interpretAnalysisQuestion, interpretationAttemptMs, isTimelinePurpose, unresolvedContributionClarification, validateRequestSemantics } from "./analysisSemantics.ts";
 import { guidanceAnalysis, isGuidancePurpose } from "./analysisGuidance.ts";
 import { historyAnalysis } from "./analysisHistory.ts";
 
 const date=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable();
 const search=z.string().max(100).nullable();
 const requestSchema=z.object({
-  purpose:z.enum(["general","current_balance","forecast_balance","affordability","buffer_timeline","goal_timeline","debt_timeline","paycheck_allocation","action_plan","budget_plan","transaction_last","balance_history","bill_settlement","bills_overdue"]),
+  purpose:z.enum(["general","current_balance","forecast_balance","affordability","buffer_timeline","goal_timeline","debt_timeline","paycheck_allocation","action_plan","budget_plan","allocation_choice","transaction_last","balance_history","bill_settlement","bills_overdue"]),
   planDays:z.union([z.literal(30),z.literal(90)]).nullable(),
   metric:z.enum(["balance","apr","utilization","amount"]).nullable().describe("Preserve the requested ranking metric: APR, balance, utilization or transaction amount. Never substitute balance for APR."),
   amountRole:z.enum(["none","target_balance","contribution_amount","payment_amount","purchase_amount","threshold"]),
@@ -36,7 +36,7 @@ const requestSchema=z.object({
   comparisonStart:date,comparisonEnd:date,
   target:z.enum(["none","paycheck_ahead","month_ahead","three_months","six_months"]),
   debtMethod:z.enum(["snowball","avalanche"]),
-  scenario:z.object({kind:z.enum(["purchase","income_change","extra_debt","save","bill_increase","cancel_bill","move_bill"]),amount:z.number().min(-1e9).max(1e9),date:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),sourceDate:date.describe("For moving a bill, original occurrence date if specified; destination is date. Otherwise null selects the next unpaid occurrence."),entity:search,repeat:z.enum(["once","monthly","paycheck"])}).nullable().describe("Explicit what-if only, never a request to mutate data. income_change is signed (paycheck lower by 200 => -200). Other amounts are spending/contribution magnitudes. Use the user's stated frequency; default once."),
+  scenario:z.object({kind:z.enum(["purchase","income_change","extra_debt","save","bill_increase","cancel_bill","move_bill"]),amount:z.number().min(-1e9).max(1e9),amountMode:z.enum(["delta","absolute"]).nullable().describe("bill_increase only: rises BY an amount uses delta; rises TO a new bill amount uses absolute. Do not calculate the difference yourself. Other scenario kinds use null."),date:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),sourceDate:date.describe("For moving a bill, original occurrence date if specified; destination is date. Otherwise null selects the next unpaid occurrence."),entity:search,repeat:z.enum(["once","monthly","paycheck"])}).nullable().describe("Explicit what-if only, never a request to mutate data. income_change is signed (paycheck lower by 200 => -200). Other amounts are spending/contribution magnitudes. Use the user's stated frequency; default once."),
 });
 const schema=z.object({legacy:z.boolean().describe("True only for app navigation/how-to, saved-plan retrieval, connection help, explicit real-data change requests, or unrelated questions. Actual financial analysis is false."),requests:z.array(requestSchema).max(4)});
 
@@ -44,6 +44,10 @@ export function validateAnalysisRequest(request: AnalysisRequest, today: string)
   const semanticError=validateRequestSemantics(request);if(semanticError)return semanticError;
   for(const value of [request.startDate,request.endDate,request.comparisonStart,request.comparisonEnd,request.scenario?.date,request.scenario?.sourceDate]) if(value!==null&&value!==undefined&&!validDate(value)) return "The requested calendar date is invalid.";
   if(request.startDate&&request.endDate&&request.startDate>request.endDate) return "The start date is after the end date.";
+  if(request.purpose==="action_plan"&&request.planDays!=null&&request.endDate) {
+    const days=(Date.parse(request.endDate)-Date.parse(request.startDate??today))/86400000+1;
+    if(days!==request.planDays)return "The action-plan date range must match its inclusive requested day count.";
+  }
   if(request.comparisonStart&&request.comparisonEnd&&request.comparisonStart>request.comparisonEnd) return "The comparison start date is after its end date.";
   if(request.scenario&&request.scenario.date<today) return "What-if changes must start today or later; historical records are not changed.";
   if(request.scenario&&request.endDate&&request.scenario.date>request.endDate) return "The scenario starts after the requested forecast window.";
@@ -88,19 +92,25 @@ export function calculateFinancialAnalysis(snapshot: AnalysisSnapshot, request: 
 export async function runFinancialAnalysis(options:{runtime:FloToolRuntime;question:string;apiKey:string;modelId:string;safetyIdentifier:string;conversationId?:string;historyEnabled?:boolean}) {
   const {runtime,question}=options;
   const {data:settings,error}=await runtime.client.from("household_settings").select("time_zone,payment_method").eq("household_id",runtime.householdId).maybeSingle();
+  if(error)return recordAnalysis(runtime,[{text:"I could not verify your household's planning settings. Please retry before I calculate dates or choose a payoff method; I will not assume a different timezone or debt method.",facts:{},sources:[],assumptions:[],missing:["Household planning settings could not be verified"],scenario:false}],null,{inputTokens:0,outputTokens:0});
   let timeZone=settings?.time_zone??"UTC";
   try { localDay(runtime.now,timeZone); } catch {timeZone="UTC";}
   const today=localDay(runtime.now,timeZone);
-  const {data:priorRows}=options.historyEnabled&&options.conversationId?await runtime.client.from("flo_messages").select("content").eq("conversation_id",options.conversationId).eq("role","user").eq("status","completed").order("created_at",{ascending:false}).limit(4):{data:[]};
+  const {data:priorRows,error:historyError}=options.historyEnabled&&options.conversationId?await runtime.client.from("flo_messages").select("content").eq("conversation_id",options.conversationId).eq("role","user").eq("status","completed").order("created_at",{ascending:false}).limit(4):{data:[],error:null};
+  if(historyError)return recordAnalysis(runtime,[{text:"I could not retrieve this conversation's context. Please retry or repeat the full question, including the account, goal or payoff method you mean, so I do not assume a different scope.",facts:{},sources:[],assumptions:[],missing:["Conversation context could not be verified"],scenario:false}],null,{inputTokens:0,outputTokens:0});
   const prior=(priorRows??[]).map((r:any)=>String(r.content).slice(0,800)).filter((q:string)=>q!==question).reverse();
-  const interpret=(correction="")=>generateText({model:createOpenAI({apiKey:options.apiKey}).responses(options.modelId),output:Output.object({schema}),maxRetries:0,abortSignal:AbortSignal.timeout(correction?8000:12000),providerOptions:{openai:{store:false,safetyIdentifier:options.safetyIdentifier,reasoningEffort:"low",textVerbosity:"low"}},
+  const clarification=unresolvedContributionClarification(question,prior);
+  if(clarification)return recordAnalysis(runtime,[clarification],null,{inputTokens:0,outputTokens:0});
+  const interpretationStartedAt=performance.now();
+  const interpret=(correction="")=>generateText({model:createOpenAI({apiKey:options.apiKey}).responses(options.modelId),output:Output.object({schema}),maxRetries:0,abortSignal:AbortSignal.timeout(interpretationAttemptMs(interpretationStartedAt,performance.now(),Boolean(correction))),providerOptions:{openai:{store:false,safetyIdentifier:options.safetyIdentifier,reasoningEffort:"low",textVerbosity:"low"}},
     system:analysisInterpreterPrompt({today,timeZone,debtMethod:settings?.payment_method??"snowball",correction}),prompt:JSON.stringify({question,priorQuestions:prior})});
   const usage={inputTokens:0,outputTokens:0};
-  const plan=await interpretAnalysisQuestion(question,async correction=>{
+  const plan=(prior.length===0?deterministicAnalysisPlan(question,today,settings?.payment_method==="avalanche"?"avalanche":"snowball"):null)??await interpretAnalysisQuestion(question,async correction=>{
     const interpreted=await interpret(correction);
     usage.inputTokens+=interpreted.usage.inputTokens??0;usage.outputTokens+=interpreted.usage.outputTokens??0;
-    return schema.parse(interpreted.output);
-  });
+    try {return schema.parse(interpreted.output);}
+    catch {throw analysisInterpretationError(["schema_shape"]);}
+  },today);
   if(plan.legacy) return null;
   if(!plan.requests.length) throw new Error("structured_output_invalid");
   const snapshot=await loadAnalysisSnapshot(runtime.client,runtime.householdId,runtime.now);
@@ -116,16 +126,16 @@ export async function runFinancialAnalysis(options:{runtime:FloToolRuntime;quest
   return recordAnalysis(runtime,results,snapshot,usage,plan.requests.map(r=>r.domain));
 }
 
-async function recordAnalysis(runtime:FloToolRuntime,results:AnalysisResult[],snapshot:AnalysisSnapshot,usage:any,domains:string[]=[]) {
+async function recordAnalysis(runtime:FloToolRuntime,results:AnalysisResult[],snapshot:AnalysisSnapshot|null,usage:any,domains:string[]=[]) {
   const sources:FloSourceRef[]=[];
   const payloads:FloToolEnvelope[]=[];
   for(const [index,result] of results.entries()) {
-    const id=`financialAnalysis:${snapshot.hash.slice(0,16)}:${index}`;
-    const asOf=oldestSourceAsOf(result.sources.flatMap(table=>(snapshot.sources[table]?.rows??[]).flatMap(r=>[r.updated_at,r.balance_as_of,r.observed_at,r.last_reviewed_at].filter(Boolean))));
+    const id=`financialAnalysis:${snapshot?.hash.slice(0,16)??"clarification"}:${index}`;
+    const asOf=oldestSourceAsOf(result.sources.flatMap(table=>(snapshot?.sources[table]?.rows??[]).flatMap(r=>[r.updated_at,r.balance_as_of,r.observed_at,r.last_reviewed_at].filter(Boolean))));
     const domain=domains[index]??"forecast";
     const route=["spending","transactions","unusual","fees","review"].includes(domain)?"/(tabs)/transactions":["bills","subscriptions","credit"].includes(domain)?"/(tabs)/bills":domain==="debt"?"/snowball-plan":["savings","emergency"].includes(domain)?"/(tabs)/more?section=goals":domain==="income"?"/(tabs)/more?section=money":domain==="budget"?"/(tabs)/category-budget":"/(tabs)/monthly";
-    const evidence:FloSourceRef={id,type:domain,label:result.scenario?"Read-only financial scenario":`${domain[0].toUpperCase()+domain.slice(1)} calculation`,asOf,freshness:asOf?freshness(asOf):"unknown",route};
-    const payload:FloToolEnvelope={status:result.missing.length?"partial":"ok",dataAsOf:asOf,coverage:{complete:!result.missing.length,returned:1,limit:1,...(result.missing.length?{reason:"analysis_data_incomplete",exclusions:result.missing}: {})},evidence:[evidence],records:[{id,...result.facts}],summary:{snapshotHash:snapshot.hash,assumptions:result.assumptions},message:result.text};
+    const evidence:FloSourceRef={id,type:snapshot?domain:"help",label:!snapshot?"Clarification needed":result.scenario?"Read-only financial scenario":`${domain[0].toUpperCase()+domain.slice(1)} calculation`,asOf,freshness:asOf?freshness(asOf):"unknown",route};
+    const payload:FloToolEnvelope={status:result.missing.length?"partial":"ok",dataAsOf:asOf,coverage:{complete:!result.missing.length,returned:1,limit:1,...(result.missing.length?{reason:"analysis_data_incomplete",exclusions:result.missing}: {})},evidence:[evidence],records:[{id,...result.facts}],summary:{...(snapshot?{snapshotHash:snapshot.hash}:{}),assumptions:result.assumptions},message:result.text};
     runtime.toolNames.push("analyzeFinances");runtime.toolResultNames.push("analyzeFinances");runtime.toolResults.push(payload);
     await runtime.onToolResult?.("analyzeFinances",payload,{domainCount:results.length});
     sources.push(evidence);payloads.push(payload);

@@ -1,7 +1,25 @@
 {
   "version": 2,
   "auditDate": "2026-09-10",
-  "evaluationStatus": "Representative corpus only. Natural-language end-to-end execution has not been verified by this audit. Status describes source-level capability, not test results.",
+  "evaluationStatus": "Finite representative corpus. Final v14 targeted repairs passed independently, but all 74 questions were not rerun on v14. No universal natural-language all-pass is claimed. Per-family statuses describe source capability, not blanket passing results; production status is tracked in the linked receipt.",
+  "liveEvaluationProgress": {
+    "asOfDate": "2026-09-10",
+    "source": "tmp/flo-live-results-20260910.jsonl plus main/SENTINEL progress reports; not a final receipt",
+    "firstCandidateRun": {"questionCount": 74, "failedCases": 17, "outcome": "failed", "observedIssues": ["Semantic misrouting"]},
+    "currentCandidate": "review-v14",
+    "currentRunStatus": "14 targeted cases plus two follow-ups passed; independently confirmed by SENTINEL at 2026-09-10T17:34:27.677Z. Not a full 74-question rerun on v14.",
+    "fullCorpusAudit": {"candidate":"review-v12-corpus","attemptedQuestions":74,"responses":73,"orphanSseErrors":1,"semanticFailures":5,"additionalFinding":"Latent unsafe affordability risk horizon","outcome":"failed"},
+    "targetedRuns": [{"candidate":"review-v13","cases":14,"routingErrors":2,"outcome":"failed"},{"candidate":"review-v14","cases":14,"followupCases":2,"outcome":"passed","independentReviewer":"SENTINEL","confirmedAt":"2026-09-10T17:34:27.677Z"}],
+    "historicalRepairFindings": ["Affordability risk-horizon coverage", "After-bill routing", "Affordability versus earliest-purchase-date intent", "Historical bill settlement with unknown origins"],
+    "repairStatus": "Targeted repairs independently passed on v14; full corpus was not rerun on this final candidate",
+    "offlineChecks": {"edgeTestsPassed": 271, "denoCheck": "passed", "qualifier": "Offline result does not establish universal live intent correctness"},
+    "finalReviewQaSha256": "49ceacd7e4908a5fbb14020989fcf7e879b5c19761663a76a3fbf262857b9bf9",
+    "eventualReceiptPath": "docs/flo-live-evaluation-20260910.md",
+    "productionStatus": "Conditional approval pending clean QA restoration, commit and artifact parity; final production status is authoritative in docs/flo-live-evaluation-20260910.md",
+    "qaAllowance": "Temporary QA-account-only cap increase explicitly approved; restore and verify normal cap before production promotion",
+    "allNaturalLanguageCasesPassed": false,
+    "finalReleaseReceiptAvailable": false
+  },
   "userHeadingCoverage": {
     "currentmoney": [
       "current_named_account",
@@ -628,5 +646,5 @@
       ]
     }
   ],
-  "implementationUpdate": "Updated against the frozen candidate after semantic contracts, guidance, history, settlement, search and ranking changes. Main reports 204 Edge tests at this stage; this is not a final receipt or live deployment claim. All natural-language cases remain unverified here."
+  "implementationUpdate": "Semantic contracts, guidance, history, settlement, search and ranking changes are implemented. Main reports 271 passing Edge tests and Deno checking. Final v14 targeted 14 cases plus two follow-ups independently passed; all 74 questions were not rerun on v14. This is not a universal/full-spec-complete claim; final deployment evidence belongs in the linked receipt. Preserve missing-data versus missing-feature distinctions."
 }

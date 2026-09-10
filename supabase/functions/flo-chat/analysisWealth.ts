@@ -42,7 +42,7 @@ export function wealthAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequ
     sources=["bills","monthly_overrides","bill_date_moves","household_settings"];
     const raw=rows("bills").filter(r=>r.is_debt && numeric(r.balance)!>0 && (!r.end_date || r.end_date>=snapshot.today));
     const named=raw.filter(r=>!request.entity||String(r.name).trim().toLowerCase()===request.entity.trim().toLowerCase());
-    if(request.entity && named.length!==1) missing.push("The debt name does not identify exactly one active debt; use its full name");
+    if(request.entity && named.length!==1)return {text:"Please use the full recorded name of exactly one active debt. I cannot substitute the whole plan's payoff date for an unidentified debt.",facts,sources,assumptions,missing:["The debt name does not identify exactly one active debt; use its full name"],scenario:Boolean(request.scenario)};
     if(rows("bills").some(r=>r.is_debt && numeric(r.balance)===null)) missing.push("A debt balance is missing");
     const total=sum(raw.map(r=>Number(r.balance)));
     facts.totalDebt=total; facts.debtCount=raw.length;

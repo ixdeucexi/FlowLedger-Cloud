@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { recurringAnalysis } from './analysisRecurring.ts';
+import { spendingAnalysis } from './analysisSpending.ts';
+import { analysisColumns } from './analysisSnapshot.ts';
+const snap=()=>({householdId:'h',today:'2026-09-10',capturedAt:'2026-09-10T16:00:00Z',timeZone:'UTC',sources:Object.fromEntries(Object.keys(analysisColumns).map(t=>[t,{rows:[],complete:true}]))});
+const req=(patch={})=>({domain:'subscriptions',operation:'compare',purpose:'general',dateEvent:'none',amount:null,startDate:null,endDate:null,entity:null,merchant:null,category:null,...patch});
+test('payday-relative bills retain the income evidence used for their cutoff',()=>{const s=snap();s.sources.incomes.rows=[{id:'pay',name:'Pay',amount:1500,frequency:'biweekly',start_date:'2026-09-11',next_payment_date:'2026-09-11'}];const r=recurringAnalysis(s,req({domain:'bills',operation:'summary',dateEvent:'before_payday'}));assert.ok(r.sources.includes('incomes'));assert.match(r.text,/2026-09-10/);});
+test('no recurring history is an unavailable comparison, not unchanged prices',()=>{const r=recurringAnalysis(snap(),req());assert.equal(r.facts.increasedRecurringMerchantCount,null);assert.ok(r.missing.length);assert.match(r.text,/not enough repeated/);assert.match(r.text,/No repeated subscription names/);});
+test('recurring increases use observed comparable merchant charges',()=>{const s=snap();s.sources.transactions.rows=['2026-06-01','2026-07-01','2026-08-01'].map((date,i)=>({id:String(i),date,amount:i===2?-15:-10,category:'Entertainment',note:'Stream'}));const r=recurringAnalysis(s,req({domain:'bills'}));assert.equal(r.facts.increasedRecurringMerchantCount,1);assert.equal(r.facts.comparableRecurringMerchantCount,1);assert.match(r.text,/up \$5.00/);});
+test('complete calendar window with absent income history identifies missing observations',()=>{const r=spendingAnalysis(snap(),req({domain:'income',operation:'average',startDate:'2026-06-01',endDate:'2026-08-31'}));assert.ok(r.missing.some(x=>x.includes('does not cover')));assert.ok(!r.missing.some(x=>x.includes('Use complete calendar')));});

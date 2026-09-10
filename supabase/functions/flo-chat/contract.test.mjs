@@ -283,7 +283,8 @@ test("runtime handles proven-empty tools before model output and validates all n
   assert.ok(emptyAt > 0 && emptyAt < outputAt && outputAt < validationAt);
   assert.match(source, /if \(selected.provenEmpty\)/);
   assert.match(source, /evidenceIds: claimEvidenceIds\(answer\)/);
-  assert.match(source, /failureClass, failureReason, failureStage, droppedFollowupCount/);
+  assert.match(source, /failureClass, failureReason, semanticFailureCodes, failureStage, droppedFollowupCount/);
+  assert.match(source, /const semanticFailureCodes = safeAnalysisFailureCodes\(error\)/);
   const contract = await readFile(new URL("./contract.ts", import.meta.url), "utf8");
   assert.doesNotMatch(contract, /full explanation needed more time/);
 });
