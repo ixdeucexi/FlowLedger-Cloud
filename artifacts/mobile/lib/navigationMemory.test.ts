@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 
 import {
   normalizeRestorableRoute,
-  prefetchRestorableRoute,
-  restorableRouteCanApply,
-  restorableRoutePrefetchIsCurrent,
+  createAppRouteMemory,
+  resolveAppEntryRoute,
 } from "./navigationMemory";
 
 test("normalizes tab routes without retaining action parameters", () => {
@@ -32,46 +32,95 @@ test("treats the How FlowLedger works guide as a transient route", () => {
   assert.equal(normalizeRestorableRoute("/(tabs)/how-flowledger-works?protectedDays=42"), "/(tabs)");
 });
 
-test("prefetched routes cannot apply before core privacy readiness or across a scope change", () => {
-  const entry = prefetchRestorableRoute(null, "user-a:household-a", async () => "/transactions");
-  const canApply = (overrides: Partial<Parameters<typeof restorableRouteCanApply>[0]> = {}) =>
-    restorableRouteCanApply({
-      cancelled: false,
+test("entry navigation waits for scoped core/privacy readiness and preserves explicit routes", () => {
+  let reads = 0;
+  const resolve = (overrides: Partial<Parameters<typeof resolveAppEntryRoute>[0]> = {}) =>
+    resolveAppEntryRoute({
       applyReady: true,
       expectedScopeKey: "user-a:household-a",
       currentScopeKey: "user-a:household-a",
-      entry,
-      currentEntry: entry,
+      eligibleEntry: true,
+      readRoute: () => { reads += 1; return "/transactions"; },
       ...overrides,
     });
 
-  assert.equal(canApply(), true);
-  assert.equal(canApply({ applyReady: false }), false);
-  assert.equal(canApply({ cancelled: true }), false);
-  assert.equal(canApply({ currentScopeKey: "user-b:household-b" }), false);
-  assert.equal(canApply({ currentScopeKey: null }), false);
-  assert.equal(canApply({ currentEntry: null }), false);
+  assert.equal(resolve({ applyReady: false }), null);
+  assert.equal(resolve({ currentScopeKey: "user-b:household-b" }), null);
+  assert.equal(resolve({ currentScopeKey: null }), null);
+  assert.equal(resolve({ eligibleEntry: false }), null);
+  assert.equal(reads, 0);
+  assert.equal(resolve(), "/transactions");
+  assert.equal(reads, 1);
 });
 
-test("route prefetch reuses only the current user and household scope", async () => {
-  let reads = 0;
-  const first = prefetchRestorableRoute(null, "user-a:household-a", async () => {
-    reads += 1;
-    return "/transactions";
+test("cold runtime opens Dashboard; warm entry reads the most recent page synchronously", async () => {
+  const runtime = createAppRouteMemory();
+  const resolve = () => resolveAppEntryRoute({
+    applyReady: true,
+    expectedScopeKey: "a:h",
+    currentScopeKey: "a:h",
+    eligibleEntry: true,
+    readRoute: () => runtime.read("a", "h"),
   });
-  const reused = prefetchRestorableRoute(first, "user-a:household-a", async () => {
-    reads += 1;
-    return "/bills";
-  });
-  const replacement = prefetchRestorableRoute(reused, "user-b:household-b", async () => {
-    reads += 1;
-    return "/monthly";
-  });
+  assert.equal(resolve(), "/(tabs)");
+  runtime.remember("a", "h", "/bills");
+  assert.equal(resolve(), "/bills");
+  runtime.remember("a", "h", "/monthly?month=9&year=2026");
+  assert.equal(resolve(), "/monthly?month=9&year=2026");
+  await Promise.resolve();
+  assert.equal(resolve(), "/monthly?month=9&year=2026");
+  const freshRuntime = createAppRouteMemory();
+  assert.equal(freshRuntime.read("a", "h"), null);
+});
 
-  assert.equal(reused, first);
-  assert.equal(await reused.promise, "/transactions");
-  assert.equal(await replacement.promise, "/monthly");
-  assert.equal(reads, 2);
-  assert.equal(restorableRoutePrefetchIsCurrent(first, "user-b:household-b"), false);
-  assert.equal(restorableRoutePrefetchIsCurrent(replacement, "user-b:household-b"), true);
+test("memory isolates households/users and sign-out clears only that user's routes", () => {
+  const runtime = createAppRouteMemory();
+  runtime.remember("a", "one", "/bills?add=1");
+  runtime.remember("a", "two", "/monthly");
+  runtime.remember("b", "one", "/transactions");
+  runtime.remember("a", "one", "/auth/reset-password?token=private");
+  assert.equal(runtime.read("a", "one"), "/bills");
+  assert.equal(runtime.read("a", "two"), "/monthly");
+  assert.equal(runtime.read("b", "one"), "/transactions");
+  assert.equal(runtime.read("b", "two"), null);
+  runtime.clear();
+  assert.equal(runtime.read("a", "one"), "/bills");
+  runtime.clear("a");
+  assert.equal(runtime.read("a", "one"), null);
+  assert.equal(runtime.read("a", "two"), null);
+  assert.equal(runtime.read("b", "one"), "/transactions");
+});
+
+test("a subsequent notification/deep link cannot be overwritten by delayed restoration", async () => {
+  const runtime = createAppRouteMemory();
+  runtime.remember("a", "h", "/bills");
+  let route = "/";
+  const applyEntry = () => {
+    const destination = resolveAppEntryRoute({
+      applyReady: true,
+      expectedScopeKey: "a:h",
+      currentScopeKey: "a:h",
+      eligibleEntry: route === "/",
+      readRoute: () => runtime.read("a", "h"),
+    });
+    if (destination) route = destination;
+  };
+  applyEntry();
+  assert.equal(route, "/bills");
+  route = "/transactions?activityId=notification-target";
+  await Promise.resolve();
+  applyEntry();
+  assert.equal(route, "/transactions?activityId=notification-target");
+});
+
+test("navigation memory has no durable storage and pause listeners only remember, never redirect", () => {
+  const memory = readFileSync("lib/navigationMemory.ts", "utf8");
+  assert.doesNotMatch(memory, /interfacePreferences|AsyncStorage|localStorage|sessionStorage/);
+  const layout = readFileSync("app/_layout.tsx", "utf8");
+  const pauseStart = layout.indexOf("const rememberRouteBeforePause");
+  const pauseEnd = layout.indexOf("return null;", pauseStart);
+  assert.ok(pauseStart >= 0 && pauseEnd > pauseStart);
+  assert.doesNotMatch(layout.slice(pauseStart, pauseEnd), /router\.|replaceRoute|clearLastAppRoute/);
+  const auth = readFileSync("context/AuthContext.tsx", "utf8");
+  assert.match(auth, /clearLastAppRoute\(signedOutUserId\)/);
 });

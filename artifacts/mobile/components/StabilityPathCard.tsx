@@ -1,11 +1,13 @@
 import Feather from "@expo/vector-icons/Feather";
 import React, { memo } from "react";
+import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { AppText } from "@/components/AppText";
 import { surfaceTokens } from "@/constants/surfaces";
 import { useColors } from "@/hooks/useColors";
 import type { StabilityProgress } from "@/lib/stability";
+import { stabilityPlanAction } from "@/lib/stabilityActions";
 
 interface StabilityPathCardProps {
   progress: StabilityProgress;
@@ -47,6 +49,8 @@ function statusColor(status: StabilityProgress["status"], isDark: boolean) {
 
 function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps) {
   const c = useColors();
+  const router = useRouter();
+  const planAction = stabilityPlanAction(progress);
   const color = statusColor(progress.status, c.isDark);
   const theme = STABILITY_THEMES[c.mode];
   const progressWidth = `${Math.round(progress.backupProgress * 100)}%` as const;
@@ -99,8 +103,9 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
         style={[styles.paydayCard, { backgroundColor: `${paydayColor}10`, borderColor: `${paydayColor}35` }]}
       >
         <Feather name={progress.safeUntilPayday === true ? "check-circle" : progress.safeUntilPayday === false ? "alert-circle" : "calendar"} size={16} color={paydayColor} />
-        <AppText tone="title" numberOfLines={1} style={[styles.paydayTitle, { color: paydayColor }]}>{paydayTitle}</AppText>
+        <AppText tone="title" style={[styles.paydayTitle, { color: paydayColor }]}>{paydayTitle}</AppText>
       </View>
+      <AppText style={[styles.planNote, { color: theme.mutedText }]}>Based on your recorded plan. Cover bills and minimum payments, protect your chosen cushion, then review any extra debt payment.</AppText>
 
       <View style={styles.progressHeader}>
         <AppText style={[styles.progressLabel, { color: theme.labelText }]}>180-day path</AppText>
@@ -121,11 +126,20 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
         </View>
         <View style={styles.nextMoveCopy}>
           <AppText tone="label" style={[styles.nextMoveLabel, { color: theme.purpleText }]}>Next</AppText>
-          <AppText numberOfLines={2} style={[styles.nextMoveText, { color: theme.purpleStrongText }]}>{progress.nextAction}</AppText>
+          <AppText style={[styles.nextMoveText, { color: theme.purpleStrongText }]}>{progress.nextAction}</AppText>
         </View>
       </View>
 
       <View style={styles.actions}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={planAction.label}
+          onPress={() => router.push({ pathname: planAction.pathname, params: planAction.params } as any)}
+          style={({ pressed }) => [styles.primaryButton, { backgroundColor: c.primary, opacity: pressed ? 0.72 : 1 }]}
+        >
+          <Feather name="calendar" size={16} color={c.primaryForeground} />
+          <AppText tone="button" style={[styles.secondaryButtonText, { color: c.primaryForeground }]}>{planAction.label}</AppText>
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="See how your Stability Path works"
@@ -186,6 +200,8 @@ const styles = StyleSheet.create({
   nextMoveLabel: { color: "#c4b5fd", fontSize: 10, fontFamily: "Inter_800ExtraBold" },
   nextMoveText: { color: "#ede9fe", fontSize: 12, lineHeight: 16, fontFamily: "Inter_700Bold", marginTop: 2 },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
+  planNote: { fontSize: 12, lineHeight: 18, marginTop: 8 },
+  primaryButton: { width: "100%", minHeight: 48, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   secondaryButton: { flex: 1, minWidth: 140, minHeight: 44, borderRadius: 14, borderWidth: 1, borderColor: "rgba(96,165,250,0.22)", backgroundColor: "rgba(37,99,235,0.12)", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, paddingHorizontal: 10 },
   secondaryButtonText: { color: "#bfdbfe", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
 });

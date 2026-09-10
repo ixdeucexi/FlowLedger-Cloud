@@ -1,6 +1,7 @@
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useLocalDay } from "@/hooks/useLocalDay";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { AddBillModal, type AddBillInitialValues } from "@/components/AddBillModal";
@@ -108,9 +109,10 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all", onMana
   useEffect(() => {
     void refreshBankData();
   }, [refreshBankData]);
+  const localDay = useLocalDay();
   const fullQueue = useMemo(
-    () => buildReviewQueue(transactions, todayIso(), focusTransactionId),
-    [focusTransactionId, transactions],
+    () => buildReviewQueue(transactions, localDay, focusTransactionId),
+    [focusTransactionId, transactions, localDay],
   );
   const [reviewFilter, setReviewFilter] = useState<"all" | "expense" | "income">(initialFilter);
   const queue = useMemo(() => prioritizeReviewTransaction(fullQueue.filter(transaction =>
@@ -321,7 +323,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all", onMana
     const summary = spendingBucketSummary(bucketClosePrompt.goal);
     const remainder = summary.closed ? summary.released : summary.remaining;
     if (remainder <= 0.005) return null;
-    const effectiveDate = bucketEffectiveRouteDate(todayIso(), bucketClosePrompt.goal.target_date);
+    const effectiveDate = bucketEffectiveRouteDate(localDay, bucketClosePrompt.goal.target_date);
     const [year, monthNumber] = effectiveDate.split("-").map(Number);
     const month = monthNumber - 1;
     const existing = getExtraPayment(month, year);
@@ -357,7 +359,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all", onMana
       paymentDate: selectedPaymentDate,
       safe: dateValid && preview.selectedExtra + 0.005 >= total,
     };
-  }, [bucketClosePrompt, bucketPaymentDate, bucketRouteMode, getExtraPayment, getRemainingDebtPlanForMonth, previewDebtSnowball, settings.debtPayoffEnabled]);
+  }, [bucketClosePrompt, bucketPaymentDate, bucketRouteMode, getExtraPayment, getRemainingDebtPlanForMonth, previewDebtSnowball, settings.debtPayoffEnabled, localDay]);
 
   const closeBucketKeepAvailable = async (prompt: BucketClosePrompt) => {
     if (saving || bucketCloseInFlightRef.current) return;

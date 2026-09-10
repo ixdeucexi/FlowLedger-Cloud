@@ -17,7 +17,7 @@ import { getLatestRecordedIncomeAmount, getUpcomingIncomeOccurrenceDates, normal
 
 const FREQUENCIES: { key: IncomeItem["frequency"]; label: string; desc: string }[] = [
   { key: "monthly",  label: "Monthly",  desc: "×1/mo"   },
-  { key: "biweekly", label: "Biweekly", desc: "×2/mo"   },
+  { key: "biweekly", label: "Biweekly", desc: "Every 2 weeks" },
   { key: "weekly",   label: "Weekly",   desc: "×4–5/mo" },
 ];
 

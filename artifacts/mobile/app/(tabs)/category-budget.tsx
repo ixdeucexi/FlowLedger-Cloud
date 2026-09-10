@@ -1,6 +1,6 @@
 import Feather from "@expo/vector-icons/Feather";
 import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -14,10 +14,12 @@ import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { isCashFlowTransaction } from "@/lib/billMatching";
 import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
 import { applyCategoryBudgetMove, buildCategoryPlan, buildZeroBudgetSummary, type CategoryPlanRow } from "@/lib/categoryPlanning";
-import { loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets } from "@/lib/categoryBudgetStore";
+import { loadCategoryBudgetsExact, readCategoryBudgetCache, saveCategoryBudgets } from "@/lib/categoryBudgetStore";
 import { buildReviewQueue } from "@/lib/reviewCenter";
 import { unmatchedPendingTransactions } from "@/lib/pendingPlanMatches";
 import { assertFinancialMutationOnline } from "@/lib/networkStatus";
+import { useLocalDay } from "@/hooks/useLocalDay";
+import { parseCategoryAssignments } from "@/lib/moneyFormInput";
 
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const CAT_COLORS: Record<string, string> = {
@@ -54,11 +56,20 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
     canEditHousehold,
   } = useBudget();
   const now = new Date();
+  const localDay = useLocalDay();
   const [month, setMonth] = useState(now.getMonth());
   const [year, setYear] = useState(selectedYear || now.getFullYear());
   const [filter, setFilter] = useState<Filter>("all");
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
+  const [loadReady, setLoadReady] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const busyRef = useRef(false);
+  const dirtyRef = useRef(new Set<string>());
+  const scopeVersion = useRef(0);
   const [moveTarget, setMoveTarget] = useState<CategoryPlanRow | null>(null);
   const [moveSource, setMoveSource] = useState("");
   const [moveAmount, setMoveAmount] = useState("");
@@ -73,15 +84,25 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
 
   useEffect(() => {
     let cancelled = false;
+    scopeVersion.current += 1;
+    dirtyRef.current.clear();
+    setDrafts({});
+    setSaveMessage("");
+    setMoveTarget(null);
+    setLoadReady(false);
+    setLoadError("");
     setCategoryBudgets(readCategoryBudgetCache(month, year, budgetScope));
-    void loadCategoryBudgets(budgetScope, month, year).then(next => {
-      if (!cancelled) setCategoryBudgets(next);
+    void loadCategoryBudgetsExact(budgetScope, month, year).then(result => {
+      if (cancelled) return;
+      setCategoryBudgets(result.value);
+      setLoadReady(!result.error);
+      setLoadError(result.error ?? "");
     });
-    return () => { cancelled = true; };
-  }, [budgetScope, month, year]);
+    return () => { cancelled = true; scopeVersion.current += 1; };
+  }, [budgetScope, month, year, loadAttempt]);
 
   useEffect(() => {
-    setDrafts(Object.fromEntries(editableCategories.map(category => [category, categoryBudgets[category] === undefined ? "" : String(categoryBudgets[category])])) as Record<string, string>);
+    setDrafts(previous => Object.fromEntries(editableCategories.map(category => [category, dirtyRef.current.has(category) ? previous[category] ?? "" : categoryBudgets[category] === undefined ? "" : String(categoryBudgets[category])])));
   }, [categoryBudgets, editableCategories]);
 
   const categoryPlan = useMemo(() => {
@@ -101,43 +122,57 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
   const zeroBudgetSummary = buildZeroBudgetSummary(monthlyIncome, categoryPlan);
   const unassigned = zeroBudgetSummary.leftToAssign;
   const reviewCount = useMemo(() => {
-    const today = new Date();
-    const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-    return buildReviewQueue(transactions, todayIso).length;
-  }, [transactions]);
+    return buildReviewQueue(transactions, localDay).length;
+  }, [transactions, localDay]);
   const pendingReviewCount = useMemo(
     () => unmatchedPendingTransactions(pendingPlanMatches, pendingBankTransactions).length,
     [pendingBankTransactions, pendingPlanMatches],
   );
 
   const persistBudgets = async (next: Record<string, number>) => {
-    if (!canEditHousehold) return;
+    if (!canEditHousehold || !loadReady || busyRef.current) return false;
+    const version = scopeVersion.current;
+    busyRef.current = true;
+    setSaving(true);
+    setSaveMessage("Saving…");
     try {
       if (budgetScope.userId) assertFinancialMutationOnline();
-      setCategoryBudgets(next);
       await saveCategoryBudgets(budgetScope, month, year, next);
+      if (version !== scopeVersion.current) return false;
+      dirtyRef.current.clear();
+      setCategoryBudgets(next);
+      setSaveMessage("Assignments saved.");
+      return true;
     } catch (error) {
-      Alert.alert("Category budget", error instanceof Error ? error.message : "Could not save these assignments.");
+      if (version === scopeVersion.current) setSaveMessage(error instanceof Error ? error.message : "Could not save these assignments. Your changes are still here; try again.");
+      return false;
+    } finally {
+      busyRef.current = false;
+      setSaving(false);
     }
   };
 
   const saveDrafts = () => {
-    const next: Record<string, number> = {};
-    Object.entries(drafts).forEach(([category, raw]) => {
-      const parsed = Number(raw);
-      if (Number.isFinite(parsed) && parsed >= 0) next[category] = parsed;
-    });
-    void persistBudgets(next);
-    Keyboard.dismiss();
+    try {
+      void persistBudgets(parseCategoryAssignments(drafts));
+      Keyboard.dismiss();
+    } catch (error) { setSaveMessage(error instanceof Error ? error.message : "Check your assignments."); }
   };
 
   const shiftMonth = (delta: number) => {
+    if (busyRef.current) return;
     const next = new Date(year, month + delta, 1);
-    setMonth(next.getMonth());
-    setYear(next.getFullYear());
+    const change = () => { setMonth(next.getMonth()); setYear(next.getFullYear()); };
+    if (dirtyRef.current.size) {
+      Alert.alert("Unsaved assignments", "Save your changes before changing months, or discard them.", [
+        { text: "Keep editing", style: "cancel" }, { text: "Discard", style: "destructive", onPress: change },
+      ]);
+    } else change();
   };
 
   const openMove = (row: CategoryPlanRow) => {
+    if (!loadReady || busyRef.current) return;
+    if (dirtyRef.current.size) { setSaveMessage("Save your assignments before moving money."); return; }
     const source = categoryPlan.filter(item => item.category !== row.category && item.remaining > 0.005).sort((a, b) => b.remaining - a.remaining)[0];
     setMoveTarget(row);
     setMoveSource(source?.category ?? "");
@@ -145,7 +180,7 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
     setMoveError("");
   };
 
-  const applyMove = () => {
+  const applyMove = async () => {
     if (!moveTarget || !moveSource) return;
     const amount = Number(moveAmount);
     const source = categoryPlan.find(row => row.category === moveSource);
@@ -153,18 +188,24 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
       setMoveError(`You can move up to $${Math.max(0, source?.remaining ?? 0).toFixed(0)} from ${moveSource}.`);
       return;
     }
-    void persistBudgets(applyCategoryBudgetMove(categoryBudgets, categoryPlan, moveSource, moveTarget.category, amount));
-    setMoveTarget(null);
+    if (await persistBudgets(applyCategoryBudgetMove(categoryBudgets, categoryPlan, moveSource, moveTarget.category, amount))) setMoveTarget(null);
+    else setMoveError("The move was not saved. Check your connection and try again.");
   };
 
   const copyPreviousMonth = async () => {
+    if (!loadReady || busyRef.current) return;
+    if (dirtyRef.current.size) { setSaveMessage("Save your assignments before copying another month."); return; }
+    const version = scopeVersion.current;
     const previousDate = new Date(year, month - 1, 1);
-    const previous = await loadCategoryBudgets(budgetScope, previousDate.getMonth(), previousDate.getFullYear());
+    const result = await loadCategoryBudgetsExact(budgetScope, previousDate.getMonth(), previousDate.getFullYear());
+    if (version !== scopeVersion.current || busyRef.current || dirtyRef.current.size) return;
+    if (result.error) { setSaveMessage(`Could not load the previous month: ${result.error}`); return; }
+    const previous = result.value;
     if (!Object.keys(previous).length) {
       Alert.alert("Nothing to copy", "The previous month does not have any saved assignments yet.");
       return;
     }
-    const applyCopy = () => void persistBudgets(previous);
+    const applyCopy = () => { if (version === scopeVersion.current && !dirtyRef.current.size) void persistBudgets(previous); };
     if (!Object.keys(categoryBudgets).length) {
       applyCopy();
       return;
@@ -244,17 +285,20 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
           <Text style={[styles.subtitle, { color: c.mutedForeground }]}>Give every dollar a job</Text>
           <DataFreshnessLabel compact />
         </View>
-        <Pressable disabled={!canEditHousehold} onPress={saveDrafts} style={[styles.saveBtn, { backgroundColor: c.primary, opacity: canEditHousehold ? 1 : 0.5 }]}>
-          <Text style={[styles.saveText, { color: c.primaryForeground }]}>Save</Text>
+        <Pressable disabled={!canEditHousehold || saving || !loadReady} onPress={saveDrafts} style={[styles.saveBtn, { backgroundColor: c.primary, opacity: canEditHousehold && !saving && loadReady ? 1 : 0.5 }]}>
+          <Text style={[styles.saveText, { color: c.primaryForeground }]}>{saving ? "Saving…" : "Save"}</Text>
         </Pressable>
       </View>
+      {saveMessage ? <Text accessibilityLiveRegion="polite" style={[styles.subtitle, { color: c.foreground }]}>{saveMessage}</Text> : null}
+      {!loadReady ? <Text accessibilityLiveRegion="polite" style={[styles.subtitle, { color: c.mutedForeground }]}>{loadError ? "Could not confirm your saved assignments. Retry before editing." : "Loading saved assignments…"}</Text> : null}
+      {loadError ? <Pressable onPress={() => setLoadAttempt(value => value + 1)} style={styles.copyPreviousButton}><Text style={{ color: c.primary }}>Retry loading assignments</Text></Pressable> : null}
 
       <View style={[styles.monthCard, { backgroundColor: c.card }]}>
         <Pressable onPress={() => shiftMonth(-1)} style={styles.monthBtn}><Feather name="chevron-left" size={18} color={c.foreground} /></Pressable>
         <Text style={[styles.monthTitle, { color: c.foreground }]}>{MONTH_FULL[month]} {year}</Text>
         <Pressable onPress={() => shiftMonth(1)} style={styles.monthBtn}><Feather name="chevron-right" size={18} color={c.foreground} /></Pressable>
       </View>
-      <Pressable disabled={!canEditHousehold} onPress={() => void copyPreviousMonth()} style={styles.copyPreviousButton}>
+      <Pressable disabled={!canEditHousehold || saving || !loadReady} onPress={() => void copyPreviousMonth()} style={styles.copyPreviousButton}>
         <Feather name="copy" size={13} color={canEditHousehold ? c.primary : c.mutedForeground} />
         <Text style={[styles.copyPreviousText, { color: canEditHousehold ? c.primary : c.mutedForeground }]}>Copy previous month</Text>
       </Pressable>
@@ -313,8 +357,8 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
                   <Text style={[styles.dollar, { color: c.mutedForeground }]}>$</Text>
                   <TextInput
                     value={drafts[row.category] ?? ""}
-                    onChangeText={value => setDrafts(previous => ({ ...previous, [row.category]: value }))}
-                    editable={canEditHousehold}
+                    onChangeText={value => { dirtyRef.current.add(row.category); setSaveMessage("Unsaved assignments"); setDrafts(previous => ({ ...previous, [row.category]: value })); }}
+                    editable={canEditHousehold && !saving && loadReady}
                     keyboardType="decimal-pad"
                     placeholder={row.budgeted.toFixed(0)}
                     placeholderTextColor={c.mutedForeground}
@@ -354,8 +398,8 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
               <TextInput value={moveAmount} onChangeText={setMoveAmount} keyboardType="decimal-pad" placeholder="Amount" placeholderTextColor={c.mutedForeground} style={[styles.input, { color: c.foreground }]} />
             </View>
             {moveError ? <Text style={[styles.error, { color: c.destructive }]}>{moveError}</Text> : null}
-            <Pressable onPress={applyMove} style={[styles.sheetPrimary, { backgroundColor: c.primary }]}>
-              <Text style={[styles.sheetPrimaryText, { color: c.primaryForeground }]}>Apply move</Text>
+            <Pressable disabled={saving} onPress={applyMove} style={[styles.sheetPrimary, { backgroundColor: c.primary }]}>
+              <Text style={[styles.sheetPrimaryText, { color: c.primaryForeground }]}>{saving ? "Saving…" : "Apply move"}</Text>
             </Pressable>
           </Pressable>
         </Pressable>

@@ -147,8 +147,7 @@ export interface ForecastReadinessResult {
 export interface GoalFundingPlan {
   goalId: string;
   monthlyNeeded: number;
-  safeMonthlyContribution: number;
-  status: "on_track" | "behind" | "unsafe" | "needs_date";
+  status: "on_track" | "behind" | "unsafe" | "needs_date" | "needs_review";
   message: string;
 }
 
@@ -377,29 +376,20 @@ export function evaluateForecastReadiness(input: ForecastReadinessInput): Foreca
 
 export function buildGoalFundingPlans(
   goals: GrowthGoal[],
-  safeMonthlyAmount: number,
   today = new Date(),
 ): GoalFundingPlan[] {
   return goals.map(goal => {
     const remaining = Math.max(0, goal.targetAmount - goal.currentAmount);
     const months = goal.targetDate ? monthsUntil(goal.targetDate, today) : 0;
     const monthlyNeeded = months > 0 ? roundCurrency(remaining / months) : remaining;
-    const safeMonthlyContribution = roundCurrency(Math.min(monthlyNeeded, Math.max(0, safeMonthlyAmount)));
-    const status: GoalFundingPlan["status"] = !goal.targetDate
-      ? "needs_date"
-      : remaining <= 0
+    const status: GoalFundingPlan["status"] = remaining <= 0
       ? "on_track"
-      : safeMonthlyContribution <= 0
-      ? "unsafe"
-      : safeMonthlyContribution + 0.01 >= monthlyNeeded
-      ? "on_track"
-      : "behind";
+      : !goal.targetDate ? "needs_date" : months <= 0 ? "behind" : "needs_review";
     return {
       goalId: goal.id,
       monthlyNeeded,
-      safeMonthlyContribution,
       status,
-      message: goalFundingMessage(goal.name, status, monthlyNeeded, safeMonthlyContribution),
+      message: goalFundingMessage(goal.name, status, monthlyNeeded),
     };
   });
 }
@@ -637,11 +627,11 @@ function monthsUntil(date: string, today: Date) {
   return Math.max(1, years * 12 + months + (target.getDate() >= today.getDate() ? 0 : -1));
 }
 
-function goalFundingMessage(name: string, status: GoalFundingPlan["status"], needed: number, safe: number) {
+function goalFundingMessage(name: string, status: GoalFundingPlan["status"], needed: number) {
   if (status === "needs_date") return `${name} needs a target date before I can build a funding plan.`;
-  if (status === "on_track") return `${name} can stay on track at about $${needed.toFixed(0)} per month.`;
-  if (status === "unsafe") return `I would pause ${name} contributions until the cushion has room.`;
-  return `${name} needs about $${needed.toFixed(0)} per month, but only $${safe.toFixed(0)} looks safe right now.`;
+  if (status === "on_track") return `${name} has reached its recorded target.`;
+  if (status === "behind") return `${name}'s target date needs review. Change the date or remaining target to update its pace.`;
+  return `${name} needs about $${needed.toFixed(0)} per month to reach its date. This is a target pace, not an affordability recommendation.`;
 }
 
 function roundCurrency(value: number) {

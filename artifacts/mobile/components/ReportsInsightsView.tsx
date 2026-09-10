@@ -1,4 +1,5 @@
 import Feather from "@expo/vector-icons/Feather";
+import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
@@ -7,6 +8,7 @@ import { useColors } from "@/hooks/useColors";
 import type { MonthlyMoneyInsight, ReminderItem, ReportsSummary, SubscriptionCandidate } from "@/lib/competitiveGrowth";
 import type { CategoryPlanRow } from "@/lib/categoryPlanning";
 import { shouldExpandReportDetails, shouldStackSettingsMetrics } from "@/lib/settingsLayout";
+import { reportIncomeUsage } from "@/lib/moneyFormInput";
 
 interface ReportsInsightsViewProps {
   monthLabel: string;
@@ -36,15 +38,14 @@ export function ReportsInsightsView({
   onOpenSubscriptions,
 }: ReportsInsightsViewProps) {
   const c = useColors();
+  const router = useRouter();
   const { width: viewportWidth } = useWindowDimensions();
   const stackCompactContent = shouldStackSettingsMetrics(viewportWidth);
   const expandCompactDetails = shouldExpandReportDetails(viewportWidth);
   const [insightRange, setInsightRange] = useState<"six" | "year">("six");
   const hasActivity = summary.income > 0 || summary.spending > 0;
   const moneyKept = summary.net >= 0;
-  const spendingPercent = summary.income > 0
-    ? Math.min(100, Math.round((summary.spending / summary.income) * 100))
-    : summary.spending > 0 ? 100 : 0;
+  const incomeUsage = reportIncomeUsage(summary.income, summary.spending);
   const largestCategory = summary.categoryTotals[0]?.amount ?? 0;
   const visibleInsights = insightRange === "six" ? monthlyInsights.slice(-6) : monthlyInsights;
   const trendIncome = visibleInsights.reduce((sum, item) => sum + item.income, 0);
@@ -58,7 +59,7 @@ export function ReportsInsightsView({
     if (reminders.length) return reminders[0].title;
     if (!hasActivity) return "Add activity to start your monthly report.";
     if (!moneyKept) return `Review ${summary.topCategory ?? "your largest spending area"} first.`;
-    if (summary.debtTotal > 0) return "Decide how much of the money left should go toward debt.";
+    if (summary.debtTotal > 0) return "Check affordability before adding an extra debt payment.";
     return "Your month is on track. Keep following the plan.";
   }, [hasActivity, moneyKept, reminders, summary.debtTotal, summary.topCategory]);
 
@@ -96,15 +97,15 @@ export function ReportsInsightsView({
 
         <View style={styles.paceRow}>
           <Text style={[styles.paceText, { color: c.mutedForeground }]}>Income used</Text>
-          <Text style={[styles.paceValue, { color: c.foreground }]}>{spendingPercent}%</Text>
+          <Text style={[styles.paceValue, { color: c.foreground }]}>{incomeUsage.label}</Text>
         </View>
         <View style={[styles.track, { backgroundColor: c.muted }]}>
           <View
             style={[
               styles.fill,
               {
-                width: `${spendingPercent}%`,
-                backgroundColor: spendingPercent > 100 ? c.destructive : spendingPercent > 85 ? c.warning : c.success,
+                width: `${incomeUsage.barPercent}%`,
+                backgroundColor: incomeUsage.overIncome ? c.destructive : incomeUsage.watch ? c.warning : c.success,
               },
             ]}
           />
@@ -277,6 +278,11 @@ export function ReportsInsightsView({
           <Text style={[styles.actionText, { color: c.mutedForeground }]}>
             {reminders.length ? `${reminders.length} item${reminders.length === 1 ? "" : "s"} may need attention.` : summary.insight}
           </Text>
+          {!reminders.length && summary.debtTotal > 0 ? (
+            <Pressable accessibilityRole="button" onPress={() => router.push("/snowball-plan")} style={styles.smallButton}>
+              <Text style={[styles.smallButtonText, { color: c.primary }]}>Check payoff affordability</Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
 

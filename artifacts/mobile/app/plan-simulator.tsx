@@ -2,6 +2,7 @@ import Feather from "@expo/vector-icons/Feather";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocalDay } from "@/hooks/useLocalDay";
 import {
   ActivityIndicator,
   Alert,
@@ -70,11 +71,6 @@ const CHANGE_OPTIONS: Array<{ type: ChangeKind; label: string; detail: string; i
   { type: "debt_extra", label: "Extra debt payment", detail: "Use your payoff method", icon: "trending-down" },
   { type: "debt_payoff", label: "Pay off a debt", detail: "Close one selected balance", icon: "check-circle" },
 ];
-
-function todayString() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-}
 
 function money(value: number) {
   return value.toLocaleString(undefined, { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -416,8 +412,8 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
     previewDebtSnowball,
     settings,
   } = useBudget();
-  const now = useMemo(() => new Date(), []);
-  const startDate = useMemo(todayString, []);
+  const startDate = useLocalDay();
+  const now = useMemo(() => new Date(`${startDate}T12:00:00`), [startDate]);
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
   const defaultHorizon = isPlanSimulationHorizon(settings.forecast_horizon_months) ? settings.forecast_horizon_months : 6;

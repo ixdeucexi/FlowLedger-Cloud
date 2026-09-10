@@ -47,12 +47,9 @@ import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { NetworkStatusProvider } from "@/hooks/useNetworkStatus";
 import {
-  prefetchRestorableRoute,
   readLastAppRoute,
   rememberAppRoute,
-  restorableRouteCanApply,
-  restorableRoutePrefetchIsCurrent,
-  type RestorableRoutePrefetch,
+  resolveAppEntryRoute,
 } from "@/lib/navigationMemory";
 import { WEB_VIEWPORT_CONTENT } from "@/lib/webViewport";
 import {
@@ -144,7 +141,6 @@ function AuthObserver({
   const searchParams =
     useGlobalSearchParams<Record<string, string | string[]>>();
   const restoreAttemptRef = useRef<string | null>(null);
-  const routePrefetchRef = useRef<RestorableRoutePrefetch | null>(null);
   const notificationInitialRef = useRef<string | null>(null);
   const routeUserId = session?.user.id ?? null;
   const routeHouseholdId = activeHousehold?.householdId ?? null;
@@ -152,9 +148,7 @@ function AuthObserver({
     ? `${routeUserId}:${routeHouseholdId}`
     : null;
   const routeScopeKeyRef = useRef<string | null>(routeScopeKey);
-  const routeApplyReadyRef = useRef(restorableRouteApplyReady);
   routeScopeKeyRef.current = routeScopeKey;
-  routeApplyReadyRef.current = restorableRouteApplyReady;
 
   useEffect(() => {
     if (Platform.OS === "web") return;
@@ -242,32 +236,9 @@ function AuthObserver({
     return serialized ? `${pathname}?${serialized}` : pathname;
   }, [pathname, searchParams]);
 
-  // Reading the last route is local preference work, so overlap it with the
-  // financial core. It cannot navigate until RootNavigator confirms that this
-  // exact user/household scope is both loaded and privacy-verified.
   useEffect(() => {
     restoreAttemptRef.current = null;
-    if (!routeScopeKey || !routeUserId || !routeHouseholdId) {
-      routePrefetchRef.current = null;
-      return;
-    }
-    const entry = prefetchRestorableRoute(
-      routePrefetchRef.current,
-      routeScopeKey,
-      () => withStartupTimeout(
-        readLastAppRoute(routeUserId, routeHouseholdId),
-        1_500,
-        "Restore last screen",
-      ),
-    );
-    routePrefetchRef.current = entry;
-    return () => {
-      if (
-        routePrefetchRef.current === entry
-        && routeScopeKeyRef.current !== routeScopeKey
-      ) routePrefetchRef.current = null;
-    };
-  }, [routeHouseholdId, routeScopeKey, routeUserId]);
+  }, [routeScopeKey]);
 
   useEffect(() => {
     if (loading || (session && budgetLoading)) return;
@@ -314,33 +285,20 @@ function AuthObserver({
         if (!restorableRouteApplyReady || !routeScopeKey || !routeHouseholdId) return;
         const restoreKey = routeScopeKey;
         if (restoreAttemptRef.current === restoreKey) return;
-        restoreAttemptRef.current = restoreKey;
-        const entry = restorableRoutePrefetchIsCurrent(routePrefetchRef.current, restoreKey)
-          ? routePrefetchRef.current!
-          : prefetchRestorableRoute(
-              null,
-              restoreKey,
-              () => withStartupTimeout(
-                readLastAppRoute(session.user.id, routeHouseholdId),
-                1_500,
-                "Restore last screen",
-              ),
-            );
-        routePrefetchRef.current = entry;
-        let cancelled = false;
-        void entry.promise.then((destination) => {
-          if (restorableRouteCanApply({
-            cancelled,
-            applyReady: routeApplyReadyRef.current,
-            expectedScopeKey: restoreKey,
-            currentScopeKey: routeScopeKeyRef.current,
-            entry,
-            currentEntry: routePrefetchRef.current,
-          })) replaceRoute(destination ?? "/(tabs)");
+        // Read the latest runtime route now, never a prefetched/stale page. There
+        // is no asynchronous callback that could overwrite a newer deep link.
+        const destination = resolveAppEntryRoute({
+          applyReady: restorableRouteApplyReady,
+          expectedScopeKey: restoreKey,
+          currentScopeKey: routeScopeKeyRef.current,
+          eligibleEntry: inAuth || (isAuthCallback && !isPasswordReset) || atRoot,
+          readRoute: () => readLastAppRoute(session.user.id, routeHouseholdId),
         });
-        return () => {
-          cancelled = true;
-        };
+        if (destination) {
+          restoreAttemptRef.current = restoreKey;
+          replaceRoute(destination);
+        }
+        return;
       }
       replaceRoute(settings.onboarding_completed ? "/(tabs)" : "/setup");
       return;

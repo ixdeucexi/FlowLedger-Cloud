@@ -223,16 +223,13 @@ test("startup plan loading fails closed instead of hanging on household discover
   );
   assert.doesNotMatch(layout, /setPrivacyShielded\(false\);\s*\}, 120\)/);
   assert.match(layout, /setPrivacyRefreshRetry\(\(?value\)? => value \+ 1\)/);
-  assert.match(
-    layout,
-    /withStartupTimeout\([\s\S]*?readLastAppRoute[\s\S]*?1_500/,
-  );
-  assert.match(layout, /prefetchRestorableRoute\(/);
+  assert.doesNotMatch(layout, /prefetchRestorableRoute|routePrefetchRef|Restore last screen/);
+  assert.match(layout, /readRoute: \(\) => readLastAppRoute\(session.user.id, routeHouseholdId\)/);
   assert.match(layout, /verifiedPrivacyScopeKey === currentPrivacyScopeKey/);
   assert.match(layout, /restorableRouteApplyReady/);
-  assert.match(layout, /restorableRouteCanApply\(\{/);
+  assert.match(layout, /resolveAppEntryRoute\(\{/);
   assert.match(layout, /currentScopeKey: routeScopeKeyRef\.current/);
-  assert.match(layout, /currentEntry: routePrefetchRef\.current/);
+  assert.match(layout, /eligibleEntry: inAuth \|\| \(isAuthCallback && !isPasswordReset\) \|\| atRoot/);
   assert.match(layout, /if \(loading \|\| \(session && budgetLoading\)\) return/);
   assert.match(layout, /if \(!requestedSetup && settings\.onboarding_completed\)/);
   assert.match(budgetContext, /if \(ownsLegacyPersonalRows\(priorScope\)\) return/);

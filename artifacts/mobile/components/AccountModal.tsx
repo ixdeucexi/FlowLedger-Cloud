@@ -9,6 +9,7 @@ import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { DESKTOP_MODAL_COMPACT, DESKTOP_MODAL_OVERLAY } from "@/lib/desktopModal";
 import type { AccountType } from "@/lib/accounts";
+import { parseAccountBalance } from "@/lib/moneyFormInput";
 
 const TYPES: { value: AccountType; label: string }[] = [
   { value: "checking", label: "Checking" },
@@ -50,7 +51,7 @@ export function AccountModal({
   useEffect(() => {
     setName(account?.name ?? "");
     setType(account?.account_type ?? "checking");
-    setBalance(account ? Math.abs(account.current_balance).toString() : "");
+    setBalance(account ? account.current_balance.toString() : "");
     setDate(account?.balance_as_of ?? localToday());
     setError("");
   }, [account, mode, visible]);
@@ -58,8 +59,8 @@ export function AccountModal({
   const submit = async () => {
     if (saving) return;
 
-    const amount = Number(balance);
-    if (!Number.isFinite(amount) || !date || (mode !== "reconcile" && !name.trim())) {
+    const amount = parseAccountBalance(balance);
+    if (amount === null || !date || (mode !== "reconcile" && !name.trim())) {
       setError(mode === "reconcile" ? "Enter a valid balance and date." : "Enter an account name, balance, and date.");
       return;
     }
@@ -123,7 +124,7 @@ export function AccountModal({
           <TextInput
             value={balance}
             onChangeText={setBalance}
-            keyboardType="decimal-pad"
+            keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "default"}
             placeholder="0.00"
             placeholderTextColor={c.mutedForeground}
             style={[styles.input, { color: c.foreground, backgroundColor: c.card, borderColor: c.border }]}

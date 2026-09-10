@@ -11,6 +11,10 @@
     "outDir": ".test-dist"
   },
   "include": [
+    "lib/stabilityActions.test.ts",
+    "lib/moneyFormInput.test.ts",
+    "lib/categorySaveReliability.test.ts",
+    "lib/goalFundingReview.test.ts",
     "lib/competitivePolish.test.ts",
     "lib/forecast.ts",
     "lib/forecastDisplay.ts",

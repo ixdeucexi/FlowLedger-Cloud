@@ -37,6 +37,7 @@ import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import { FloLogo } from "@/components/FloLogo";
 import { FeedbackManageModal } from "@/components/FeedbackManageModal";
 import { IncomeModal } from "@/components/IncomeModal";
+import { GoalModal } from "@/components/GoalModal";
 import { HouseholdMemberActionsModal } from "@/components/HouseholdMemberActionsModal";
 import { MembershipPanel } from "@/components/MembershipPanel";
 import { FOUNDING_FREE_LAUNCH, FOUNDING_FREE_NAME, hasAdminProAccess } from "@/lib/launchMode";
@@ -52,7 +53,7 @@ import { PWA_INSTALL_EVENT } from "@/components/PwaInstallPrompt";
 import { PlaidLinkButton } from "@/components/PlaidLinkButton";
 import { RecentlyDeletedTransactions } from "@/components/RecentlyDeletedTransactions";
 import colors from "@/constants/colors";
-import type { Account, IncomeItem } from "@/context/BudgetContext";
+import type { Account, IncomeItem, Goal } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useAuth } from "@/context/AuthContext";
@@ -65,9 +66,11 @@ import {
 import { useFeedbackBadge } from "@/context/FeedbackBadgeContext";
 import { useColors } from "@/hooks/useColors";
 import { useSetupReadiness } from "@/hooks/useSetupReadiness";
+import { useLocalDay } from "@/hooks/useLocalDay";
+import { goalFundingCushion, parseGoalContribution, goalContributionSnapshotMatches } from "@/lib/goalFundingReview";
 import { isCashFlowTransaction } from "@/lib/billMatching";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
-import { localDateString } from "@/lib/dateLabels";
+import { dateOnlyToLocalDate, localDateString } from "@/lib/dateLabels";
 import { householdActivityHeadline } from "@/lib/householdActivity";
 import { parseStatementCsv } from "@/lib/accounts";
 import { orderActiveDebtsForStrategy } from "@/lib/debtOrder";
@@ -446,6 +449,12 @@ export default function MoreScreen({
     overrides,
     incomes,
     goals,
+    addGoal,
+    updateGoal,
+    deleteGoal,
+    getPlanSimulationBaseline,
+    loading: budgetLoading,
+    loadError: budgetLoadError,
     importBills,
     settings,
     updateSettings,
@@ -588,6 +597,11 @@ export default function MoreScreen({
   >({});
   const [subscriptionMatchBusy, setSubscriptionMatchBusy] = useState<string | null>(null);
   const [goalContributionBusy, setGoalContributionBusy] = useState<string | null>(null);
+  const [goalEditor, setGoalEditor] = useState<Goal | "new" | null>(null);
+  const [contributionGoalId, setContributionGoalId] = useState<string | null>(null);
+  const [contributionText, setContributionText] = useState("");
+  const [contributionAccountId, setContributionAccountId] = useState<string | null>(null);
+  const [goalCushionReview, setGoalCushionReview] = useState<{ revision: unknown; date: string; householdId?: string; safetyFloor: number; amount: number | null; endDate: string } | null>(null);
   const subscriptionCreateInFlightRef = useRef(false);
   const goalContributionInFlightRef = useRef(false);
   const [subscriptionBillLinks, setSubscriptionBillLinks] = useState<Record<string, string>>({});
@@ -1165,22 +1179,7 @@ export default function MoreScreen({
   const setupIsComplete = settings.onboarding_completed;
   const shouldShowFloSetup = !setupIsComplete;
   const currentMonthPrefix = localDateString().slice(0, 7);
-  const accountMonthDeltas = useMemo(() => {
-    const deltas = new Map<string, number>();
-    transactions.forEach((transaction) => {
-      if (
-        !transaction.account_id ||
-        !transaction.date.startsWith(currentMonthPrefix)
-      )
-        return;
-      deltas.set(
-        transaction.account_id,
-        (deltas.get(transaction.account_id) ?? 0) + transaction.amount,
-      );
-    });
-    return deltas;
-  }, [transactions, currentMonthPrefix]);
-  const todayIso = localDateString();
+  const todayIso = useLocalDay();
   const activeAccounts = useMemo(
     () => accounts.filter((account) => account.is_active),
     [accounts],
@@ -1266,7 +1265,7 @@ export default function MoreScreen({
   );
   const growthGoals = useMemo(
     () =>
-      goals.map((goal) => ({
+      goals.filter(goal => goal.goal_type !== "planned_expense").map((goal) => ({
         id: goal.id,
         name: goal.name,
         targetAmount: goal.target_amount,
@@ -1372,30 +1371,34 @@ export default function MoreScreen({
         .sort((a, b) => a.due_day - b.due_day || a.name.localeCompare(b.name)),
     [bills, todayIso],
   );
-  const monthlyRecurringBills = useMemo(
-    () =>
-      bills
-        .filter(
-          (bill) =>
-            bill.is_recurring !== false &&
-            !bill.is_debt &&
-            !(bill.end_date && bill.end_date < todayIso),
-        )
-        .reduce((sum, bill) => sum + Math.max(0, bill.amount), 0),
-    [bills, todayIso],
-  );
-  const safeMonthlyGoalFunding = useMemo(
-    () =>
-      Math.max(
-        0,
-        Math.round((totalMonthlyIncome - monthlyRecurringBills) * 0.1),
-      ),
-    [monthlyRecurringBills, totalMonthlyIncome],
-  );
   const goalFundingPlans = useMemo(
-    () => buildGoalFundingPlans(growthGoals, safeMonthlyGoalFunding),
-    [growthGoals, safeMonthlyGoalFunding],
+    () => buildGoalFundingPlans(growthGoals, new Date(`${todayIso}T12:00:00`)),
+    [growthGoals, todayIso],
   );
+  const goalEstimateReady = !budgetLoading && !budgetLoadError && forecastConfidence.level === "high";
+  useEffect(() => {
+    if (activeSettingsSection !== "goals" || !goalEstimateReady) return;
+    let secondFrame = 0;
+    let cancelled = false;
+    // Paint the Goals screen first. Reuse the bounded, canonical three-month ledger.
+    const frame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(() => {
+        if (cancelled) return;
+        try {
+          const baseline = getPlanSimulationBaseline(3, todayIso);
+          setGoalCushionReview({ revision: getPlanSimulationBaseline, date: todayIso, householdId: activeHousehold?.householdId, safetyFloor: settings.safety_floor, amount: goalFundingCushion(baseline, settings.safety_floor), endDate: baseline.endDate });
+        } catch { setGoalCushionReview(null); }
+      });
+    });
+    return () => { cancelled = true; cancelAnimationFrame(frame); cancelAnimationFrame(secondFrame); };
+  }, [activeSettingsSection, goalEstimateReady, getPlanSimulationBaseline, todayIso, activeHousehold?.householdId, settings.safety_floor]);
+  const sharedGoalCushion = goalEstimateReady && goalCushionReview?.revision === getPlanSimulationBaseline
+    && goalCushionReview.date === todayIso && goalCushionReview.householdId === activeHousehold?.householdId
+    && goalCushionReview.safetyFloor === settings.safety_floor
+    ? goalCushionReview.amount : null;
+  const goalMutationSnapshotRef = useRef({ householdId: activeHousehold?.householdId, goals, date: todayIso, revision: getPlanSimulationBaseline, canEdit: canEditHousehold, accounts });
+  goalMutationSnapshotRef.current = { householdId: activeHousehold?.householdId, goals, date: todayIso, revision: getPlanSimulationBaseline, canEdit: canEditHousehold, accounts };
+  useEffect(() => { setContributionGoalId(null); setGoalEditor(null); }, [activeHousehold?.householdId]);
   const reportsSummary = useMemo(
     () =>
       buildReportsSummary(
@@ -1779,38 +1782,37 @@ export default function MoreScreen({
       .catch(error => Alert.alert("Couldn’t save subscription", error instanceof Error ? error.message : "Please try again."));
   };
 
-  const handleAddSafeGoalContribution = (goalId: string) => {
-    const plan = goalFundingPlans.find((item) => item.goalId === goalId);
+  const handleRecordGoalContribution = (goalId: string) => {
     const goal = goals.find((item) => item.id === goalId);
-    if (!plan || !goal || goalContributionBusy) return;
-    const contribution = Math.floor(
-      (
-        Math.max(
-          0,
-          Math.min(
-            plan.safeMonthlyContribution,
-            goal.target_amount - goal.current_amount,
-          ),
-        ) + Number.EPSILON
-      ) * 100,
-    ) / 100;
-    if (!Number.isFinite(contribution) || contribution <= 0) {
+    const householdId = activeHousehold?.householdId;
+    if (!goal || !householdId || !canEditHousehold || goalContributionBusy) return;
+    const contribution = parseGoalContribution(contributionText, goal.target_amount - goal.current_amount);
+    if (contribution === null) {
       Alert.alert(
         "Goal funding",
-        "I don’t see a safe contribution for this goal yet.",
+        "Enter a positive amount with up to two decimal places, no more than the remaining target.",
       );
       return;
     }
+    const accountId = contributionAccountId;
+    const account = activeAccounts.find(item => item.id === accountId);
+    if (accountId && !account) return;
+    const expected = { householdId, goalId, currentAmount: goal.current_amount, targetAmount: goal.target_amount, date: todayIso, revision: getPlanSimulationBaseline };
+    const caution = sharedGoalCushion === null ? "The forecast needs review before estimating new savings. "
+      : contribution > sharedGoalCushion ? "This exceeds the shared forecast cushion. Protect bills and required debt payments before setting aside new money. " : "";
     confirmAction({
-      title: "Add safe goal contribution?",
-      message: `I’ll add $${contribution.toFixed(2)} toward ${goal.name} today and keep it inside the current safe funding plan.`,
-      confirmText: "Add contribution",
+      title: "Record money already set aside?",
+      message: `${caution}Record $${contribution.toFixed(2)} toward ${goal.name} today, ${account ? `from ${account.name}` : "with no account assigned"}? This adds an Activity entry and updates goal progress; it does not transfer money. Do not record it again if it is already in Activity.`,
+      confirmText: "Record contribution",
       onConfirm: async () => {
-        const householdId = activeHousehold?.householdId;
-        if (!householdId) return;
         if (goalContributionInFlightRef.current) return;
+        const current = goalMutationSnapshotRef.current;
+        if (!goalContributionSnapshotMatches(expected, current)
+          || (accountId && !current.accounts.some(item => item.id === accountId && item.is_active))) {
+          Alert.alert("Plan changed", "Review the current goal and amount, then confirm again.");
+          return;
+        }
         goalContributionInFlightRef.current = true;
-        const accountId = activeAccounts[0]?.id ?? null;
         const transactionId = stableUuidFromString(
           [
             "goal-funding",
@@ -1833,7 +1835,10 @@ export default function MoreScreen({
             expectedCurrentAmount: goal.current_amount,
             accountId,
           });
-          await retryBudgetLoad();
+          if (goalMutationSnapshotRef.current.householdId === householdId) {
+            setContributionGoalId(null);
+            retryBudgetLoad();
+          }
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (error) {
           Alert.alert(
@@ -3397,8 +3402,7 @@ export default function MoreScreen({
                       (Date.now() - new Date(reviewed).getTime()) / 86_400_000,
                     ),
                   );
-                  const monthDelta = accountMonthDeltas.get(account.id) ?? 0;
-                  const projected = account.current_balance + monthDelta;
+                  const balanceDate = dateOnlyToLocalDate(account.balance_as_of ?? "");
                   return (
                     <View
                       key={account.id}
@@ -3472,7 +3476,7 @@ export default function MoreScreen({
                             { color: c.mutedForeground },
                           ]}
                         >
-                          Proj ${projected.toFixed(2)}
+                          {balanceDate ? `Balance as of ${balanceDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}` : "Balance date unknown"}
                         </Text>
                         <Pressable
                           onPress={() => openAccount("reconcile", account)}
@@ -4517,6 +4521,16 @@ export default function MoreScreen({
 
         {activeSettingsSection === "goals" && (
           <>
+            <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius, gap: 12 }]}>
+              <Text style={[styles.dataLabel, { color: c.foreground }]}>Protect bills first. Build savings next.</Text>
+              <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>
+                {sharedGoalCushion === null
+                  ? "Review your account balances, income and bills before estimating room for new savings."
+                  : `One shared estimated cushion: $${sharedGoalCushion.toFixed(2)}, from ${todayIso} through ${goalCushionReview?.endDate}. Based on the recorded Forecast after planned bills, debt payments and your safety floor—not an amount available for each goal or a monthly promise.`}
+              </Text>
+              <Pressable accessibilityRole="button" onPress={() => router.push("/(tabs)/monthly")}><Text style={{ color: c.primary, paddingVertical: 12 }}>Review Forecast</Text></Pressable>
+              {canEditHousehold && <Pressable accessibilityRole="button" onPress={() => setGoalEditor("new")}><Text style={{ color: c.primary, paddingVertical: 12 }}>Add savings goal</Text></Pressable>}
+            </View>
             <View
               style={[
                 styles.card,
@@ -4570,20 +4584,20 @@ export default function MoreScreen({
                           { color: c.mutedForeground },
                         ]}
                       >
-                        Needed ${plan.monthlyNeeded.toFixed(0)}/mo • Safe $
-                        {plan.safeMonthlyContribution.toFixed(0)}/mo
+                        Recorded ${goal?.current_amount.toFixed(2)} of ${goal?.target_amount.toFixed(2)}
                       </Text>
-                      {plan.safeMonthlyContribution > 0 ? (
+                      {canEditHousehold && <Pressable accessibilityRole="button" onPress={() => goal && setGoalEditor(goal)}><Text style={{ color: c.primary, paddingVertical: 12 }}>Edit goal or date</Text></Pressable>}
+                      {canEditHousehold && goal && goal.current_amount < goal.target_amount ? (
                         <Pressable
                           accessibilityRole="button"
-                          accessibilityLabel={`Add safe contribution to ${goal?.name ?? "goal"}`}
+                          accessibilityLabel={`Record contribution to ${goal?.name ?? "goal"}`}
                           accessibilityState={{
                             disabled: Boolean(goalContributionBusy),
                             busy: goalContributionBusy === plan.goalId,
                           }}
                           disabled={Boolean(goalContributionBusy)}
                           onPress={() =>
-                            handleAddSafeGoalContribution(plan.goalId)
+                            { setContributionGoalId(plan.goalId); setContributionText(""); setContributionAccountId(null); }
                           }
                           style={({ pressed }) => [
                             styles.growthInlineButton,
@@ -4611,7 +4625,7 @@ export default function MoreScreen({
                           >
                             {goalContributionBusy === plan.goalId
                               ? "Adding…"
-                              : "Add safe contribution"}
+                              : "Record contribution"}
                           </Text>
                         </Pressable>
                       ) : null}
@@ -4625,6 +4639,19 @@ export default function MoreScreen({
                 </Text>
               )}
             </View>
+            {contributionGoalId && <Modal visible transparent animationType="fade" onRequestClose={() => { if (!goalContributionBusy) setContributionGoalId(null); }}>
+              <View style={{ flex: 1, justifyContent: "center", padding: 20, backgroundColor: "rgba(0,0,0,0.65)" }}>
+              <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: "90%", width: "100%", maxWidth: 520, alignSelf: "center", borderRadius: colors.radius, backgroundColor: c.card }} contentContainerStyle={{ padding: 20, gap: 12 }}>
+              <Text style={[styles.dataLabel, { color: c.foreground }]}>Record contribution: {goals.find(goal => goal.id === contributionGoalId)?.name}</Text>
+              <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>Only record money already set aside and not already recorded in Activity. This does not move money between bank accounts.</Text>
+              <TextInput accessibilityLabel="Contribution amount" placeholder="Amount (0.00)" placeholderTextColor={c.mutedForeground} value={contributionText} onChangeText={setContributionText} keyboardType="decimal-pad" editable={!goalContributionBusy} style={{ color: c.foreground, borderWidth: 1, borderColor: c.border, padding: 12, borderRadius: 12 }} />
+              <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>Source account (optional)</Text>
+              {[{ id: null, name: "Unassigned — no account selected" }, ...activeAccounts].map(account => <Pressable key={account.id ?? "unassigned"} accessibilityRole="radio" accessibilityState={{ checked: contributionAccountId === account.id }} disabled={Boolean(goalContributionBusy)} onPress={() => setContributionAccountId(account.id)} style={{ paddingVertical: 12 }}><Text style={{ color: contributionAccountId === account.id ? c.primary : c.foreground }}>{contributionAccountId === account.id ? "✓ " : ""}{account.name}</Text></Pressable>)}
+              <Pressable accessibilityRole="button" disabled={Boolean(goalContributionBusy)} onPress={() => handleRecordGoalContribution(contributionGoalId)}><Text style={{ color: c.primary, paddingVertical: 12 }}>{goalContributionBusy ? "Recording…" : "Review and record"}</Text></Pressable>
+              <Pressable accessibilityRole="button" disabled={Boolean(goalContributionBusy)} onPress={() => setContributionGoalId(null)}><Text style={{ color: c.mutedForeground, paddingVertical: 12 }}>Cancel</Text></Pressable>
+              </ScrollView></View>
+            </Modal>}
+            {goalEditor && <GoalModal visible onClose={() => setGoalEditor(null)} editGoal={goalEditor === "new" ? null : goalEditor} initialMode="savings" lockedMode="savings" onSave={goal => "id" in goal ? updateGoal(goal) : addGoal(goal)} onDelete={deleteGoal} />}
           </>
         )}
 

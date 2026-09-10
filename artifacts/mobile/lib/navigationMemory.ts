@@ -1,9 +1,3 @@
-import {
-  clearInterfacePreferencesForUser,
-  readInterfacePreferences,
-  updateInterfacePreferences,
-} from "./interfacePreferences";
-
 const MAIN_APP_ROUTES = new Set([
   "/",
   "/bills",
@@ -59,73 +53,51 @@ export function normalizeRestorableRoute(route: string | null | undefined) {
   return serialized ? `${destination}?${serialized}` : destination;
 }
 
-export async function readLastAppRoute(userId: string, householdId: string) {
-  const preferences = await readInterfacePreferences(userId, householdId);
-  return normalizeRestorableRoute(preferences.lastRoute);
-}
-
-export interface RestorableRoutePrefetch {
-  scopeKey: string;
-  promise: Promise<string | null>;
-}
-
 /**
- * Starts one local route read per authenticated household scope and reuses it
- * while the financial core loads. The caller still decides when navigation is
- * safe; this helper never applies a route or reveals scoped UI by itself.
+ * A new JS runtime starts empty. Backgrounding an existing app keeps its memory;
+ * closing/reloading it does not restore a page from durable preferences.
  */
-export function prefetchRestorableRoute(
-  existing: RestorableRoutePrefetch | null,
-  scopeKey: string,
-  load: () => Promise<string | null>,
-): RestorableRoutePrefetch {
-  if (existing?.scopeKey === scopeKey) return existing;
+export function createAppRouteMemory() {
+  const users = new Map<string, Map<string, string>>();
   return {
-    scopeKey,
-    promise: Promise.resolve().then(load).catch(() => null),
+    read(userId: string, householdId: string): string | null {
+      return users.get(userId)?.get(householdId) ?? null;
+    },
+    remember(userId: string, householdId: string, route: string) {
+      const safeRoute = normalizeRestorableRoute(route);
+      if (!userId || !householdId || !safeRoute) return;
+      let households = users.get(userId);
+      if (!households) {
+        households = new Map();
+        users.set(userId, households);
+      }
+      households.set(householdId, safeRoute);
+    },
+    clear(userId?: string) {
+      if (userId) users.delete(userId);
+    },
   };
 }
 
-export function restorableRoutePrefetchIsCurrent(
-  prefetch: RestorableRoutePrefetch | null,
-  scopeKey: string,
-): boolean {
-  return prefetch?.scopeKey === scopeKey;
-}
+const runtimeRoutes = createAppRouteMemory();
+export const readLastAppRoute = runtimeRoutes.read;
+export const rememberAppRoute = runtimeRoutes.remember;
+export const clearLastAppRoute = runtimeRoutes.clear;
 
-export function restorableRouteCanApply({
-  cancelled,
+/** Resolve only at an eligible entry screen, after scoped privacy/core readiness. */
+export function resolveAppEntryRoute({
   applyReady,
   expectedScopeKey,
   currentScopeKey,
-  entry,
-  currentEntry,
+  eligibleEntry,
+  readRoute,
 }: {
-  cancelled: boolean;
   applyReady: boolean;
   expectedScopeKey: string;
   currentScopeKey: string | null;
-  entry: RestorableRoutePrefetch;
-  currentEntry: RestorableRoutePrefetch | null;
-}): boolean {
-  return !cancelled
-    && applyReady
-    && currentScopeKey === expectedScopeKey
-    && entry.scopeKey === expectedScopeKey
-    && currentEntry === entry;
-}
-
-export async function rememberAppRoute(
-  userId: string,
-  householdId: string,
-  route: string,
-) {
-  const safeRoute = normalizeRestorableRoute(route);
-  if (!safeRoute) return;
-  await updateInterfacePreferences(userId, householdId, { lastRoute: safeRoute });
-}
-
-export async function clearLastAppRoute(userId?: string) {
-  if (!userId) return;
-  await clearInterfacePreferencesForUser(userId);
+  eligibleEntry: boolean;
+  readRoute: () => string | null;
+}): string | null {
+  if (!applyReady || !eligibleEntry || !expectedScopeKey || currentScopeKey !== expectedScopeKey) return null;
+  return normalizeRestorableRoute(readRoute()) ?? "/(tabs)";
 }

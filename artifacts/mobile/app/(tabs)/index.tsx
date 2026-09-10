@@ -37,6 +37,7 @@ import { useDashboardLayoutPreferences } from "@/hooks/useDashboardLayoutPrefere
 import { useSetupReadiness } from "@/hooks/useSetupReadiness";
 import { applyCategoryBudgetMove, buildZeroBudgetSummary } from "@/lib/categoryPlanning";
 import { saveCategoryBudgets as saveCategoryBudgetsRemote } from "@/lib/categoryBudgetStore";
+import { parseCategoryAssignments } from "@/lib/moneyFormInput";
 import type { DashboardSavingsAccount } from "@/lib/dashboardFinancialModel";
 import {
   isDashboardFinancialSnapshotReadyForScope,
@@ -315,6 +316,15 @@ function MobileDashboardContent({
     () => ({ ...dashboardSnapshot.categoryBudgets }),
   );
   const [categoryBudgetDrafts, setCategoryBudgetDrafts] = useState<Record<string, string>>({});
+  const [categorySaving, setCategorySaving] = useState(false);
+  const categorySavingRef = useRef(false);
+  const categorySaveScopeRef = useRef(0);
+  useEffect(() => {
+    categorySaveScopeRef.current += 1;
+    setCategoryBudgetModalVisible(false);
+    setMoveMoneyVisible(false);
+    return () => { categorySaveScopeRef.current += 1; };
+  }, [categoryBudgetScope, currentMonth, currentYear]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [moveMoneyVisible, setMoveMoneyVisible] = useState(false);
   const [moveTargetCategory, setMoveTargetCategory] = useState<string | null>(null);
@@ -537,9 +547,23 @@ function MobileDashboardContent({
   );
   const zeroBudgetIncome = zeroBudgetSummary.plannedIncome;
   const zeroBudgetLeftToAssign = zeroBudgetSummary.leftToAssign;
-  const persistCategoryBudgets = (next: Record<string, number>) => {
-    setCategoryBudgets(next);
-    void saveCategoryBudgetsRemote(categoryBudgetScope, currentMonth, currentYear, next).catch(() => undefined);
+  const persistCategoryBudgets = async (next: Record<string, number>) => {
+    if (!canEditHousehold || categorySavingRef.current) return false;
+    categorySavingRef.current = true;
+    setCategorySaving(true);
+    const scope = categorySaveScopeRef.current;
+    try {
+      await saveCategoryBudgetsRemote(categoryBudgetScope, currentMonth, currentYear, next);
+      if (scope !== categorySaveScopeRef.current) return false;
+      setCategoryBudgets(next);
+      return true;
+    } catch (error) {
+      if (scope === categorySaveScopeRef.current) Alert.alert("Category budget not saved", error instanceof Error ? error.message : "Your changes are still here. Please try again.");
+      return false;
+    } finally {
+      categorySavingRef.current = false;
+      setCategorySaving(false);
+    }
   };
 
   const openCategoryBudgetEditorForCategory = (category: string) => {
@@ -565,7 +589,7 @@ function MobileDashboardContent({
     setMoveMoneyVisible(true);
   };
 
-  const applyMoveMoney = () => {
+  const applyMoveMoney = async () => {
     const targetCategory = moveTargetCategory;
     const sourceCategory = moveSourceCategory;
     const amount = Number.parseFloat(moveAmount);
@@ -584,7 +608,7 @@ function MobileDashboardContent({
     }
 
     const next = applyCategoryBudgetMove(categoryBudgets, categoryPlan, sourceCategory, targetCategory, amount);
-    persistCategoryBudgets(next);
+    if (!await persistCategoryBudgets(next)) return;
     setMoveMoneyVisible(false);
     setMoveTargetCategory(null);
     setMoveSourceCategory("");
@@ -592,20 +616,15 @@ function MobileDashboardContent({
     setMoveError("");
   };
 
-  const saveCategoryBudgets = () => {
-    const next: Record<string, number> = {};
-    Object.entries(categoryBudgetDrafts).forEach(([category, value]) => {
-      const amount = Number.parseFloat(value);
-      if (category && Number.isFinite(amount) && amount >= 0) next[category] = amount;
-    });
-    persistCategoryBudgets(next);
-    setCategoryBudgetModalVisible(false);
+  const saveCategoryBudgets = async () => {
+    try {
+      if (await persistCategoryBudgets(parseCategoryAssignments(categoryBudgetDrafts))) setCategoryBudgetModalVisible(false);
+    } catch (error) { Alert.alert("Check assignments", error instanceof Error ? error.message : "Enter valid assignments."); }
   };
 
-  const clearCategoryBudgets = () => {
-    setCategoryBudgets({});
+  const clearCategoryBudgets = async () => {
+    if (!await persistCategoryBudgets({})) return;
     setCategoryBudgetDrafts({});
-    void saveCategoryBudgetsRemote(categoryBudgetScope, currentMonth, currentYear, {}).catch(() => undefined);
     setCategoryBudgetModalVisible(false);
   };
 
@@ -1626,6 +1645,7 @@ function MobileDashboardContent({
                     <Text style={[styles.categoryBudgetDollar, { color: c.mutedForeground }]}>$</Text>
                     <TextInput
                       value={categoryBudgetDrafts[category] ?? ""}
+                      editable={!categorySaving}
                       onChangeText={(value) => setCategoryBudgetDrafts(previous => ({ ...previous, [category]: value }))}
                       placeholder="Auto"
                       placeholderTextColor={c.mutedForeground}
@@ -1638,11 +1658,11 @@ function MobileDashboardContent({
             </ScrollView>
 
             <View style={styles.expenseBtns}>
-              <Pressable onPress={clearCategoryBudgets} style={[styles.expenseBtn, { backgroundColor: c.muted }]}>
+              <Pressable disabled={categorySaving} onPress={clearCategoryBudgets} style={[styles.expenseBtn, { backgroundColor: c.muted }]}>
                 <Text style={[styles.expenseBtnText, { color: c.mutedForeground }]}>Clear</Text>
               </Pressable>
-              <Pressable onPress={saveCategoryBudgets} style={[styles.expenseBtn, { backgroundColor: c.primary }]}>
-                <Text style={[styles.expenseBtnText, { color: c.primaryForeground }]}>Save</Text>
+              <Pressable disabled={categorySaving} onPress={saveCategoryBudgets} style={[styles.expenseBtn, { backgroundColor: c.primary, opacity: categorySaving ? 0.6 : 1 }]}>
+                <Text style={[styles.expenseBtnText, { color: c.primaryForeground }]}>{categorySaving ? "Saving…" : "Save"}</Text>
               </Pressable>
             </View>
           </Pressable>
@@ -1823,6 +1843,7 @@ function MobileDashboardContent({
               <Text style={[styles.categoryBudgetDollar, { color: c.mutedForeground }]}>$</Text>
               <TextInput
                 value={moveAmount}
+                editable={!categorySaving}
                 onChangeText={(value) => {
                   setMoveAmount(value);
                   setMoveError("");
@@ -1843,11 +1864,11 @@ function MobileDashboardContent({
                 <Text style={[styles.expenseBtnText, { color: c.mutedForeground }]}>Cancel</Text>
               </Pressable>
               <Pressable
-                disabled={!moveSourceOptions.length}
+                disabled={!moveSourceOptions.length || categorySaving}
                 onPress={applyMoveMoney}
                 style={[styles.expenseBtn, { backgroundColor: moveSourceOptions.length ? c.primary : c.muted, opacity: moveSourceOptions.length ? 1 : 0.6 }]}
               >
-                <Text style={[styles.expenseBtnText, { color: moveSourceOptions.length ? c.primaryForeground : c.mutedForeground }]}>Move</Text>
+                <Text style={[styles.expenseBtnText, { color: moveSourceOptions.length ? c.primaryForeground : c.mutedForeground }]}>{categorySaving ? "Saving…" : "Move"}</Text>
               </Pressable>
             </View>
           </Pressable>

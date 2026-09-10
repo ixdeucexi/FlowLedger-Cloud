@@ -135,7 +135,6 @@ export async function loadCategoryBudgets(scope: CategoryBudgetScope, month: num
 export async function saveCategoryBudgets(scope: CategoryBudgetScope, month: number, year: number, budgets: Record<string, number>): Promise<void> {
   if (scope.userId) assertFinancialMutationOnline();
   const clean = normalizeBudgetMap(budgets);
-  writeCategoryBudgetCache(month, year, clean, scope, false);
   if (!scope.userId) {
     writeCategoryBudgetCache(month, year, clean, scope);
     return;

@@ -107,13 +107,15 @@ test("scores forecast readiness with clear next step", () => {
   assert.ok(readiness.missing.includes("Add debts"));
 });
 
-test("creates safe goal funding plans", () => {
+test("goal target pace is not a claim of monthly affordability", () => {
   const plans = buildGoalFundingPlans([
     { id: "g1", name: "Emergency fund", targetAmount: 1200, currentAmount: 300, targetDate: "2026-12-31" },
-  ], 100, new Date("2026-07-01T00:00:00"));
+  ], new Date("2026-07-01T00:00:00"));
 
-  assert.equal(plans[0].status, "behind");
-  assert.equal(plans[0].safeMonthlyContribution, 100);
+  assert.equal(plans[0].status, "needs_review");
+  assert.equal(plans[0].monthlyNeeded, 180);
+  assert.match(plans[0].message, /not an affordability recommendation/);
+  assert.equal("safeMonthlyContribution" in plans[0], false);
 });
 
 test("summarizes reports without AI guessing", () => {
