@@ -5,6 +5,7 @@ import { operatingAccountAnchor, connectedCheckingObservedAnchor } from "../../.
 import type { FinancialProjectionSnapshot } from "../../../artifacts/mobile/lib/financialProjectionTypes.ts";
 import { analyticTransactions, aggregateSpending } from "./analysisSpending.ts";
 import { scheduleAnalysis } from "./analysisSchedule.ts";
+import { validIncomeEffectiveFrom, validIncomeExcludedDate } from "./analysisIncomeDates.ts";
 import { dayAdd, dollars, label, matches, monthEnd, monthStart, numeric, requireSources, round, shiftMonth, sum, validDate, type AnalysisRequest, type AnalysisResult, type AnalysisSnapshot } from "./analysisTypes.ts";
 
 export const projectionSources = ["household_settings", "bills", "monthly_overrides", "bill_date_moves", "transactions", "accounts", "plaid_accounts", "plaid_transactions", "pending_plan_matches", "incomes", "goals", "extra_payments", "decisions"];
@@ -61,7 +62,7 @@ export function projectionInput(snapshot: AnalysisSnapshot): { input: FinancialP
   dates("monthly_overrides", ["paid_date"], true); dates("extra_payments", ["payment_date"], true);
   for (const income of rows("incomes")) {
     if (!["monthly", "biweekly", "weekly"].includes(income.frequency) || !validDate(income.start_date ?? income.next_payment_date)) missing.push("An income recurrence anchor or frequency is unavailable");
-    if (!Array.isArray(income.amount_history ?? []) || !Array.isArray(income.excluded_dates ?? []) || (income.amount_history ?? []).some((e: any) => !validDate(e.effective_from)) || (income.excluded_dates ?? []).some((d: any) => !validDate(d))) missing.push("An income history or excluded date is invalid");
+    if (!Array.isArray(income.amount_history ?? []) || !Array.isArray(income.excluded_dates ?? []) || (income.amount_history ?? []).some((e: any) => !validIncomeEffectiveFrom(e?.effective_from)) || (income.excluded_dates ?? []).some((d: any) => !validIncomeExcludedDate(d))) missing.push("An income history or excluded date is invalid");
   }
   for (const bill of rows("bills")) {
     if (typeof bill.is_debt !== "boolean" || typeof bill.is_recurring !== "boolean" || !["monthly", "quarterly", "weekly", "biweekly"].includes(bill.frequency) || !Number.isInteger(strictNumber(bill.due_day)) || bill.due_day < 1 || bill.due_day > 31) missing.push("A bill recurrence or debt classification is invalid");

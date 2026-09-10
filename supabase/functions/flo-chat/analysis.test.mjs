@@ -140,3 +140,9 @@ test("multi-month budgets use each month's own transactions",()=>{
  const s=snapshot({category_budgets:[{id:"aug",month:7,year:2026,category:"Food",amount:200},{id:"sep",month:8,year:2026,category:"Food",amount:200}],transactions:[{id:"a",date:"2026-08-05",amount:-100,category:"Food"},{id:"s",date:"2026-09-05",amount:-20,category:"Food"}]});
  const r=wealthAnalysis(s,req({domain:"budget",startDate:"2026-08-01",endDate:"2026-09-30"}));assert.match(r.text,/2026-08 Food: \$100\.00/);assert.match(r.text,/2026-09 Food: \$20\.00/);assert.doesNotMatch(r.text,/Food: \$120\.00/);
 });
+test("safe-extra-debt calculator accepts nonempty app income history and exclusions without writes",()=>{
+ const s=snapshot();s.sources.incomes.rows[0].amount_history=[{effective_from:"2026-09",amount:1200}];s.sources.incomes.rows[0].excluded_dates=["2026-09-11T12:00:00Z"];
+ const before=JSON.stringify(s);
+ const r=calculateFinancialAnalysis(s,req({domain:"purchase",operation:"scenario",scenario:{kind:"extra_debt",amount:100,date:"2026-09-12",entity:null,repeat:"once"}}));
+ assert.equal(r.facts.baselineEndBalance,200);assert.equal(r.facts.scenarioEndBalance,100);assert.equal(r.scenario,true);assert.equal(JSON.stringify(s),before);assert.ok(!r.missing.some(x=>/income history|exclusion date/.test(x)));
+});

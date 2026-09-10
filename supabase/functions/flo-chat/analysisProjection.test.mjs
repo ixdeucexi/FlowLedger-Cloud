@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { projectionInput, projectionSources, forecastAnalysis, buildAnalysisForecast } from './analysisProjection.ts';
+import { validIncomeEffectiveFrom, validIncomeExcludedDate } from './analysisIncomeDates.ts';
 
 function snapshot() {
   const sources = Object.fromEntries(projectionSources.map(name=>[name,{rows:[],complete:true}]));
@@ -126,4 +127,18 @@ test('creation day does not hide an earlier unpaid canonical occurrence in the s
  const f=buildAnalysisForecast(s,'2026-09-20');assert.deepEqual(f.engine.getBillOccurrencesInMonth(f.input.bills[0],8,2026),[1]);assert.ok(f.affordabilityMissing.some(x=>/Older bill obligations/.test(x)));
  s.sources.bills.rows[0].start_date='2026-09-09';
  const explicit=buildAnalysisForecast(s,'2026-09-20');assert.deepEqual(explicit.engine.getBillOccurrencesInMonth(explicit.input.bills[0],8,2026),[]);assert.deepEqual(explicit.affordabilityMissing,[]);
+});
+test('income field validators accept app month precision and strict exclusion timestamps only',()=>{
+ for(const date of ['2026-09','2026-09-30','2024-02-29'])assert.equal(validIncomeEffectiveFrom(date),true,date);
+ for(const date of [null,undefined,false,{},'2026-00','2026-13','2026-9','2026-02-30','2026-09-01T12:00:00Z','2026-09 junk'])assert.equal(validIncomeEffectiveFrom(date),false,String(date));
+ for(const date of ['2026-09-11','2026-09-11T12:00:00Z','2026-09-11T23:30:00.123-05:00'])assert.equal(validIncomeExcludedDate(date),true,date);
+ for(const date of [null,false,'2026-09','2026-02-30T12:00:00Z','2026-09-11 rubbish','2026-09-11T24:00:00Z','2026-09-11T12:60:00Z','2026-09-11T12:00:00+25:00'])assert.equal(validIncomeExcludedDate(date),false,String(date));
+});
+test('projection preserves app income month history and exclusion calendar prefix',()=>{
+ const s=snapshot();s.sources.incomes.rows[0].amount_history=[{effective_from:'2026-09',amount:1700},{effective_from:'2026-10-20',amount:1800}];s.sources.incomes.rows[0].excluded_dates=['2026-09-11T23:30:00-05:00'];
+ const before=JSON.stringify(s);assert.deepEqual(projectionInput(s).missing,[]);
+ const result=forecastAnalysis(s,request());assert.equal(result.facts.expectedIncome,1700);assert.equal(result.facts.projectedBalance,5800);assert.equal(JSON.stringify(s),before);
+});
+test('null income history entry fails closed without throwing from prevalidation',()=>{
+ const s=snapshot();s.sources.incomes.rows[0].amount_history=[null];assert.doesNotThrow(()=>projectionInput(s));assert.ok(projectionInput(s).missing.length);assert.throws(()=>buildAnalysisForecast(s,'2026-09-30'));
 });

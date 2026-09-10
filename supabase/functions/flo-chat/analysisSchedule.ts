@@ -3,6 +3,7 @@ import { createFinancialProjection } from "../../../artifacts/mobile/lib/financi
 import { normalizeSettingsRow, normalizeBillRow, normalizeMonthlyOverrideRow, normalizeBillDateMoveRow, normalizeTransactionRow } from "../../../artifacts/mobile/lib/financialProjectionInput.ts";
 import { resolveDebtOccurrenceSettlement } from "../../../artifacts/mobile/lib/debtPlanDomain.ts";
 import { occurrenceKey } from "../../../artifacts/mobile/lib/reviewCenter.ts";
+import { validIncomeEffectiveFrom, validIncomeExcludedDate } from "./analysisIncomeDates.ts";
 import { dayAdd, dollars, label, monthEnd, monthStart, requireSources, round, shiftMonth, sum, validDate, type AnalysisRequest, type AnalysisResult, type AnalysisSnapshot } from "./analysisTypes.ts";
 
 const money = (v: unknown): number | null => (typeof v === "number" || typeof v === "string" && /^[-+]?(?:\d+\.?\d*|\.\d+)$/.test(v.trim())) && Number.isFinite(Number(v)) ? Number(v) : null;
@@ -33,8 +34,8 @@ export function scheduleAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
     for (const row of selected) {
       if (!validDate(row.start_date ?? row.next_payment_date)) missing.push("An income recurrence anchor is required");
       if (row.frequency !== "monthly" && !validDate(row.next_payment_date)) missing.push("A weekly or biweekly income payment anchor is required");
-      if (!Array.isArray(row.amount_history ?? []) || (row.amount_history ?? []).some((r: any)=>money(r?.amount) === null || !validDate(r?.effective_from))) missing.push("An income amount history entry is invalid");
-      if (!Array.isArray(row.excluded_dates ?? []) || (row.excluded_dates ?? []).some((date: any)=>!validDate(date))) missing.push("An income exclusion date is invalid");
+      if (!Array.isArray(row.amount_history ?? []) || (row.amount_history ?? []).some((r: any)=>money(r?.amount) === null || !validIncomeEffectiveFrom(r?.effective_from))) missing.push("An income amount history entry is invalid");
+      if (!Array.isArray(row.excluded_dates ?? []) || (row.excluded_dates ?? []).some((date: any)=>!validIncomeExcludedDate(date))) missing.push("An income exclusion date is invalid");
     }
     if (missing.length) return unavailable(sources,missing);
     const events: {date:string;name:string;amount:number}[]=[];
