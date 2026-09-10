@@ -122,7 +122,7 @@ endobj
 endobj
 15 0 obj
 <<
-/Author (FlowLedger) /CreationDate (D:20260827091949-05'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:9ab0d94151d0b64a27731b0f5c98140cc1db3b6000133674bfa508710bc9f6df) /ModDate (D:20260827091949-05'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+/Author (FlowLedger) /CreationDate (D:20260910004325-05'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:da22548622e343ff92a7f78c5b645f93cdf1cdd7c1214213582b1f94cf51cb09) /ModDate (D:20260910004325-05'00') /Producer (ReportLab PDF Library - \(opensource\)) 
   /Subject (Current Dashboard, Activity, Bills, Forecast, payoff, Flo, and Settings guidance) /Title (FlowLedger User Guide) /Trapped /False
 >>
 endobj
@@ -133,7 +133,7 @@ endobj
 endobj
 17 0 obj
 <<
-/Length 4165
+/Length 4168
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -311,13 +311,13 @@ BT /F1 9.5 Tf 11.4 TL ET
 BT 1 0 0 1 58 201 Tm (Continue paying bills and debts through your bank or provider.) Tj T* ET
 .666667 .701961 .784314 rg
 BT /F1 9 Tf 10.8 TL ET
-BT 1 0 0 1 48 30 Tm (Phone, installed PWA, and desktop - updated August 27, 2026) Tj T* ET
+BT 1 0 0 1 48 30 Tm (Phone, installed PWA, and desktop - updated September 10, 2026) Tj T* ET
  
 endstream
 endobj
 18 0 obj
 <<
-/Length 5756
+/Length 5759
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -355,7 +355,7 @@ BT 1 0 0 1 42 664 Tm (Set up recurring money once, then review it whenever life 
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated August 27, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated September 10, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 2) Tj T* ET
 .133333 .780392 .839216 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -563,7 +563,7 @@ endstream
 endobj
 19 0 obj
 <<
-/Length 4506
+/Length 4509
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -601,7 +601,7 @@ BT 1 0 0 1 42 664 Tm (Use the same short path each day. Go deeper only when some
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated August 27, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated September 10, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 3) Tj T* ET
 .145098 .827451 .607843 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -751,7 +751,7 @@ endstream
 endobj
 20 0 obj
 <<
-/Length 4932
+/Length 4935
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -789,7 +789,7 @@ BT 1 0 0 1 42 664 Tm (Activity is the history of what really happened. Review ne
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated August 27, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated September 10, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 4) Tj T* ET
 .219608 .741176 .972549 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -943,7 +943,7 @@ endstream
 endobj
 21 0 obj
 <<
-/Length 6197
+/Length 6200
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -981,7 +981,7 @@ BT 1 0 0 1 42 664 Tm (Use Bills for recurring obligations. Switch to Debt to man
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated August 27, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated September 10, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 5) Tj T* ET
 .960784 .721569 .180392 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -1194,7 +1194,7 @@ endstream
 endobj
 22 0 obj
 <<
-/Length 6541
+/Length 6544
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -1232,7 +1232,7 @@ BT 1 0 0 1 42 664 Tm (Forecast shows when money should move and what each day's 
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated August 27, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated September 10, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 6) Tj T* ET
 .360784 .65098 1 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -1472,7 +1472,7 @@ endstream
 endobj
 23 0 obj
 <<
-/Length 6591
+/Length 6618
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -1510,7 +1510,7 @@ BT 1 0 0 1 42 664 Tm (Use savings for purpose-based balances. Use Flo for explan
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated August 27, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated September 10, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 7) Tj T* ET
 .654902 .427451 1 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -1721,11 +1721,11 @@ n
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 338 418 Tm (Hide when needed) Tj T* ET
+BT 1 0 0 1 338 418 Tm (Move or hide Flo) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 327 403 Tm (Press and hold the Flo icon to dismiss it for the current) Tj T* ET
-BT 1 0 0 1 327 392 Tm (session.) Tj T* ET
+BT 1 0 0 1 327 403 Tm (Drag the Flo icon to move it. Tap X to hide it for this) Tj T* ET
+BT 1 0 0 1 327 392 Tm (session, or Undo to bring it back.) Tj T* ET
 .062745 .094118 .168627 rg
 .654902 .427451 1 RG
 .8 w
@@ -1752,7 +1752,7 @@ endstream
 endobj
 24 0 obj
 <<
-/Length 5851
+/Length 5854
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -1790,7 +1790,7 @@ BT 1 0 0 1 42 664 Tm (Use reminders to catch upcoming items and the Guided Tour 
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated August 27, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated September 10, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 8) Tj T* ET
 1 .615686 .301961 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -2001,7 +2001,7 @@ endstream
 endobj
 25 0 obj
 <<
-/Length 6394
+/Length 6397
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -2040,7 +2040,7 @@ BT 1 0 0 1 42 650 Tm (support.) Tj T* ET
 n 42 630 m 570 630 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated August 27, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated September 10, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 9) Tj T* ET
 .654902 .545098 .980392 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -2255,7 +2255,7 @@ endstream
 endobj
 26 0 obj
 <<
-/Length 9399
+/Length 9402
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -2293,7 +2293,7 @@ BT 1 0 0 1 42 664 Tm (Most differences come from status, recurrence, unmatched a
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated August 27, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated September 10, 2026) Tj T* ET
 BT 1 0 0 1 540.2 24 Tm (Page 10) Tj T* ET
 1 .435294 .568627 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -2671,19 +2671,19 @@ xref
 0000002345 00000 n 
 0000002782 00000 n 
 0000002901 00000 n 
-0000007118 00000 n 
-0000012926 00000 n 
-0000017484 00000 n 
-0000022468 00000 n 
-0000028717 00000 n 
-0000035310 00000 n 
-0000041953 00000 n 
-0000047856 00000 n 
-0000054302 00000 n 
+0000007121 00000 n 
+0000012932 00000 n 
+0000017493 00000 n 
+0000022480 00000 n 
+0000028732 00000 n 
+0000035328 00000 n 
+0000041998 00000 n 
+0000047904 00000 n 
+0000054353 00000 n 
 trailer
 <<
 /ID 
-[<b027938463a5796563a918eec567cebf><b027938463a5796563a918eec567cebf>]
+[<b69166e957eb2292825b056e01466c99><b69166e957eb2292825b056e01466c99>]
 % ReportLab generated PDF document -- digest (opensource)
 
 /Info 15 0 R
@@ -2691,5 +2691,5 @@ trailer
 /Size 27
 >>
 startxref
-63753
+63807
 %%EOF
