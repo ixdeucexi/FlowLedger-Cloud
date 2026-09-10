@@ -20,6 +20,12 @@ test("linked savings contributions are not consumption and ambiguous savings nee
  const r=analyticTransactions(s);assert.equal(r.rows[0].kind,"transfer");assert.equal(r.rows[1].kind,"unresolved");
  assert.equal(spendingAnalysis(s,request()).facts.spending,0);
 });
+test("missing linked goal is unresolved even with a user-edited category",()=>{
+ const s=snapshot({transactions:[{id:"unknown",date:"2026-09-09",amount:-25,category:"Other",linked_plan_type:"goal",linked_plan_id:"missing"}]});
+ assert.equal(analyticTransactions(s).rows[0].kind,"unresolved");
+ assert.equal(spendingAnalysis(s,request()).facts.spending,0);
+ s.sources.goals.complete=false;assert.ok(analyticTransactions(s).missing.some(m=>m.includes("goals")));
+});
 test("weekly review compares equal elapsed periods",()=>{
  const s=snapshot({transactions:[{id:"last",date:"2026-09-04",amount:-20,category:"Food"},{id:"now",date:"2026-09-08",amount:-10,category:"Food"}]});
  const r=spendingAnalysis(s,request({domain:"review",startDate:"2026-09-07",endDate:"2026-09-10"}));

@@ -88,7 +88,7 @@ export function wealthAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequ
       }
     }
   } else if(request.domain === "budget") {
-    sources=["category_budgets","transactions","plaid_transactions","plaid_accounts","bills"];
+    sources=["category_budgets","transactions","plaid_transactions","plaid_accounts","bills","goals"];
     const activity=analyticTransactions(snapshot); missing.push(...activity.missing);
     const start=request.startDate??monthStart(snapshot.today), end=request.endDate??snapshot.today;
     const totals=aggregateSpending(activity.rows,start,end);

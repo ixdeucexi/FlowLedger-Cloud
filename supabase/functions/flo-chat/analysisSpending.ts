@@ -35,6 +35,7 @@ export function analyticTransactions(snapshot: AnalysisSnapshot): { rows: Analyt
     if ((bank || r.source === "plaid") && !account) kind = "unresolved";
     if(!transfer&&/TRANSFER_(?:IN|OUT)/.test(pfc))kind="unresolved";
     if(!transfer&&/^savings$/i.test(category))kind="unresolved";
+    if(!transfer&&r.linked_plan_type==="goal"&&!source("goals").some(g=>g.id===r.linked_plan_id&&g.goal_type==="planned_expense"))kind="unresolved";
     // Raw credit loan-payment credits are repayments, not merchant refunds.
     if (credit && amount > 0 && /LOAN_PAYMENTS/.test(pfc)) kind = "repayment";
     const base:AnalyticTransaction = { id: String(r.id), date: String(r.date ?? r.transaction_date), amount, merchant: label(r.merchant_name ?? r.note ?? r.name), category: label(category), account: label(account?.display_name ?? account?.name ?? r.account_id ?? "Manual"), kind, repaymentKind:repayment ? cardRepayment||credit ? "card" : loanRepayment ? "loan" : "unknown" : undefined, billId: r.linked_bill_id };

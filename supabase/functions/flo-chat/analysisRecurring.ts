@@ -62,6 +62,6 @@ export function recurringAnalysis(snapshot:AnalysisSnapshot,request:AnalysisRequ
     if(repeated.length)base.text+=`\n\nRepeated configured names to review: ${repeated.map(([name,count])=>`${label(name)} (${count} records)`).join(", ")}. Matching names are not proof of duplicate services.`;
     base.assumptions.push("Merchant patterns are possible recurring charges, not confirmed subscriptions. They are not added to the configured subscription total, which avoids counting the same bill twice.");
   }
-  base.sources=[...new Set([...base.sources,"transactions","plaid_transactions"])];base.missing.push(...history.missing);
+  base.sources=[...new Set([...base.sources,"transactions","plaid_transactions","plaid_accounts","goals"])];base.missing.push(...history.missing);
   return base;
 }

@@ -78,7 +78,7 @@ export function stabilityAnalysis(snapshot: AnalysisSnapshot, request: AnalysisR
 export function scenarioAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequest): AnalysisResult {
   const scenario=request.scenario;
   if(!scenario) throw new Error("A scenario change is required");
-  const end=request.endDate??monthEnd(shiftMonth(snapshot.today,2));
+  const end=request.endDate??(scenario.repeat==="once"?scenario.date:monthEnd(shiftMonth(scenario.date,1)));
   const configuredEnd=monthEnd(shiftMonth(snapshot.today,Number(snapshot.sources.household_settings?.rows[0]?.forecast_horizon_months??1)-1));
   const obligationWindow=monthEnd(shiftMonth(scenario.date,1));
   const assessmentEnd=(obligationWindow>end?obligationWindow:end)>configuredEnd?configuredEnd:(obligationWindow>end?obligationWindow:end);
