@@ -143,6 +143,10 @@ export function FloLauncher({ desktop }: { desktop: boolean }) {
   const panResponder = useMemo(
     () =>
       PanResponder.create({
+        onStartShouldSetPanResponderCapture: () => {
+          dragSession.begin(positionRef.current);
+          return false;
+        },
         onStartShouldSetPanResponder: () => false,
         onMoveShouldSetPanResponderCapture: (_event, gesture) =>
           shouldStartFloDrag(gesture.dx, gesture.dy),
@@ -273,8 +277,8 @@ export function FloLauncher({ desktop }: { desktop: boolean }) {
                   accessibilityLabel={context.label}
                   accessibilityHint="Tap to open Flo. Drag this shortcut to move it. Use the adjacent X button to hide it."
                   delayLongPress={650}
-                  onPressIn={() => {
-                    dragSession.begin(positionRef.current);
+                  onPressIn={(event) => {
+                    dragSession.pressIn(positionRef.current, event.nativeEvent);
                   }}
                   onLongPress={() => dragSession.suppressActivation()}
                   onPress={() => {

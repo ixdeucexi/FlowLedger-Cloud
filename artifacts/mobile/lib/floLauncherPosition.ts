@@ -81,12 +81,20 @@ export function createFloDragSession() {
   let current = origin;
   let suppress = false;
   let dragging = false;
+  const begin = (point: FloPoint) => {
+    origin = { ...point };
+    current = origin;
+    suppress = false;
+    dragging = false;
+  };
   return {
-    begin(point: FloPoint) {
-      origin = { ...point };
-      current = origin;
-      suppress = false;
-      dragging = false;
+    begin,
+    pressIn(point: FloPoint, event: object) {
+      // Pointer origin is captured synchronously by the wrapper. Pressable can
+      // deliver its press-in later, after the drag has already taken over.
+      if ("key" in event && (event.key === "Enter" || event.key === " ")) {
+        begin(point);
+      }
     },
     move(dx: number, dy: number, bounds: FloBounds): FloPoint | null {
       dragging = dragging || shouldStartFloDrag(dx, dy);

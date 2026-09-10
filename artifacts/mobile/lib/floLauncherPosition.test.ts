@@ -125,6 +125,27 @@ test("release, cancellation and hold cannot accidentally open or hide Flo", () =
   assert.equal(isFloLauncherDismissed(), false);
 });
 
+test("quick touch captures the actual origin before delayed press-in; keyboard can activate afterward", () => {
+  const gesture = createFloDragSession();
+  gesture.begin({ x: 268, y: 692 });
+  gesture.suppressActivation();
+  assert.deepEqual(gesture.move(-20, -30, mobile), { x: 248, y: 662 });
+  gesture.pressIn({ x: 248, y: 662 }, { type: "touchstart" });
+  assert.equal(gesture.canActivate(), false);
+  assert.deepEqual(gesture.move(-120, -180, mobile), { x: 148, y: 512 });
+  assert.deepEqual(gesture.finish(mobile), { x: 148, y: 512 });
+  assert.equal(gesture.canActivate(), false);
+  gesture.pressIn({ x: 148, y: 512 }, { key: "Enter" });
+  assert.equal(gesture.canActivate(), true);
+  gesture.suppressActivation();
+  gesture.pressIn({ x: 148, y: 512 }, { key: " " });
+  assert.equal(gesture.canActivate(), true);
+  gesture.suppressActivation();
+  gesture.begin({ x: 148, y: 512 });
+  gesture.pressIn({ x: 148, y: 512 }, { type: "mousedown" });
+  assert.equal(gesture.canActivate(), true);
+});
+
 test("component isolates drag handle, provides visible X and preserves timed Undo", () => {
   const source = readFileSync(
     join(process.cwd(), "components", "FloLauncher.tsx"),
@@ -139,6 +160,14 @@ test("component isolates drag handle, provides visible X and preserves timed Und
   assert.match(source, /closeButton: \{\s*width: 44,\s*height: 44/);
   assert.doesNotMatch(source, /onLongPress=\{hideLauncher\}|AsyncStorage/);
   assert.match(source, /onPanResponderTerminate/);
+  assert.match(
+    source,
+    /onStartShouldSetPanResponderCapture: \(\) => \{\s*dragSession.begin\(positionRef.current\);\s*return false;/,
+  );
+  assert.match(
+    source,
+    /dragSession.pressIn\(positionRef.current, event.nativeEvent\)/,
+  );
   assert.match(source, /if \(!dragSession.canActivate\(\)\) return/);
   assert.match(source, /touchAction: "none"/);
 });
