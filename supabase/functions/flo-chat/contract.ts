@@ -126,19 +126,32 @@ export function safeOptionalFollowups(values: unknown): string[] {
 }
 
 export type FloFailureClass = "timeout" | "provider_rate_limit" | "provider_auth" | "provider_unavailable" | "structured_output" | "claim_validation" | "tool_coverage" | "persistence" | "unknown";
+const validationFailureReasons = ["unsupported_amount", "unsupported_claim", "unsupported_date", "unstructured_numeric_claim", "unsafe_followup", "invalid_answer", "unverified_evidence", "unverified_claim", "evidence_record_missing", "grounding_failed", "answer_too_large"] as const;
+export function safeFloFailureReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : "";
+  const known = [...validationFailureReasons, "structured_output_invalid", "tool_required", "answer_timeout", "terminal_persistence_failed", "proposal_persistence_failed", "audit_unavailable", "ephemeral_cleanup_failed"];
+  return known.includes(message as typeof known[number]) ? message : "unclassified";
+}
 export function classifyFloFailure(error: unknown): FloFailureClass {
   const item = error && typeof error === "object" ? error as { name?: unknown; message?: unknown; statusCode?: unknown } : {};
   if (item.name === "AbortError" || item.name === "TimeoutError" || item.message === "answer_timeout") return "timeout";
-  if (["AI_NoOutputGeneratedError", "AI_NoObjectGeneratedError", "AI_TypeValidationError", "AI_JSONParseError"].includes(String(item.name))) return "structured_output";
+  if (item.message === "structured_output_invalid" || ["AI_NoOutputGeneratedError", "AI_NoObjectGeneratedError", "AI_TypeValidationError", "AI_JSONParseError"].includes(String(item.name))) return "structured_output";
   if (item.name === "AI_APICallError") {
     if (item.statusCode === 429) return "provider_rate_limit";
     if (item.statusCode === 401 || item.statusCode === 403) return "provider_auth";
     return "provider_unavailable";
   }
-  if (["unsupported_amount", "unsupported_claim", "unsupported_date", "unstructured_numeric_claim", "unsafe_followup", "invalid_answer", "unverified_evidence", "unverified_claim", "grounding_failed", "answer_too_large"].includes(String(item.message))) return "claim_validation";
+  if (validationFailureReasons.includes(String(item.message) as typeof validationFailureReasons[number])) return "claim_validation";
   if (item.message === "tool_required") return "tool_coverage";
   if (["terminal_persistence_failed", "proposal_persistence_failed", "audit_unavailable", "ephemeral_cleanup_failed"].includes(String(item.message))) return "persistence";
   return "unknown";
+}
+
+// The published prose is rendered only from claims. Its source list must be
+// derived from those same claims, not an independently generated model list.
+// This does NOT validate any claim: the complete validator still runs next.
+export function claimEvidenceIds(answer: FloGroundedAnswer): string[] {
+  return [...new Set(answer.claims.flatMap(claim => claim.evidenceIds))];
 }
 
 export function verifiedEmptyAnswerFromTools(toolNames: string[], payloads: FloToolEnvelope[]): FloGroundedAnswer | null {
@@ -159,6 +172,14 @@ export function verifiedEmptyAnswerFromTools(toolNames: string[], payloads: FloT
     evidenceIds.push(...payload.evidence.map(source => source.id));
   }
   return { answer: `No matching ${[...new Set(toolNames.map(name => labels[name]))].join(" or ")} were found in the checked records. Check the linked source scope and date range; this does not establish that no records exist outside that check.`, claims: [], evidenceIds: [...new Set(evidenceIds)], caveat: null, followups: [] };
+}
+
+export function selectToolVerifiedAnswer(readModelOutput: () => FloGroundedAnswer, toolNames: string[], payloads: FloToolEnvelope[]): { answer: FloGroundedAnswer; provenEmpty: boolean } {
+  const empty = verifiedEmptyAnswerFromTools(toolNames, payloads);
+  // Read the provider's output getter only if the authoritative tool evidence
+  // cannot supply a complete empty result. Model claims/prose are never reused
+  // for this server-authored empty branch.
+  return empty ? { answer: empty, provenEmpty: true } : { answer: readModelOutput(), provenEmpty: false };
 }
 
 const helpSource = (id: string, label: string, route: string): FloSourceRef => ({
@@ -612,7 +633,7 @@ export function verifiedFallbackForTool(
     partial: true,
     caveat: payload.status !== "ok" || !payload.coverage.complete
       ? "Flo answered from the verified records that were available. Some records may still need a refresh."
-      : "Flo verified the records, then used a reliable account answer because the full explanation needed more time.",
+      : "These checked records are available, but Flo could not fully verify the requested explanation.",
     followups: [],
   };
 }
@@ -675,7 +696,7 @@ export function verifiedFallbackFromTools(
     partial: true,
     caveat: payloads.some(payload => payload.status !== "ok" || !payload.coverage.complete)
       ? "Flo answered from the verified records that were available. Some records may still need a refresh."
-      : "Flo verified the requested account sections, then used a reliable account answer because the full explanation needed more time.",
+      : "These checked records are available, but Flo could not fully verify the requested explanation.",
   };
 }
 

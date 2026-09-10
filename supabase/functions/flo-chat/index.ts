@@ -8,6 +8,7 @@ import {
   aggregateCoverage,
   allowsSavedPlanRead,
   classifyFloFailure,
+  claimEvidenceIds,
   deterministicAnswerFromTools,
   deterministicFloRoute,
   floCapabilityGuidance,
@@ -18,9 +19,10 @@ import {
   requiresConfiguredDebtRead,
   sanitizeContext,
   safeOptionalFollowups,
+  safeFloFailureReason,
   validateGroundedAnswer,
   verifiedFallbackFromTools,
-  verifiedEmptyAnswerFromTools,
+  selectToolVerifiedAnswer,
   type FloGroundedAnswer,
   type FloProposal,
   type FloSourceRef,
@@ -530,20 +532,28 @@ async function handleV3(
           const usage = result.usage as any;
           inputTokens = Number.isFinite(Number(usage?.inputTokens)) ? Number(usage.inputTokens) : null;
           outputTokens = Number.isFinite(Number(usage?.outputTokens)) ? Number(usage.outputTokens) : null;
-          answer = result.output as FloGroundedAnswer;
           failureStage = "validation";
           if (!toolRuntime.toolResults.length) throw new Error("tool_required");
           if (requiresConfiguredDebtRead(message) && !toolRuntime.toolNames.includes("getBillsAndDebt")) throw new Error("tool_required");
           const allSources = Array.from(new Map(toolRuntime.toolResults.flatMap(item => item.evidence).map(source => [source.id, source])).values());
           aggregate = aggregateCoverage(toolRuntime.toolResults);
-          const safeFollowups = safeOptionalFollowups(answer.followups);
-          droppedFollowupCount = answer.followups.length - safeFollowups.length;
-          answer = { ...answer, claims: answer.claims.map(claim => ({ ...claim, label: safeClaimLabel(claim.field) })), followups: safeFollowups, caveat: coverageCaveat(aggregate.coverage, aggregate.partial) };
-          if (answer.claims.length === 0) {
-            const empty = verifiedEmptyAnswerFromTools(toolRuntime.toolResultNames, toolRuntime.toolResults);
-            if (!empty) throw new Error("grounding_failed");
-            answer = { ...empty, caveat: coverageCaveat(aggregate.coverage, aggregate.partial) };
-          } else answer.answer = renderValidatedClaims(answer);
+          const selected = selectToolVerifiedAnswer(() => {
+            const parsed = answerSchema.safeParse(result.output);
+            if (!parsed.success) throw new Error("structured_output_invalid");
+            return parsed.data;
+          }, toolRuntime.toolResultNames, toolRuntime.toolResults);
+          answer = selected.answer;
+          if (selected.provenEmpty) {
+            // A proven-empty read is authoritative even if the model invented
+            // a zero/count claim against query evidence with no record row.
+            answer = { ...answer, caveat: coverageCaveat(aggregate.coverage, aggregate.partial) };
+          } else {
+            const safeFollowups = safeOptionalFollowups(answer.followups);
+            droppedFollowupCount = answer.followups.length - safeFollowups.length;
+            answer = { ...answer, claims: answer.claims.map(claim => ({ ...claim, label: safeClaimLabel(claim.field) })), evidenceIds: claimEvidenceIds(answer), followups: safeFollowups, caveat: coverageCaveat(aggregate.coverage, aggregate.partial) };
+            if (!answer.claims.length) throw new Error("grounding_failed");
+            answer.answer = renderValidatedClaims(answer);
+          }
           const check = validateGroundedAnswer(answer, allSources, toolRuntime.toolResults);
           if (!check.valid) throw new Error(check.code ?? "grounding_failed");
           sources = validatedEvidence(answer, allSources);
@@ -585,7 +595,8 @@ async function handleV3(
       } catch (error) {
         let code = publicFailureCode(error);
         const failureClass = classifyFloFailure(error);
-        console.warn("[flo-chat] answer path interrupted", { requestId, code, failureClass, failureStage, durationMs: Date.now() - started, tools: Array.from(new Set(toolRuntime.toolNames)) });
+        const failureReason = safeFloFailureReason(error);
+        console.warn("[flo-chat] answer path interrupted", { requestId, code, failureClass, failureReason, failureStage, durationMs: Date.now() - started, tools: Array.from(new Set(toolRuntime.toolNames)) });
         if (latestVerifiedFallback.current && verifiedFallbackCodes.has(code)) {
           const fallback = latestVerifiedFallback.current;
           const fallbackAnswer: FloGroundedAnswer = {
@@ -605,7 +616,7 @@ async function handleV3(
               coverage: fallback.coverage, partial: true, toolNames: toolRuntime.toolNames,
               durationMs: Date.now() - started, inputTokens, outputTokens,
               terminalEventType: "answer",
-              terminalParameters: { sourceCount: fallback.sources.length, recoveredFrom: code, deterministic: true, failureClass, failureStage, droppedFollowupCount },
+              terminalParameters: { sourceCount: fallback.sources.length, recoveredFrom: code, deterministic: true, failureClass, failureReason, failureStage, droppedFollowupCount },
               rowCount: fallback.sources.length, terminalStatus: "partial", ephemeral,
             });
             emitEvent("verified-fallback", { fallback });
@@ -630,7 +641,7 @@ async function handleV3(
             proposal: null, answer: null, followups: [], dataAsOf: aggregate.dataAsOf,
             coverage: aggregate.coverage, partial: true, toolNames: toolRuntime.toolNames,
             durationMs: Date.now() - started, inputTokens, outputTokens,
-            terminalEventType: "failure", terminalParameters: { failureClass, failureStage, droppedFollowupCount }, rowCount: sources.length,
+            terminalEventType: "failure", terminalParameters: { failureClass, failureReason, failureStage, droppedFollowupCount }, rowCount: sources.length,
             terminalStatus: "error", ephemeral,
           });
           terminalErrorPersisted = true;

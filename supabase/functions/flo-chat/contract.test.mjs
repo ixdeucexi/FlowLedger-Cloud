@@ -7,6 +7,7 @@ import {
   aggregateCoverage,
   allowsSavedPlanRead,
   classifyFloFailure,
+  claimEvidenceIds,
   boundedLimit,
   configuredDebtSummary,
   deterministicAnswerFromTools,
@@ -18,10 +19,12 @@ import {
   requiresConfiguredDebtRead,
   sanitizeContext,
   safeOptionalFollowups,
+  safeFloFailureReason,
   validateGroundedAnswer,
   verifiedFallbackFromTools,
   verifiedFallbackForTool,
   verifiedEmptyAnswerFromTools,
+  selectToolVerifiedAnswer,
 } from "./contract.ts";
 
 const evidence = [{ id: "account:a", type: "account", label: "Checking", recordId: "a", asOf: "2026-08-12T00:00:00.000Z", freshness: "current" }];
@@ -117,6 +120,45 @@ test("failure telemetry classifies only safe enums without copying provider deta
   assert.equal(classifyFloFailure(new Error("answer_timeout")), "timeout");
   assert.equal(classifyFloFailure(new Error("terminal_persistence_failed")), "persistence");
   assert.equal(classifyFloFailure(new Error("sk-secret user question provider response")), "unknown");
+  assert.equal(classifyFloFailure(new Error("evidence_record_missing")), "claim_validation");
+  assert.equal(safeFloFailureReason(new Error("unverified_evidence")), "unverified_evidence");
+  assert.equal(safeFloFailureReason(new Error("evidence_record_missing")), "evidence_record_missing");
+  assert.equal(safeFloFailureReason(new Error("sk-secret user question provider response")), "unclassified");
+});
+
+test("published evidence follows exact rendered claims while every claim remains validated", () => {
+  const answer = { answer: "Current balance: $42.81.", claims: [{ kind: "amount", label: "Balance", field: "current_balance", value: "$42.81", evidenceIds: ["account:a"] }], caveat: null, evidenceIds: ["getAccountOverview"], followups: [] };
+  assert.equal(validateGroundedAnswer(answer, evidence, [payload]).code, "unverified_evidence");
+  const normalized = { ...answer, evidenceIds: claimEvidenceIds(answer) };
+  assert.deepEqual(normalized.evidenceIds, ["account:a"]);
+  assert.deepEqual(validateGroundedAnswer(normalized, evidence, [payload]), { valid: true });
+  const invented = { ...answer, claims: [{ ...answer.claims[0], evidenceIds: ["account:another-household"] }] };
+  assert.equal(validateGroundedAnswer({ ...invented, evidenceIds: claimEvidenceIds(invented) }, evidence, [payload]).valid, false);
+  const wrongField = { ...answer, claims: [{ ...answer.claims[0], field: "minimum_payment" }] };
+  assert.equal(validateGroundedAnswer({ ...wrongField, evidenceIds: claimEvidenceIds(wrongField) }, evidence, [payload]).code, "unsupported_amount");
+});
+
+test("runtime handles proven-empty tools before model output and validates all nonempty claims", async () => {
+  const empty = { ...payload, records: [], coverage: { complete: true, returned: 0, limit: 20 } };
+  const result = { get output() { throw new Error("provider output getter must not run for proven empty tools"); } };
+  const selected = selectToolVerifiedAnswer(() => result.output, ["getDecisionsAndSimulations"], [empty]);
+  assert.equal(selected.provenEmpty, true);
+  assert.match(selected.answer.answer, /No matching saved decisions or simulations/);
+  assert.deepEqual(validateGroundedAnswer(selected.answer, evidence, [empty]), { valid: true });
+  assert.throws(() => selectToolVerifiedAnswer(() => result.output, ["getAccountOverview"], [payload]));
+  assert.throws(() => selectToolVerifiedAnswer(() => result.output, ["getDecisionsAndSimulations"], [{ ...empty, coverage: { ...empty.coverage, complete: false } }]));
+  const model = { answer: "untrusted prose", claims: [], evidenceIds: ["account:a"], caveat: null, followups: [] };
+  assert.equal(selectToolVerifiedAnswer(() => model, ["getAccountOverview"], [payload]).provenEmpty, false);
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const emptyAt = source.indexOf("const selected = selectToolVerifiedAnswer(() =>");
+  const outputAt = source.indexOf("answerSchema.safeParse(result.output)");
+  const validationAt = source.indexOf("validateGroundedAnswer(answer, allSources, toolRuntime.toolResults)");
+  assert.ok(emptyAt > 0 && emptyAt < outputAt && outputAt < validationAt);
+  assert.match(source, /if \(selected.provenEmpty\)/);
+  assert.match(source, /evidenceIds: claimEvidenceIds\(answer\)/);
+  assert.match(source, /failureClass, failureReason, failureStage, droppedFollowupCount/);
+  const contract = await readFile(new URL("./contract.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(contract, /full explanation needed more time/);
 });
 
 test("card balance, minimum and rate questions require the configured debt source", () => {
