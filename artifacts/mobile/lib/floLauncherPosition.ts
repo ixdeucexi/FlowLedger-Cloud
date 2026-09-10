@@ -81,14 +81,35 @@ export function createFloDragSession() {
   let current = origin;
   let suppress = false;
   let dragging = false;
-  const begin = (point: FloPoint) => {
+  let pointerOrigin: FloPoint | null = null;
+  const begin = (point: FloPoint, pointer?: FloPoint) => {
     origin = { ...point };
     current = origin;
     suppress = false;
     dragging = false;
+    pointerOrigin = pointer ? { ...pointer } : null;
+  };
+  const pointerDelta = (pointer: FloPoint) =>
+    pointerOrigin && Number.isFinite(pointer.x) && Number.isFinite(pointer.y)
+      ? { x: pointer.x - pointerOrigin.x, y: pointer.y - pointerOrigin.y }
+      : null;
+  const move = (dx: number, dy: number, bounds: FloBounds): FloPoint | null => {
+    dragging = dragging || shouldStartFloDrag(dx, dy);
+    if (!dragging) return null;
+    suppress = true;
+    current = clampFloPosition({ x: origin.x + dx, y: origin.y + dy }, bounds);
+    return current;
   };
   return {
     begin,
+    shouldStartPointerDrag(pointer: FloPoint) {
+      const delta = pointerDelta(pointer);
+      return delta !== null && shouldStartFloDrag(delta.x, delta.y);
+    },
+    movePointer(pointer: FloPoint, bounds: FloBounds) {
+      const delta = pointerDelta(pointer);
+      return delta ? move(delta.x, delta.y, bounds) : null;
+    },
     pressIn(point: FloPoint, event: object) {
       // Pointer origin is captured synchronously by the wrapper. Pressable can
       // deliver its press-in later, after the drag has already taken over.
@@ -96,16 +117,7 @@ export function createFloDragSession() {
         begin(point);
       }
     },
-    move(dx: number, dy: number, bounds: FloBounds): FloPoint | null {
-      dragging = dragging || shouldStartFloDrag(dx, dy);
-      if (!dragging) return null;
-      suppress = true;
-      current = clampFloPosition(
-        { x: origin.x + dx, y: origin.y + dy },
-        bounds,
-      );
-      return current;
-    },
+    move,
     finish(bounds: FloBounds) {
       current = clampFloPosition(current, bounds);
       return current;

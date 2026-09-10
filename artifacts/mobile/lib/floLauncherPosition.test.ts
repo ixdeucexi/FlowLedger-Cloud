@@ -146,6 +146,33 @@ test("quick touch captures the actual origin before delayed press-in; keyboard c
   assert.equal(gesture.canActivate(), true);
 });
 
+test("absolute pointer coordinates retain the first move sample and subsequent cancellation delta", () => {
+  const gesture = createFloDragSession();
+  gesture.begin({ x: 268, y: 692 }, { x: 295, y: 719 });
+  assert.equal(gesture.shouldStartPointerDrag({ x: 288, y: 719 }), false);
+  assert.equal(gesture.shouldStartPointerDrag({ x: 287, y: 719 }), true);
+  // Grant can happen on the first move while PanResponder's dx is still zero.
+  assert.deepEqual(gesture.movePointer({ x: 285, y: 704 }, mobile), {
+    x: 258,
+    y: 677,
+  });
+  gesture.pressIn({ x: 258, y: 677 }, { type: "touchstart" });
+  assert.deepEqual(gesture.movePointer({ x: 175, y: 539 }, mobile), {
+    x: 148,
+    y: 512,
+  });
+  assert.deepEqual(gesture.finish(mobile), { x: 148, y: 512 });
+  assert.equal(gesture.canActivate(), false);
+  gesture.begin({ x: 148, y: 512 }, { x: 175, y: 539 });
+  assert.deepEqual(gesture.movePointer({ x: 215, y: 439 }, mobile), {
+    x: 188,
+    y: 412,
+  });
+  assert.deepEqual(gesture.cancel(mobile), { x: 188, y: 412 });
+  assert.equal(gesture.canActivate(), false);
+  assert.equal(gesture.movePointer({ x: NaN, y: 1 }, mobile), null);
+});
+
 test("component isolates drag handle, provides visible X and preserves timed Undo", () => {
   const source = readFileSync(
     join(process.cwd(), "components", "FloLauncher.tsx"),
@@ -162,8 +189,9 @@ test("component isolates drag handle, provides visible X and preserves timed Und
   assert.match(source, /onPanResponderTerminate/);
   assert.match(
     source,
-    /onStartShouldSetPanResponderCapture: \(\) => \{\s*dragSession.begin\(positionRef.current\);\s*return false;/,
+    /onStartShouldSetPanResponderCapture: \(event\) => \{\s*dragSession.begin\(positionRef.current, \{\s*x: event.nativeEvent.pageX,\s*y: event.nativeEvent.pageY,\s*\}\);\s*return false;/,
   );
+  assert.doesNotMatch(source, /gesture\.d[xy]/);
   assert.match(
     source,
     /dragSession.pressIn\(positionRef.current, event.nativeEvent\)/,

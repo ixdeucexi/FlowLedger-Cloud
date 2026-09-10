@@ -34,7 +34,6 @@ import {
   floLauncherBounds,
   readFloPosition,
   rememberFloPosition,
-  shouldStartFloDrag,
   type FloPoint,
 } from "@/lib/floLauncherPosition";
 
@@ -143,26 +142,30 @@ export function FloLauncher({ desktop }: { desktop: boolean }) {
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponderCapture: () => {
-          dragSession.begin(positionRef.current);
+        onStartShouldSetPanResponderCapture: (event) => {
+          dragSession.begin(positionRef.current, {
+            x: event.nativeEvent.pageX,
+            y: event.nativeEvent.pageY,
+          });
           return false;
         },
         onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponderCapture: (_event, gesture) =>
-          shouldStartFloDrag(gesture.dx, gesture.dy),
-        onPanResponderGrant: (_event, gesture) => {
+        onMoveShouldSetPanResponderCapture: (event) =>
+          dragSession.shouldStartPointerDrag({
+            x: event.nativeEvent.pageX,
+            y: event.nativeEvent.pageY,
+          }),
+        onPanResponderGrant: (event) => {
           dragSession.suppressActivation();
-          const point = dragSession.move(
-            gesture.dx,
-            gesture.dy,
+          const point = dragSession.movePointer(
+            { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY },
             gestureContext.current.bounds,
           );
           if (point) gestureContext.current.place(point);
         },
-        onPanResponderMove: (_event, gesture) => {
-          const point = dragSession.move(
-            gesture.dx,
-            gesture.dy,
+        onPanResponderMove: (event) => {
+          const point = dragSession.movePointer(
+            { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY },
             gestureContext.current.bounds,
           );
           if (point) gestureContext.current.place(point);
