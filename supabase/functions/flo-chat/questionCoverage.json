@@ -1,83 +1,632 @@
 {
-  "version": 1,
+  "version": 2,
   "auditDate": "2026-09-10",
   "evaluationStatus": "Representative corpus only. Natural-language end-to-end execution has not been verified by this audit. Status describes source-level capability, not test results.",
   "userHeadingCoverage": {
-    "currentmoney":["current_named_account","safe_spending"],
-    "datebalance":["dated_balance","named_account_forecast"],
-    "cashflow":["payday_relative_balance","bill_relative_balance","forecast_extrema","balance_threshold"],
-    "purchases":["purchase_affordability","purchase_date"],
-    "spending":["spending_filters"],
-    "comparisons":["forecast_comparison","spending_comparison"],
-    "bills":["upcoming_and_overdue_bills","historical_bill_settlement"],
-    "subscriptions":["subscriptions"],
-    "income":["received_income","expected_income","income_average"],
-    "debt":["debt_payoff_scenario","named_debt_payoff"],
-    "snowball":["snowball_and_minimums"],
-    "credit":["credit_utilization","credit_ranking"],
-    "savings":["goal_timeline","debt_vs_savings_recommendation"],
-    "emergency":["emergency_fund"],
-    "budget":["budget_remaining","feasible_budget_plan"],
-    "paycheckdependence":["paycheck_dependence"],
-    "buffer":["buffer_timeline"],
-    "paycheckahead":["paycheck_or_month_ahead"],
-    "monthahead":["paycheck_or_month_ahead"],
-    "paycheckplanning":["paycheck_allocation"],
-    "escape30_90dayplan":["escape_plan"],
-    "progress":["historical_progress"],
-    "whatif":["dated_purchase_scenario","income_bill_scenarios","bill_date_scenario"],
-    "search":["transaction_search","last_merchant_payment"],
-    "unusual":["unusual_charges_and_fees"],
-    "fees":["unusual_charges_and_fees"],
-    "health":["financial_health"],
-    "daily":["daily_briefing"],
-    "weekly":["weekly_monthly_review"],
-    "monthly":["weekly_monthly_review"]
+    "currentmoney": [
+      "current_named_account",
+      "safe_spending"
+    ],
+    "datebalance": [
+      "dated_balance",
+      "named_account_forecast"
+    ],
+    "cashflow": [
+      "payday_relative_balance",
+      "bill_relative_balance",
+      "forecast_extrema",
+      "balance_threshold"
+    ],
+    "purchases": [
+      "purchase_affordability",
+      "purchase_date"
+    ],
+    "spending": [
+      "spending_filters"
+    ],
+    "comparisons": [
+      "forecast_comparison",
+      "spending_comparison"
+    ],
+    "bills": [
+      "upcoming_and_overdue_bills",
+      "historical_bill_settlement"
+    ],
+    "subscriptions": [
+      "subscriptions"
+    ],
+    "income": [
+      "received_income",
+      "expected_income",
+      "income_average"
+    ],
+    "debt": [
+      "debt_payoff_scenario",
+      "named_debt_payoff"
+    ],
+    "snowball": [
+      "snowball_and_minimums"
+    ],
+    "credit": [
+      "credit_utilization",
+      "credit_ranking"
+    ],
+    "savings": [
+      "goal_timeline",
+      "debt_vs_savings_recommendation"
+    ],
+    "emergency": [
+      "emergency_fund"
+    ],
+    "budget": [
+      "budget_remaining",
+      "feasible_budget_plan"
+    ],
+    "paycheckdependence": [
+      "paycheck_dependence"
+    ],
+    "buffer": [
+      "buffer_timeline"
+    ],
+    "paycheckahead": [
+      "paycheck_or_month_ahead"
+    ],
+    "monthahead": [
+      "paycheck_or_month_ahead"
+    ],
+    "paycheckplanning": [
+      "paycheck_allocation"
+    ],
+    "escape30_90dayplan": [
+      "escape_plan"
+    ],
+    "progress": [
+      "historical_progress"
+    ],
+    "whatif": [
+      "dated_purchase_scenario",
+      "income_bill_scenarios",
+      "bill_date_scenario"
+    ],
+    "search": [
+      "transaction_search",
+      "last_merchant_payment"
+    ],
+    "unusual": [
+      "unusual_charges_and_fees"
+    ],
+    "fees": [
+      "unusual_charges_and_fees"
+    ],
+    "health": [
+      "financial_health"
+    ],
+    "daily": [
+      "daily_briefing"
+    ],
+    "weekly": [
+      "weekly_monthly_review"
+    ],
+    "monthly": [
+      "weekly_monthly_review"
+    ]
   },
   "families": [
-    {"family":"paycheck_allocation","questions":["How should I split my next paycheck between bills, spending, saving and debt?"],"status":"partial_feature_composition_needed","calculator":"analysisStability.stabilityAnalysis + canonical forecast","limitations":["Next-paycheck committed obligations and contribution scenarios exist; complete constrained paycheck allocation is not established."]},
-    {"family":"escape_plan","questions":["Make me a 30-day plan to stop living paycheck to paycheck.","What should I do over the next 90 days to get ahead?"],"status":"partial_feature_composition_needed","calculator":"analysisStability + analysisWealth + canonical forecast","limitations":["Current shortfall, buffer and debt primitives exist; dated prioritized 30/90-day action plan with feasible milestones is not implemented as a complete result."]},
-    {"family":"financial_health","questions":["How is my financial health, and what is my biggest risk right now?"],"status":"conditional_data_unverified_nl","calculator":"analysisStability.stabilityAnalysis","limitations":["Cash-flow lows, income/expense balance and historical pressure signals exist; no comprehensive financial-health score or unsupported diagnosis."]},
-    {"family":"daily_briefing","questions":["What should I focus on with my money today?","Give me today's financial plan."],"status":"partial_feature_unverified_nl","calculator":"Current-plan legacy briefing / analysisReview and analysisStability primitives","limitations":["Daily purpose is absent from analysis domain enum; verify current-plan routing does not fall through to saved simulations or an unrelated historical review."]},
-    {"family":"current_named_account","questions":["How much is in Main Checking right now?","How much is in Rainy Day Savings?"],"status":"implemented_unverified_nl","calculator":"analysisAccounts.currentBalanceAnalysis","limitations":["Exact active name required; recorded balance is not live available funds.","Account and goal names must not be confused."]},
-    {"family":"safe_spending","questions":["How much can I safely spend today?","What can I spend without touching my bill money?"],"status":"conditional_data_unverified_nl","calculator":"analysisProjection.forecastAnalysis","limitations":["Needs dated available funds, resolved obligations and classified spending baseline."]},
-    {"family":"dated_balance","questions":["What will my balance be September 25?","How much will I have next Friday?"],"status":"implemented_unverified_nl","calculator":"analysisProjection.forecastAnalysis","limitations":["Household projection only, within configured horizon; distinguish estimated spending."]},
-    {"family":"named_account_forecast","questions":["What will Main Checking have September 25?"],"status":"unsupported_feature_explicit","calculator":"analysisProjection.forecastAnalysis","limitations":["No individual account-level forecast. Must not return household total as the named balance."]},
-    {"family":"payday_relative_balance","questions":["What will be left before my next paycheck?","What will I have after Salary arrives?"],"status":"implemented_unverified_nl","calculator":"analysisProjection.forecastAnalysis","limitations":["Resolve exact income if named; expected deposits are not confirmed receipt."]},
-    {"family":"bill_relative_balance","questions":["What will remain after Rent is paid?"],"status":"implemented_unverified_nl","calculator":"analysisProjection.forecastAnalysis","limitations":["Unique bill and applicable occurrence required."]},
-    {"family":"forecast_extrema","questions":["What is my lowest balance next month?","When will my balance be highest next month?"],"status":"implemented_unverified_nl","calculator":"analysisProjection.forecastAnalysis","limitations":["Search only requested forecast window."]},
-    {"family":"balance_threshold","questions":["When will checking reach $1000?"],"status":"implemented_unverified_nl","calculator":"analysisProjection.forecastAnalysis","limitations":["First threshold crossing is not a sustained protected buffer."]},
-    {"family":"forecast_comparison","questions":["Compare the last week of this month with the first week of next month."],"status":"implemented_unverified_nl","calculator":"analysisProjection.forecastAnalysis","limitations":["Preserve both windows; do not infer historical actuals from forecast."]},
-    {"family":"purchase_affordability","questions":["Can I afford a $250 purchase?"],"status":"conditional_data_unverified_nl","calculator":"analysisProjection.forecastAnalysis","limitations":["Protect future obligations/cushion, not just today's positive balance."]},
-    {"family":"purchase_date","questions":["When is the earliest safe day to buy a $250 appliance?"],"status":"conditional_data_unverified_nl","calculator":"analysisProjection.forecastAnalysis","limitations":["Earliest projected date is not verified future available funds."]},
-    {"family":"dated_purchase_scenario","questions":["What if I spend $250 this weekend?","What if I spend $1000 tomorrow?"],"status":"implemented_unverified_nl","calculator":"analysisStability.scenarioAnalysis","limitations":["Use requested purchase date, not earliest-date search; no real changes."]},
-    {"family":"upcoming_and_overdue_bills","questions":["What bills are due before payday?","What bills remain overdue?"],"status":"partial_feature_unverified_nl","calculator":"analysisRecurring.recurringAnalysis + analysisSchedule.scheduleAnalysis","limitations":["Upcoming and current-month unpaid checks exist; complete cross-month overdue scope is not established."]},
-    {"family":"historical_bill_settlement","questions":["Did I pay all my bills last month?"],"status":"partial_feature_unverified_nl","calculator":"analysisRecurring.recurringAnalysis","limitations":["Lists monthly payment records; does not prove all scheduled obligations were settled."]},
-    {"family":"last_merchant_payment","questions":["When did I last pay Netflix?"],"status":"routing_scope_gap","calculator":"analysisSpending.spendingAnalysis","limitations":["Default month-start window cannot establish last-ever payment; interpreter must request bounded retained history and disclose coverage."]},
-    {"family":"subscriptions","questions":["What subscriptions do I have?","Which recurring charges increased?","Am I paying for duplicate subscriptions?"],"status":"implemented_heuristic_unverified_nl","calculator":"analysisRecurring.recurringAnalysis","limitations":["Category and recurring-merchant patterns are not proof of active contracts or duplicate services."]},
-    {"family":"received_income","questions":["How much income did I receive last month?"],"status":"implemented_unverified_nl","calculator":"analysisSpending.spendingAnalysis","limitations":["Only recorded posted received income; exclude scheduled deposits, transfers and card refunds."]},
-    {"family":"expected_income","questions":["When and how much is my next paycheck?"],"status":"implemented_unverified_nl","calculator":"analysisSchedule.scheduleAnalysis","limitations":["Canonical recurrence, month-level income history and excluded dates; not proof of receipt."]},
-    {"family":"income_average","questions":["What is my average monthly income?"],"status":"conditional_data_unverified_nl","calculator":"analysisSpending.spendingAnalysis","limitations":["Recorded history coverage and exact averaging period must be explicit."]},
-    {"family":"spending_filters","questions":["How much did I spend on groceries last month?","How much did I spend at Walmart last month?"],"status":"implemented_unverified_nl","calculator":"analysisSpending.spendingAnalysis","limitations":["Preserve merchant/category; avoid card purchase plus repayment double counting."]},
-    {"family":"spending_comparison","questions":["Where did spending rise compared with last month?"],"status":"implemented_unverified_nl","calculator":"analysisSpending.spendingAnalysis","limitations":["Classified activity and comparable periods required."]},
-    {"family":"transaction_search","questions":["Find my $35 transaction."],"status":"implemented_unverified_nl","calculator":"analysisSpending.spendingAnalysis","limitations":["Bounded recorded history and ambiguous matches disclosed."]},
-    {"family":"unusual_charges_and_fees","questions":["Are there unusual charges?","How much did I pay in fees?"],"status":"implemented_heuristic_unverified_nl","calculator":"analysisSpending.spendingAnalysis","limitations":["No fraud or exhaustive fee-detection claim; sparse merchant baseline limits detection."]},
-    {"family":"snowball_and_minimums","questions":["Show me my debt snowball target.","What required minimum payments remain?"],"status":"implemented_unverified_nl","calculator":"analysisWealth.wealthAnalysis + canonical debt settlement","limitations":["Current eligible debt and minimum settlement; not saved simulation history."]},
-    {"family":"debt_payoff_scenario","questions":["When will I be debt-free?","How much faster if I add $100 each month?"],"status":"implemented_unverified_nl","calculator":"analysisWealth.wealthAnalysis + analysisDebt.projectAnalystDebt","limitations":["Fixed-payment monthly scenario; no cash affordability guarantee; financial question must not be intercepted as app navigation."]},
-    {"family":"named_debt_payoff","questions":["When will I finish paying Test Card?"],"status":"partial_feature_scope_risk","calculator":"analysisWealth.wealthAnalysis","limitations":["Current result is included-plan payoff; selected debt needs its own payoff event, not unrelated whole-plan timing."]},
-    {"family":"buffer_timeline","questions":["How long will it take to have 1000 buffer","When can I build a $1,000 cushion?","How many paychecks until I have a thousand-dollar buffer?"],"status":"reported_routing_failure_repair_in_progress","calculator":"analysisStability.stabilityAnalysis","limitations":["Target amount is not contribution amount; define above-cushion buffer; explicit already-met, no-capacity and unknown outcomes required."]},
-    {"family":"paycheck_or_month_ahead","questions":["How can I get one paycheck ahead?","How can I get a month ahead?","What is my buffer now?"],"status":"conditional_data_unverified_nl","calculator":"analysisStability.stabilityAnalysis","limitations":["Sustainable contribution requires history and forecast; current buffer must not become unprotected total checking."]},
-    {"family":"paycheck_dependence","questions":["Am I still living paycheck to paycheck?"],"status":"conditional_data_unverified_nl","calculator":"analysisStability.stabilityAnalysis","limitations":["Needs multiple historical pre-payday closes and classified income/expenses; one low balance is insufficient."]},
-    {"family":"historical_progress","questions":["Am I improving over the past three months?","How much has my debt fallen?","How much have my savings grown?"],"status":"partial_feature_and_data_limits","calculator":"analysisStability.stabilityAnalysis + analysisReview.reviewAnalysis","limitations":["Historical checking closes supported; complete debt/savings balance-series deltas unavailable and cannot be reconstructed from gross payments."]},
-    {"family":"emergency_fund","questions":["How much emergency savings do I need for three months?","Do I have six months of expenses saved?"],"status":"conditional_data_unverified_nl","calculator":"analysisWealth.wealthAnalysis","limitations":["Recorded expense baseline; essential-only classification and earmarked/inaccessible funds not inferred."]},
-    {"family":"goal_timeline","questions":["When will Vacation be funded if I save $100 per paycheck?","How long to save $1000 for Vacation?","I can contribute $100 per paycheck."],"status":"partial_feature_repair_in_progress","calculator":"analysisWealth.wealthAnalysis","limitations":["Existing contribution count does not establish cadence/date or affordability; exact goal, amount role and follow-up context needed."]},
-    {"family":"credit_utilization","questions":["What is my credit utilization?","What payment gets Main Card below 30%?"],"status":"conditional_data_unverified_nl","calculator":"analysisWealth.wealthAnalysis","limitations":["Requires connected limit/balance; cannot predict credit score or certify payment affordability."]},
-    {"family":"credit_ranking","questions":["Which card has my highest APR?","Which card has the highest utilization?"],"status":"unsupported_ranking_operation","calculator":"analysisWealth.wealthAnalysis","limitations":["Current credit branch lists cards without requested maximum ranking; first listed card is not necessarily highest."]},
-    {"family":"budget_remaining","questions":["How much grocery budget is left this month?"],"status":"implemented_unverified_nl","calculator":"analysisWealth.wealthAnalysis","limitations":["Configured category budget and classified activity required."]},
-    {"family":"feasible_budget_plan","questions":["Make a budget that covers bills, debt and saving without overdrafting."],"status":"partial_feature_not_constrained_plan","calculator":"analysisWealth.wealthAnalysis","limitations":["Existing history-average draft does not constrain allocations to income, essential obligations, minimums, goals and cushion."]},
-    {"family":"weekly_monthly_review","questions":["Give me a weekly financial review.","Review last month and tell me what to focus on."],"status":"implemented_composite_unverified_nl","calculator":"analysisReview.reviewAnalysis","limitations":["Historical results and current outlook separate; unavailable debt/savings changes explicitly excluded."]},
-    {"family":"income_bill_scenarios","questions":["What if my pay falls $200?","What if Rent rises by $100?","What if Rent rises to $1200?","What if I cancel Streaming?"],"status":"implemented_delta_semantic_risk","calculator":"analysisStability.scenarioAnalysis","limitations":["Absolute new amount versus delta must be distinguished; named occurrence and cadence must be preserved."]},
-    {"family":"bill_date_scenario","questions":["What if I move Rent from September 15 to September 20?"],"status":"implemented_unverified_nl","calculator":"analysisStability.scenarioAnalysis","limitations":["One-off occurrence scenario only; real mutation separately authorized."]},
-    {"family":"debt_vs_savings_recommendation","questions":["Should I put $100 toward debt or savings?"],"status":"partial_feature_composition_needed","calculator":"analysisStability + analysisWealth + canonical forecast","limitations":["Primitives exist; no demonstrated composed priority recommendation protecting required payments and cushion."]}
-  ]
+    {
+      "family": "paycheck_allocation",
+      "questions": [
+        "How should I split my next paycheck between bills, spending, saving and debt?"
+      ],
+      "status": "implemented_conditional_unverified_nl",
+      "calculator": "analysisGuidance.guidanceAnalysis",
+      "limitations": [
+        "Constrained reserves, paycheck-only gap and one shared optional capacity use canonical forecast; current funds, classified history, settled older obligations and two payday dates required. No arbitrary debt/savings split."
+      ]
+    },
+    {
+      "family": "escape_plan",
+      "questions": [
+        "Make me a 30-day plan to stop living paycheck to paycheck.",
+        "What should I do over the next 90 days to get ahead?"
+      ],
+      "status": "implemented_conditional_unverified_nl",
+      "calculator": "analysisGuidance.guidanceAnalysis",
+      "limitations": [
+        "Dated read-only checklist and shared capacity cover the requested forecastable window; no guaranteed escape date or invented contribution rate."
+      ]
+    },
+    {
+      "family": "financial_health",
+      "questions": [
+        "How is my financial health, and what is my biggest risk right now?"
+      ],
+      "status": "conditional_data_unverified_nl",
+      "calculator": "analysisStability.stabilityAnalysis",
+      "limitations": [
+        "Cash-flow lows, income/expense balance and historical pressure signals exist; no comprehensive financial-health score or unsupported diagnosis."
+      ]
+    },
+    {
+      "family": "daily_briefing",
+      "questions": [
+        "What should I focus on with my money today?",
+        "Give me today's financial plan."
+      ],
+      "status": "partial_feature_unverified_nl",
+      "calculator": "Current-plan legacy briefing / analysisReview and analysisStability primitives",
+      "limitations": [
+        "Daily purpose is absent from analysis domain enum; verify current-plan routing does not fall through to saved simulations or an unrelated historical review."
+      ]
+    },
+    {
+      "family": "current_named_account",
+      "questions": [
+        "How much is in Main Checking right now?",
+        "How much is in Rainy Day Savings?"
+      ],
+      "status": "implemented_unverified_nl",
+      "calculator": "analysisAccounts.currentBalanceAnalysis",
+      "limitations": [
+        "Exact active name required; recorded balance is not live available funds.",
+        "Account and goal names must not be confused."
+      ]
+    },
+    {
+      "family": "safe_spending",
+      "questions": [
+        "How much can I safely spend today?",
+        "What can I spend without touching my bill money?"
+      ],
+      "status": "conditional_data_unverified_nl",
+      "calculator": "analysisProjection.forecastAnalysis",
+      "limitations": [
+        "Needs dated available funds, resolved obligations and classified spending baseline."
+      ]
+    },
+    {
+      "family": "dated_balance",
+      "questions": [
+        "What will my balance be September 25?",
+        "How much will I have next Friday?"
+      ],
+      "status": "implemented_unverified_nl",
+      "calculator": "analysisProjection.forecastAnalysis",
+      "limitations": [
+        "Household projection only, within configured horizon; distinguish estimated spending."
+      ]
+    },
+    {
+      "family": "named_account_forecast",
+      "questions": [
+        "What will Main Checking have September 25?"
+      ],
+      "status": "unsupported_feature_explicit",
+      "calculator": "analysisProjection.forecastAnalysis",
+      "limitations": [
+        "No individual account-level forecast. Must not return household total as the named balance."
+      ]
+    },
+    {
+      "family": "payday_relative_balance",
+      "questions": [
+        "What will be left before my next paycheck?",
+        "What will I have after Salary arrives?"
+      ],
+      "status": "implemented_unverified_nl",
+      "calculator": "analysisProjection.forecastAnalysis",
+      "limitations": [
+        "Resolve exact income if named; expected deposits are not confirmed receipt."
+      ]
+    },
+    {
+      "family": "bill_relative_balance",
+      "questions": [
+        "What will remain after Rent is paid?"
+      ],
+      "status": "implemented_unverified_nl",
+      "calculator": "analysisProjection.forecastAnalysis",
+      "limitations": [
+        "Unique bill and applicable occurrence required."
+      ]
+    },
+    {
+      "family": "forecast_extrema",
+      "questions": [
+        "What is my lowest balance next month?",
+        "When will my balance be highest next month?"
+      ],
+      "status": "implemented_unverified_nl",
+      "calculator": "analysisProjection.forecastAnalysis",
+      "limitations": [
+        "Search only requested forecast window."
+      ]
+    },
+    {
+      "family": "balance_threshold",
+      "questions": [
+        "When will checking reach $1000?"
+      ],
+      "status": "implemented_unverified_nl",
+      "calculator": "analysisProjection.forecastAnalysis",
+      "limitations": [
+        "First threshold crossing is not a sustained protected buffer."
+      ]
+    },
+    {
+      "family": "forecast_comparison",
+      "questions": [
+        "Compare the last week of this month with the first week of next month."
+      ],
+      "status": "implemented_unverified_nl",
+      "calculator": "analysisProjection.forecastAnalysis",
+      "limitations": [
+        "Preserve both windows; do not infer historical actuals from forecast."
+      ]
+    },
+    {
+      "family": "purchase_affordability",
+      "questions": [
+        "Can I afford a $250 purchase?"
+      ],
+      "status": "conditional_data_unverified_nl",
+      "calculator": "analysisProjection.forecastAnalysis",
+      "limitations": [
+        "Protect future obligations/cushion, not just today's positive balance."
+      ]
+    },
+    {
+      "family": "purchase_date",
+      "questions": [
+        "When is the earliest safe day to buy a $250 appliance?"
+      ],
+      "status": "conditional_data_unverified_nl",
+      "calculator": "analysisProjection.forecastAnalysis",
+      "limitations": [
+        "Earliest projected date is not verified future available funds."
+      ]
+    },
+    {
+      "family": "dated_purchase_scenario",
+      "questions": [
+        "What if I spend $250 this weekend?",
+        "What if I spend $1000 tomorrow?"
+      ],
+      "status": "implemented_unverified_nl",
+      "calculator": "analysisStability.scenarioAnalysis",
+      "limitations": [
+        "Use requested purchase date, not earliest-date search; no real changes."
+      ]
+    },
+    {
+      "family": "upcoming_and_overdue_bills",
+      "questions": [
+        "What bills are due before payday?",
+        "What bills remain overdue?"
+      ],
+      "status": "implemented_conditional_unverified_nl",
+      "calculator": "analysisRecurring.recurringAnalysis + analysisSchedule.scheduleAnalysis",
+      "limitations": [
+        "Explicit overdue purpose checks cross-month configured occurrences within a disclosed 24-month bound; missing origins and older obligations limit completeness."
+      ]
+    },
+    {
+      "family": "historical_bill_settlement",
+      "questions": [
+        "Did I pay all my bills last month?"
+      ],
+      "status": "implemented_conditional_unverified_nl",
+      "calculator": "analysisRecurring.recurringAnalysis",
+      "limitations": [
+        "Explicit settlement purpose reconciles configured occurrences and recorded settlements, not unrecorded bills or bank confirmation. Future ranges rejected."
+      ]
+    },
+    {
+      "family": "last_merchant_payment",
+      "questions": [
+        "When did I last pay Netflix?"
+      ],
+      "status": "implemented_conditional_unverified_nl",
+      "calculator": "analysisSpending.spendingAnalysis",
+      "limitations": [
+        "Explicit last-payment purpose searches retained history rather than default current month; coverage and ambiguity limit last-recorded claims."
+      ]
+    },
+    {
+      "family": "subscriptions",
+      "questions": [
+        "What subscriptions do I have?",
+        "Which recurring charges increased?",
+        "Am I paying for duplicate subscriptions?"
+      ],
+      "status": "implemented_heuristic_unverified_nl",
+      "calculator": "analysisRecurring.recurringAnalysis",
+      "limitations": [
+        "Category and recurring-merchant patterns are not proof of active contracts or duplicate services."
+      ]
+    },
+    {
+      "family": "received_income",
+      "questions": [
+        "How much income did I receive last month?"
+      ],
+      "status": "implemented_unverified_nl",
+      "calculator": "analysisSpending.spendingAnalysis",
+      "limitations": [
+        "Only recorded posted received income; exclude scheduled deposits, transfers and card refunds."
+      ]
+    },
+    {
+      "family": "expected_income",
+      "questions": [
+        "When and how much is my next paycheck?"
+      ],
+      "status": "implemented_unverified_nl",
+      "calculator": "analysisSchedule.scheduleAnalysis",
+      "limitations": [
+        "Canonical recurrence, month-level income history and excluded dates; not proof of receipt."
+      ]
+    },
+    {
+      "family": "income_average",
+      "questions": [
+        "What is my average monthly income?"
+      ],
+      "status": "conditional_data_unverified_nl",
+      "calculator": "analysisSpending.spendingAnalysis",
+      "limitations": [
+        "Recorded history coverage and exact averaging period must be explicit."
+      ]
+    },
+    {
+      "family": "spending_filters",
+      "questions": [
+        "How much did I spend on groceries last month?",
+        "How much did I spend at Walmart last month?"
+      ],
+      "status": "implemented_unverified_nl",
+      "calculator": "analysisSpending.spendingAnalysis",
+      "limitations": [
+        "Preserve merchant/category; avoid card purchase plus repayment double counting."
+      ]
+    },
+    {
+      "family": "spending_comparison",
+      "questions": [
+        "Where did spending rise compared with last month?"
+      ],
+      "status": "implemented_unverified_nl",
+      "calculator": "analysisSpending.spendingAnalysis",
+      "limitations": [
+        "Classified activity and comparable periods required."
+      ]
+    },
+    {
+      "family": "transaction_search",
+      "questions": [
+        "Find my $35 transaction."
+      ],
+      "status": "implemented_unverified_nl",
+      "calculator": "analysisSpending.spendingAnalysis",
+      "limitations": [
+        "Bounded recorded history and ambiguous matches disclosed."
+      ]
+    },
+    {
+      "family": "unusual_charges_and_fees",
+      "questions": [
+        "Are there unusual charges?",
+        "How much did I pay in fees?"
+      ],
+      "status": "implemented_heuristic_unverified_nl",
+      "calculator": "analysisSpending.spendingAnalysis",
+      "limitations": [
+        "No fraud or exhaustive fee-detection claim; sparse merchant baseline limits detection."
+      ]
+    },
+    {
+      "family": "snowball_and_minimums",
+      "questions": [
+        "Show me my debt snowball target.",
+        "What required minimum payments remain?"
+      ],
+      "status": "implemented_unverified_nl",
+      "calculator": "analysisWealth.wealthAnalysis + canonical debt settlement",
+      "limitations": [
+        "Current eligible debt and minimum settlement; not saved simulation history."
+      ]
+    },
+    {
+      "family": "debt_payoff_scenario",
+      "questions": [
+        "When will I be debt-free?",
+        "How much faster if I add $100 each month?"
+      ],
+      "status": "implemented_unverified_nl",
+      "calculator": "analysisWealth.wealthAnalysis + analysisDebt.projectAnalystDebt",
+      "limitations": [
+        "Fixed-payment monthly scenario; no cash affordability guarantee; financial question must not be intercepted as app navigation."
+      ]
+    },
+    {
+      "family": "named_debt_payoff",
+      "questions": [
+        "When will I finish paying Test Card?"
+      ],
+      "status": "implemented_conditional_unverified_nl",
+      "calculator": "analysisWealth.wealthAnalysis",
+      "limitations": [
+        "Selected debt payoff comes from its projected payoff event, not whole-plan timing; excluded or unreached debts and incomplete inputs remain explicit."
+      ]
+    },
+    {
+      "family": "buffer_timeline",
+      "questions": [
+        "How long will it take to have 1000 buffer",
+        "When can I build a $1,000 cushion?",
+        "How many paychecks until I have a thousand-dollar buffer?"
+      ],
+      "status": "implemented_conditional_unverified_nl",
+      "calculator": "analysisSemantics + analysisStability.stabilityAnalysis",
+      "limitations": [
+        "Purpose/amount-role validation separates target from contribution; above-cushion timeline emits duration, already-reached or not-estimable. Screenshot and paraphrases still require actual interpreter evaluation."
+      ]
+    },
+    {
+      "family": "paycheck_or_month_ahead",
+      "questions": [
+        "How can I get one paycheck ahead?",
+        "How can I get a month ahead?",
+        "What is my buffer now?"
+      ],
+      "status": "conditional_data_unverified_nl",
+      "calculator": "analysisStability.stabilityAnalysis",
+      "limitations": [
+        "Sustainable contribution requires history and forecast; current buffer must not become unprotected total checking."
+      ]
+    },
+    {
+      "family": "paycheck_dependence",
+      "questions": [
+        "Am I still living paycheck to paycheck?"
+      ],
+      "status": "conditional_data_unverified_nl",
+      "calculator": "analysisStability.stabilityAnalysis",
+      "limitations": [
+        "Needs multiple historical pre-payday closes and classified income/expenses; one low balance is insufficient."
+      ]
+    },
+    {
+      "family": "historical_progress",
+      "questions": [
+        "Am I improving over the past three months?",
+        "How much has my debt fallen?",
+        "How much have my savings grown?"
+      ],
+      "status": "implemented_observation_history_with_data_limits_unverified_nl",
+      "calculator": "analysisHistory.historyAnalysis + analysisStability.stabilityAnalysis + analysisReview.reviewAnalysis",
+      "limitations": [
+        "Manual savings/checking deltas use two actual account_balances observations inside the window; sparse endpoints and mixed cohorts explicit. Historical checking closes also supported. Observed debt-principal and connected-bank balance histories are unavailable in existing sources, never inferred from payments or current balances."
+      ]
+    },
+    {
+      "family": "emergency_fund",
+      "questions": [
+        "How much emergency savings do I need for three months?",
+        "Do I have six months of expenses saved?"
+      ],
+      "status": "conditional_data_unverified_nl",
+      "calculator": "analysisWealth.wealthAnalysis",
+      "limitations": [
+        "Recorded expense baseline; essential-only classification and earmarked/inaccessible funds not inferred."
+      ]
+    },
+    {
+      "family": "goal_timeline",
+      "questions": [
+        "When will Vacation be funded if I save $100 per paycheck?",
+        "How long to save $1000 for Vacation?",
+        "I can contribute $100 per paycheck."
+      ],
+      "status": "implemented_conditional_unverified_nl",
+      "calculator": "analysisSemantics + analysisWealth.wealthAnalysis",
+      "limitations": [
+        "Explicit target/contribution role and cadence support scenario duration or already-met/not-estimable outcomes; contribution is not certified affordable. Follow-up language remains unverified."
+      ]
+    },
+    {
+      "family": "credit_utilization",
+      "questions": [
+        "What is my credit utilization?",
+        "What payment gets Main Card below 30%?"
+      ],
+      "status": "conditional_data_unverified_nl",
+      "calculator": "analysisWealth.wealthAnalysis",
+      "limitations": [
+        "Requires connected limit/balance; cannot predict credit score or certify payment affordability."
+      ]
+    },
+    {
+      "family": "credit_ranking",
+      "questions": [
+        "Which card has my highest APR?",
+        "Which card has the highest utilization?"
+      ],
+      "status": "implemented_conditional_unverified_nl",
+      "calculator": "analysisRanking.rankCreditOrDebt",
+      "limitations": [
+        "Requested metric controls ranking; unavailable APR or limits and scope remain explicit. No credit-score prediction."
+      ]
+    },
+    {
+      "family": "budget_remaining",
+      "questions": [
+        "How much grocery budget is left this month?"
+      ],
+      "status": "implemented_unverified_nl",
+      "calculator": "analysisWealth.wealthAnalysis",
+      "limitations": [
+        "Configured category budget and classified activity required."
+      ]
+    },
+    {
+      "family": "feasible_budget_plan",
+      "questions": [
+        "Make a budget that covers bills, debt and saving without overdrafting."
+      ],
+      "status": "implemented_conditional_unverified_nl",
+      "calculator": "analysisGuidance.guidanceAnalysis",
+      "limitations": [
+        "Explicit budget-plan purpose combines expected income, existing commitments, living allowance and one cushion-protected capacity. Read-only aggregate draft, not a saved category-by-category budget or arbitrary percentage allocation."
+      ]
+    },
+    {
+      "family": "weekly_monthly_review",
+      "questions": [
+        "Give me a weekly financial review.",
+        "Review last month and tell me what to focus on."
+      ],
+      "status": "implemented_composite_unverified_nl",
+      "calculator": "analysisReview.reviewAnalysis",
+      "limitations": [
+        "Historical results and current outlook separate; unavailable debt/savings changes explicitly excluded."
+      ]
+    },
+    {
+      "family": "income_bill_scenarios",
+      "questions": [
+        "What if my pay falls $200?",
+        "What if Rent rises by $100?",
+        "What if Rent rises to $1200?",
+        "What if I cancel Streaming?"
+      ],
+      "status": "implemented_delta_semantic_risk",
+      "calculator": "analysisStability.scenarioAnalysis",
+      "limitations": [
+        "Absolute new amount versus delta must be distinguished; named occurrence and cadence must be preserved."
+      ]
+    },
+    {
+      "family": "bill_date_scenario",
+      "questions": [
+        "What if I move Rent from September 15 to September 20?"
+      ],
+      "status": "implemented_unverified_nl",
+      "calculator": "analysisStability.scenarioAnalysis",
+      "limitations": [
+        "One-off occurrence scenario only; real mutation separately authorized."
+      ]
+    },
+    {
+      "family": "debt_vs_savings_recommendation",
+      "questions": [
+        "Should I put $100 toward debt or savings?"
+      ],
+      "status": "partial_feature_composition_needed",
+      "calculator": "analysisStability + analysisWealth + canonical forecast",
+      "limitations": [
+        "Primitives exist; no demonstrated composed priority recommendation protecting required payments and cushion."
+      ]
+    }
+  ],
+  "implementationUpdate": "Updated against the frozen candidate after semantic contracts, guidance, history, settlement, search and ranking changes. Main reports 204 Edge tests at this stage; this is not a final receipt or live deployment claim. All natural-language cases remain unverified here."
 }

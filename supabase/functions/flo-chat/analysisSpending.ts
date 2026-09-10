@@ -1,6 +1,6 @@
 import { dayAdd, dollars, label, matches, monthStart, numeric, requireSources, round, shiftMonth, sum, validDate, type AnalysisRequest, type AnalysisResult, type AnalysisSnapshot } from "./analysisTypes.ts";
 
-export type AnalyticTransaction = { id: string; date: string; amount: number; merchant: string; category: string; account: string; kind: "spending" | "income" | "refund" | "transfer" | "repayment" | "unresolved"; repaymentKind?: "card" | "loan" | "unknown"; billId?: string };
+export type AnalyticTransaction = { id: string; date: string; amount: number; merchant: string; category: string; account: string; accountKey?: string; kind: "spending" | "income" | "refund" | "transfer" | "repayment" | "unresolved"; repaymentKind?: "card" | "loan" | "unknown"; billId?: string };
 /** Stored Plaid amounts already use FlowLedger's sign convention. */
 export function analyticTransactions(snapshot: AnalysisSnapshot): { rows: AnalyticTransaction[]; missing: string[] } {
   const source = (table: string) => snapshot.sources[table]?.rows ?? [];
@@ -38,7 +38,9 @@ export function analyticTransactions(snapshot: AnalysisSnapshot): { rows: Analyt
     if(!transfer&&r.linked_plan_type==="goal"&&!source("goals").some(g=>g.id===r.linked_plan_id&&g.goal_type==="planned_expense"))kind="unresolved";
     // Raw credit loan-payment credits are repayments, not merchant refunds.
     if (credit && amount > 0 && /LOAN_PAYMENTS/.test(pfc)) kind = "repayment";
-    const base:AnalyticTransaction = { id: String(r.id), date: String(r.date ?? r.transaction_date), amount, merchant: label(r.merchant_name ?? r.note ?? r.name), category: label(category), account: label(account?.display_name ?? account?.name ?? r.account_id ?? "Manual"), kind, repaymentKind:repayment ? cardRepayment||credit ? "card" : loanRepayment ? "loan" : "unknown" : undefined, billId: r.linked_bill_id };
+    const manualAccount=source("accounts").find(a=>a.id===r.account_id);
+    const accountKey=account?.id?`connected:${account.id}`:r.account_id?`manual:${r.account_id}`:undefined;
+    const base:AnalyticTransaction = { id: String(r.id), date: String(r.date ?? r.transaction_date), amount, merchant: label(r.merchant_name ?? r.note ?? r.name), category: label(category), account: label(account?.display_name ?? account?.name ?? manualAccount?.name ?? r.account_id ?? "Unassigned account"), accountKey, kind, repaymentKind:repayment ? cardRepayment||credit ? "card" : loanRepayment ? "loan" : "unknown" : undefined, billId: r.linked_bill_id };
     const allocations = Array.isArray(r.review_allocations) ? r.review_allocations : [];
     if (kind === "spending" && allocations.length && Math.abs(sum(allocations.map((a: any) => Math.abs(numeric(a.amount) ?? NaN))) - Math.abs(amount)) < .005) {
       allocations.forEach((a: any, index: number) => rows.push({ ...base, id: `${base.id}:${index}`, amount: -Math.abs(Number(a.amount)), category: label(a.category ?? a.name ?? category), kind: a.type === "transfer" ? "transfer" : a.type === "extra_principal" || debts.has(a.targetId) ? "repayment" : "spending" }));
@@ -63,7 +65,8 @@ export function aggregateSpending(rows: AnalyticTransaction[], start: string, en
 
 export function spendingAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequest): AnalysisResult {
   const all = analyticTransactions(snapshot);
-  const start = request.startDate ?? monthStart(snapshot.today);
+  const lastPayment=request.purpose==="transaction_last";
+  const start = request.startDate ?? (lastPayment?all.rows.map(r=>r.date).sort()[0]??snapshot.today:monthStart(snapshot.today));
   const requestedEnd = request.endDate ?? snapshot.today;
   const end = requestedEnd < snapshot.today ? requestedEnd : snapshot.today;
   if(start>end)return {text:"That range is in the future. Recorded spending and received income can only be reviewed through today; ask for a forecast for future money.",facts:{},sources:["transactions","plaid_transactions"],assumptions:[],missing:["The requested range has no elapsed dates"],scenario:false};
@@ -73,7 +76,15 @@ export function spendingAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
   if (current.unresolved) missing.push(`${current.unresolved} transactions need classification and are excluded from income/spending totals`);
   const facts: AnalysisResult["facts"] = { spending: current.spending, income: current.income, debtRepayments: current.repayments, startDate: start, endDate: end };
   const lines: string[] = [];
-  if(request.domain==="income") {
+  if(lastPayment) {
+    const payments=current.rows.filter(r=>r.amount<0&&["spending","repayment"].includes(r.kind)).sort((a,b)=>b.date.localeCompare(a.date)||a.id.localeCompare(b.id));
+    const latest=payments[0]?.date;
+    const sameDay=payments.filter(r=>r.date===latest);
+    facts.lastPaymentDate=latest??null;facts.matchCount=payments.length;facts.latestDayPaymentCount=sameDay.length;
+    lines.push(latest?`The latest matching recorded payment date is ${latest}${request.merchant??request.entity?` for ${label(request.merchant??request.entity)}`:""}. ${sameDay.map(r=>`${r.merchant}: ${dollars(-r.amount)}`).slice(0,8).join("; ")}.`:`No matching posted payment was found in the retained records from ${start} through ${end}.`);
+    lines.push(`Searched retained posted history from ${start} through ${end}; records outside that coverage are not checked. Same-day payments have no verified posting order.`);
+    if(!request.merchant&&!request.entity)missing.push("No merchant was specified; this is the most recent recorded payment across merchants");
+  } else if(request.domain==="income") {
     const received=current.rows.filter(r=>r.kind==="income"&&matches(r.merchant,request.entity));
     const total=sum(received.map(r=>r.amount));
     facts.income=total;facts.paycheckCount=received.length;facts.averagePaycheck=received.length?round(total/received.length):null;
@@ -97,6 +108,12 @@ export function spendingAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
     const total = -sum(fees.map(r => r.amount));
     lines.push(`${dollars(total)} in recorded fee-labeled charges from ${start} through ${end}.`, ...fees.slice(-5).map(r => `${r.date}: ${r.merchant}, ${dollars(-r.amount)} (${r.account}).`));
     facts.fees = total;
+    const byAccount=new Map<string,{account:string;cents:number}>();
+    fees.filter(r=>r.accountKey).forEach(r=>{const prior=byAccount.get(r.accountKey!);byAccount.set(r.accountKey!,{account:r.account,cents:(prior?.cents??0)+Math.round(-r.amount*100)});});
+    const accountFees=[...byAccount].map(([key,r])=>({key,account:r.account,amount:r.cents/100})).sort((a,b)=>b.amount-a.amount);
+    const display=(r:typeof accountFees[number])=>accountFees.filter(a=>a.account===r.account).length>1?`${r.account} (separate account ${accountFees.indexOf(r)+1})`:r.account;
+    if(accountFees.length){const leaders=accountFees.filter(r=>r.amount===accountFees[0].amount);facts.highestFeeAccount=leaders.map(display).join(", ");facts.highestAccountFees=accountFees[0].amount;facts.highestFeeAccountCount=leaders.length;lines.push(`Fee totals by identified account: ${accountFees.map(r=>`${display(r)}: ${dollars(r.amount)}`).join("; ")}.`);}
+    if(fees.some(r=>!r.accountKey)){missing.push("Some fee charges have no account identity; account rankings are partial");lines.push("Unassigned fee charges are included in the total, but not combined into a fictional account or ranked.");}
     lines.push("These are category/name matches, not confirmation that every fee was identified.");
   } else if (request.domain === "unusual") {
     const purchases = current.rows.filter(r => r.kind === "spending");

@@ -14,11 +14,15 @@ import { localDay, validDate, type AnalysisRequest, type AnalysisResult, type An
 import { aggregateCoverage, freshness, oldestSourceAsOf, type FloGroundedAnswer, type FloToolEnvelope, type FloSourceRef } from "./contract.ts";
 import type { FloToolRuntime } from "./tools.ts";
 import { analysisInterpreterPrompt, interpretAnalysisQuestion, isTimelinePurpose, validateRequestSemantics } from "./analysisSemantics.ts";
+import { guidanceAnalysis, isGuidancePurpose } from "./analysisGuidance.ts";
+import { historyAnalysis } from "./analysisHistory.ts";
 
 const date=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable();
 const search=z.string().max(100).nullable();
 const requestSchema=z.object({
-  purpose:z.enum(["general","current_balance","forecast_balance","affordability","buffer_timeline","goal_timeline","debt_timeline"]),
+  purpose:z.enum(["general","current_balance","forecast_balance","affordability","buffer_timeline","goal_timeline","debt_timeline","paycheck_allocation","action_plan","budget_plan","transaction_last","balance_history","bill_settlement","bills_overdue"]),
+  planDays:z.union([z.literal(30),z.literal(90)]).nullable(),
+  metric:z.enum(["balance","apr","utilization","amount"]).nullable().describe("Preserve the requested ranking metric: APR, balance, utilization or transaction amount. Never substitute balance for APR."),
   amountRole:z.enum(["none","target_balance","contribution_amount","payment_amount","purchase_amount","threshold"]),
   contribution:z.object({amount:z.number().positive().max(1e9),frequency:z.enum(["once","monthly","paycheck"])}).nullable().describe("Only a separately stated savings contribution and its explicit frequency; never derive from target amount."),
   domain:z.enum(["money","forecast","purchase","spending","bills","subscriptions","income","debt","credit","savings","emergency","budget","stability","buffer","paycheck","progress","transactions","unusual","fees","health","review"]),
@@ -51,7 +55,8 @@ const projectionDomains=new Set(["money","forecast","purchase","bills","subscrip
 export function calculateFinancialAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequest): AnalysisResult {
   const invalid=validateAnalysisRequest(request,snapshot.today);
   if(invalid) return {text:invalid,facts:isTimelinePurpose(request)?{timelineOutcome:"not_estimable"}:{},sources:[],assumptions:[],missing:[invalid],scenario:Boolean(request.scenario)};
-  if(request.purpose==="debt_timeline"&&request.entity)return {text:"I cannot yet establish an individual payoff date for that named debt. The available payoff date covers the whole included debt plan, so I will not present it as this debt's date.",facts:{timelineOutcome:"not_estimable"},sources:[],assumptions:[],missing:["Named-debt payoff timing is not available from the whole-plan result"],scenario:Boolean(request.scenario)};
+  if(isGuidancePurpose(request.purpose))return guidanceAnalysis(snapshot,request);
+  if(request.purpose==="balance_history")return historyAnalysis(snapshot,request);
   if(request.domain==="money"&&request.operation==="detail"&&!request.scenario&&request.dateEvent==="none")return currentBalanceAnalysis(snapshot,request);
   const historicalBills=request.domain==="bills"&&request.endDate!==null&&request.endDate<snapshot.today;
   const receivedIncome=request.domain==="income"&&request.incomeTiming==="received";
@@ -66,7 +71,7 @@ export function calculateFinancialAnalysis(snapshot: AnalysisSnapshot, request: 
   if(["debt","credit","savings","emergency","budget"].includes(request.domain)) {
     const result=wealthAnalysis(snapshot,request);
     if(request.purpose==="debt_timeline") {
-      const date=result.facts.scenarioDebtFreeMonth;
+      const date=request.entity?result.facts.namedDebtPayoffMonth:result.facts.scenarioDebtFreeMonth;
       if(typeof date==="string"&&!result.missing.length){result.facts.timelineOutcome="duration";result.facts.timelineTargetMonth=date;}
       else {result.facts.timelineOutcome="not_estimable";result.text=`I cannot establish a reliable payoff timeline from the available plan.\n\n${result.text}`;result.missing.push("A verified payoff date is unavailable for this request");}
     }

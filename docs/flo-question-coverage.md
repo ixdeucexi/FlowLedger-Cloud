@@ -6,6 +6,23 @@ Scope: the account, date-specific forecast, affordability, bill, income, spendin
 
 Machine-readable evaluation input: [questionCoverage.json](../supabase/functions/flo-chat/questionCoverage.json). Its status distinguishes implemented primitives, missing user data, missing features and semantic routing risks. The JSON adds explicit last-merchant-payment and credit-ranking cases to the grouped matrix below. It is not an execution receipt.
 
+## Frozen candidate update — not a release receipt
+
+The candidate now implements purpose/amount-role guards and timeline outcomes; constrained paycheck, budget and 30/90-day guidance; named debt payoff events; metric-aware credit/debt rankings; retained-history last-payment search; bounded cross-month bill settlement; and manual-account historical observations. The JSON statuses reflect these source-level changes. **All natural-language corpus cases remain unverified in this document.**
+
+The frozen candidate passes 214 Edge tests and Deno checking. SENTINEL independently reran 68 relevant tests and returned an offline PASS after ranking, overdue-list, fee-account identity and checklist-coverage repairs. This is not a live deployment result or proof that all user questions route correctly. Production remains gated on live conversational evaluation; the QA daily allowance is exhausted and has not been bypassed.
+
+| Area | Current implementation and boundary |
+| --- | --- |
+| Buffer / goal timelines | `analysisSemantics` separates targets from contributions. Answers must provide duration, already-reached or explicit not-estimable outcomes. Contribution scenarios do not certify affordability. |
+| Paycheck / action guidance | `analysisGuidance` reserves existing commitments and living costs, protects the cushion and exposes one shared optional capacity. Missing inputs suppress numeric allocation. No guaranteed escape date. |
+| Budget planning | Explicit budget-plan purpose combines expected income and constrained reserves. Classified historical category shares divide the existing living allowance with exact cent conservation, not additional spending capacity. Ambiguous refund composition is disclosed. It neither saves a budget nor invents category percentages. |
+| Debt / credit | Named payoff comes from that debt's projected payoff event. Ranking uses the requested APR/utilization/balance metric rather than first-listed order. |
+| Search / settlement | Last-payment search covers retained history. Settlement and overdue purposes reconcile recorded occurrences with a disclosed 24-month bound, not unrecorded bills or bank confirmation. |
+| Observed history | `analysisHistory` uses existing `account_balances` for manual checking/savings changes. Partial dates and cohorts remain explicit. Observed debt-principal and connected-bank balance history is unavailable in existing sources; repayments never substitute for balance changes. |
+
+The following risk list and matrix preserve the original audit baseline. Their gap descriptions are historical, not the current candidate status. Use this update and the version-2 JSON for present capability reporting. Remaining explicit limits include unavailable observed debt/bank histories, named-account forecasts, conditional affordability, and unverified interpretation of all corpus wording.
+
 ## Immediate wrong-answer risks in the audited baseline (41b7c78)
 
 1. **Goal and amount semantics are not represented.** `analysisPlanner.ts` admits domain/operation combinations with a generic `amount`. `analysisWealth.ts` currently interprets a positive amount as a contribution whenever one savings goal matches. A target such as “have $1000” can become “contribute $1000.” Likewise `savings/plan` can return only current savings instead of a timeline. The reported buffer response is consistent with this route failure; this audit did not inspect its private request trace.
@@ -19,7 +36,7 @@ Minimal initial repair: explicit purpose and amount role; enforce compatible cal
 
 The working repair introduces purpose/amount-role validation, a bounded interpretation repair, buffer/goal timeline outcomes and a narrower app-navigation predicate. Those changes do not by themselves complete the remaining feature gaps or verify live language-model interpretation. Refer to the final release evidence before treating any repair as shipped.
 
-## Representative family matrix / corpus v1
+## Original baseline representative family matrix / corpus v1
 
 Code paths below are under `supabase/functions/flo-chat/`. “Available” means source-level calculation exists, not that natural-language routing has passed.
 

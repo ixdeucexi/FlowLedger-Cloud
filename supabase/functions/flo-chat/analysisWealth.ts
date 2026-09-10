@@ -1,5 +1,6 @@
 import { orderDebts } from "../../../artifacts/mobile/lib/snowball.ts";
 import { projectAnalystDebt } from "./analysisDebt.ts";
+import { rankCreditOrDebt } from "./analysisRanking.ts";
 import { canonicalConnectedAccounts } from "../../../artifacts/mobile/lib/plaidActivity.ts";
 import { createFinancialProjection } from "../../../artifacts/mobile/lib/financialProjection.ts";
 import { isBillActiveForMonth } from "../../../artifacts/mobile/lib/schedule.ts";
@@ -10,6 +11,7 @@ import { analyticTransactions, aggregateSpending } from "./analysisSpending.ts";
 import { dayAdd, dollars, label, matches, monthEnd, monthStart, numeric, requireSources, round, shiftMonth, sum, type AnalysisRequest, type AnalysisResult, type AnalysisSnapshot } from "./analysisTypes.ts";
 
 export function wealthAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequest): AnalysisResult {
+  if(["credit","debt"].includes(request.domain)&&["minimum","maximum"].includes(request.operation))return rankCreditOrDebt(snapshot,request);
   const rows = (name: string) => snapshot.sources[name]?.rows ?? [];
   const facts: AnalysisResult["facts"] = {};
   const lines: string[] = [];
@@ -39,7 +41,7 @@ export function wealthAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequ
   } else if (request.domain === "debt") {
     sources=["bills","monthly_overrides","bill_date_moves","household_settings"];
     const raw=rows("bills").filter(r=>r.is_debt && numeric(r.balance)!>0 && (!r.end_date || r.end_date>=snapshot.today));
-    const named=raw.filter(r=>matches(r.name,request.entity));
+    const named=raw.filter(r=>!request.entity||String(r.name).trim().toLowerCase()===request.entity.trim().toLowerCase());
     if(request.entity && named.length!==1) missing.push("The debt name does not identify exactly one active debt; use its full name");
     if(rows("bills").some(r=>r.is_debt && numeric(r.balance)===null)) missing.push("A debt balance is missing");
     const total=sum(raw.map(r=>Number(r.balance)));
@@ -81,6 +83,12 @@ export function wealthAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequ
         };
         const base=projection(0); const scenario=projection(extra);
         facts.baselineDebtFreeMonth=base.debtFreeDate; facts.scenarioDebtFreeMonth=scenario.debtFreeDate;
+        if(request.entity&&named.length===1) {
+          const payoff=(result:typeof base)=>{const m=result.months.find(m=>m.paidOffIds.includes(named[0].id));return m?`${m.year}-${String(m.month+1).padStart(2,"0")}`:null;};
+          facts.namedDebtPayoffMonth=payoff(scenario);facts.namedDebtBaselineMonth=payoff(base);facts.namedDebt=label(named[0].name);
+          lines.unshift(facts.namedDebtPayoffMonth?`For ${label(named[0].name)}, the fixed-payment scenario projects payoff in ${facts.namedDebtPayoffMonth}; its baseline payoff month is ${facts.namedDebtBaselineMonth??"not reached"}. This is that debt's date, not the whole plan's debt-free date.`:`${label(named[0].name)} does not reach payoff within the modeled included-debt plan. I cannot substitute the whole plan's date for this debt.`);
+          if(!facts.namedDebtPayoffMonth)missing.push("The named debt did not reach a verified payoff month within this scenario");
+        }
         lines.push(`Fixed-payment scenario: ${extra ? `${dollars(extra)} extra ${cadence==="monthly"?"each month":cadence==="paycheck"?"on each scheduled household payday":"once"} beginning ${extraDate}` : "no additional payment"}${namedExtra?` toward ${label(namedExtra)}`:""}, with freed payments rolling forward. Estimated included-plan payoff month: ${scenario.debtFreeDate??"not reached within 30 years"}. Baseline: ${base.debtFreeDate??"not reached within 30 years"}. Excluded debts still receive their configured payments but are not counted as paid off by this plan.`);
         const next=scenario.months.find(m=>m.paidOffNames?.length);
         if(next) lines.push(`Next projected payoff: ${next.paidOffNames!.join(", ")} in ${next.year}-${String(next.month+1).padStart(2,"0")}.`);

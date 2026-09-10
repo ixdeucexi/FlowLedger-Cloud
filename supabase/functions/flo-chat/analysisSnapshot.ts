@@ -9,6 +9,9 @@ export const analysisColumns: Record<string, string> = {
   bill_date_moves: "id,household_id,bill_id,from_date,to_date,move_reason,created_at,updated_at",
   transactions: "id,household_id,date,amount,category,note,linked_bill_id,account_id,import_hash,transfer_group_id,debt_applied_amount,debt_applied_bill_id,source,plaid_transaction_id,plaid_account_id,merchant_name,pending,removed_at,deleted_at,match_confidence,match_reason,review_status,review_resolution,review_allocations,reviewed_at,user_edited_at,linked_income_id,linked_plan_id,linked_plan_type,matched_occurrence_date",
   accounts: "id,household_id,name,account_type,current_balance,balance_as_of,last_reconciled_at,is_active,created_at",
+  // Optional historical source: calculators that do not use account history
+  // must not add this table to their required projection inputs.
+  account_balances: "id,household_id,account_id,balance,as_of_date,source,created_at",
   plaid_accounts: "id,household_id,plaid_account_id,name,display_name,official_name,mask,persistent_account_id,account_type,account_subtype,current_balance,available_balance,credit_limit,minimum_payment_amount,next_payment_due_date,last_statement_balance,last_statement_issue_date,is_overdue,purchase_apr,liability_last_synced_at,is_active,updated_at",
   plaid_transactions: "id,household_id,plaid_account_id,flowledger_transaction_id,plaid_transaction_id,transaction_date,authorized_date,amount,name,merchant_name,category,pending,removed_at,updated_at,primary_category:raw->personal_finance_category->>primary,detailed_category:raw->personal_finance_category->>detailed",
   pending_plan_matches: "id,household_id,pending_plaid_transaction_id,pending_account_id,target_type,target_id,target_name,occurrence_date,planned_amount,pending_amount,pending_transaction_date,status,posted_transaction_id,posted_plaid_transaction_id,posted_amount,created_at,updated_at",

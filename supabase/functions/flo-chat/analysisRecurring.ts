@@ -1,12 +1,32 @@
 import { scheduleAnalysis } from "./analysisSchedule.ts";
 import { analyticTransactions } from "./analysisSpending.ts";
-import { dayAdd, dollars, label, matches, monthStart, numeric, requireSources, round, shiftMonth, sum, type AnalysisRequest, type AnalysisResult, type AnalysisSnapshot } from "./analysisTypes.ts";
+import { dayAdd, dollars, label, matches, monthStart, numeric, requireSources, round, shiftMonth, sum, validDate, type AnalysisRequest, type AnalysisResult, type AnalysisSnapshot } from "./analysisTypes.ts";
 
 /** Recurring-charge detection is evidence of a pattern, not proof of an active
  * subscription or a duplicate service. Never cancel or mutate from this read. */
 export function recurringAnalysis(snapshot:AnalysisSnapshot,request:AnalysisRequest):AnalysisResult {
   const rows=(name:string)=>snapshot.sources[name]?.rows??[];
   const history=analyticTransactions(snapshot);
+  if(request.purpose==="bill_settlement"||request.purpose==="bills_overdue") {
+    const overdue=request.purpose==="bills_overdue";
+    const end=request.endDate??(overdue?dayAdd(snapshot.today,-1):snapshot.today);
+    const earliest=monthStart(shiftMonth(snapshot.today,-23));
+    const origins=rows("bills").filter(b=>!request.entity||matches(b.name,request.entity)).map(b=>b.start_date??monthStart(String(b.created_at??"").slice(0,10)));
+    const validOrigins=origins.filter(d=>validDate(d)&&d<=end).sort();
+    const start=request.startDate??(overdue?(validOrigins[0]??monthStart(end)):monthStart(end));
+    if(!validDate(end)||end>snapshot.today||!validDate(start)||start>end)return {text:"Choose an elapsed date range to check recorded bill settlements.",facts:{},sources:["bills","monthly_overrides","transactions"],assumptions:[],missing:["Settlement checks cannot confirm future payments"],scenario:false};
+    const boundedStart=start<earliest?earliest:start;
+    const base=scheduleAnalysis(snapshot,{...request,domain:"bills",startDate:boundedStart,endDate:end,dateEvent:"none"});
+    if(start<earliest)base.missing.push("Earlier obligations extend beyond this 24-month settlement check; the overdue list is incomplete");
+    if(overdue&&origins.some(d=>!validDate(d)))base.missing.push("A bill start date is unavailable; complete overdue coverage cannot be verified");
+    const count=base.facts.occurrenceCount,left=base.facts.remainingObligations;
+    if(typeof count==="number"&&typeof left==="number"&&!base.missing.length) {
+      base.facts.allRecordedDueSettled=count?left===0:null;
+      base.text=`${count===0?"No recorded bill obligations fall in this checked range.":left===0?`All ${count} recorded obligations due in this range are satisfied in FlowLedger.`:`No—${dollars(left)} still remains against recorded obligations in this range.`}\n\n${base.text}`;
+    }
+    base.assumptions.push("This checks configured occurrences and recorded settlements, not unrecorded bills or bank confirmation. Future bills are not counted as unpaid past obligations.");
+    return base;
+  }
   if(request.domain==="bills"&&request.endDate&&request.endDate<snapshot.today) {
     const start=request.startDate??monthStart(request.endDate),end=request.endDate;
     const paid=rows("monthly_overrides").filter(r=>r.paid_date&&r.paid_date>=start&&r.paid_date<=end&&numeric(r.paid_amount)!>0).flatMap(r=>{const bill=rows("bills").find(b=>b.id===r.bill_id);return bill&&matches(bill.name,request.entity)?[{bill,paid_amount:Number(r.paid_amount),paid_date:String(r.paid_date)}]:[];});

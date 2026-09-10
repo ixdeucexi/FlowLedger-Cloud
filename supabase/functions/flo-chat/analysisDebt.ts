@@ -6,10 +6,11 @@ import { round, sum } from "./analysisTypes.ts";
 export function projectAnalystDebt(options:{debts:SnowballDebtInput[];method:"snowball"|"avalanche";year:number;month:number;currentPlan:DatedSnowballMonthPlanResult;targetId?:string;extra:(month:number,year:number)=>number}) {
   const balances=new Map(options.currentPlan.balances);
   let rolled=options.currentPlan.rolledPayment;
-  const months:Array<{month:number;year:number;endingDebt:number;interest:number;extra:number;paidOffNames:string[]}>=[];
+  const months:Array<{month:number;year:number;endingDebt:number;interest:number;extra:number;paidOffNames:string[];paidOffIds:string[]}>=[];
   const order=[...options.currentPlan.payoffOrder];
   for(let offset=0;offset<=360;offset++) {
     const absolute=options.year*12+options.month+offset,year=Math.floor(absolute/12),month=absolute%12;
+    const beforeMonth=offset===0?new Map(options.debts.map(d=>[d.id,d.balance])):new Map(balances);
     let interest=0;
     const paidOffNames:string[]=offset===0?[...options.currentPlan.paidOffNames]:[];
     if(offset>0) {
@@ -28,7 +29,8 @@ export function projectAnalystDebt(options:{debts:SnowballDebtInput[];method:"sn
     }
     for(const name of paidOffNames)if(!order.includes(name))order.push(name);
     const endingDebt=sum(options.debts.filter(d=>d.included).map(d=>balances.get(d.id)??0));
-    months.push({month,year,endingDebt,interest,extra:applied,paidOffNames});
+    const paidOffIds=options.debts.filter(d=>(beforeMonth.get(d.id)??0)>.009&&(balances.get(d.id)??0)<=.009).map(d=>d.id);
+    months.push({month,year,endingDebt,interest,extra:applied,paidOffNames,paidOffIds});
     if(endingDebt<=.009)return {months,payoffOrder:order,debtFreeDate:`${year}-${String(month+1).padStart(2,"0")}`};
   }
   return {months,payoffOrder:order,debtFreeDate:null};
