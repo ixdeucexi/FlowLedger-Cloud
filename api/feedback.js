@@ -10,6 +10,7 @@ const { sendPushToUser } = require("./_utils/push");
 const { authenticatedUser, publicError, safeError, serviceSupabase } = require("./_utils/supabase");
 
 const accountDeletion = createAccountDeletionHandler();
+const healthz = require("./_utils/healthz");
 
 async function submitFeedback(db, auth, body, res) {
   let input;
@@ -129,6 +130,7 @@ async function manageFeedback(db, auth, body, res) {
 }
 
 module.exports = async function feedback(req, res) {
+  if (req.query?.healthz === "1") return healthz(req, res);
   if (req.query?.accountAction === "delete") return accountDeletion(req, res);
   if (req.query?.accountAction === "apple-authorization") return storeAppleAuthorization(req, res);
   if (req.method !== "POST") return res.status(405).json({ error: "METHOD_NOT_ALLOWED" });

@@ -43,6 +43,13 @@
   ],
   "headers": [
     {
+      "source": "/push-sw.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "Service-Worker-Allowed", "value": "/" }
+      ]
+    },
+    {
       "source": "/.well-known/assetlinks.json",
       "headers": [
         {
@@ -159,6 +166,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/healthz",
+      "destination": "/api/feedback?healthz=1"
+    },
+    {
       "source": "/api/account/delete",
       "destination": "/api/feedback?accountAction=delete"
     },
@@ -183,7 +194,7 @@
       "destination": "/api/notifications?notificationAction=:notificationAction"
     },
     {
-      "source": "/(.*)",
+      "source": "/:path((?!api(?:/|$)|_expo(?:/|$)).*)",
       "destination": "/index.html"
     }
   ]

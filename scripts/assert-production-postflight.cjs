@@ -2,6 +2,7 @@ const crypto = require("node:crypto");
 const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
+const { requiredAppRoutes, assertAppRouteSources, assertRegisteredAppRoute, assertHealthResponse, assertMissingResource } = require("./production-route-contract.cjs");
 const {
   assertExecutableJavaScriptResponse,
   assertStartupShell,
@@ -67,6 +68,7 @@ async function fetchWithRetry(url, attempts = 6) {
 }
 
 async function main() {
+  assertAppRouteSources(root);
   const commit = git("rev-parse", "HEAD");
   const inspections = productionHosts.map(host => ({
     host,
@@ -122,12 +124,28 @@ async function main() {
     assertCleanCopy(await oldAssetResponse.text(), "Former public bundle URL");
   }
 
-  for (const route of ["support", "delete-account", "user-guide", "legal?doc=privacy"] ) {
-    const response = await fetchWithRetry(`${canonicalOrigin}/${route}`);
+  await assertHealthResponse(await fetchWithRetry(`${canonicalOrigin}/api/healthz`));
+  for (const missing of ["/api/does-not-exist-postflight", "/_expo/static/js/web/entry-00000000000000000000000000000000.js"]) {
+    assertMissingResource(await fetch(`${canonicalOrigin}${missing}`, { redirect: "manual", cache: "no-store" }), missing);
+  }
+  const workerUrl = `${canonicalOrigin}/push-sw.js`;
+  const workerResponse = await fetchWithRetry(workerUrl);
+  assertExecutableJavaScriptResponse(workerResponse, workerUrl, "Production service worker");
+  if (!/no-store/i.test(workerResponse.headers.get("cache-control") || "")) throw new Error("Production service worker must be no-store.");
+  const liveWorker = await workerResponse.text();
+  const expectedWorker = fs.readFileSync(path.join(root, "artifacts", "mobile", "public", "push-sw.js"), "utf8");
+  if (liveWorker.replace(/\r\n/g, "\n") !== expectedWorker.replace(/\r\n/g, "\n")) throw new Error("Production service worker differs from the reviewed source.");
+  for (const route of requiredAppRoutes) {
+    assertRegisteredAppRoute(route, bundle);
+    const response = await fetchWithRetry(`${canonicalOrigin}${route.url}`);
+    if (!/^text\/html\b/i.test(response.headers.get("content-type") || "")) throw new Error(`${route.url} is not HTML.`);
     if (!/no-store/i.test(response.headers.get("cache-control") || "")) {
-      throw new Error(`/${route} does not return fresh SPA HTML.`);
+      throw new Error(`${route.url} does not return fresh SPA HTML.`);
     }
-    assertCleanCopy(await response.text(), `/${route}`);
+    const routeHtml = await response.text();
+    assertCleanCopy(routeHtml, route.url);
+    const routeShell = assertStartupShell(routeHtml, route.url);
+    if (routeShell.bundlePath !== bundlePath) throw new Error(`${route.url} serves a different app build.`);
   }
 
   const pdfResponse = await fetchWithRetry(`${canonicalOrigin}/FlowLedger-User-Guide.pdf`);

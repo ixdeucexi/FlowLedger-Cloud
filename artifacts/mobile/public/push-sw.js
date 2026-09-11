@@ -6,6 +6,23 @@ self.addEventListener("activate", event => {
   event.waitUntil(self.clients.claim());
 });
 
+// Deliberately not an offline app cache: never retain sessions, financial data,
+// API responses, auth redirects, old app HTML, or hashed application bundles.
+const OFFLINE_DOCUMENT = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FlowLedger — Offline</title><style>body{margin:0;background:#070919;color:#fff;font:18px system-ui;min-height:100vh;display:grid;place-items:center}main{max-width:28rem;padding:2rem}h1{font-size:1.6rem}p{line-height:1.5;color:#cbd0df}a{display:inline-block;padding:14px 20px;background:#9b4dff;border-radius:12px;color:#fff;text-decoration:none}</style></head><body><main><h1>You’re offline</h1><p>Reconnect to open FlowLedger. Your account balances and changes are not available on this offline page.</p><a href="/">Try again</a></main></body></html>`;
+self.addEventListener("fetch", event => {
+  const request = event.request;
+  const url = new URL(request.url);
+  if (request.method !== "GET" || request.mode !== "navigate" || url.origin !== self.location.origin || /^\/(?:api|_expo)(?:\/|$)/.test(url.pathname)) return;
+  event.respondWith(fetch(request).catch(() => new Response(OFFLINE_DOCUMENT, {
+    status: 503,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    },
+  })));
+});
+
 self.addEventListener("push", event => {
   let payload = {};
   try { payload = event.data ? event.data.json() : {}; } catch { payload = {}; }
