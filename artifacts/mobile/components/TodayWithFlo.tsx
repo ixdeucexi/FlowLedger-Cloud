@@ -373,6 +373,7 @@ export function TodayWithFlo({ ready }: { ready: boolean }) {
             width: "100%",
             maxWidth: 440,
             maxHeight: "90%",
+            flexGrow: 0,
             borderRadius: 24,
             backgroundColor: c.card,
           }}
