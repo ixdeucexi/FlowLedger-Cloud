@@ -3,6 +3,7 @@
 import Feather from "@expo/vector-icons/Feather";
 import { FloLauncherSetting } from "@/components/FloLauncherSetting";
 import { TodayWithFloSetting } from "@/components/TodayWithFloSetting";
+import { AccountDeletionSetting } from "@/components/AccountDeletionSetting";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
@@ -5603,6 +5604,7 @@ export default function MoreScreen({
           <>
             <View style={{ marginTop: 8, marginBottom: 8 }}>
               <BiometricLockSettings />
+              <AccountDeletionSetting />
               <View
                 style={[
                   styles.card,

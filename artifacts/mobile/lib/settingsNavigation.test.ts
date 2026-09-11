@@ -4,6 +4,21 @@ import { readFileSync } from "node:fs";
 import { createSettingsRestoreGuard, requestedSettingsSection, restoreSavedSettingsSection } from "./settingsNavigation";
 
 type Section = "overview" | "household" | "money";
+
+test("mobile and desktop security settings link to existing verified deletion screen", () => {
+  const entry = readFileSync("components/AccountDeletionSetting.tsx", "utf8");
+  assert.match(entry, /router.push\("\/delete-account" as never\)/);
+  assert.match(entry, /accessibilityRole="button"/);
+  assert.match(entry, /accessibilityLabel="Delete account"/);
+  assert.match(entry, /minHeight: 64/);
+  assert.doesNotMatch(entry, /deleteFlowLedgerAccount|supabase|signOut|fetch\(/);
+  for (const path of ["app/(tabs)/more.tsx", "components/desktop/DesktopSettingsPage.tsx"]) {
+    assert.match(readFileSync(path, "utf8"), /<BiometricLockSettings[^>]*\/>\s*<AccountDeletionSetting \/>/);
+  }
+  const deletion = readFileSync("app/delete-account.tsx", "utf8");
+  assert.match(deletion, /confirmation.trim\(\) !== "DELETE"/);
+  assert.match(deletion, /verify your identity/);
+});
 const isSection = (value: unknown): value is Section => ["overview", "household", "money"].includes(String(value));
 
 test("explicit empty section means overview, while only absence allows saved restoration", () => {

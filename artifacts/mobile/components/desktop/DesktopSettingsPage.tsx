@@ -1,6 +1,7 @@
 import Feather from "@expo/vector-icons/Feather";
 import { FloLauncherSetting } from "@/components/FloLauncherSetting";
 import { TodayWithFloSetting } from "@/components/TodayWithFloSetting";
+import { AccountDeletionSetting } from "@/components/AccountDeletionSetting";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -438,6 +439,7 @@ export function DesktopSettingsPage({
             {section === "Data & security" ? (
               <>
                 <BiometricLockSettings appearance="desktop" />
+                <AccountDeletionSetting />
                 <DesktopCard>
                   <View style={styles.sectionBody}>
                     <Text style={styles.supportNote}>
