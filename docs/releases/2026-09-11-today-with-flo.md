@@ -24,4 +24,34 @@ Previous deployment: `dpl_A47YjxTFxh1eqTd4vZm5WFTH54sR`.
 Recovery: `vercel rollback dpl_A47YjxTFxh1eqTd4vZm5WFTH54sR --yes`.
 Flo Edge function remains version 36; no schema, financial records or backend deployment changes.
 
-Candidate browser results and production receipt are recorded after the release gate. No physical Android/iOS device testing is claimed.
+## Deploy Result
+
+- URL: https://flowledger-algo.com
+- Candidate: https://flow-ledger-cloud-grafsp3w0-flow-ledger-s-projects.vercel.app
+- Deployment: `dpl_4q6yRD2UxYsuQbLdM1EA2q14caa1`
+- Target: production
+- Status: READY; tested artifact promoted without rebuilding
+- Commit: `326073110617898c44898908b3ae11a5bcfc8624`
+- Framework: Expo Router web export (Vercel custom/static configuration)
+- Build duration: 143 seconds from buildingAt to ready
+- Entrypoint: `entry-ad8018ca92a6a7337549d4e6b1cbbf5d.js`
+
+## Final verification and release gate
+
+- Final full preflight at `90aa839`: 980 mobile tests and 5 isolated performance checks, all API/Edge/release-fixture suites, all typechecks, web export, guide/artifact scans, audit policy and Expo Doctor 18/18 passed.
+- One subsequent style-only correction (`flexGrow: 0`) keeps the scrollable card content-sized. Mobile typecheck and independent review passed for exact deployed commit `3260731`.
+- Authenticated synthetic QA account only; no customer account or financial-record writes. Existing Vercel automation access used for protected candidates; deployment protection was not disabled.
+- Exact final candidate: live-data scheduled-rent tip, compact card at 390x844 and 320x568, desktop card geometry at 1440x1000, Got it and reload suppression, independent desktop Settings OFF persistence with Flo shortcut still ON, then ON restored. Completed desktop Settings navigation verified separately from the responsive-transition screenshot.
+- Same functional source on first candidate: X, Escape, Back (stayed on Dashboard), action opened Bills, phone Settings OFF/reload/ON, and zero Flo-chat resource requests. Final artifact retains this behavior; only one layout style differed.
+- SENTINEL final release PASS before promotion. Rollback guard rechecked unchanged old production immediately before promotion.
+- Production postflight passed across all four production aliases at the exact clean deployed commit. Startup shell, executable assets, PWA/release contracts and guide passed.
+- Live canonical-origin QA: correct compact tip appeared after Dashboard readiness; Got it dismissed; reload did not repeat; new entrypoint confirmed and no Flo-chat request triggered.
+
+## Post-Deploy Observability
+
+- Error scan: no error logs returned for this deployment, last hour, before and after promotion. Browser error list empty.
+- Drains: not inspected; no monitoring configuration changed.
+- Monitoring: bounded deployment and browser checks completed; no ongoing monitoring created.
+- Limitations: no physical Android/iOS device test or multi-device preference sync is claimed. Preferences are per device and household. User interaction or unavailable data suppresses the optional overlay for that opening instead of interrupting late.
+
+The Supabase/account-isolation, React/browser verification, deployment/environment and PDF workflows informed the scoped preferences, independent quality gate, protected-candidate testing and rendered guide verification.
