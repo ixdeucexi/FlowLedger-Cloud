@@ -3,6 +3,7 @@ import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, findNodeHandle, Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
+import { useOverlayActivity } from "@/hooks/useOverlayActivity";
 import { subscribeConfirmAction, type ConfirmActionOptions } from "@/lib/confirmAction";
 
 interface DialogProps {
@@ -12,6 +13,7 @@ interface DialogProps {
 }
 
 function ConfirmActionDialog({ request, onClose, contained = false }: DialogProps) {
+  useOverlayActivity(true);
   const c = useColors();
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");

@@ -43,7 +43,6 @@ export function PwaInstallPrompt() {
   const [visible, setVisible] = useState(false);
   const [installEvent, setInstallEvent] = useState<DeferredInstallPrompt | null>(null);
   const [installed, setInstalled] = useState(false);
-  useBackDismiss(visible, () => setVisible(false));
 
   const platform = useMemo(() => {
     if (Platform.OS !== "web" || typeof navigator === "undefined") return "other";
@@ -54,6 +53,8 @@ export function PwaInstallPrompt() {
     if (isAndroid) return "android";
     return "desktop";
   }, []);
+
+  useBackDismiss(visible && Platform.OS === "web" && !installed && platform !== "desktop" && !storeCaptureMode, () => setVisible(false));
 
   useEffect(() => {
     if (Platform.OS !== "web" || typeof window === "undefined") return;

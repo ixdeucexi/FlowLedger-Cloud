@@ -1,5 +1,6 @@
 import Feather from "@expo/vector-icons/Feather";
 import { FloLauncherSetting } from "@/components/FloLauncherSetting";
+import { TodayWithFloSetting } from "@/components/TodayWithFloSetting";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -384,6 +385,7 @@ export function DesktopSettingsPage({
                 <CardHeader title="Preferences" />
                 <View style={styles.sectionBody}>
                   <FloLauncherSetting />
+                  <TodayWithFloSetting />
                   <OptionGroup
                     label="Theme"
                     value={themeMode}

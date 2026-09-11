@@ -92,7 +92,7 @@ def page_base(c, page_number, eyebrow, title, intro, accent=PURPLE):
     c.line(42, intro_bottom - 6, PAGE_WIDTH - 42, intro_bottom - 6)
     c.setFillColor(MUTED)
     c.setFont("Helvetica", 8)
-    c.drawString(42, 24, "FlowLedger User Guide - Updated September 10, 2026")
+    c.drawString(42, 24, "FlowLedger User Guide - Updated September 11, 2026")
     c.drawRightString(PAGE_WIDTH - 42, 24, f"Page {page_number}")
     return intro_bottom - 25
 
@@ -280,7 +280,7 @@ def build():
     callout(c, cover["callout"]["title"], cover["callout"]["body"], y - 3, accent=RED)
     c.setFillColor(MUTED)
     c.setFont("Helvetica", 9)
-    c.drawString(48, 30, "Phone, installed PWA, and desktop - updated September 10, 2026")
+    c.drawString(48, 30, "Phone, installed PWA, and desktop - updated September 11, 2026")
     finish_page(c)
 
     for page_number, slide in enumerate(catalog[1:], 2):

@@ -1,7 +1,9 @@
 import { useEffect, useRef } from "react";
 import { Platform } from "react-native";
+import { useOverlayActivity } from "./useOverlayActivity";
 
-export function useBackDismiss(active: boolean, onDismiss: () => void) {
+export function useBackDismiss(active: boolean, onDismiss: () => void, blocksDailyTip = true) {
+  useOverlayActivity(active && blocksDailyTip);
   const onDismissRef = useRef(onDismiss);
 
   useEffect(() => {

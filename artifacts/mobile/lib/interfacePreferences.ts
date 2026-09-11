@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { clearTodayWithFloStoresForUser, type TodayWithFloSaved } from "./todayWithFloPreferences";
 import { clearFloLauncherPreferenceStoresForUser } from "./floLauncherVisibility";
 import type { DashboardLayoutPreference } from "./dashboardCustomization";
 import type { NotificationCenterState } from "./notificationCenter";
@@ -23,6 +24,7 @@ export type ActivityPresentationState = {
 };
 
 export type InterfacePreferences = {
+  todayWithFlo?: TodayWithFloSaved;
   floLauncherEnabled?: boolean;
   lastRoute?: string;
   sidebarCollapsed?: boolean;
@@ -50,7 +52,11 @@ export async function readInterfacePreferences(
     const raw = await AsyncStorage.getItem(interfacePreferenceKey(userId, householdId));
     if (!raw) return {};
     const parsed = JSON.parse(raw) as unknown;
-    return parsed && typeof parsed === "object" ? parsed as InterfacePreferences : {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      if (throwOnError) throw new Error("Invalid interface preferences");
+      return {};
+    }
+    return parsed as InterfacePreferences;
   } catch (error) {
     if (throwOnError) throw error;
     return {};
@@ -81,6 +87,7 @@ export async function updateInterfacePreferences(
 }
 
 export async function clearInterfacePreferencesForUser(userId: string) {
+  clearTodayWithFloStoresForUser(userId);
   clearFloLauncherPreferenceStoresForUser(userId);
   try {
     const prefix = `${PREFERENCE_PREFIX}:${cleanScopePart(userId)}:`;
