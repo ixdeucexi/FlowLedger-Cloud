@@ -23,8 +23,9 @@ export function TodayWithFloSetting() {
           <Text
             style={{ color: c.mutedForeground, fontSize: 12, marginTop: 4 }}
           >
-            One useful takeaway when you open the app each day. On this device,
-            for this household. Separate from the Flo shortcut.
+            One useful takeaway from 8 AM in your household’s timezone, when the
+            app is open or you next return. On this device. Separate from the
+            Flo shortcut.
           </Text>
         </View>
         <Switch

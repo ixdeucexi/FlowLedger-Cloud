@@ -23,7 +23,7 @@ import { useDashboardFinancialSnapshot } from "@/context/DashboardFinancialSnaps
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useTodayWithFloPreference } from "@/hooks/useTodayWithFloPreference";
-import { localDateInTimeZone } from "@/lib/dailyCheckingClose";
+import { todayWithFloSchedule } from "@/lib/todayWithFloSchedule";
 import { overlayActivity } from "@/lib/overlayActivity";
 import {
   dailySnapshotMatches,
@@ -56,6 +56,7 @@ export function TodayWithFlo({ ready }: { ready: boolean }) {
     () => false,
   );
   const [foreground, setForeground] = useState(0);
+  const [morningEpoch, setMorningEpoch] = useState(0);
   const [active, setActive] = useState(AppState.currentState !== "background");
   const [presentation, setPresentation] = useState<Presentation | null>(null);
   const keyboardOpen = useRef(false);
@@ -104,6 +105,26 @@ export function TodayWithFlo({ ready }: { ready: boolean }) {
   useBackDismiss(visible, close, false);
 
   useEffect(() => {
+    if (!ready || !active || !preference.ready || !preference.enabled) return;
+    const schedule = todayWithFloSchedule(new Date(), householdTimeZone);
+    if (!schedule) return;
+    const timer = setTimeout(
+      () => setMorningEpoch((n) => n + 1),
+      Math.max(1, schedule.nextMorningAt - Date.now()),
+    );
+    return () => clearTimeout(timer);
+  }, [
+    ready,
+    active,
+    preference.ready,
+    preference.enabled,
+    householdTimeZone,
+    scope,
+    foreground,
+    morningEpoch,
+  ]);
+
+  useEffect(() => {
     let previous = AppState.currentState;
     const subscription = AppState.addEventListener("change", (state) => {
       setActive(state === "active");
@@ -148,7 +169,9 @@ export function TodayWithFlo({ ready }: { ready: boolean }) {
       !preference.householdId
     )
       return;
-    const opportunity = `${scope}:${foreground}`;
+    const morning = todayWithFloSchedule(new Date(), householdTimeZone);
+    if (!morning?.eligible) return;
+    const opportunity = `${scope}:${foreground}:${morning.day}:${morningEpoch}`;
     if (attemptedOpportunity.current === opportunity) return;
     attemptedOpportunity.current = opportunity;
     let cancelled = false;
@@ -202,12 +225,12 @@ export function TodayWithFlo({ ready }: { ready: boolean }) {
         }, 300);
         return;
       }
-      let day: string;
-      try {
-        day = localDateInTimeZone(new Date(), current.householdTimeZone);
-      } catch {
-        return;
-      }
+      const schedule = todayWithFloSchedule(
+        new Date(),
+        current.householdTimeZone,
+      );
+      if (!schedule?.eligible) return;
+      const day = schedule.day;
       const value = current.snapshot.value;
       if (
         !dailySnapshotMatches(
@@ -316,6 +339,8 @@ export function TodayWithFlo({ ready }: { ready: boolean }) {
     scope,
     budget,
     foreground,
+    morningEpoch,
+    householdTimeZone,
     pathname,
   ]);
 
