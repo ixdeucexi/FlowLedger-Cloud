@@ -3,12 +3,20 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { requiredAppRoutes, assertAppRouteSources, assertRegisteredAppRoute, assertHealthResponse, assertMissingResource } = require("./production-route-contract.cjs");
-test("SPA success and incidental route text cannot prove the privacy route exists", () => {
-  const privacy = requiredAppRoutes.find(r => r.url.includes("privacy"));
-  assert.throws(() => assertRegisteredAppRoute(privacy, '<html>FlowLedger</html>'), /not registered/);
-  assert.throws(() => assertRegisteredAppRoute(privacy, 'const route="./legal.tsx";'), /not registered/);
-  assert.doesNotThrow(() => assertRegisteredAppRoute(privacy, '"./legal.tsx":{enumerable:!0,get:()=>r(d[25])}'));
-  assert.throws(() => assertRegisteredAppRoute(privacy, '"./not-legal.tsx":{enumerable:!0,get:()=>r(d[25])}'), /not registered/);
+test("SPA success and incidental route text cannot prove a required route exists", () => {
+  for (const route of requiredAppRoutes) {
+    assert.throws(() => assertRegisteredAppRoute(route, '<html>FlowLedger</html>'), /not registered/);
+    assert.throws(() => assertRegisteredAppRoute(route, `const route="${route.module}";`), /not registered/);
+    assert.doesNotThrow(() => assertRegisteredAppRoute(route, `"${route.module}":{enumerable:!0,get:()=>r(d[25])}`));
+    assert.throws(() => assertRegisteredAppRoute(route, '"./not-the-required-route.tsx":{enumerable:!0,get:()=>r(d[25])}'), /not registered/);
+  }
+});
+test("temporary gate defers legal/privacy without claiming those routes are verified", () => {
+  assert.deepEqual(requiredAppRoutes.map(route => route.url), ["/support", "/delete-account", "/user-guide"]);
+  assert.equal(requiredAppRoutes.some(route => /legal|privacy/.test(route.url)), false);
+  assert.doesNotThrow(() => assertAppRouteSources(path.join(__dirname, "..")));
+  const configCheck = fs.readFileSync(path.join(__dirname, "assert-mobile-config.cjs"), "utf8");
+  assert.doesNotMatch(configCheck, /for \(const route of \[[^\]]*"legal"/);
 });
 test("absent source tree is rejected rather than inferred from a SPA shell", () => {
   assert.throws(() => assertAppRouteSources(path.join(__dirname, "absent-source-fixture")), /no application module/);

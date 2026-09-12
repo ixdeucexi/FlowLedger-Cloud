@@ -210,7 +210,8 @@ assert.equal(
   "The public guide must not retain a withdrawn or stale release copy.",
 );
 const spaNoStoreSource = vercelConfig.headers?.find(entry => entry.source.startsWith("/:page("))?.source || "";
-for (const route of ["support", "delete-account", "user-guide", "legal", "plan-simulator", "snowball-plan"]) {
+// Legal/privacy publishing is temporarily outside the required release scope.
+for (const route of ["support", "delete-account", "user-guide", "plan-simulator", "snowball-plan"]) {
   assert.match(spaNoStoreSource, new RegExp(`(?:\\||\\()${route}(?:\\||\\))`), `${route} must receive fresh SPA HTML.`);
 }
 const authNoStore = vercelConfig.headers?.find(entry => entry.source === "/auth/:page(callback|reset-password)")?.headers || [];

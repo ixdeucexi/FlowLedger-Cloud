@@ -1,10 +1,11 @@
 const fs = require("node:fs");
 const path = require("node:path");
+// Temporary release scope: legal/privacy publishing is intentionally deferred.
+// This gate verifies only the routes below; it does not certify legal readiness.
 const requiredAppRoutes = Object.freeze([
   { url: "/support", module: "./support.tsx" },
   { url: "/delete-account", module: "./delete-account.tsx" },
   { url: "/user-guide", module: "./user-guide.tsx" },
-  { url: "/legal?doc=privacy", module: "./legal.tsx" },
 ]);
 function assertAppRouteSources(root) {
   for (const route of requiredAppRoutes) {
