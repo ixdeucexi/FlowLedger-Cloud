@@ -458,7 +458,9 @@ export default function MonthlyScreen() {
         const now = new Date();
         setMonth(now.getMonth());
         setSelectedYear(now.getFullYear());
-        setSelectedDate(todayIsoDate());
+        // Start on the current month without opening a day overlay. Details
+        // appear only after the user taps a calendar date.
+        setSelectedDate(null);
       } else if (!requestedDate && saved && saved.month >= 0 && saved.month <= 11 && saved.year >= 2000 && saved.year <= 2200) {
         setMonth(saved.month);
         setSelectedYear(saved.year);
@@ -494,6 +496,14 @@ export default function MonthlyScreen() {
         viewport.content = previousContent;
       };
     }, []),
+  );
+  useFocusEffect(
+    useCallback(() => {
+      if (isDesktop) return undefined;
+      const requestedDate = Array.isArray(routeParams.openDate) ? routeParams.openDate[0] : routeParams.openDate;
+      if (!requestedDate) setSelectedDate(null);
+      return undefined;
+    }, [isDesktop, routeParams.openDate]),
   );
   const paidPromptPendingRef = useRef<Set<string>>(new Set());
   const paidSaveSnapshotRef = useRef<Record<string, { value: string; at: number }>>({});
