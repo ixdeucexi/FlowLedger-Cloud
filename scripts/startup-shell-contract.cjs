@@ -2,12 +2,12 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
-// Floating-logo shell plus decorative reduced-motion-aware dotted ring.
-// Controller and noscript guards are unchanged; no readiness/timing changes.
-const EXPECTED_STYLE_SHA256 = "364a32273b24b8eccb630452a5bd7ae5c77f7048dd4b2bdd9d259d9ba54673c1";
+// Reviewed d6007b9 floating-logo shell: no tile radius/drop shadow; startup-logo.png.
+// Controller and noscript guards are unchanged.
+const EXPECTED_STYLE_SHA256 = "a77e9bd6d705b7c8be0cfb31b518baf13b6cac3e229a07d9e47adce5226e032f";
 const EXPECTED_CONTROLLER_SHA256 = "122db0d9fc5d8baa041e43d2f2e2dc809221836fd8d7de2866bde02b2b7ec388";
 const EXPECTED_NOSCRIPT_SHA256 = "cd9d9810020d0dc0ad6f4239233d4e185e61c50a45d3e8522bc3ce58ea5efbce";
-const EXPECTED_DOCUMENT_SHA256 = "a512743714a437b81442cf58655d3aa83abe0dd9c7fcc8fc5878c4f1070dd1ee";
+const EXPECTED_DOCUMENT_SHA256 = "7b0ae1721c713118867cc02888345d5bfde107fd88d4cf5fba5205a6de342a96";
 
 function stripMarkupComments(source) {
   return source

@@ -88,30 +88,6 @@
         font: 800 20px/1.2 Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
 
-      .flowledger-web-startup-dots,
-      #flowledger-react-startup-dots {
-        position: relative;
-        width: 32px;
-        height: 32px;
-        margin-top: 18px;
-        pointer-events: none;
-        animation: flowledger-startup-dots 1.2s linear infinite;
-      }
-      .flowledger-web-startup-dots span {
-        position: absolute;
-        width: 4px;
-        height: 4px;
-        border-radius: 50%;
-        background: #a855f7;
-      }
-      @keyframes flowledger-startup-dots {
-        to { transform: rotate(360deg); }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .flowledger-web-startup-dots,
-        #flowledger-react-startup-dots { animation: none; }
-      }
-
       @media (max-width: 767px) {
         * {
           scrollbar-width: none;
@@ -142,16 +118,6 @@
           height="200"
         />
         <p class="flowledger-web-startup-status">Loading Plan...</p>
-        <div class="flowledger-web-startup-dots" aria-hidden="true">
-          <span style="left:14px;top:0;opacity:.25"></span>
-          <span style="left:24px;top:4px;opacity:.35"></span>
-          <span style="left:28px;top:14px;opacity:.45"></span>
-          <span style="left:24px;top:24px;opacity:.55"></span>
-          <span style="left:14px;top:28px;opacity:.65"></span>
-          <span style="left:4px;top:24px;opacity:.75"></span>
-          <span style="left:0;top:14px;opacity:.85"></span>
-          <span style="left:4px;top:4px;opacity:.95"></span>
-        </div>
       </div>
     </div>
     <noscript>
