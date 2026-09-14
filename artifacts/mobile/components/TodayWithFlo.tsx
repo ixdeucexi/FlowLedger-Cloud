@@ -276,6 +276,16 @@ export function TodayWithFlo({ ready }: { ready: boolean }) {
               ) ?? null,
             categories: value.model.categoryPlan,
             safetyFloor: value.model.algorithmSuite.safeCushion.safetyFloor,
+            cashFlowRisk: {
+              lowestBalance:
+                value.model.algorithmSuite.safeCushion.lowestBalance,
+              safetyFloor: value.model.algorithmSuite.safeCushion.safetyFloor,
+            },
+            accountHealth: {
+              checkingBalance: value.model.bankCurrentCheckingBalance,
+              pendingCount: value.model.checkingPendingTransactions.length,
+              confidence: value.model.algorithmSuite.flowScore.confidence,
+            },
           },
           Object.values(preference.store.getSnapshot().history)
             .flat()

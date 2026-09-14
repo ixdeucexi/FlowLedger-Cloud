@@ -36,6 +36,12 @@ export type FloDailyFacts = {
     status: string;
   }[];
   safetyFloor?: number;
+  cashFlowRisk?: { lowestBalance: number; safetyFloor: number };
+  accountHealth?: {
+    checkingBalance: number | null;
+    pendingCount: number;
+    confidence: "high" | "medium" | "low";
+  };
 };
 const money = (amount: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
@@ -47,9 +53,10 @@ export function selectTodayWithFlo(
 ): FloDailyTip | null {
   const tips: FloDailyTip[] = [];
   if (
-    facts.decisions.some(
-      (d) => d.id === "breathing-room-opportunity" && d.tone === "risk",
-    )
+    facts.cashFlowRisk &&
+    Number.isFinite(facts.cashFlowRisk.lowestBalance) &&
+    Number.isFinite(facts.cashFlowRisk.safetyFloor) &&
+    facts.cashFlowRisk.lowestBalance < facts.cashFlowRisk.safetyFloor
   ) {
     tips.push({
       topic: "forecast-risk",
@@ -73,17 +80,25 @@ export function selectTodayWithFlo(
       ],
       actionLabel: "Review items",
       route: "/(tabs)/review",
-      urgent: true,
+      urgent: false,
     });
   }
-  const bill = facts.upcoming
+  const bills = facts.upcoming
     .filter((b) => Number.isFinite(b.amount) && b.amount > 0)
     .map((b) => ({
       ...b,
       date: `${b.year}-${String(b.month + 1).padStart(2, "0")}-${String(b.day).padStart(2, "0")}`,
     }))
     .filter((b) => b.date >= facts.today)
-    .sort((a, b) => a.date.localeCompare(b.date))[0];
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const bill =
+    bills.find(
+      (b) =>
+        !b.pending &&
+        Date.parse(`${b.date}T00:00:00Z`) -
+          Date.parse(`${facts.today}T00:00:00Z`) <=
+          86400000,
+    ) ?? bills[0];
   if (bill)
     tips.push({
       topic: bill.pending ? "pending-payment" : "upcoming-bill",
@@ -99,10 +114,66 @@ export function selectTodayWithFlo(
       actionLabel: "Review bills",
       route: "/(tabs)/bills",
       urgent:
+        !bill.pending &&
         Date.parse(`${bill.date}T00:00:00Z`) -
           Date.parse(`${facts.today}T00:00:00Z`) <=
-        3 * 86400000,
+          86400000,
     });
+  const accountHealth = facts.accountHealth;
+  if (
+    accountHealth &&
+    (accountHealth.checkingBalance === null ||
+      Number.isFinite(accountHealth.checkingBalance))
+  ) {
+    tips.push({
+      topic: "account-balance-review",
+      title:
+        accountHealth.checkingBalance === null
+          ? "Give your plan a checking balance to work from"
+          : "Keep checking aligned with your bank",
+      details: [
+        accountHealth.checkingBalance === null
+          ? "Your prepared view does not have an available checking-balance snapshot."
+          : `Your prepared view records ${money(accountHealth.checkingBalance)} in checking.`,
+        "Review your accounts and compare with your bank. A recorded balance is not a promise of available spending money.",
+      ],
+      actionLabel: "Review accounts",
+      route: "/(tabs)/more",
+      params: { section: "accounts" },
+      urgent: false,
+    });
+  }
+  if (
+    accountHealth &&
+    Number.isInteger(accountHealth.pendingCount) &&
+    accountHealth.pendingCount > 0
+  ) {
+    tips.push({
+      topic: "account-pending-review",
+      title: "Keep pending activity in view",
+      details: [
+        `Your prepared view includes ${accountHealth.pendingCount} pending checking transaction${accountHealth.pendingCount === 1 ? "" : "s"}.`,
+        "Amounts or dates can change before posting. Review activity before recording a payment again.",
+      ],
+      actionLabel: "Review activity",
+      route: "/(tabs)/transactions",
+      urgent: false,
+    });
+  }
+  if (accountHealth && ["low", "medium"].includes(accountHealth.confidence)) {
+    tips.push({
+      topic: "plan-input-review",
+      title: "Strengthen the inputs behind your plan",
+      details: [
+        `The prepared forecast has ${accountHealth.confidence.toLowerCase()} input confidence.`,
+        "Review account balances, income timing and bills before relying on future projections.",
+      ],
+      actionLabel: "Review plan settings",
+      route: "/(tabs)/more",
+      params: { section: "money" },
+      urgent: false,
+    });
+  }
   const goal = facts.goals.find(
     (g) =>
       !g.closed_at &&
@@ -190,7 +261,7 @@ export function selectTodayWithFlo(
       ],
       actionLabel: "Review spending",
       route: "/(tabs)/transactions",
-      urgent: category.status === "over",
+      urgent: false,
     });
   if (
     typeof facts.safetyFloor === "number" &&
@@ -222,12 +293,19 @@ export function selectTodayWithFlo(
     });
   const urgent = tips.find((t) => t.urgent);
   if (urgent) return urgent;
-  // Least recently shown eligible topic wins. No random filler or all-clear guarantees.
+  // Routine bill reminders are a fallback, not a daily coaching priority.
+  const coaching = tips.filter(
+    (t) => !["upcoming-bill", "pending-payment"].includes(t.topic),
+  );
+  const pool = coaching.length ? coaching : tips;
+  // Rotate useful coaching; an undifferentiated review count wins only after
+  // equally recent account/plan tips, rather than permanently starving them.
   const selected =
-    tips.sort((a, b) =>
-      (history.find((h) => h.topic === a.topic)?.day ?? "").localeCompare(
-        history.find((h) => h.topic === b.topic)?.day ?? "",
-      ),
+    pool.sort(
+      (a, b) =>
+        (history.find((h) => h.topic === a.topic)?.day ?? "").localeCompare(
+          history.find((h) => h.topic === b.topic)?.day ?? "",
+        ) || Number(a.topic === "review") - Number(b.topic === "review"),
     )[0] ?? null;
   if (selected && history.some((h) => h.topic === selected.topic)) {
     const repeatTitles: Record<string, string> = {

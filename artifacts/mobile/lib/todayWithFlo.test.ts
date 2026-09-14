@@ -48,18 +48,17 @@ test("risk can repeat while ordinary useful topics rotate", () => {
     selectTodayWithFlo(
       {
         ...populated,
-        decisions: [{ id: "breathing-room-opportunity", tone: "risk" }],
+        cashFlowRisk: { lowestBalance: 150, safetyFloor: 200 },
       },
       [{ day: "2026-09-10", topic: "forecast-risk" }],
     )?.topic,
     "forecast-risk",
   );
 });
-test("due-soon pending bills beat coaching, preserve cents and warn against double payment", () => {
+test("pending bill fallback preserves cents and warns against double payment without claiming urgency", () => {
   const tip = selectTodayWithFlo(
     {
       ...facts,
-      safetyFloor: 200,
       upcoming: [
         {
           name: "Rent",
@@ -78,13 +77,13 @@ test("due-soon pending bills beat coaching, preserve cents and warn against doub
     tip!.details.join(" "),
     /\$900\.37.*2026-09-12.*before paying again/,
   );
-  assert.equal(tip?.urgent, true);
+  assert.equal(tip?.urgent, false);
 });
 test("catalog has ten distinct fact-backed topics, each with at most two details", () => {
   const samples: FloDailyFacts[] = [
     {
       ...facts,
-      decisions: [{ id: "breathing-room-opportunity", tone: "risk" }],
+      cashFlowRisk: { lowestBalance: 150, safetyFloor: 200 },
     },
     { ...facts, reviewCount: 2 },
     ...[true, false].map((pending) => ({
@@ -124,6 +123,150 @@ test("catalog has ten distinct fact-backed topics, each with at most two details
     tips.find((t) => t.topic === "goal-earmark")!.details.join(" "),
     /not a separate available-cash/,
   );
+});
+test("prepared cash-flow shortfall overrides coaching even when decisions omit the risk flag", () => {
+  const base = {
+    ...facts,
+    safetyFloor: 200,
+    cashFlowRisk: { lowestBalance: 199.99, safetyFloor: 200 },
+  };
+  assert.equal(selectTodayWithFlo(base, [])?.topic, "forecast-risk");
+  for (const lowestBalance of [200, 201, NaN])
+    assert.notEqual(
+      selectTodayWithFlo(
+        { ...base, cashFlowRisk: { lowestBalance, safetyFloor: 200 } },
+        [],
+      )?.topic,
+      "forecast-risk",
+    );
+  assert.notEqual(
+    selectTodayWithFlo(
+      { ...base, cashFlowRisk: { lowestBalance: 100, safetyFloor: NaN } },
+      [],
+    )?.topic,
+    "forecast-risk",
+  );
+});
+test("only nonpending today/tomorrow bills override coaching; an earlier pending item cannot hide them", () => {
+  const pending = {
+    name: "Pending",
+    amount: 10,
+    day: 11,
+    month: 8,
+    year: 2026,
+    pending: true,
+  };
+  const bill = {
+    name: "Required",
+    amount: 50.12,
+    day: 12,
+    month: 8,
+    year: 2026,
+    pending: false,
+  };
+  const base = { ...facts, safetyFloor: 200, upcoming: [pending, bill] };
+  const urgent = selectTodayWithFlo(base, [])!;
+  assert.equal(urgent.urgent, true);
+  assert.match(urgent.title, /Required/);
+  assert.equal(
+    selectTodayWithFlo({ ...base, upcoming: [{ ...bill, day: 13 }] }, [])
+      ?.topic,
+    "cushion-review",
+  );
+  assert.equal(
+    selectTodayWithFlo({ ...base, upcoming: [pending] }, [])?.topic,
+    "cushion-review",
+  );
+});
+test("account coaching rotates for a week without routine bills or review count starving it", () => {
+  const base: FloDailyFacts = {
+    ...facts,
+    safetyFloor: 200,
+    reviewCount: 4,
+    accountHealth: {
+      checkingBalance: 500.23,
+      pendingCount: 2,
+      confidence: "low",
+    },
+    goals: [{ name: "Trip", current_amount: 20, target_amount: 100 }],
+    payday: { date: "2026-09-25", income: 1500 },
+    categories: [{ category: "Food", spent: 25, budgeted: 20, status: "over" }],
+    upcoming: [
+      {
+        name: "Routine",
+        amount: 35,
+        day: 25,
+        month: 8,
+        year: 2026,
+        pending: false,
+      },
+    ],
+  };
+  const history: { day: string; topic: string }[] = [];
+  for (let i = 0; i < 7; i++) {
+    const tip = selectTodayWithFlo(base, history)!;
+    assert.notEqual(tip.topic, "upcoming-bill");
+    assert.equal(tip.urgent, false);
+    history.unshift({ day: `2026-09-${String(11 + i)}`, topic: tip.topic });
+  }
+  assert.equal(new Set(history.map((h) => h.topic)).size, 7);
+  for (const topic of [
+    "account-balance-review",
+    "account-pending-review",
+    "plan-input-review",
+    "category-spending",
+  ])
+    assert.ok(history.some((h) => h.topic === topic));
+  assert.equal(selectTodayWithFlo(base, history)?.topic, "review");
+});
+test("account balance facts remain recorded snapshots; missing and invalid values do not become dollars", () => {
+  for (const checkingBalance of [0, -12.34, 500.23]) {
+    const tip = selectTodayWithFlo(
+      {
+        ...facts,
+        accountHealth: { checkingBalance, pendingCount: 0, confidence: "high" },
+      },
+      [],
+    )!;
+    assert.match(tip.details.join(" "), /prepared view records/);
+    assert.match(tip.details.join(" "), /not a promise/);
+    assert.equal(tip.urgent, false);
+  }
+  const missing = selectTodayWithFlo(
+    {
+      ...facts,
+      accountHealth: {
+        checkingBalance: null,
+        pendingCount: 0,
+        confidence: "high",
+      },
+    },
+    [],
+  )!;
+  assert.match(missing.details[0], /does not have/);
+  assert.doesNotMatch(missing.details.join(" "), /\$0/);
+  assert.equal(
+    selectTodayWithFlo(
+      {
+        ...facts,
+        accountHealth: {
+          checkingBalance: NaN,
+          pendingCount: NaN,
+          confidence: "high",
+        },
+      },
+      [],
+    ),
+    null,
+  );
+});
+test("canonical low and medium confidence levels select input review regardless of display wording", () => {
+  for (const confidence of ["low", "medium"] as const) {
+    const tip = selectTodayWithFlo({ ...facts, accountHealth: { checkingBalance: NaN, pendingCount: 0, confidence } }, []);
+    assert.equal(tip?.topic, "plan-input-review");
+  }
+  const source = readFileSync("components/TodayWithFlo.tsx", "utf8");
+  assert.match(source, /confidence: value.model.algorithmSuite.flowScore.confidence/);
 });
 test("snapshot identity and household date must all match", () => {
   const identity = { userId: "u", householdId: "h", budgetId: "b" };
