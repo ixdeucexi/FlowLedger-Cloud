@@ -47,11 +47,12 @@ test("calendar summaries exclude transfers and balance reconciliations", () => {
   });
 });
 
-test("calendar categories use the shared five-color financial system", () => {
+test("calendar categories keep debt distinct from generic plans", () => {
   const transferIds = new Set(["transfer"]);
   const overdueKeys = new Set(["bill:2026-08-05"]);
   assert.equal(calendarEventKind(event("paycheck", 2500, "income"), transferIds), "income");
   assert.equal(calendarEventKind(event("bill", -120, "bill"), transferIds), "bill");
+  assert.equal(calendarEventKind({ ...event("debt", -120, "bill"), debtTargetBillId: "debt" }, transferIds), "debt");
   assert.equal(calendarEventKind(event("transfer", -400), transferIds), "plan");
   assert.equal(calendarEventKind(event("goal", -300, "goal"), transferIds), "plan");
   assert.equal(calendarEventKind(event("purchase", -85), transferIds), "spending");

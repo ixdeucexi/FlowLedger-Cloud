@@ -59,6 +59,11 @@ import {
 import { hasBucketRemainderFunding, latestBucketRemainderAvailableDate } from "@/lib/snowballFunding";
 import { readInterfacePreferences, updateInterfacePreferences } from "@/lib/interfacePreferences";
 
+// A calendar remembers navigation while the app stays open, but a cold start
+// should always give the user a useful current-day view. The scope key keeps
+// separate households/users isolated when auth changes in the same runtime.
+const calendarRuntimeScopes = new Set<string>();
+
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly", quarterly: "Quarterly" };
 
@@ -443,10 +448,18 @@ export default function MonthlyScreen() {
     calendarPreferenceReadyRef.current = false;
     let active = true;
     const requestedDate = Array.isArray(routeParams.openDate) ? routeParams.openDate[0] : routeParams.openDate;
+    const scopeKey = `${user.id}:${activeHousehold.householdId}`;
+    const isColdCalendarStart = !calendarRuntimeScopes.has(scopeKey);
+    calendarRuntimeScopes.add(scopeKey);
     void readInterfacePreferences(user.id, activeHousehold.householdId).then(preferences => {
       if (!active) return;
       const saved = preferences.calendar;
-      if (!requestedDate && saved && saved.month >= 0 && saved.month <= 11 && saved.year >= 2000 && saved.year <= 2200) {
+      if (!requestedDate && isColdCalendarStart) {
+        const now = new Date();
+        setMonth(now.getMonth());
+        setSelectedYear(now.getFullYear());
+        setSelectedDate(todayIsoDate());
+      } else if (!requestedDate && saved && saved.month >= 0 && saved.month <= 11 && saved.year >= 2000 && saved.year <= 2200) {
         setMonth(saved.month);
         setSelectedYear(saved.year);
         setSelectedDate(saved.selectedDate && /^\d{4}-\d{2}-\d{2}$/.test(saved.selectedDate) ? saved.selectedDate : null);

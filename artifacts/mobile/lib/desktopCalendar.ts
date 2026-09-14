@@ -11,6 +11,7 @@ export type CalendarForecastDay = {
 export type DesktopCalendarEventKind =
   | "income"
   | "bill"
+  | "debt"
   | "plan"
   | "spending"
   | "risk";
@@ -50,13 +51,18 @@ export function calendarEventKind(
   ) {
     return "plan";
   }
+  if (
+    Boolean(event.debtTargetBillId) ||
+    event.sourceType === "extra_payment" ||
+    event.kind === "debt_payment"
+  ) {
+    return "debt";
+  }
   if (event.sourceType === "bill" || event.kind === "bill") return "bill";
   if (
     event.sourceType === "goal" ||
     event.sourceType === "decision" ||
-    event.sourceType === "extra_payment" ||
-    event.kind === "goal" ||
-    event.kind === "debt_payment"
+    event.kind === "goal"
   ) {
     return "plan";
   }

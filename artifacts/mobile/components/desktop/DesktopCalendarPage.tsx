@@ -101,7 +101,8 @@ function eventTone(kind: DesktopCalendarEventKind) {
   return {
     income: { color: palette.green, background: palette.greenSoft },
     bill: { color: palette.amber, background: palette.amberSoft },
-    plan: { color: palette.blue, background: palette.blueSoft },
+    debt: { color: palette.blue, background: palette.blueSoft },
+    plan: { color: palette.textSecondary, background: palette.surfaceMuted },
     spending: { color: palette.purple, background: palette.purpleSoft },
     risk: { color: palette.red, background: palette.redSoft },
   }[kind];
@@ -248,7 +249,7 @@ function CalendarEventPill({
 function CalendarLegend() {
   return (
     <View accessibilityLabel="Calendar legend" style={styles.legend}>
-      {(["income", "bill", "plan", "spending", "risk"] as const).map((kind) => {
+      {(["income", "bill", "debt", "plan", "spending", "risk"] as const).map((kind) => {
         const tone = eventTone(kind);
         return (
           <View key={kind} style={styles.legendItem}>

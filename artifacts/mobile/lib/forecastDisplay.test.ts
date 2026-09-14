@@ -124,10 +124,13 @@ test("a canonical child opens the editor for its source debt and occurrence", ()
 
 test("planned badges name the money type while real statuses stay intact", () => {
   const bill = event({ id: "apple", sourceType: "bill", sourceId: "apple", kind: "bill", date: "2026-08-28", amount: -10.99, status: "scheduled" });
+  const debtBill = event({ id: "card-bill", sourceType: "bill", sourceId: "card", kind: "bill", date: "2026-08-28", amount: -120, status: "scheduled", debtTargetBillId: "card" });
   const debt = event({ id: "tesla-required", sourceType: "extra_payment", sourceId: "tesla", kind: "debt_payment", date: "2026-08-28", amount: -695.51, status: "scheduled", debtPlanAllocationKind: "required" });
   const snowball = event({ id: "tesla-extra", sourceType: "extra_payment", sourceId: "tesla", kind: "debt_payment", date: "2026-08-28", amount: -50, status: "planned", debtPlanAllocationKind: "extra" });
 
   assert.equal(forecastItemBadgeLabel(bill, "scheduled"), "Bill");
+  assert.equal(forecastItemTypeLabel(debtBill), "Debt");
+  assert.equal(groupForecastEvents([debtBill])[0].title, "Debt payments");
   assert.equal(forecastItemTypeLabel(debt), "Debt");
   assert.equal(forecastItemBadgeLabel(debt, "scheduled"), "Debt");
   assert.equal(forecastItemBadgeLabel(snowball, "planned"), "Snowball");

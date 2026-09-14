@@ -1341,6 +1341,7 @@ export function createFinancialProjection(
               name: b.name,
               configuredOccurrenceAmount: finalizedAmount,
               settledOccurrenceAmount: Math.abs(Number(match?.amount) || 0),
+              ...(b.is_debt ? { debtTargetBillId: b.id } : {}),
             });
           });
           return;
@@ -1363,6 +1364,7 @@ export function createFinancialProjection(
             name: b.name,
             configuredOccurrenceAmount: amt,
             settledOccurrenceAmount: Math.abs(Number(match?.amount) || 0),
+            ...(b.is_debt ? { debtTargetBillId: b.id } : {}),
           });
         });
       });

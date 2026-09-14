@@ -58,7 +58,7 @@ function chipPalette(kind: ChipKind, isDark: boolean) {
     if (kind === "bill") return { bg: "#fef3c7", border: "#f59e0b", text: "#92400e" };
     if (kind === "debt") return { bg: "#dbeafe", border: "#3b82f6", text: "#1d4ed8" };
     if (kind === "goal") return { bg: "#f3e8ff", border: "#a855f7", text: "#6b21a8" };
-    if (kind === "plan") return { bg: "#dbeafe", border: "#3b82f6", text: "#1d4ed8" };
+    if (kind === "plan") return { bg: "#e0e7ff", border: "#6366f1", text: "#3730a3" };
     if (kind === "risk") return { bg: "#ffe4e6", border: "#fb7185", text: "#be123c" };
     return { bg: "#ede9fe", border: "#8b5cf6", text: "#5b21b6" };
   }
@@ -66,7 +66,7 @@ function chipPalette(kind: ChipKind, isDark: boolean) {
   if (kind === "bill") return { bg: "rgba(245,158,11,0.18)", border: "rgba(245,158,11,0.82)", text: "#fde68a" };
   if (kind === "debt") return { bg: "rgba(59,130,246,0.20)", border: "rgba(96,165,250,0.86)", text: "#bfdbfe" };
   if (kind === "goal") return { bg: "rgba(168,85,247,0.20)", border: "rgba(168,85,247,0.82)", text: "#e9d5ff" };
-  if (kind === "plan") return { bg: "rgba(59,130,246,0.20)", border: "rgba(96,165,250,0.86)", text: "#bfdbfe" };
+  if (kind === "plan") return { bg: "rgba(99,102,241,0.20)", border: "rgba(129,140,248,0.86)", text: "#c7d2fe" };
   if (kind === "risk") return { bg: "rgba(244,63,94,0.20)", border: "rgba(251,113,133,0.90)", text: "#fecdd3" };
   return { bg: "rgba(139,92,246,0.20)", border: "rgba(167,139,250,0.80)", text: "#ddd6fe" };
 }
@@ -211,10 +211,10 @@ export function CalendarView({
           const ordinaryDayTxs = ungroupedDayTxs.filter(transaction => !isSnowballPaymentTransaction(transaction));
           const displayEvents = combineSameDayDebtPaymentEvents(db?.events ?? []);
           const billEvents = displayEvents
-            .filter(event => event.amount < 0 && (event.sourceType === "bill" || event.kind === "bill"))
+            .filter(event => event.amount < 0 && !event.debtTargetBillId && (event.sourceType === "bill" || event.kind === "bill"))
             .slice(0, 3);
           const debtEvents = displayEvents
-            .filter(event => event.amount < 0 && (event.sourceType === "extra_payment" || event.kind === "debt_payment"))
+            .filter(event => event.amount < 0 && (event.sourceType === "extra_payment" || event.kind === "debt_payment" || Boolean(event.debtTargetBillId)))
             .slice(0, 2);
           const calendarGoals: CalendarGoalExpense[] = (db?.goalExpenses ?? []).map(goal => ({
             ...goal,
@@ -355,7 +355,8 @@ export function CalendarView({
         {[
           { label: "Income", color: CALENDAR.green },
           { label: "Bills", color: "#f59e0b" },
-          { label: "Plan", color: "#3b82f6" },
+          { label: "Debt", color: "#3b82f6" },
+          { label: "Plan", color: "#6366f1" },
           { label: "Spending", color: "#8b5cf6" },
           { label: "Risk", color: calendarTheme.red },
         ].map(item => (

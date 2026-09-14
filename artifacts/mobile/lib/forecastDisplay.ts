@@ -92,7 +92,7 @@ export function combineSameDayDebtPaymentEvents(events: FinancialEvent[] = []): 
 function groupKeyForEvent(event: FinancialEvent): ForecastEventGroupKey {
   if (event.sourceType === "reconciliation") return "plans";
   if (event.sourceType === "decision") return "plans";
-  if (event.kind === "debt_payment" || event.sourceType === "extra_payment") return "debt";
+  if (event.kind === "debt_payment" || event.sourceType === "extra_payment" || Boolean(event.debtTargetBillId)) return "debt";
   if (event.sourceType === "income" || event.kind === "scheduled_income") return "income";
   if (event.sourceType === "bill" || event.kind === "bill") return "bills";
   if (event.sourceType === "goal" || event.kind === "goal") return "goals";
@@ -116,7 +116,8 @@ export function formatEventStatus(status: FinancialEventStatus): string {
 }
 
 export function forecastItemTypeLabel(event: FinancialEvent): string {
-  if (event.kind === "debt_payment" || event.sourceType === "extra_payment") {
+  if (event.sourceType === "bill" && Boolean(event.debtTargetBillId)) return "Debt";
+  if (event.kind === "debt_payment" || event.sourceType === "extra_payment" || Boolean(event.debtTargetBillId)) {
     return event.debtPlanAllocationKind === "required" ? "Debt" : "Snowball";
   }
   if (event.kind === "bill" || event.sourceType === "bill") return "Bill";
