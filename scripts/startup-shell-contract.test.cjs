@@ -32,6 +32,21 @@ test("the approved floating-logo shell cannot silently restore the old tile", ()
   const oldTile = valid.replace("object-fit: contain;", "object-fit: contain; border-radius: 48px;");
   assert.throws(() => assertStartupShell(oldTile, "fixture"), /startup CSS/);
 });
+test("decorative startup dots remain reduced-motion aware without controller changes", () => {
+  assert.match(valid, /class="flowledger-web-startup-dots" aria-hidden="true"/);
+  assert.match(valid, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?#flowledger-react-startup-dots \{ animation: none; \}/);
+  assert.equal((valid.match(/<span style="left:/g) || []).length, 8);
+  assert.throws(() => assertStartupShell(valid.replace("animation: none;", "animation: flowledger-startup-dots 1.2s linear infinite;"), "fixture"), /startup CSS/);
+  const native = fs.readFileSync(path.resolve(__dirname, "..", "artifacts", "mobile", "components", "StartupLoadingDots.tsx"), "utf8");
+  assert.match(native, /useState\(true\)/);
+  assert.match(native, /useNativeDriver: true/);
+  assert.match(native, /isInteraction: false/);
+  assert.match(native, /animation.stop\(\)/);
+  assert.match(native, /subscription.remove\(\)/);
+  assert.match(native, /mounted && !eventReceived/);
+  assert.match(native, /importantForAccessibility="no-hide-descendants"/);
+  assert.doesNotMatch(native, /setTimeout|setInterval|requestAnimationFrame|onComplete|setAppReady/);
+});
 
 test("commented-out atomic hiding cannot satisfy the release shell contract", () => {
   const malformed = valid

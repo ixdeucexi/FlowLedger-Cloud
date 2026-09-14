@@ -1,5 +1,6 @@
 import React from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
+import { StartupLoadingDots } from "./StartupLoadingDots";
 
 const STARTUP_LOGO_SIZE = 200;
 
@@ -14,6 +15,7 @@ export function StartupPlanBrand() {
         resizeMode="contain"
       />
       <Text style={styles.status}>Loading Plan...</Text>
+      <StartupLoadingDots />
     </View>
   );
 }
