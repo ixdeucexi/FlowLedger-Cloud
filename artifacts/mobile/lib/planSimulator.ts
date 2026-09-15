@@ -49,6 +49,16 @@ export interface CanonicalPlanSimulationDay {
   events: FinancialEvent[];
 }
 
+/** Returns the first projected day whose closing balance is below zero. */
+export function firstNegativeBalanceDay(
+  days: readonly Pick<CanonicalPlanSimulationDay, "date" | "balance">[],
+): Pick<CanonicalPlanSimulationDay, "date" | "balance"> | null {
+  return days
+    .slice()
+    .sort((left, right) => left.date.localeCompare(right.date))
+    .find(day => Number.isFinite(day.balance) && day.balance < -0.005) ?? null;
+}
+
 export interface PlanSimulationBaseline {
   startDate: string;
   endDate: string;

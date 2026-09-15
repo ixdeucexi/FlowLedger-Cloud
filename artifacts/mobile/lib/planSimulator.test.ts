@@ -8,6 +8,7 @@ import {
   buildCanonicalPlanSimulationBaseline,
   debtPayoffCadenceForMonth,
   decodePlanSimulationChanges,
+  firstNegativeBalanceDay,
   normalizePlanSimulationRow,
   planSimulationStorageKey,
   planSimulationStoragePrefix,
@@ -138,6 +139,16 @@ test("extra debt uses the debt remaining after earlier canonical payments and ke
   assert.equal(result.debtExtraApplied, 60.19);
   assert.deepEqual(result.debtAllocations.map(item => [item.billId, item.amount]), [["concert", 60.19]]);
   assert.equal(result.days.find(day => day.date === "2026-08-14")?.outflow, 60.19);
+});
+
+test("negative balance alert selects the first projected day and preserves the exact amount", () => {
+  const days = [
+    { date: "2026-09-01", balance: 12.5 },
+    { date: "2026-09-02", balance: -0.01 },
+    { date: "2026-09-03", balance: -100 },
+  ];
+  assert.deepEqual(firstNegativeBalanceDay(days), { date: "2026-09-02", balance: -0.01 });
+  assert.equal(firstNegativeBalanceDay([{ date: "2026-09-01", balance: 0 }]), null);
 });
 
 test("payoff cadence applies rollover once per month instead of once per occurrence", () => {
