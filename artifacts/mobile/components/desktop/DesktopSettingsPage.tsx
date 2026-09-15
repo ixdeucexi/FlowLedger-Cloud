@@ -16,7 +16,6 @@ import {
 import { BiometricLockSettings } from "@/components/BiometricLockSettings";
 import { HouseholdSwitcher } from "@/components/HouseholdSwitcher";
 import { AdminMembershipTools } from "@/components/AdminMembershipTools";
-import { AdminMoneyHealth } from "@/components/AdminMoneyHealth";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { PlaidLinkButton } from "@/components/PlaidLinkButton";
 import {
@@ -656,13 +655,6 @@ export function DesktopSettingsPage({
                     </DesktopCard>
                   ) : null}
                 </View>
-                <DesktopCard>
-                  <CardHeader title="System Integrity" />
-                  <AdminMoneyHealth
-                    householdId={activeHousehold?.householdId}
-                    appearance="settings"
-                  />
-                </DesktopCard>
                 <DesktopCard>
                   <CardHeader title="Admin Notifications" />
                   <NotificationSettings scope="admin" appearance="settings" />
