@@ -32,7 +32,6 @@ import { useAuth } from "@/context/AuthContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useMembership } from "@/context/MembershipContext";
 import {
-  type AppFontStyle,
   type ThemeMode,
   useThemeMode,
 } from "@/context/ThemeContext";
@@ -63,7 +62,7 @@ const SECTIONS: Array<{
   },
   {
     label: "Appearance & feedback",
-    description: "Theme, text, and haptics",
+    description: "Theme and haptics",
     icon: "sliders",
   },
   {
@@ -142,7 +141,7 @@ export function DesktopSettingsPage({
   const { accounts, connectedBankAccounts, activeHousehold } = useBudget();
   const { actualPlan, loading: membershipLoading } = useMembership();
   const adminProAccess = hasAdminProAccess(actualPlan);
-  const { themeMode, setThemeMode, fontStyle, setFontStyle } = useThemeMode();
+  const { themeMode, setThemeMode } = useThemeMode();
   const {
     enabled: hapticsEnabled,
     ready: hapticsReady,
@@ -309,7 +308,7 @@ export function DesktopSettingsPage({
                 <View style={styles.previewGrid}>
                   <SettingsPreview
                     title="Appearance & feedback"
-                    rows={[`Theme: ${themeMode}`, `Text style: ${fontStyle}`]}
+                    rows={[`Theme: ${themeMode}`, "FlowLedger type scale"]}
                     action="Manage preferences"
                     onPress={() => setSection("Appearance & feedback")}
                   />
@@ -395,20 +394,6 @@ export function DesktopSettingsPage({
                       { label: "Auto", value: "auto" },
                     ]}
                     onChange={(value) => void setThemeMode(value as ThemeMode)}
-                  />
-                  <OptionGroup
-                    label="Text style"
-                    value={fontStyle}
-                    values={[
-                      { label: "Flow", value: "default" },
-                      { label: "Classic", value: "elegant" },
-                      { label: "Strong", value: "bold" },
-                      { label: "Friendly", value: "playful" },
-                      { label: "Comfort", value: "soft" },
-                    ]}
-                    onChange={(value) =>
-                      void setFontStyle(value as AppFontStyle)
-                    }
                   />
                   <SettingsLine
                     icon="smartphone"

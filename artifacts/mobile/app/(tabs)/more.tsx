@@ -34,7 +34,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AccountModal } from "@/components/AccountModal";
 import { AdminMembershipTools } from "@/components/AdminMembershipTools";
-import { AppText } from "@/components/AppText";
 import { BiometricLockSettings } from "@/components/BiometricLockSettings";
 import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import { FloLogo } from "@/components/FloLogo";
@@ -62,7 +61,6 @@ import { useMembership } from "@/context/MembershipContext";
 import { useAuth } from "@/context/AuthContext";
 import { useAppDiscovery } from "@/context/AppDiscoveryContext";
 import {
-  type AppFontStyle,
   type ThemeMode,
   useThemeMode,
 } from "@/context/ThemeContext";
@@ -182,44 +180,6 @@ const THEME_OPTIONS: { label: string; value: ThemeMode; icon: string }[] = [
   { label: "Light", value: "light", icon: "sun" },
   { label: "Dark", value: "dark", icon: "moon" },
   { label: "Auto", value: "auto", icon: "smartphone" },
-];
-
-const FONT_OPTIONS: {
-  label: string;
-  value: AppFontStyle;
-  icon: string;
-  desc: string;
-}[] = [
-  {
-    label: "Flow",
-    value: "default",
-    icon: "type",
-    desc: "Clear and balanced for everyday planning.",
-  },
-  {
-    label: "Classic",
-    value: "elegant",
-    icon: "feather",
-    desc: "A highly readable serif style.",
-  },
-  {
-    label: "Strong",
-    value: "bold",
-    icon: "bold",
-    desc: "Heavier text with clear contrast.",
-  },
-  {
-    label: "Friendly",
-    value: "playful",
-    icon: "smile",
-    desc: "Open, relaxed, and easy to scan.",
-  },
-  {
-    label: "Comfort",
-    value: "soft",
-    icon: "heart",
-    desc: "A calm, familiar reading style.",
-  },
 ];
 
 const BACKUP_COMPLETE_KEY = "flowledger_backup_exported";
@@ -430,7 +390,7 @@ export default function MoreScreen({
     reviewFilter?: string;
     reviewTransactionId?: string;
   }>();
-  const { themeMode, setThemeMode, fontStyle, setFontStyle } = useThemeMode();
+  const { themeMode, setThemeMode } = useThemeMode();
   const {
     enabled: hapticsEnabled,
     ready: hapticsReady,
@@ -2688,71 +2648,6 @@ export default function MoreScreen({
                   );
                 })}
               </View>
-            </View>
-            <SLabel c={c} text="Text style" />
-            <View
-              style={[
-                styles.card,
-                { backgroundColor: c.card, borderRadius: colors.radius },
-              ]}
-            >
-              {FONT_OPTIONS.map((opt, index) => {
-                const active = fontStyle === opt.value;
-                return (
-                  <Pressable
-                    key={opt.value}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: active }}
-                    onPress={() => {
-                      setFontStyle(opt.value);
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    }}
-                    style={({ pressed }) => [
-                      styles.dataRow,
-                      {
-                        borderTopWidth: index ? 1 : 0,
-                        borderTopColor: c.border,
-                        opacity: pressed ? 0.75 : 1,
-                      },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.dataIcon,
-                        {
-                          backgroundColor: active ? c.primary + "24" : c.muted,
-                        },
-                      ]}
-                    >
-                      <Feather
-                        name={opt.icon as any}
-                        size={17}
-                        color={active ? c.primary : c.mutedForeground}
-                      />
-                    </View>
-                    <View style={styles.dataBody}>
-                      <AppText
-                        tone="title"
-                        fontStyleOverride={opt.value}
-                        style={[styles.dataLabel, { color: c.foreground }]}
-                      >
-                        {opt.label}
-                      </AppText>
-                      <AppText
-                        fontStyleOverride={opt.value}
-                        style={[styles.dataDesc, { color: c.mutedForeground }]}
-                      >
-                        {opt.desc}
-                      </AppText>
-                    </View>
-                    <Feather
-                      name={active ? "check-circle" : "circle"}
-                      size={18}
-                      color={active ? c.primary : c.mutedForeground}
-                    />
-                  </Pressable>
-                );
-              })}
             </View>
             <SLabel c={c} text="Touch feedback" />
             <PlanningToolToggle

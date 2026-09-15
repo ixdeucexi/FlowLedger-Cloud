@@ -2,7 +2,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useState } from "react";
 
 export type ThemeMode = "auto" | "dark" | "light";
-export type AppFontStyle = "default" | "elegant" | "bold" | "playful" | "soft";
+// Keep a single app-wide font family. Weight and tone provide hierarchy while
+// avoiding the visual inconsistency of switching families between screens.
+// This type remains in the context for backwards compatibility.
+export type AppFontStyle = "default";
 
 interface ThemeContextValue {
   themeMode: ThemeMode;
@@ -24,7 +27,7 @@ const THEME_STORAGE_KEY = "@app_theme_v1";
 const FONT_STORAGE_KEY = "@app_font_style_v1";
 
 function isFontStyle(value: string | null): value is AppFontStyle {
-  return value === "default" || value === "elegant" || value === "bold" || value === "playful" || value === "soft";
+  return value === "default";
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -43,9 +46,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         if (theme === "auto" || theme === "dark" || theme === "light") {
           setThemeModeState(theme);
         }
-        if (isFontStyle(font)) {
-          setFontStyleState(font);
-        }
+        if (isFontStyle(font)) setFontStyleState(font);
+        else if (font != null) void AsyncStorage.setItem(FONT_STORAGE_KEY, "default");
       })
       .finally(() => {
         if (mounted) setReady(true);

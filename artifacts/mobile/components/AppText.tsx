@@ -11,8 +11,7 @@ type AppTextProps = TextProps & {
   fontStyleOverride?: AppFontStyle;
 };
 
-function getFontFamily(style: AppFontStyle): string | undefined {
-  if (style === "default") return undefined;
+function getFontFamily(style: AppFontStyle): string {
   return Platform.OS === "web" ? fontFamilyForStyle(style) : nativeFontFamilyForStyle(style);
 }
 
