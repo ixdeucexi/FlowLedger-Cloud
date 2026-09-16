@@ -2,7 +2,7 @@ import React from "react";
 import { Platform, StyleSheet, Text, type TextProps, type TextStyle } from "react-native";
 
 import { type AppFontStyle, useThemeMode } from "@/context/ThemeContext";
-import { fontFamilyForStyle, nativeFontFamilyForStyle } from "@/lib/appTypography";
+import { fontFamilyForStyle, fontFamilyForWeight, nativeFontFamilyForStyle } from "@/lib/appTypography";
 
 export type AppTextTone = "body" | "title" | "label" | "number" | "button" | "flo";
 
@@ -11,8 +11,11 @@ type AppTextProps = TextProps & {
   fontStyleOverride?: AppFontStyle;
 };
 
-function getFontFamily(style: AppFontStyle): string {
-  return Platform.OS === "web" ? fontFamilyForStyle(style) : nativeFontFamilyForStyle(style);
+function getFontFamily(style: AppFontStyle, weight: TextStyle["fontWeight"]): string {
+  return fontFamilyForWeight(
+    weight,
+    Platform.OS !== "web",
+  ) || (Platform.OS === "web" ? fontFamilyForStyle(style) : nativeFontFamilyForStyle(style));
 }
 
 function toneStyle(tone: AppTextTone): TextStyle | undefined {
@@ -36,8 +39,9 @@ function toneStyle(tone: AppTextTone): TextStyle | undefined {
 export function AppText({ tone = "body", fontStyleOverride, style, ...props }: AppTextProps) {
   const { fontStyle } = useThemeMode();
   const selectedStyle = fontStyleOverride ?? fontStyle;
-  const fontFamily = getFontFamily(selectedStyle);
   const flattened = StyleSheet.flatten(style) ?? {};
+  const explicitFontFamily = typeof flattened.fontFamily === "string" ? flattened.fontFamily : undefined;
+  const fontFamily = explicitFontFamily ?? getFontFamily(selectedStyle, flattened.fontWeight);
   const baseFontSize = typeof flattened.fontSize === "number" ? flattened.fontSize : 14;
   const lineHeightRatio = tone === "number" ? 1.08 : tone === "title" ? 1.18 : tone === "label" ? 1.25 : 1.34;
   const dynamicStyle: TextStyle = {
