@@ -275,6 +275,8 @@ export function TodayWithFlo({ ready }: { ready: boolean }) {
                 (d) => d.date > day && d.income > 0,
               ) ?? null,
             categories: value.model.categoryPlan,
+            monthlyIncome: value.model.cashFlow.monthlyIncome,
+            monthlyBills: value.model.cashFlow.totalBillsDue,
             safetyFloor: value.model.algorithmSuite.safeCushion.safetyFloor,
             cashFlowRisk: {
               lowestBalance:

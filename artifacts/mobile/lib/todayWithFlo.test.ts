@@ -55,7 +55,7 @@ test("risk can repeat while ordinary useful topics rotate", () => {
     "forecast-risk",
   );
 });
-test("pending bill fallback preserves cents and warns against double payment without claiming urgency", () => {
+test("routine and pending bill reminders are not selected as daily coaching", () => {
   const tip = selectTodayWithFlo(
     {
       ...facts,
@@ -72,26 +72,15 @@ test("pending bill fallback preserves cents and warns against double payment wit
     },
     [{ day: "2026-09-10", topic: "pending-payment" }],
   );
-  assert.equal(tip?.topic, "pending-payment");
-  assert.match(
-    tip!.details.join(" "),
-    /\$900\.37.*2026-09-12.*before paying again/,
-  );
-  assert.equal(tip?.urgent, false);
+  assert.equal(tip, null);
 });
-test("catalog has ten distinct fact-backed topics, each with at most two details", () => {
+test("catalog has eight distinct fact-backed coaching topics, each with at most two details", () => {
   const samples: FloDailyFacts[] = [
     {
       ...facts,
       cashFlowRisk: { lowestBalance: 150, safetyFloor: 200 },
     },
     { ...facts, reviewCount: 2 },
-    ...[true, false].map((pending) => ({
-      ...facts,
-      upcoming: [
-        { name: "Bill", amount: 1.23, day: 20, month: 8, year: 2026, pending },
-      ],
-    })),
     {
       ...facts,
       goals: [{ name: "Goal", current_amount: 1.23, target_amount: 5 }],
@@ -111,7 +100,7 @@ test("catalog has ten distinct fact-backed topics, each with at most two details
     { ...facts, decisions: [{ id: "snowball-target", tone: "info" }] },
   ];
   const tips = samples.map((f) => selectTodayWithFlo(f, [])!);
-  assert.equal(new Set(tips.map((t) => t.topic)).size, 10);
+  assert.equal(new Set(tips.map((t) => t.topic)).size, 8);
   assert.ok(
     tips.every((t) => t.details.length <= 2 && t.route.startsWith("/")),
   );
@@ -147,7 +136,7 @@ test("prepared cash-flow shortfall overrides coaching even when decisions omit t
     "forecast-risk",
   );
 });
-test("only nonpending today/tomorrow bills override coaching; an earlier pending item cannot hide them", () => {
+test("bill timing never overrides account coaching", () => {
   const pending = {
     name: "Pending",
     amount: 10,
@@ -165,9 +154,9 @@ test("only nonpending today/tomorrow bills override coaching; an earlier pending
     pending: false,
   };
   const base = { ...facts, safetyFloor: 200, upcoming: [pending, bill] };
-  const urgent = selectTodayWithFlo(base, [])!;
-  assert.equal(urgent.urgent, true);
-  assert.match(urgent.title, /Required/);
+  const tip = selectTodayWithFlo(base, [])!;
+  assert.equal(tip.topic, "cushion-review");
+  assert.equal(tip.urgent, false);
   assert.equal(
     selectTodayWithFlo({ ...base, upcoming: [{ ...bill, day: 13 }] }, [])
       ?.topic,
@@ -218,6 +207,32 @@ test("account coaching rotates for a week without routine bills or review count 
   ])
     assert.ok(history.some((h) => h.topic === topic));
   assert.equal(selectTodayWithFlo(base, history)?.topic, "review");
+});
+
+test("cash-buffer and paycheck-commitment tips use the recorded numbers", () => {
+  const bufferTip = selectTodayWithFlo(
+    {
+      ...facts,
+      safetyFloor: 300,
+      monthlyIncome: 2_000,
+      monthlyBills: 900,
+      accountHealth: { checkingBalance: 125, pendingCount: 0, confidence: "high" },
+    },
+    [{ day: "2026-09-15", topic: "account-balance-review" }],
+  );
+  assert.equal(bufferTip?.topic, "buffer-build");
+  assert.match(bufferTip!.details.join(" "), /\$175\.00 below the \$300\.00 safety floor/);
+
+  const commitmentTip = selectTodayWithFlo(
+    {
+      ...facts,
+      monthlyIncome: 2_000,
+      monthlyBills: 1_400,
+    },
+    [],
+  );
+  assert.equal(commitmentTip?.topic, "paycheck-commitments");
+  assert.match(commitmentTip!.details.join(" "), /About 70%/);
 });
 test("account balance facts remain recorded snapshots; missing and invalid values do not become dollars", () => {
   for (const checkingBalance of [0, -12.34, 500.23]) {

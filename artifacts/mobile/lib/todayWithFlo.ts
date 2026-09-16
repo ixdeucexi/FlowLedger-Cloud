@@ -35,6 +35,9 @@ export type FloDailyFacts = {
     spent: number;
     status: string;
   }[];
+  /** Prepared month totals used to turn general guidance into account-specific coaching. */
+  monthlyIncome?: number;
+  monthlyBills?: number;
   safetyFloor?: number;
   cashFlowRisk?: { lowestBalance: number; safetyFloor: number };
   accountHealth?: {
@@ -83,43 +86,8 @@ export function selectTodayWithFlo(
       urgent: false,
     });
   }
-  const bills = facts.upcoming
-    .filter((b) => Number.isFinite(b.amount) && b.amount > 0)
-    .map((b) => ({
-      ...b,
-      date: `${b.year}-${String(b.month + 1).padStart(2, "0")}-${String(b.day).padStart(2, "0")}`,
-    }))
-    .filter((b) => b.date >= facts.today)
-    .sort((a, b) => a.date.localeCompare(b.date));
-  const bill =
-    bills.find(
-      (b) =>
-        !b.pending &&
-        Date.parse(`${b.date}T00:00:00Z`) -
-          Date.parse(`${facts.today}T00:00:00Z`) <=
-          86400000,
-    ) ?? bills[0];
-  if (bill)
-    tips.push({
-      topic: bill.pending ? "pending-payment" : "upcoming-bill",
-      title: bill.pending
-        ? `Check ${bill.name} before paying again`
-        : `Keep ${bill.name} on your radar`,
-      details: [
-        `${money(bill.amount)} is scheduled for ${bill.date}.`,
-        bill.pending
-          ? "A payment is pending. Review its status before paying again."
-          : "Check payment status and your account balance before paying.",
-      ],
-      actionLabel: "Review bills",
-      route: "/(tabs)/bills",
-      urgent:
-        !bill.pending &&
-        Date.parse(`${bill.date}T00:00:00Z`) -
-          Date.parse(`${facts.today}T00:00:00Z`) <=
-          86400000,
-    });
   const accountHealth = facts.accountHealth;
+  const checkingBalance = accountHealth?.checkingBalance;
   if (
     accountHealth &&
     (accountHealth.checkingBalance === null ||
@@ -130,7 +98,7 @@ export function selectTodayWithFlo(
       title:
         accountHealth.checkingBalance === null
           ? "Give your plan a checking balance to work from"
-          : "Keep checking aligned with your bank",
+          : "Reconcile checking before your next move",
       details: [
         accountHealth.checkingBalance === null
           ? "Your prepared view does not have an available checking-balance snapshot."
@@ -140,6 +108,48 @@ export function selectTodayWithFlo(
       actionLabel: "Review accounts",
       route: "/(tabs)/more",
       params: { section: "accounts" },
+      urgent: false,
+    });
+  }
+  if (
+    accountHealth &&
+    typeof checkingBalance === "number" &&
+    Number.isFinite(checkingBalance) &&
+    typeof facts.safetyFloor === "number" &&
+    Number.isFinite(facts.safetyFloor) &&
+    checkingBalance < facts.safetyFloor
+  ) {
+    const gap = facts.safetyFloor - checkingBalance;
+    tips.push({
+      topic: "buffer-build",
+      title: "Build a small cash buffer first",
+      details: [
+        `Your recorded checking balance is ${money(gap)} below the ${money(facts.safetyFloor)} safety floor.`,
+        "Start with a small fixed amount each payday, then increase it when your cash flow allows.",
+      ],
+      actionLabel: "Plan my buffer",
+      route: "/(tabs)/monthly",
+      urgent: false,
+    });
+  }
+  if (
+    typeof facts.monthlyIncome === "number" &&
+    Number.isFinite(facts.monthlyIncome) &&
+    facts.monthlyIncome > 0 &&
+    typeof facts.monthlyBills === "number" &&
+    Number.isFinite(facts.monthlyBills) &&
+    facts.monthlyBills >= facts.monthlyIncome * 0.6
+  ) {
+    const committedPercent = Math.round((facts.monthlyBills / facts.monthlyIncome) * 100);
+    tips.push({
+      topic: "paycheck-commitments",
+      title: "Lower what is committed before payday",
+      details: [
+        `About ${committedPercent}% of this month's recorded income is committed to bills.`,
+        "Use a cash-flow budget to assign each paycheck before it arrives, then target one flexible expense to reduce.",
+      ],
+      actionLabel: "Open cash-flow plan",
+      route: "/(tabs)/monthly",
       urgent: false,
     });
   }
@@ -226,10 +236,10 @@ export function selectTodayWithFlo(
   )
     tips.push({
       topic: "payday",
-      title: "Give your next paycheck a plan",
+      title: "Give your next paycheck a job",
       details: [
         `Your prepared forecast includes ${money(facts.payday.income)} of scheduled income on ${facts.payday.date}.`,
-        "Expected income is not money received. Review bills around that date before assigning the rest.",
+        "Expected income is not money received. Assign essentials first, protect a small buffer, then decide what can go to debt or spending.",
       ],
       actionLabel: "View payday in forecast",
       route: "/(tabs)/monthly",
@@ -254,10 +264,10 @@ export function selectTodayWithFlo(
   if (category)
     tips.push({
       topic: "category-spending",
-      title: `Check in on ${category.category}`,
+      title: `${category.category} is a place to free up cash`,
       details: [
         `This month's plan shows ${money(category.spent)} spent against ${money(category.budgeted)} budgeted.`,
-        "Review the underlying activity before changing your category plan.",
+        "Review the underlying activity and choose one realistic reduction before the next payday.",
       ],
       actionLabel: "Review spending",
       route: "/(tabs)/transactions",
@@ -270,10 +280,10 @@ export function selectTodayWithFlo(
   )
     tips.push({
       topic: "cushion-review",
-      title: "Keep your cushion intentional",
+      title: "Protect your cash cushion",
       details: [
         `Your prepared plan uses a ${money(facts.safetyFloor)} safety floor.`,
-        "That is a planning setting—not proof the cash is available. Check actual balances and upcoming bills before extra spending.",
+        "Treat it as do-not-spend money until your next paycheck clears; check actual balances before extra spending.",
       ],
       actionLabel: "Review cushion in forecast",
       route: "/(tabs)/monthly",
@@ -282,10 +292,10 @@ export function selectTodayWithFlo(
   if (facts.decisions.some((d) => d.id === "snowball-target"))
     tips.push({
       topic: "debt-plan",
-      title: "Keep your next debt step intentional",
+      title: "Protect minimums, then attack one debt",
       details: [
-        "Review your current payoff target and required payments together.",
-        "Check bills, actual balances, and your cushion before sending extra money.",
+        "Keep every minimum payment covered, then direct extra money to your current payoff target.",
+        "Check bills, actual balances, and your cushion before sending anything extra.",
       ],
       actionLabel: "Review debt plan",
       route: "/snowball-plan",
@@ -293,11 +303,9 @@ export function selectTodayWithFlo(
     });
   const urgent = tips.find((t) => t.urgent);
   if (urgent) return urgent;
-  // Routine bill reminders are a fallback, not a daily coaching priority.
-  const coaching = tips.filter(
-    (t) => !["upcoming-bill", "pending-payment"].includes(t.topic),
-  );
-  const pool = coaching.length ? coaching : tips;
+  // Daily coaching is reserved for actions that improve the user's position;
+  // routine bill reminders are intentionally never selected here.
+  const pool = tips;
   // Rotate useful coaching; an undifferentiated review count wins only after
   // equally recent account/plan tips, rather than permanently starving them.
   const selected =
@@ -313,6 +321,8 @@ export function selectTodayWithFlo(
       "cushion-review": "Does your cushion still fit your plan?",
       "debt-plan": "Review your next payoff step",
       "category-spending": `Take another look at ${category?.category ?? "your category plan"}`,
+      "buffer-build": "What would close your buffer gap fastest?",
+      "paycheck-commitments": "Find one expense to free up before payday",
     };
     if (repeatTitles[selected.topic])
       return { ...selected, title: repeatTitles[selected.topic] };
