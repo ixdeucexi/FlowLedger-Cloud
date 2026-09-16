@@ -22,6 +22,11 @@ test("a confirmed zero-balance account completes starting money", () => {
   assert.equal(readiness.stages.find(stage => stage.id === "starting_money")?.complete, true);
 });
 
+test("a connected checking account can complete starting money without duplicate manual entry", () => {
+  const readiness = buildSetupReadiness({ ...baseInput(), accounts: [], connectedCheckingCount: 1 });
+  assert.equal(readiness.stages.find(stage => stage.id === "starting_money")?.complete, true);
+});
+
 test("explicit none answers complete empty cash-flow and debt sections", () => {
   let progress = defaultSetupScopeProgress("2026-08-12T00:00:00.000Z");
   progress = withSetupConfirmation(progress, "income_none", true);

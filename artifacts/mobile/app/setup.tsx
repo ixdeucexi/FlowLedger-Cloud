@@ -23,6 +23,7 @@ import { AppLoadingIntro } from "@/components/AppLoadingIntro";
 import { FloLogo } from "@/components/FloLogo";
 import { GoalModal } from "@/components/GoalModal";
 import { IncomeModal } from "@/components/IncomeModal";
+import { PlaidLinkButton } from "@/components/PlaidLinkButton";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { useAuth } from "@/context/AuthContext";
 import { useBudget, type Account, type Bill, type Goal, type IncomeItem } from "@/context/BudgetContext";
@@ -118,6 +119,7 @@ function SetupWizard() {
   const {
     activeHousehold,
     accounts,
+    connectedBankAccounts,
     incomes,
     bills,
     goals,
@@ -132,6 +134,7 @@ function SetupWizard() {
     deleteBillMistake,
     addGoal,
     updateSettings,
+    refreshBankData,
   } = useBudget();
 
   const scopeKey = setupScopeKey(user?.id, activeHousehold?.householdId);
@@ -169,13 +172,16 @@ function SetupWizard() {
     preferences,
     progress,
     accounts,
+    connectedCheckingCount: connectedBankAccounts.filter(account => account.is_active && String(account.account_subtype ?? "").toLowerCase() === "checking").length,
     incomeCount: incomes.length,
     bills,
     goalCount: goals.filter(goal => goal.goal_type === "savings" && !goal.closed_at).length,
     safetyFloor: settings.safety_floor,
     forecastMonths: settings.forecast_horizon_months,
-  }), [accounts, bills, goals, incomes.length, preferences, progress, settings.forecast_horizon_months, settings.safety_floor]);
+  }), [accounts, bills, connectedBankAccounts, goals, incomes.length, preferences, progress, settings.forecast_horizon_months, settings.safety_floor]);
   const activeAccount = accounts.find(account => account.is_active) ?? null;
+  const connectedCheckingAccounts = connectedBankAccounts.filter(account => account.is_active && String(account.account_subtype ?? "").toLowerCase() === "checking");
+  const connectedAccountCount = connectedBankAccounts.length;
   const recurringBills = bills.filter(item => !item.is_debt && item.is_recurring !== false);
   const debts = bills.filter(item => item.is_debt);
   const savingsGoals = goals.filter(goal => goal.goal_type === "savings" && !goal.closed_at);
@@ -194,6 +200,7 @@ function SetupWizard() {
           preferences: normalized,
           progress: nextProgress,
           accounts,
+          connectedCheckingCount: connectedBankAccounts.filter(account => account.is_active && String(account.account_subtype ?? "").toLowerCase() === "checking").length,
           incomeCount: incomes.length,
           bills,
           goalCount: savingsGoals.length,
@@ -315,6 +322,7 @@ function SetupWizard() {
       preferences,
       progress: finishedProgress,
       accounts,
+      connectedCheckingCount: connectedCheckingAccounts.length,
       incomeCount: incomes.length,
       bills,
       goalCount: savingsGoals.length,
@@ -346,7 +354,7 @@ function SetupWizard() {
       return;
     }
     if (stage === "starting_money") {
-      if (!activeAccount?.balance_as_of) {
+      if (!activeAccount?.balance_as_of && connectedCheckingAccounts.length === 0) {
         setSelectedAccount(activeAccount);
         setAccountModalVisible(true);
         return;
@@ -389,7 +397,7 @@ function SetupWizard() {
     stage === "priorities" ? !preferences.startingPoint || preferences.help.length === 0 :
     stage === "cashflow" || stage === "debt_savings" ? !stageStatus.complete : false
   );
-  const primaryLabel = stage === "starting_money" && !activeAccount?.balance_as_of
+  const primaryLabel = stage === "starting_money" && !activeAccount?.balance_as_of && connectedCheckingAccounts.length === 0
     ? "Add starting account"
     : stage === "review" ? (settings.onboarding_completed ? "Back to Dashboard" : "Open Dashboard") : "Continue";
 
@@ -451,25 +459,53 @@ function SetupWizard() {
   );
 
   const renderStartingMoney = () => (
-    <SectionCard title="Your everyday account" subtitle="The account, balance, and balance date become the trusted starting point for Forecast.">
-      {activeAccount ? (
-        <DataRow
-          icon="credit-card"
-          title={activeAccount.name}
-          detail={`${activeAccount.account_type} · balance confirmed ${activeAccount.balance_as_of || "date missing"}`}
-          value={`$${Number(activeAccount.current_balance).toFixed(2)}`}
-          action="Review"
+    <>
+      <SectionCard title="Bring in your money" subtitle="Connect a bank to bring in balances and checking activity, or enter a starting account yourself. Your place is saved as you go.">
+        <View style={styles.importCallout}>
+          <View style={styles.importCalloutIcon}><Feather name="zap" size={18} color="#c4b5fd" /></View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.importCalloutTitle}>Recommended: connect your bank</Text>
+            <Text style={styles.importCalloutText}>Plaid securely imports checking and savings balances. You can review everything before Forecast uses it.</Text>
+          </View>
+        </View>
+        <PlaidLinkButton colors={colors} onConnected={refreshBankData} />
+        {connectedAccountCount > 0 ? (
+          <View style={styles.connectedNotice}>
+            <Feather name="check-circle" size={16} color="#86efac" />
+            <Text style={styles.connectedNoticeText}>{connectedAccountCount} connected account{connectedAccountCount === 1 ? "" : "s"} available. Confirm your everyday account below.</Text>
+          </View>
+        ) : null}
+        <View style={styles.importDivider}><View style={styles.importDividerLine} /><Text style={styles.importDividerText}>OR ENTER MANUALLY</Text><View style={styles.importDividerLine} /></View>
+        <ActionButton
+          icon={activeAccount ? "edit-2" : "plus"}
+          label={activeAccount ? "Review starting account" : "Enter starting account"}
           onPress={() => { setSelectedAccount(activeAccount); setAccountModalVisible(true); }}
         />
-      ) : (
-        <EmptyState icon="credit-card" text="Add the checking or cash account you use for everyday money. A confirmed $0 balance is valid." />
-      )}
-      <ActionButton
-        icon={activeAccount ? "edit-2" : "plus"}
-        label={activeAccount ? "Review starting account" : "Add starting account"}
-        onPress={() => { setSelectedAccount(activeAccount); setAccountModalVisible(true); }}
-      />
-    </SectionCard>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Import a bank statement"
+          onPress={() => router.push({ pathname: "/(tabs)/more", params: { section: "backup" } } as never)}
+          style={styles.importLink}
+        >
+          <Feather name="upload" size={16} color="#c4b5fd" />
+          <Text style={styles.importLinkText}>Have a CSV? Import a bank statement instead</Text>
+        </Pressable>
+      </SectionCard>
+      <SectionCard title="Your everyday account" subtitle="This confirmed balance is the trusted starting point for Forecast. A confirmed $0 balance is valid.">
+        {activeAccount ? (
+          <DataRow
+            icon="credit-card"
+            title={activeAccount.name}
+            detail={`${activeAccount.account_type} · balance confirmed ${activeAccount.balance_as_of || "date missing"}`}
+            value={`$${Number(activeAccount.current_balance).toFixed(2)}`}
+            action="Review"
+            onPress={() => { setSelectedAccount(activeAccount); setAccountModalVisible(true); }}
+          />
+        ) : (
+          <EmptyState icon="credit-card" text="Choose the checking or cash account you use for everyday money after connecting, or add one manually above." />
+        )}
+      </SectionCard>
+    </>
   );
 
   const renderCashflow = () => (
@@ -537,7 +573,7 @@ function SetupWizard() {
         </View>
       </SectionCard>
       <SectionCard title="Plan check" subtitle="These are the facts FlowLedger will use. Nothing is estimated as complete.">
-        <ReviewRow label="Starting account" value={activeAccount ? `${activeAccount.name} · $${Number(activeAccount.current_balance).toFixed(2)}` : "Missing"} complete={Boolean(activeAccount?.balance_as_of)} />
+        <ReviewRow label="Starting account" value={activeAccount ? `${activeAccount.name} · $${Number(activeAccount.current_balance).toFixed(2)}` : connectedCheckingAccounts.length ? `${connectedCheckingAccounts.length} connected checking account${connectedCheckingAccounts.length === 1 ? "" : "s"}` : "Missing"} complete={Boolean(activeAccount?.balance_as_of) || connectedCheckingAccounts.length > 0} />
         <ReviewRow label="Income" value={incomes.length ? `${incomes.length} source${incomes.length === 1 ? "" : "s"}` : "Confirmed none"} complete={incomes.length > 0 || hasSetupConfirmation(progress, "income_none")} />
         <ReviewRow label="Recurring bills" value={recurringBills.length ? `${recurringBills.length} added` : "Confirmed none"} complete={recurringBills.length > 0 || hasSetupConfirmation(progress, "bills_none")} />
         <ReviewRow label="Debt" value={debts.length ? `${debts.length} added` : "Confirmed none"} complete={debts.length > 0 || hasSetupConfirmation(progress, "debts_none")} />
@@ -859,6 +895,17 @@ const styles = StyleSheet.create({
   sectionTitle: { color: "#f8fafc", fontSize: 18, fontFamily: "Inter_800ExtraBold" },
   sectionSubtitle: { color: "#94a3b8", fontSize: 13, lineHeight: 19, marginTop: 4, fontFamily: "Inter_500Medium" },
   sectionContent: { gap: 10, marginTop: 14 },
+  importCallout: { flexDirection: "row", alignItems: "flex-start", gap: 10, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: "rgba(139,92,246,0.28)", backgroundColor: "rgba(88,28,135,0.16)" },
+  importCalloutIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(139,92,246,0.22)" },
+  importCalloutTitle: { color: "#ede9fe", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  importCalloutText: { color: "#cbd5e1", fontSize: 11, lineHeight: 16, marginTop: 3, fontFamily: "Inter_500Medium" },
+  connectedNotice: { flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 3 },
+  connectedNoticeText: { flex: 1, color: "#bbf7d0", fontSize: 11, lineHeight: 16, fontFamily: "Inter_700Bold" },
+  importDivider: { flexDirection: "row", alignItems: "center", gap: 9, marginVertical: 2 },
+  importDividerLine: { flex: 1, height: 1, backgroundColor: "rgba(148,163,184,0.18)" },
+  importDividerText: { color: "#64748b", fontSize: 9, letterSpacing: 1, fontFamily: "Inter_800ExtraBold" },
+  importLink: { minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, paddingHorizontal: 8 },
+  importLinkText: { color: "#c4b5fd", fontSize: 12, fontFamily: "Inter_700Bold", textAlign: "center" },
   optionCard: { minHeight: 68, borderWidth: 1, borderColor: "rgba(148,163,184,0.16)", borderRadius: 17, backgroundColor: "rgba(2,6,23,0.38)", flexDirection: "row", alignItems: "center", gap: 11, padding: 12 },
   optionCardSelected: { borderColor: "rgba(139,92,246,0.7)", backgroundColor: "rgba(88,28,135,0.34)" },
   optionIcon: { width: 38, height: 38, borderRadius: 13, backgroundColor: "rgba(148,163,184,0.10)", alignItems: "center", justifyContent: "center" },

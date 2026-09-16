@@ -27,6 +27,8 @@ export interface SetupReadinessInput {
   preferences: OnboardingPreferences;
   progress: SetupScopeProgress;
   accounts: SetupReadinessAccount[];
+  /** Active connected checking accounts can serve as the trusted starting balance. */
+  connectedCheckingCount?: number;
   incomeCount: number;
   bills: SetupReadinessBill[];
   goalCount: number;
@@ -57,9 +59,9 @@ const STAGE_COPY: Record<SetupStageId, Omit<SetupStageStatus, "id" | "complete">
     detail: "Tell Flo where you are starting and what should come first.",
   },
   starting_money: {
-    label: "Set your starting money",
-    shortLabel: "Starting money",
-    detail: "Add the everyday account, balance, and balance date in one place.",
+    label: "Bring in your money",
+    shortLabel: "Bring in money",
+    detail: "Connect your bank or enter a trusted starting balance, then confirm what FlowLedger should use.",
   },
   cashflow: {
     label: "Add income and bills",
@@ -101,7 +103,9 @@ export function withSetupConfirmation(
 export function buildSetupReadiness(input: SetupReadinessInput): SetupReadiness {
   const activeAccounts = input.accounts.filter(account => account.is_active !== false);
   const prioritiesComplete = Boolean(input.preferences.startingPoint) && input.preferences.help.length > 0;
-  const startingMoneyComplete = activeAccounts.some(account => Boolean(account.balance_as_of));
+  const startingMoneyComplete =
+    activeAccounts.some(account => Boolean(account.balance_as_of)) ||
+    (input.connectedCheckingCount ?? 0) > 0;
   const incomeComplete = input.incomeCount > 0 || hasSetupConfirmation(input.progress, "income_none");
   const recurringBillCount = input.bills.filter(bill => !bill.is_debt && bill.is_recurring !== false).length;
   const billsComplete = recurringBillCount > 0 || hasSetupConfirmation(input.progress, "bills_none");
