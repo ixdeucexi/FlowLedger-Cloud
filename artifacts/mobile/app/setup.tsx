@@ -24,6 +24,7 @@ import { FloLogo } from "@/components/FloLogo";
 import { GoalModal } from "@/components/GoalModal";
 import { IncomeModal } from "@/components/IncomeModal";
 import { PlaidLinkButton } from "@/components/PlaidLinkButton";
+import { PlanFeatureGate } from "@/components/PlanFeatureGate";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { useAuth } from "@/context/AuthContext";
 import { useBudget, type Account, type Bill, type Goal, type IncomeItem } from "@/context/BudgetContext";
@@ -464,11 +465,13 @@ function SetupWizard() {
         <View style={styles.importCallout}>
           <View style={styles.importCalloutIcon}><Feather name="zap" size={18} color="#c4b5fd" /></View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.importCalloutTitle}>Recommended: connect your bank</Text>
-            <Text style={styles.importCalloutText}>Plaid securely imports checking and savings balances. You can review everything before Forecast uses it.</Text>
+            <Text style={styles.importCalloutTitle}>Choose how to bring in your money</Text>
+            <Text style={styles.importCalloutText}>Paid plans can securely connect a bank through Plaid. Every plan can enter balances manually or import a statement.</Text>
           </View>
         </View>
-        <PlaidLinkButton colors={colors} onConnected={refreshBankData} />
+        <PlanFeatureGate feature="plaid_sync" compact>
+          <PlaidLinkButton colors={colors} onConnected={refreshBankData} />
+        </PlanFeatureGate>
         {connectedAccountCount > 0 ? (
           <View style={styles.connectedNotice}>
             <Feather name="check-circle" size={16} color="#86efac" />
