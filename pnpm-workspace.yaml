@@ -81,6 +81,9 @@ onlyBuiltDependencies:
   - unrs-resolver
 
 overrides:
+  # Expo's navigation toolchain brings an older decoder with a malformed-input
+  # denial-of-service advisory; keep the compatible patched release everywhere.
+  "decode-uri-component": "0.5.0"
   "@xmldom/xmldom@<0.8.15": "0.8.15"
   "browserslist@<4.28.7": "4.28.7"
   "baseline-browser-mapping@>=2.0.0 <2.11.0": "2.11.0"
