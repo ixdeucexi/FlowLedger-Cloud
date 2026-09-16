@@ -488,6 +488,11 @@ export default function BillsScreen() {
     },
     [updateBill],
   );
+  const handleResumeBill = useCallback(async (id: string) => {
+    const bill = bills.find((item) => item.id === id);
+    if (!bill) return;
+    await updateBill({ ...bill, end_date: undefined }, ["end_date"]);
+  }, [bills, updateBill]);
 
   // ── Debt data ───────────────────────────────────────────────────
   // Keep debt-only projections out of Bills and the separate desktop screen.
@@ -802,7 +807,7 @@ export default function BillsScreen() {
         {stopped ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Restart ${item.name}`}
+            accessibilityLabel={`Resume ${item.name}`}
             onPress={(event) => {
               event.stopPropagation?.();
               handleRestartStoppedBill(item);
@@ -2177,6 +2182,7 @@ export default function BillsScreen() {
         onSave={handleSave}
         onDelete={deleteBill}
         onStopFuture={stopFutureBill}
+        onResume={handleResumeBill}
         onDeleteMistake={deleteBillMistake}
         editBill={editBill}
         forceDebt={activeTab === "debt"}

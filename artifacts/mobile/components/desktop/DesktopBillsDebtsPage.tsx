@@ -308,6 +308,11 @@ export function DesktopBillsDebtsPage() {
     },
     [addBill, updateBill],
   );
+  const resumeBill = useCallback(async (id: string) => {
+    const bill = bills.find((item) => item.id === id);
+    if (!bill) return;
+    await updateBill({ ...bill, end_date: undefined }, ["end_date"]);
+  }, [bills, updateBill]);
 
   const nextCategoryFilter = () => {
     const options = ["All Categories", ...categories];
@@ -498,6 +503,7 @@ export function DesktopBillsDebtsPage() {
         onSave={saveBill}
         onDelete={deleteBill}
         onStopFuture={stopFutureBill}
+        onResume={resumeBill}
         onDeleteMistake={deleteBillMistake}
         editBill={editingBill}
         forceDebt={isDebt}

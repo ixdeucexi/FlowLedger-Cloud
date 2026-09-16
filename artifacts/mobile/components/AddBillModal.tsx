@@ -50,6 +50,7 @@ interface AddBillModalProps {
   ) => void | Promise<unknown>;
   onDelete?: (id: string) => void | Promise<unknown>;
   onStopFuture?: (id: string) => void | Promise<unknown>;
+  onResume?: (id: string) => void | Promise<unknown>;
   onDeleteMistake?: (id: string) => void | Promise<unknown>;
   editBill?: Bill | null;
   forceDebt?: boolean;
@@ -58,7 +59,7 @@ interface AddBillModalProps {
   saveLabel?: string;
 }
 
-export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture, onDeleteMistake, editBill, forceDebt, initialValues, title, saveLabel }: AddBillModalProps) {
+export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture, onResume, onDeleteMistake, editBill, forceDebt, initialValues, title, saveLabel }: AddBillModalProps) {
   const c = useColors();
   const isDesktop = useDesktopExperience();
   useBackDismiss(visible, onClose);
@@ -84,6 +85,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   const [pickerMonth,   setPickerMonth]   = useState(() => new Date().getMonth());
   const [saving,         setSaving]        = useState(false);
   const [confirmation, setConfirmation] = useState<ConfirmActionOptions | null>(null);
+  const [actionMenuVisible, setActionMenuVisible] = useState(false);
 
   const firstDOWInDayPickerMonth = useMemo(
     () => new Date(pickerYear, pickerMonth, 1).getDay(),
@@ -115,6 +117,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
 
   useEffect(() => {
     setConfirmation(null);
+    setActionMenuVisible(false);
     if (editBill) {
       setName(editBill.name);
       setAmount(editBill.amount.toString());
@@ -241,11 +244,34 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       }
     };
     setConfirmation({
-      title: `Stop Future ${noun}`,
-      message: `Stop "${editBill.name}" after this month? Past months and saved monthly details will stay unchanged.`,
-      confirmText: "Stop Future",
+      title: `Pause ${noun}`,
+      message: `Pause "${editBill.name}" after this month's scheduled payments? Past months and saved monthly details will stay unchanged.`,
+      confirmText: "Pause",
       destructive: true,
       onConfirm: doStopFuture,
+    });
+  };
+
+  const handleResume = () => {
+    if (!editBill || !onResume) return;
+    const doResume = async () => {
+      if (saving) return;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setSaving(true);
+      try {
+        await onResume(editBill.id);
+        onClose();
+      } catch (error) {
+        Alert.alert("Couldn’t resume payments", error instanceof Error ? error.message : "Please try again.");
+      } finally {
+        setSaving(false);
+      }
+    };
+    setConfirmation({
+      title: `Resume ${noun}`,
+      message: `Resume "${editBill.name}" and restore its future scheduled payments?`,
+      confirmText: "Resume",
+      onConfirm: doResume,
     });
   };
 
@@ -268,10 +294,71 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
             <Text style={[styles.title, { color: c.foreground }]}>
               {title ?? (editBill ? `Edit ${noun}` : `Add ${noun}`)}
             </Text>
-            <Pressable onPress={onClose} hitSlop={8}>
-              <Feather name="x" size={22} color={c.mutedForeground} />
-            </Pressable>
+            <View style={styles.headerActions}>
+              {editBill ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="More bill actions"
+                  accessibilityState={{ expanded: actionMenuVisible }}
+                  onPress={() => setActionMenuVisible((visible) => !visible)}
+                  hitSlop={8}
+                  style={({ pressed }) => [styles.headerActionButton, { backgroundColor: actionMenuVisible ? c.primary + "18" : "transparent", opacity: pressed ? 0.7 : 1 }]}
+                >
+                  <Feather name="more-vertical" size={21} color={c.foreground} />
+                </Pressable>
+              ) : null}
+              <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close bill editor">
+                <Feather name="x" size={22} color={c.mutedForeground} />
+              </Pressable>
+            </View>
           </View>
+
+          {editBill && actionMenuVisible ? (
+            <View style={[styles.actionMenu, { backgroundColor: c.card, borderColor: c.border }]}>
+              {editBill.end_date && onResume ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Resume ${editBill.name}`}
+                  onPress={() => { setActionMenuVisible(false); handleResume(); }}
+                  style={({ pressed }) => [styles.actionMenuItem, { backgroundColor: pressed ? c.primary + "12" : "transparent" }]}
+                >
+                  <Feather name="play-circle" size={17} color={c.success} />
+                  <View style={styles.actionMenuCopy}>
+                    <Text style={[styles.actionMenuLabel, { color: c.foreground }]}>Resume payments</Text>
+                    <Text style={[styles.actionMenuHelp, { color: c.mutedForeground }]}>Restore future scheduled dates</Text>
+                  </View>
+                </Pressable>
+              ) : null}
+              {!editBill.end_date && (onStopFuture || onDeleteMistake) && (editBill.is_recurring || editBill.is_debt) ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Pause ${editBill.name}`}
+                  onPress={() => { setActionMenuVisible(false); handleStopFuture(); }}
+                  style={({ pressed }) => [styles.actionMenuItem, { backgroundColor: pressed ? c.warning + "12" : "transparent" }]}
+                >
+                  <Feather name="pause-circle" size={17} color={c.warning} />
+                  <View style={styles.actionMenuCopy}>
+                    <Text style={[styles.actionMenuLabel, { color: c.foreground }]}>Pause bill</Text>
+                    <Text style={[styles.actionMenuHelp, { color: c.mutedForeground }]}>Pause after this month’s payments</Text>
+                  </View>
+                </Pressable>
+              ) : null}
+              {onDelete ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Delete ${noun}`}
+                  onPress={() => { setActionMenuVisible(false); handleDelete(); }}
+                  style={({ pressed }) => [styles.actionMenuItem, { backgroundColor: pressed ? c.destructive + "12" : "transparent" }]}
+                >
+                  <Feather name="trash-2" size={17} color={c.destructive} />
+                  <View style={styles.actionMenuCopy}>
+                    <Text style={[styles.actionMenuLabel, { color: c.destructive }]}>Delete {noun}</Text>
+                    <Text style={[styles.actionMenuHelp, { color: c.mutedForeground }]}>Remove this {noun.toLowerCase()} and its schedule</Text>
+                  </View>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
 
           <ScrollView showsVerticalScrollIndicator={isDesktop} keyboardShouldPersistTaps="handled">
 
@@ -580,34 +667,6 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
               </Text>
             </Pressable>
 
-            {/* Delete */}
-            {editBill && onDelete && (
-              <Pressable onPress={handleDelete}
-                disabled={saving}
-                style={({ pressed }) => [styles.deleteBtn, { borderColor: c.destructive, opacity: saving ? 0.55 : pressed ? 0.7 : 1 }]}
-              >
-                <Feather name="trash-2" size={16} color={c.destructive} />
-                <Text style={[styles.deleteBtnText, { color: c.destructive }]}>
-                  {`Delete ${noun}`}
-                </Text>
-              </Pressable>
-            )}
-
-            {editBill && (onStopFuture || onDeleteMistake) && (editBill.is_recurring || editBill.is_debt) && (
-              <Pressable onPress={handleStopFuture}
-                disabled={saving}
-                style={({ pressed }) => [styles.deleteMistakeBtn, { borderColor: c.warning + "80", backgroundColor: c.warning + "10", opacity: saving ? 0.55 : pressed ? 0.72 : 1 }]}
-              >
-                <Feather name="x-circle" size={16} color={c.warning} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.deleteBtnText, { color: c.warning }]}>{`Stop Future ${noun}`}</Text>
-                  <Text style={[styles.deleteHelpText, { color: c.mutedForeground }]}>
-                    Keeps past months, but removes future scheduled copies.
-                  </Text>
-                </View>
-              </Pressable>
-            )}
-
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
@@ -621,6 +680,13 @@ const styles = StyleSheet.create({
   container: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingTop: 12, maxHeight: "94%" },
   handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#444", alignSelf: "center", marginBottom: 16 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 12 },
+  headerActionButton: { width: 34, height: 34, alignItems: "center", justifyContent: "center", borderRadius: 10 },
+  actionMenu: { borderWidth: 1, borderRadius: 14, paddingVertical: 4, marginBottom: 10 },
+  actionMenuItem: { minHeight: 54, flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, borderRadius: 10 },
+  actionMenuCopy: { flex: 1, minWidth: 0 },
+  actionMenuLabel: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  actionMenuHelp: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
   title: { fontSize: 20, fontFamily: "Inter_700Bold" },
   label: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginBottom: 6, marginTop: 14, textTransform: "uppercase", letterSpacing: 0.7 },
   input: { height: 48, borderRadius: 10, paddingHorizontal: 14, fontSize: 16, fontFamily: "Inter_400Regular" },

@@ -572,6 +572,11 @@ function DesktopDashboardContent({
   ) => "id" in bill
     ? updateBill(bill, dirtyFields ?? [], baseline)
     : addBill(bill), [addBill, updateBill]);
+  const resumeBill = useCallback(async (id: string) => {
+    const bill = bills.find((item) => item.id === id);
+    if (!bill) return;
+    await updateBill({ ...bill, end_date: undefined }, ["end_date"]);
+  }, [bills, updateBill]);
   const saveGoal = useCallback((goal: Omit<Goal, "id" | "created_at"> | Goal) =>
     "id" in goal ? updateGoal(goal) : addGoal(goal), [addGoal, updateGoal]);
   const saveIncome = useCallback((income: Omit<IncomeItem, "id"> | IncomeItem) =>
@@ -1339,6 +1344,7 @@ function DesktopDashboardContent({
         onSave={saveBill}
         onDelete={deleteBill}
         onStopFuture={stopFutureBill}
+        onResume={resumeBill}
         onDeleteMistake={deleteBillMistake}
         editBill={billEditor?.bill ?? null}
         forceDebt={billEditor?.debt ?? false}
