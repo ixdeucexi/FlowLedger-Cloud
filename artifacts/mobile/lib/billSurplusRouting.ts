@@ -7,6 +7,24 @@ export type NextPlannedDebtPayment = {
   debtName: string;
 };
 
+/**
+ * Resolves the debt that receives the current month's snowball money. The
+ * first dated allocation is not guaranteed to be that debt because required
+ * payments are emitted in calendar order, so callers must use the month's
+ * target metadata when it is available.
+ */
+export function snowballTargetDebtId(preview: {
+  allocations: readonly { billId: string; billName: string }[];
+  months: readonly { targetName: string | null }[];
+}): string | undefined {
+  const targetName = preview.months[0]?.targetName;
+  if (targetName) {
+    const target = preview.allocations.find(allocation => allocation.billName === targetName);
+    if (target) return target.billId;
+  }
+  return preview.allocations[0]?.billId;
+}
+
 const cents = (value: number) => Math.round(Math.max(0, Number(value) || 0) * 100) / 100;
 
 /**

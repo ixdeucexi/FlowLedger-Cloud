@@ -34,7 +34,7 @@ import { DESKTOP_MODAL_HANDLE, DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR, DES
 import { configuredDebtAmountForRemainingPayment, lenderMinimumRequiredAmount, parsePlannedDebtAmount } from "@/lib/debtPlanDomain";
 import { calendarBalanceIsVisible } from "@/lib/dailyCheckingClose";
 import { confirmedBillMatchId, isConfirmedBillMatch } from "@/lib/billMatching";
-import { nextPlannedDebtPayment } from "@/lib/billSurplusRouting";
+import { nextPlannedDebtPayment, snowballTargetDebtId } from "@/lib/billSurplusRouting";
 import { allocationLabel, groupPlannedExpenseAllocations, matchedOccurrenceAllocations, occurrenceKey, reviewSettlementSummary, transactionDisplayName } from "@/lib/reviewCenter";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
 import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, forecastItemBadgeLabel, forecastItemTypeLabel, groupForecastEvents, plannedDebtEditorParams } from "@/lib/forecastDisplay";
@@ -962,7 +962,7 @@ export default function MonthlyScreen() {
     const previousSource = existing?.sources?.find(source => source.type === "bill_surplus" && source.billId === surplusPrompt.bill.id)?.amount ?? 0;
     const total = Math.max(0, (existing?.amount ?? 0) - previousSource + surplus);
     const targetPreview = previewDebtSnowball(month, selectedYear, total, surplus - previousSource);
-    const targetDebtId = targetPreview.allocations[0]?.billId;
+    const targetDebtId = snowballTargetDebtId(targetPreview);
     const nextPayment = nextPlannedDebtPayment(
       getRemainingDebtPlanForMonth(month, selectedYear)?.allocations ?? [],
       targetDebtId,

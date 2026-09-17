@@ -55,7 +55,7 @@ import { useColors } from "@/hooks/useColors";
 import { useLocalDay } from "@/hooks/useLocalDay";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
-import { nextPlannedDebtPayment } from "@/lib/billSurplusRouting";
+import { nextPlannedDebtPayment, snowballTargetDebtId } from "@/lib/billSurplusRouting";
 import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
 import { connectedCheckingObservedAnchor } from "@/lib/accounts";
 import { adjacentBillMatchCandidates } from "@/lib/billMatchCandidates";
@@ -1601,7 +1601,7 @@ export function ActivityScreen() {
       total,
       surplus - previousSource,
     );
-    const targetDebtId = targetPreview.allocations[0]?.billId;
+    const targetDebtId = snowballTargetDebtId(targetPreview);
     const nextPayment = nextPlannedDebtPayment(
       getRemainingDebtPlanForMonth(surplusPrompt.month, surplusPrompt.year)
         ?.allocations ?? [],

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { nextPlannedDebtPayment } from "./billSurplusRouting";
+import { nextPlannedDebtPayment, snowballTargetDebtId } from "./billSurplusRouting";
 import type { DatedDebtAllocation } from "./snowball";
 
 function allocation(
@@ -59,4 +59,18 @@ test("bill surplus routing fails closed when no later payment exists", () => {
     allocation("past-extra", "2026-08-12", "extra", "concert", 9.11),
   ], "concert", "2026-08-13"), undefined);
   assert.equal(nextPlannedDebtPayment([], undefined, "2026-08-13"), undefined);
+});
+
+test("snowball target resolves from month metadata instead of earliest dated allocation", () => {
+  assert.equal(snowballTargetDebtId({
+    allocations: [
+      { billId: "rent", billName: "Rent" },
+      { billId: "concert", billName: "Concert" },
+    ],
+    months: [{ targetName: "Concert" }],
+  }), "concert");
+  assert.equal(snowballTargetDebtId({
+    allocations: [{ billId: "rent", billName: "Rent" }],
+    months: [{ targetName: null }],
+  }), "rent");
 });

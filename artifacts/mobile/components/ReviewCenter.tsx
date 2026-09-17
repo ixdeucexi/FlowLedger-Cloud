@@ -14,7 +14,7 @@ import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { manualActivityMatchCandidates, resolveMatchedBillBudget } from "@/lib/billMatching";
 import { adjacentBillMatchCandidates } from "@/lib/billMatchCandidates";
-import { nextPlannedDebtPayment } from "@/lib/billSurplusRouting";
+import { nextPlannedDebtPayment, snowballTargetDebtId } from "@/lib/billSurplusRouting";
 import { confirmAction } from "@/lib/confirmAction";
 import { FOUNDING_FREE_LAUNCH } from "@/lib/launchMode";
 import { applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupReviewTargets, incomeReviewTargets, matchedOccurrenceAllocations, occurrenceKey, prioritizeReviewTransaction, prioritizeSavedBillTarget, rankReviewTargets, reviewQueueAfterSkips, scheduledSnowballReviewTargets, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
@@ -296,7 +296,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all", onMana
     const previousSource = existing?.sources?.find(source => source.type === "bill_surplus" && source.reviewTransactionId === surplusPrompt.transaction.id)?.amount ?? 0;
     const total = Math.max(0, (existing?.amount ?? 0) - previousSource + surplus);
     const targetPreview = previewDebtSnowball(month, year, total, surplus - previousSource);
-    const targetDebtId = targetPreview.allocations[0]?.billId;
+    const targetDebtId = snowballTargetDebtId(targetPreview);
     const nextPayment = nextPlannedDebtPayment(
       getRemainingDebtPlanForMonth(month, year)?.allocations ?? [],
       targetDebtId,
@@ -336,7 +336,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all", onMana
     });
     const total = Math.round(sources.reduce((sum, source) => sum + Math.max(0, source.amount), 0) * 100) / 100;
     const targetPreview = previewDebtSnowball(month, year, total, remainder, effectiveDate, existing?.id);
-    const targetDebtId = targetPreview.allocations[0]?.billId;
+    const targetDebtId = snowballTargetDebtId(targetPreview);
     const nextPayment = nextPlannedDebtPayment(
       getRemainingDebtPlanForMonth(month, year)?.allocations ?? [],
       targetDebtId,
@@ -395,7 +395,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all", onMana
       const targetPreview = previewDebtSnowball(month, year, (existing?.amount ?? 0) + released, released, effectiveDate, existing?.id);
       const nextPayment = nextPlannedDebtPayment(
         getRemainingDebtPlanForMonth(month, year)?.allocations ?? [],
-        targetPreview.allocations[0]?.billId,
+        snowballTargetDebtId(targetPreview),
         effectiveDate,
       );
       setBucketPaymentDate(effectiveDate);
