@@ -362,6 +362,8 @@ export function ActivityScreen() {
     getBillMonthlyTotal,
     getBillEffectiveMonthlyTotal,
     getPaidAmount,
+    finalizeBillPayment,
+    setCustomAmount,
     getRemainingDebtPlanForMonth,
     matchTransactionToBill,
     unmatchTransactionFromBill,
@@ -1883,14 +1885,28 @@ export function ActivityScreen() {
     const prompt = fullPaymentPrompt;
     setSavingMatch(true);
     try {
-      await reconcileTransaction({
-        transactionId: prompt.transaction.id,
-        resolution: "bill",
-        targetId: prompt.bill.id,
-        occurrenceDate: prompt.occurrenceDate,
-        plannedAmount: prompt.budgeted,
-        settlement: "full",
-      });
+      // The transaction was already reconciled as a partial bill match when
+      // this prompt opened. Generic reconciliation intentionally rejects a
+      // second review, so finalize the occurrence through the override path
+      // instead of trying to review the same bank row again.
+      if (prompt.bill.is_debt) {
+        throw new Error("Debt payments should be recorded in Activity so the payment and debt balance stay together.");
+      }
+      await finalizeBillPayment(
+        prompt.bill.id,
+        prompt.month,
+        prompt.year,
+        prompt.actual,
+        prompt.transaction.date,
+      );
+      if (prompt.bill.frequency !== "weekly") {
+        await setCustomAmount(
+          prompt.bill.id,
+          prompt.month,
+          prompt.year,
+          Math.abs(prompt.actual - prompt.bill.amount) < 0.005 ? undefined : prompt.actual,
+        );
+      }
       setSurplusPaymentDate(prompt.transaction.date);
       setSurplusRouteMode("next");
       setQueuedSurplusPrompt(prompt);
