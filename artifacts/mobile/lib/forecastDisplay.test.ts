@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, combineSameDayDebtPaymentEvents, debtPaymentStatusLabel, forecastItemBadgeLabel, forecastItemTypeLabel, formatCalendarBalance, groupForecastEvents, plannedDebtEditorParams } from "./forecastDisplay";
+import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, combineSameDayDebtPaymentEvents, dedupeSameDayBillEvents, debtPaymentStatusLabel, forecastItemBadgeLabel, forecastItemTypeLabel, formatCalendarBalance, groupForecastEvents, plannedDebtEditorParams } from "./forecastDisplay";
 import type { FinancialEvent } from "./forecast";
 
 const event = (overrides: Partial<FinancialEvent> & Pick<FinancialEvent, "id" | "sourceType" | "sourceId" | "kind" | "date" | "amount" | "status">): FinancialEvent => ({
@@ -103,6 +103,14 @@ test("desktop Forecast and Flo consume only calendar-visible event sources", () 
   assert.match(desktop, /calendarVisibleForecastEvents\(selectedDay\?\.events\)/);
   assert.doesNotMatch(desktop, /palette\.purple\s*\+\s*["']55["']/);
   assert.match(flo, /groupForecastEvents\(calendarVisibleForecastEvents\(todayForecastDay\?\.events\)\)/);
+});
+
+test("calendar shows one chip when the same bill occurrence is present twice", () => {
+  const duplicate = event({ id: "apple-review", sourceType: "bill", sourceId: "apple", kind: "bill", date: "2026-09-17", amount: -9.99, status: "finalized", name: "Apple" });
+  const duplicateCopy = { ...duplicate, id: "apple-plan" };
+  assert.equal(dedupeSameDayBillEvents([duplicate, duplicateCopy]).length, 1);
+  assert.equal(calendarVisibleForecastEvents([duplicate, duplicateCopy]).length, 1);
+  assert.equal(dedupeSameDayBillEvents([duplicate, { ...duplicate, id: "apple-copy", sourceId: "legacy-apple" }]).length, 1);
 });
 
 test("a canonical child opens the editor for its source debt and occurrence", () => {

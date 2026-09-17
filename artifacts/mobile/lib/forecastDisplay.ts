@@ -56,6 +56,31 @@ const DEBT_STATUS_PRIORITY: Record<FinancialEventStatus, number> = {
 
 const cents = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
 
+function normalizedEventName(event: FinancialEvent): string {
+  return (event.name ?? "").trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+/**
+ * Removes display-only duplicate bill chips without changing the forecast's
+ * cash math. Duplicate rows can arrive after a bill review is merged with a
+ * saved occurrence, so the calendar should still show one obligation.
+ */
+export function dedupeSameDayBillEvents(events: FinancialEvent[] = []): FinancialEvent[] {
+  const seenIdentity = new Set<string>();
+  const seenSemantic = new Set<string>();
+  return events.filter(event => {
+    const isBill = event.sourceType === "bill" || event.kind === "bill";
+    if (!isBill) return true;
+    const name = normalizedEventName(event);
+    const identityKey = `${event.date}:${event.sourceId}`;
+    const semanticKey = name ? `${event.date}:${cents(event.amount)}:${name}` : "";
+    if (seenIdentity.has(identityKey) || (semanticKey && seenSemantic.has(semanticKey))) return false;
+    seenIdentity.add(identityKey);
+    if (semanticKey) seenSemantic.add(semanticKey);
+    return true;
+  });
+}
+
 /** Combines same-debt, same-date canonical and saved-extra rows for display only. */
 export function combineSameDayDebtPaymentEvents(events: FinancialEvent[] = []): FinancialEvent[] {
   const groups = new Map<string, { firstIndex: number; events: FinancialEvent[] }>();
@@ -135,9 +160,9 @@ export function forecastItemBadgeLabel(event: FinancialEvent, statusLabel: strin
 }
 
 export function calendarVisibleForecastEvents(events: FinancialEvent[] = []): FinancialEvent[] {
-  return combineSameDayDebtPaymentEvents(
+  return dedupeSameDayBillEvents(combineSameDayDebtPaymentEvents(
     events.filter(event => event.sourceType !== "reconciliation" && event.kind !== "bank_adjustment"),
-  );
+  ));
 }
 
 export function describeForecastEvent(event: FinancialEvent): ForecastEventDisplay {

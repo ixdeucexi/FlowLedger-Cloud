@@ -1,6 +1,6 @@
 import Feather from "@expo/vector-icons/Feather";
 import React from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { DatePickerField } from "@/components/DatePickerField";
 import { FloLogo } from "@/components/FloLogo";
@@ -52,6 +52,22 @@ export function BillSurplusModal({ visible, billName, itemType = "bill", budgete
   const message = itemType === "bucket"
     ? `${billName} has $${difference.toFixed(2)} left. Close the bucket and choose where that remainder goes.`
     : `Hey, I see ${billName} was paid under the planned ${itemLabel}. You have $${difference.toFixed(2)} available.`;
+  const handleSnowballPress = () => {
+    if (!targetDebt) return;
+    if (!paymentDateValid) {
+      Alert.alert("Flo needs a date", "Choose a valid payment date first so I can check the safety floor for this Snowball payment.", [{ text: "Got it" }]);
+      return;
+    }
+    if (!snowballSafe) {
+      Alert.alert(
+        "Flo says: keep this available",
+        snowballReason ?? `Sending this money to Snowball would take your forecast below the $${safetyFloor.toFixed(0)} safety floor across ${forecastHorizonMonths} months. Keeping it available protects upcoming bills and your cash cushion.`,
+        [{ text: "Keep it available" }],
+      );
+      return;
+    }
+    onSnowball();
+  };
   return (
     <Modal visible={visible} transparent animationType="fade" presentationStyle="overFullScreen" statusBarTranslucent onRequestClose={requestClose}>
       <Pressable style={styles.overlay} onPress={requestClose}>
@@ -124,12 +140,14 @@ export function BillSurplusModal({ visible, billName, itemType = "bill", budgete
           {snowballEnabled && routeMode === "next" && targetDebt && !nextPaymentDate && <Text style={[styles.note, { color: c.warning }]}>I couldn't find a planned {targetDebt} payment after this one. Choose a date and I'll place it there safely.</Text>}
           {snowballEnabled && routeMode === "date" && targetDebt && !paymentDateValid && <Text style={[styles.note, { color: c.warning }]}>Choose a valid date in this {itemType === "bucket" ? "Snowball" : "bill"} month.</Text>}
           {snowballEnabled && targetDebt && paymentDateValid && !snowballSafe && <Text style={[styles.note, { color: c.warning }]}>{snowballReason ?? `Flo says this money is safer kept available: sending it to Snowball would put your forecast below the $${safetyFloor.toFixed(0)} safety floor across ${forecastHorizonMonths} months.`}</Text>}
-          {snowballEnabled && <Pressable disabled={saving || !targetDebt || !snowballSafe} onPress={onSnowball} style={[styles.primary, { backgroundColor: targetDebt && snowballSafe ? c.primary : c.muted, opacity: saving ? 0.55 : 1 }]}>
-            <Feather name="zap" size={16} color={targetDebt && snowballSafe ? c.primaryForeground : c.mutedForeground} />
-            <Text style={[styles.primaryText, { color: targetDebt && snowballSafe ? c.primaryForeground : c.mutedForeground }]}>
-              {routeMode === "next" && nextPaymentDate
-                ? `Add $${difference.toFixed(2)} to next payment`
-                : `Add $${difference.toFixed(2)} to ${targetDebt ?? "Snowball"}`}
+          {snowballEnabled && <Pressable disabled={saving || !targetDebt} onPress={handleSnowballPress} accessibilityLabel={snowballSafe ? "Add available money to Snowball" : "Ask Flo why Snowball is not safe"} style={[styles.primary, { backgroundColor: targetDebt && snowballSafe ? c.primary : c.warning + "22", borderWidth: targetDebt && snowballSafe ? 0 : 1, borderColor: c.warning, opacity: saving ? 0.55 : 1 }]}>
+            <Feather name={snowballSafe ? "zap" : "shield"} size={16} color={targetDebt && snowballSafe ? c.primaryForeground : c.warning} />
+            <Text style={[styles.primaryText, { color: targetDebt && snowballSafe ? c.primaryForeground : c.warning }]}>
+              {snowballSafe
+                ? (routeMode === "next" && nextPaymentDate
+                  ? `Add $${difference.toFixed(2)} to next payment`
+                  : `Add $${difference.toFixed(2)} to ${targetDebt ?? "Snowball"}`)
+                : "Ask Flo why this is not safe"}
             </Text>
           </Pressable>}
           <Pressable disabled={saving} onPress={onKeep} style={[styles.secondary, { borderColor: c.border, opacity: saving ? 0.55 : 1 }]}><Text style={[styles.secondaryText, { color: c.foreground }]}>{itemType === "bucket" ? `Close bucket · keep $${difference.toFixed(2)} available` : `No, keep $${difference.toFixed(2)} available`}</Text></Pressable>
