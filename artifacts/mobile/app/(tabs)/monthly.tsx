@@ -961,6 +961,7 @@ export default function MonthlyScreen() {
     const existing = getExtraPayment(month, selectedYear);
     const previousSource = existing?.sources?.find(source => source.type === "bill_surplus" && source.billId === surplusPrompt.bill.id)?.amount ?? 0;
     const total = Math.max(0, (existing?.amount ?? 0) - previousSource + surplus);
+    const existingOtherExtra = Math.max(0, (existing?.amount ?? 0) - previousSource);
     const targetPreview = previewDebtSnowball(month, selectedYear, total, surplus - previousSource);
     const targetDebtId = snowballTargetDebtId(targetPreview);
     const nextPayment = nextPlannedDebtPayment(
@@ -971,6 +972,7 @@ export default function MonthlyScreen() {
     const selectedPaymentDate = surplusRouteMode === "next" ? nextPayment?.date ?? "" : surplusPaymentDate;
     const validDate = isValidDateInMonth(selectedPaymentDate, month, selectedYear);
     const preview = previewDebtSnowball(month, selectedYear, total, surplus - previousSource, validDate ? selectedPaymentDate : undefined);
+    const safeNewSurplus = Math.max(0, preview.safeMaximum - existingOtherExtra);
     return {
       preview,
       total,
@@ -979,6 +981,10 @@ export default function MonthlyScreen() {
       nextPayment,
       paymentDate: selectedPaymentDate,
       safe: validDate && preview.selectedExtra + 0.005 >= total,
+      safeNewSurplus,
+      snowballReason: validDate && preview.selectedExtra + 0.005 < total
+        ? `Flo says this money is safer kept available. Sending the full $${surplus.toFixed(2)} to Snowball would use more than your safe room and could take the forecast below the $${settings.safety_floor.toFixed(2)} safety floor. I can safely route up to $${safeNewSurplus.toFixed(2)} of this extra payment.`
+        : undefined,
     };
   }, [surplusPrompt, surplusPaymentDate, surplusRouteMode, getExtraPayment, getRemainingDebtPlanForMonth, previewDebtSnowball, month, selectedYear, settings.debtPayoffEnabled]);
 
@@ -1072,24 +1078,44 @@ export default function MonthlyScreen() {
     }
   }, [clearPaidEditForKey, closeFullPaymentPrompt, explainDebtPaymentRoute, fullPaymentPrompt, month, selectedYear, setPaidAmount]);
 
-  const confirmPromptAsFullPayment = useCallback(() => {
+  const confirmPromptAsFullPayment = useCallback(async () => {
     if (!fullPaymentPrompt) return;
-    const { bill, budgeted, actual, paidDate, paidKey, editValue } = fullPaymentPrompt;
+    const { bill, actual, paidDate, paidKey, editValue } = fullPaymentPrompt;
     if (bill.is_debt) {
       closeFullPaymentPrompt();
       explainDebtPaymentRoute();
       return;
     }
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSurplusPrompt({ bill, budgeted, actual, paidDate, matchAmountToActual: true });
-    setSurplusPaymentDate(paidDate);
-    setSurplusRouteMode("next");
-    setSelectedDate(null);
-    paidSaveSnapshotRef.current = { ...paidSaveSnapshotRef.current, [paidKey]: { value: editValue, at: Date.now() } };
-    clearPaidEditForKey(paidKey);
-    paidPromptPendingRef.current.delete(paidKey);
-    setFullPaymentPrompt(null);
-  }, [clearPaidEditForKey, closeFullPaymentPrompt, explainDebtPaymentRoute, fullPaymentPrompt]);
+    if (paidSaveInFlightRef.current.has(paidKey)) return;
+    paidSaveInFlightRef.current.add(paidKey);
+    setSavingPaidKey(paidKey);
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      // The user confirmed the lower amount was the complete payment. Save
+      // that occurrence directly and keep the difference available; opening a
+      // second Snowball overlay here made the flow feel like a duplicate action.
+      await finalizeBillPayment(bill.id, month, selectedYear, actual, paidDate);
+      if (bill.frequency !== "weekly") {
+        await setCustomAmount(
+          bill.id,
+          month,
+          selectedYear,
+          Math.abs(actual - bill.amount) < 0.005 ? undefined : actual,
+        );
+      }
+      setSurplusPrompt(null);
+      setSelectedDate(null);
+      paidSaveSnapshotRef.current = { ...paidSaveSnapshotRef.current, [paidKey]: { value: editValue, at: Date.now() } };
+      clearPaidEditForKey(paidKey);
+      paidPromptPendingRef.current.delete(paidKey);
+      setFullPaymentPrompt(null);
+    } catch (error) {
+      Alert.alert("Could not close bill", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      paidSaveInFlightRef.current.delete(paidKey);
+      setSavingPaidKey(current => current === paidKey ? null : current);
+    }
+  }, [clearPaidEditForKey, explainDebtPaymentRoute, finalizeBillPayment, fullPaymentPrompt, month, selectedYear, setCustomAmount]);
 
   const handlePaidBlur = useCallback(async (billId: string, key: string, submittedValue?: string) => {
     if (savingPaidKey === key || paidSaveInFlightRef.current.has(key) || paidPromptPendingRef.current.has(key)) return;
@@ -3319,6 +3345,7 @@ export default function MonthlyScreen() {
       />
       <FullPaymentPromptModal
         visible={!!fullPaymentPrompt}
+        saving={Boolean(savingPaidKey)}
         prompt={fullPaymentPrompt ? {
           billName: fullPaymentPrompt.bill.name,
           budgeted: fullPaymentPrompt.budgeted,
@@ -3336,6 +3363,7 @@ export default function MonthlyScreen() {
         actual={surplusPrompt?.actual ?? 0}
         targetDebt={surplusSnowballOffer?.targetDebt}
         snowballSafe={surplusSnowballOffer?.safe ?? false}
+        snowballReason={surplusSnowballOffer?.snowballReason}
         snowballEnabled={settings.debtPayoffEnabled}
         safetyFloor={settings.safety_floor}
         forecastHorizonMonths={settings.forecast_horizon_months}

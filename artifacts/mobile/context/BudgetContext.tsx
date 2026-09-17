@@ -4506,13 +4506,30 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
     const actual = Math.abs(transaction.amount);
     const planned = plannedAmount ?? bill.amount;
+    const matchedOccurrenceDate = occurrenceDate ?? transaction.date;
+    const settlement = Math.abs(actual - planned) < 0.005
+      ? "exact"
+      : actual < planned
+        ? "partial"
+        : "full";
+    // Matching is safe to retry after a slow response or a repeated tap. If
+    // the same bill decision is already stored, do not send a second review
+    // RPC that the database will correctly reject as a duplicate.
+    if (reconciledTransactionMatchesIntent(transaction, {
+      transactionId,
+      resolution: "bill",
+      targetId: billId,
+      occurrenceDate: matchedOccurrenceDate,
+      plannedAmount: planned,
+      settlement,
+    })) return;
     await reconcileTransaction({
       transactionId,
       resolution: "bill",
       targetId: billId,
-      occurrenceDate: occurrenceDate ?? transaction.date,
+      occurrenceDate: matchedOccurrenceDate,
       plannedAmount: planned,
-      settlement: Math.abs(actual - planned) < 0.005 ? "exact" : actual < planned ? "partial" : "full",
+      settlement,
     });
   }, [user, transactions, bills, reconcileTransaction, assertCanEditHousehold]);
 

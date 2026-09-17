@@ -15,20 +15,21 @@ export interface FullPaymentPromptDetails {
 interface Props {
   visible: boolean;
   prompt: FullPaymentPromptDetails | null;
+  saving?: boolean;
   onClose: () => void;
   onKeepPartial: () => void;
   onFullPayment: () => void;
 }
 
-export function FullPaymentPromptModal({ visible, prompt, onClose, onKeepPartial, onFullPayment }: Props) {
+export function FullPaymentPromptModal({ visible, prompt, saving = false, onClose, onKeepPartial, onFullPayment }: Props) {
   const c = useColors();
-  useBackDismiss(visible, onClose);
+  useBackDismiss(visible, saving ? () => undefined : onClose);
   const difference = prompt ? Math.max(0, prompt.budgeted - prompt.actual) : 0;
   const fmt = (amount: number) => `$${amount.toFixed(2)}`;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" presentationStyle="overFullScreen" statusBarTranslucent onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
+    <Modal visible={visible} transparent animationType="fade" presentationStyle="overFullScreen" statusBarTranslucent onRequestClose={saving ? undefined : onClose}>
+      <Pressable style={styles.backdrop} onPress={saving ? undefined : onClose}>
         <Pressable
           accessibilityRole="summary"
           onPress={(event) => event.stopPropagation()}
@@ -54,8 +55,9 @@ export function FullPaymentPromptModal({ visible, prompt, onClose, onKeepPartial
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Confirm this was the full bill payment"
+            disabled={saving}
             onPress={onFullPayment}
-            style={({ pressed }) => [styles.primaryButton, { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 }]}
+            style={({ pressed }) => [styles.primaryButton, { backgroundColor: c.primary, opacity: saving ? 0.55 : pressed ? 0.82 : 1 }]}
           >
             <Feather name="check-circle" size={18} color={c.primaryForeground} />
             <Text style={[styles.primaryButtonText, { color: c.primaryForeground }]}>Yes</Text>
@@ -63,8 +65,9 @@ export function FullPaymentPromptModal({ visible, prompt, onClose, onKeepPartial
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Keep this as a partial bill payment"
+            disabled={saving}
             onPress={onKeepPartial}
-            style={({ pressed }) => [styles.secondaryButton, { borderColor: c.border, opacity: pressed ? 0.75 : 1 }]}
+            style={({ pressed }) => [styles.secondaryButton, { borderColor: c.border, opacity: saving ? 0.55 : pressed ? 0.75 : 1 }]}
           >
             <Text style={[styles.secondaryButtonText, { color: c.foreground }]}>No, keep it partial</Text>
           </Pressable>

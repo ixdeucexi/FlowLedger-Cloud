@@ -544,6 +544,7 @@ export function ActivityScreen() {
   const handledExtraPaymentRouteRef = useRef("");
   const handledPendingRouteRef = useRef("");
   const handledActivityRouteRef = useRef("");
+  const fullPaymentConfirmingRef = useRef("");
   useBackDismiss(!!detailItem, () => setDetailItem(null));
   useBackDismiss(filterModalVisible, () => setFilterModalVisible(false));
   useBackDismiss(weeklySummaryVisible, () => setWeeklySummaryVisible(false));
@@ -1597,6 +1598,7 @@ export function ActivityScreen() {
       0,
       (existing?.amount ?? 0) - previousSource + surplus,
     );
+    const existingOtherExtra = Math.max(0, (existing?.amount ?? 0) - previousSource);
     const targetPreview = previewDebtSnowball(
       surplusPrompt.month,
       surplusPrompt.year,
@@ -1626,6 +1628,7 @@ export function ActivityScreen() {
       surplus - previousSource,
       dateValid ? selectedPaymentDate : undefined,
     );
+    const safeNewSurplus = Math.max(0, preview.safeMaximum - existingOtherExtra);
     return {
       preview,
       targetDebt:
@@ -1634,12 +1637,17 @@ export function ActivityScreen() {
       nextPayment,
       paymentDate: selectedPaymentDate,
       safe: dateValid && preview.selectedExtra + 0.005 >= total,
+      safeNewSurplus,
+      snowballReason: dateValid && preview.selectedExtra + 0.005 < total
+        ? `Flo says this money is safer kept available. Sending the full $${surplus.toFixed(2)} to Snowball would use more than your safe room and could take the forecast below the $${settings.safety_floor.toFixed(2)} safety floor. I can safely route up to $${safeNewSurplus.toFixed(2)} of this extra payment.`
+        : undefined,
     };
   }, [
     getExtraPayment,
     getRemainingDebtPlanForMonth,
     previewDebtSnowball,
     settings.debtPayoffEnabled,
+    settings.safety_floor,
     surplusPaymentDate,
     surplusPrompt,
     surplusRouteMode,
@@ -1883,6 +1891,9 @@ export function ActivityScreen() {
   const confirmMatchedFullPayment = async () => {
     if (!fullPaymentPrompt || savingMatch) return;
     const prompt = fullPaymentPrompt;
+    const operationKey = `${prompt.transaction.id}:${prompt.bill.id}:${prompt.actual.toFixed(2)}`;
+    if (fullPaymentConfirmingRef.current === operationKey) return;
+    fullPaymentConfirmingRef.current = operationKey;
     setSavingMatch(true);
     try {
       // The transaction was already reconciled as a partial bill match when
@@ -1907,9 +1918,11 @@ export function ActivityScreen() {
           Math.abs(prompt.actual - prompt.bill.amount) < 0.005 ? undefined : prompt.actual,
         );
       }
-      setSurplusPaymentDate(prompt.transaction.date);
-      setSurplusRouteMode("next");
-      setQueuedSurplusPrompt(prompt);
+      // The user just confirmed this was the complete payment. Keep any
+      // difference available instead of immediately opening another Snowball
+      // overlay; they can choose debt payoff later from the planner.
+      setQueuedSurplusPrompt(null);
+      setSurplusPrompt(null);
       setFullPaymentPrompt(null);
     } catch (error) {
       Alert.alert(
@@ -1917,6 +1930,7 @@ export function ActivityScreen() {
         error instanceof Error ? error.message : "Please try again.",
       );
     } finally {
+      if (fullPaymentConfirmingRef.current === operationKey) fullPaymentConfirmingRef.current = "";
       setSavingMatch(false);
     }
   };
@@ -4077,6 +4091,7 @@ export function ActivityScreen() {
 
       <FullPaymentPromptModal
         visible={!!fullPaymentPrompt}
+        saving={savingMatch}
         prompt={
           fullPaymentPrompt
             ? {
@@ -4099,6 +4114,7 @@ export function ActivityScreen() {
         actual={surplusPrompt?.actual ?? 0}
         targetDebt={surplusSnowballOffer?.targetDebt}
         snowballSafe={surplusSnowballOffer?.safe ?? false}
+        snowballReason={surplusSnowballOffer?.snowballReason}
         snowballEnabled={settings.debtPayoffEnabled}
         safetyFloor={settings.safety_floor}
         forecastHorizonMonths={settings.forecast_horizon_months}

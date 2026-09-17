@@ -15,6 +15,7 @@ interface Props {
   actual: number;
   targetDebt?: string;
   snowballSafe: boolean;
+  snowballReason?: string;
   snowballEnabled?: boolean;
   safetyFloor?: number;
   forecastHorizonMonths?: number;
@@ -40,7 +41,7 @@ function shortDate(value?: string) {
   return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-export function BillSurplusModal({ visible, billName, itemType = "bill", budgeted, actual, targetDebt, snowballSafe, snowballEnabled = true, safetyFloor = 200, forecastHorizonMonths = 6, paymentDate, paymentDateValid, paymentDateMin, paymentDateMax, routeMode, nextPaymentDate, nextPaymentAmount, saving = false, onRouteModeChange, onPaymentDateChange, onKeep, onSnowball, onClose }: Props) {
+export function BillSurplusModal({ visible, billName, itemType = "bill", budgeted, actual, targetDebt, snowballSafe, snowballReason, snowballEnabled = true, safetyFloor = 200, forecastHorizonMonths = 6, paymentDate, paymentDateValid, paymentDateMin, paymentDateMax, routeMode, nextPaymentDate, nextPaymentAmount, saving = false, onRouteModeChange, onPaymentDateChange, onKeep, onSnowball, onClose }: Props) {
   const c = useColors();
   const requestClose = () => {
     if (!saving) onClose();
@@ -122,7 +123,7 @@ export function BillSurplusModal({ visible, billName, itemType = "bill", budgete
           {snowballEnabled && !targetDebt && <Text style={[styles.note, { color: c.mutedForeground }]}>No snowball debt selected.</Text>}
           {snowballEnabled && routeMode === "next" && targetDebt && !nextPaymentDate && <Text style={[styles.note, { color: c.warning }]}>I couldn't find a planned {targetDebt} payment after this one. Choose a date and I'll place it there safely.</Text>}
           {snowballEnabled && routeMode === "date" && targetDebt && !paymentDateValid && <Text style={[styles.note, { color: c.warning }]}>Choose a valid date in this {itemType === "bucket" ? "Snowball" : "bill"} month.</Text>}
-          {snowballEnabled && targetDebt && paymentDateValid && !snowballSafe && <Text style={[styles.note, { color: c.warning }]}>Keep this money available to preserve your ${safetyFloor.toFixed(0)} floor across {forecastHorizonMonths} months.</Text>}
+          {snowballEnabled && targetDebt && paymentDateValid && !snowballSafe && <Text style={[styles.note, { color: c.warning }]}>{snowballReason ?? `Flo says this money is safer kept available: sending it to Snowball would put your forecast below the $${safetyFloor.toFixed(0)} safety floor across ${forecastHorizonMonths} months.`}</Text>}
           {snowballEnabled && <Pressable disabled={saving || !targetDebt || !snowballSafe} onPress={onSnowball} style={[styles.primary, { backgroundColor: targetDebt && snowballSafe ? c.primary : c.muted, opacity: saving ? 0.55 : 1 }]}>
             <Feather name="zap" size={16} color={targetDebt && snowballSafe ? c.primaryForeground : c.mutedForeground} />
             <Text style={[styles.primaryText, { color: targetDebt && snowballSafe ? c.primaryForeground : c.mutedForeground }]}>
