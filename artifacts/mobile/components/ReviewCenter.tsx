@@ -24,6 +24,7 @@ import { assertFinancialMutationOnline } from "@/lib/networkStatus";
 import { prioritizePendingPlanTarget } from "@/lib/pendingPlanMatches";
 import { bucketEffectiveRouteDate, isEligibleSpendingBucketMatch, spendingBucketSummary } from "@/lib/spendingBuckets";
 import { removeBucketRemainderFundingSource, replaceBucketRemainderFundingSource } from "@/lib/snowballFunding";
+import { formatForecastDateLabel, lowestForecastDate } from "@/lib/forecastDisplay";
 
 function todayIso() {
   const now = new Date();
@@ -100,7 +101,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all", onMana
   const c = useColors();
   const {
     transactions, incomes, goals, decisions, extraPayments, categories, canEditHousehold, settings, pendingPlanMatches,
-    getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal,
+    getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getDailyBalances,
     createSpendingBucketForTransaction, updateGoal, deleteGoal, closeSpendingBucket, closeSpendingBucketAndRouteRemainder, reopenSpendingBucket,
     archiveSpendingBucket, restoreArchivedSpendingBucket,
     reconcileTransaction, undoTransactionReconciliation, refreshBankData, retryBudgetLoad,
@@ -305,6 +306,12 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all", onMana
     const selectedPaymentDate = surplusRouteMode === "next" ? nextPayment?.date ?? "" : surplusPaymentDate;
     const dateValid = isValidDateInMonth(selectedPaymentDate, month, year);
     const preview = previewDebtSnowball(month, year, total, surplus - previousSource, dateValid ? selectedPaymentDate : undefined);
+    const safetyDate = lowestForecastDate(getDailyBalances, month, year, settings.forecast_horizon_months);
+    const snowballReason = dateValid && preview.selectedExtra + 0.005 < total
+      ? `Flo says this money is safer kept available. Sending the full ${money(surplus)} to Snowball would take your forecast below the ${money(settings.safety_floor)} safety floor on ${formatForecastDateLabel(safetyDate)}. I'm protecting that date so upcoming bills and your cash cushion stay covered.`
+      : !dateValid
+        ? `Flo can't place this on a dated Snowball payment yet. I'm keeping ${money(surplus)} available to protect your ${money(settings.safety_floor)} safety floor on ${formatForecastDateLabel(safetyDate)}.`
+        : undefined;
     return {
       month,
       year,
@@ -315,8 +322,9 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all", onMana
       nextPayment,
       paymentDate: selectedPaymentDate,
       safe: dateValid && preview.selectedExtra + 0.005 >= total,
+      snowballReason,
     };
-  }, [getExtraPayment, getRemainingDebtPlanForMonth, previewDebtSnowball, settings.debtPayoffEnabled, surplusPaymentDate, surplusPrompt, surplusRouteMode]);
+  }, [getDailyBalances, getExtraPayment, getRemainingDebtPlanForMonth, previewDebtSnowball, settings.debtPayoffEnabled, settings.forecast_horizon_months, settings.safety_floor, surplusPaymentDate, surplusPrompt, surplusRouteMode]);
 
   const bucketSnowballOffer = useMemo(() => {
     if (!bucketClosePrompt || !settings.debtPayoffEnabled) return null;
@@ -345,6 +353,12 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all", onMana
     const selectedPaymentDate = bucketRouteMode === "next" ? nextPayment?.date ?? "" : bucketPaymentDate;
     const dateValid = isValidDateInMonth(selectedPaymentDate, month, year) && selectedPaymentDate >= effectiveDate;
     const preview = previewDebtSnowball(month, year, total, remainder, dateValid ? selectedPaymentDate : undefined, existing?.id);
+    const safetyDate = lowestForecastDate(getDailyBalances, month, year, settings.forecast_horizon_months);
+    const snowballReason = dateValid && preview.selectedExtra + 0.005 < total
+      ? `Flo says this money is safer kept available. Sending the full ${money(remainder)} to Snowball would take your forecast below the ${money(settings.safety_floor)} safety floor on ${formatForecastDateLabel(safetyDate)}. I'm protecting that date so upcoming bills and your cash cushion stay covered.`
+      : !dateValid
+        ? `Flo can't place this on a dated Snowball payment yet. I'm keeping ${money(remainder)} available to protect your ${money(settings.safety_floor)} safety floor on ${formatForecastDateLabel(safetyDate)}.`
+        : undefined;
     return {
       month,
       year,
@@ -358,8 +372,9 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all", onMana
       nextPayment,
       paymentDate: selectedPaymentDate,
       safe: dateValid && preview.selectedExtra + 0.005 >= total,
+      snowballReason,
     };
-  }, [bucketClosePrompt, bucketPaymentDate, bucketRouteMode, getExtraPayment, getRemainingDebtPlanForMonth, previewDebtSnowball, settings.debtPayoffEnabled, localDay]);
+  }, [bucketClosePrompt, bucketPaymentDate, bucketRouteMode, getDailyBalances, getExtraPayment, getRemainingDebtPlanForMonth, previewDebtSnowball, settings.debtPayoffEnabled, settings.forecast_horizon_months, settings.safety_floor, localDay]);
 
   const closeBucketKeepAvailable = async (prompt: BucketClosePrompt) => {
     if (saving || bucketCloseInFlightRef.current) return;
@@ -1208,6 +1223,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all", onMana
         actual={Math.abs(surplusPrompt?.transaction.amount ?? 0)}
         targetDebt={surplusSnowballOffer?.targetDebt}
         snowballSafe={Boolean(surplusSnowballOffer?.safe)}
+        snowballReason={surplusSnowballOffer?.snowballReason}
         snowballEnabled={settings.debtPayoffEnabled}
         safetyFloor={settings.safety_floor}
         forecastHorizonMonths={settings.forecast_horizon_months}
@@ -1234,6 +1250,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all", onMana
         actual={bucketClosePrompt ? spendingBucketSummary(bucketClosePrompt.goal).spent : 0}
         targetDebt={bucketSnowballOffer?.targetDebt}
         snowballSafe={Boolean(bucketSnowballOffer?.safe)}
+        snowballReason={bucketSnowballOffer?.snowballReason}
         snowballEnabled={settings.debtPayoffEnabled}
         safetyFloor={settings.safety_floor}
         forecastHorizonMonths={settings.forecast_horizon_months}

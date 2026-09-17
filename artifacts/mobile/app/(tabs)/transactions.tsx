@@ -65,7 +65,7 @@ import {
   DESKTOP_MODAL_OVERLAY,
   DESKTOP_MODAL_REGULAR,
 } from "@/lib/desktopModal";
-import { debtPaymentStatusLabel } from "@/lib/forecastDisplay";
+import { debtPaymentStatusLabel, formatForecastDateLabel, lowestForecastDate } from "@/lib/forecastDisplay";
 import {
   canMatchExpenseToBill,
   confirmedBillMatchId,
@@ -361,6 +361,7 @@ export function ActivityScreen() {
     getBillOccurrencesInMonth,
     getBillMonthlyTotal,
     getBillEffectiveMonthlyTotal,
+    getDailyBalances,
     getPaidAmount,
     finalizeBillPayment,
     setCustomAmount,
@@ -1629,6 +1630,7 @@ export function ActivityScreen() {
       dateValid ? selectedPaymentDate : undefined,
     );
     const safeNewSurplus = Math.max(0, preview.safeMaximum - existingOtherExtra);
+    const safetyDate = lowestForecastDate(getDailyBalances, surplusPrompt.month, surplusPrompt.year, settings.forecast_horizon_months);
     return {
       preview,
       targetDebt:
@@ -1639,14 +1641,18 @@ export function ActivityScreen() {
       safe: dateValid && preview.selectedExtra + 0.005 >= total,
       safeNewSurplus,
       snowballReason: dateValid && preview.selectedExtra + 0.005 < total
-        ? `Flo says this money is safer kept available. Sending the full $${surplus.toFixed(2)} to Snowball would use more than your safe room and could take the forecast below the $${settings.safety_floor.toFixed(2)} safety floor. I can safely route up to $${safeNewSurplus.toFixed(2)} of this extra payment.`
-        : undefined,
+        ? `Flo says this money is safer kept available. Sending the full $${surplus.toFixed(2)} to Snowball would take your forecast below the $${settings.safety_floor.toFixed(2)} safety floor on ${formatForecastDateLabel(safetyDate)}. I'm protecting that date so upcoming bills and your cash cushion stay covered.`
+        : !dateValid
+          ? `Flo can't place this on a dated Snowball payment yet. I'm keeping $${surplus.toFixed(2)} available to protect your $${settings.safety_floor.toFixed(2)} safety floor on ${formatForecastDateLabel(safetyDate)}.`
+          : undefined,
     };
   }, [
     getExtraPayment,
     getRemainingDebtPlanForMonth,
     previewDebtSnowball,
+    getDailyBalances,
     settings.debtPayoffEnabled,
+    settings.forecast_horizon_months,
     settings.safety_floor,
     surplusPaymentDate,
     surplusPrompt,

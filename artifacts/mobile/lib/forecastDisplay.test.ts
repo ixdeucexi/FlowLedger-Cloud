@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, combineSameDayDebtPaymentEvents, dedupeSameDayBillEvents, debtPaymentStatusLabel, forecastItemBadgeLabel, forecastItemTypeLabel, formatCalendarBalance, groupForecastEvents, plannedDebtEditorParams } from "./forecastDisplay";
+import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, combineSameDayDebtPaymentEvents, dedupeSameDayBillEvents, debtPaymentStatusLabel, formatForecastDateLabel, forecastItemBadgeLabel, forecastItemTypeLabel, formatCalendarBalance, groupForecastEvents, lowestForecastDate, plannedDebtEditorParams } from "./forecastDisplay";
 import type { FinancialEvent } from "./forecast";
 
 const event = (overrides: Partial<FinancialEvent> & Pick<FinancialEvent, "id" | "sourceType" | "sourceId" | "kind" | "date" | "amount" | "status">): FinancialEvent => ({
@@ -17,6 +17,14 @@ test("calendar balances round cents to the nearest whole dollar", () => {
   assert.equal(formatCalendarBalance(1689.99), "$1,690");
   assert.equal(formatCalendarBalance(-12.75), "-$13");
   assert.equal(formatCalendarBalance(0.49), "$0");
+});
+
+test("Flo can name the date protected by the safety floor", () => {
+  const balances = (month: number, _year: number) => month === 8
+    ? [{ day: 17, balance: 420, balanceDate: "2026-09-17" }, { day: 26, balance: 175, balanceDate: "2026-09-26" }]
+    : [];
+  assert.equal(lowestForecastDate(balances, 8, 2026, 1), "2026-09-26");
+  assert.equal(formatForecastDateLabel("2026-09-26"), "September 26, 2026");
 });
 
 test("mobile calendar displays and announces the full balance", () => {

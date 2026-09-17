@@ -136,6 +136,34 @@ export function formatCalendarBalance(amount: number): string {
   return `${sign}$${wholeDollars.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
 
+export function formatForecastDateLabel(value?: string): string {
+  if (!value) return "the tightest forecast date";
+  const parsed = new Date(`${value.slice(0, 10)}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value.slice(0, 10);
+  return parsed.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
+export function lowestForecastDate(
+  getDailyBalances: (month: number, year: number) => Array<{ day: number; balance: number; balanceDate?: string }>,
+  startMonth: number,
+  startYear: number,
+  horizonMonths: number,
+): string | undefined {
+  let lowest = Infinity;
+  let lowestDate: string | undefined;
+  for (let offset = 0; offset < Math.max(1, horizonMonths); offset += 1) {
+    const absolute = startYear * 12 + startMonth + offset;
+    const month = absolute % 12;
+    const year = Math.floor(absolute / 12);
+    getDailyBalances(month, year).forEach(day => {
+      if (!Number.isFinite(day.balance) || day.balance >= lowest) return;
+      lowest = day.balance;
+      lowestDate = day.balanceDate ?? `${year}-${String(month + 1).padStart(2, "0")}-${String(day.day).padStart(2, "0")}`;
+    });
+  }
+  return lowestDate;
+}
+
 export function formatEventStatus(status: FinancialEventStatus): string {
   return STATUS_LABELS[status] ?? status;
 }

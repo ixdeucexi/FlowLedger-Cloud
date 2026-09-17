@@ -37,7 +37,7 @@ import { confirmedBillMatchId, isConfirmedBillMatch } from "@/lib/billMatching";
 import { nextPlannedDebtPayment, snowballTargetDebtId } from "@/lib/billSurplusRouting";
 import { allocationLabel, groupPlannedExpenseAllocations, matchedOccurrenceAllocations, occurrenceKey, reviewSettlementSummary, transactionDisplayName } from "@/lib/reviewCenter";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
-import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, forecastItemBadgeLabel, forecastItemTypeLabel, groupForecastEvents, plannedDebtEditorParams } from "@/lib/forecastDisplay";
+import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, formatForecastDateLabel, forecastItemBadgeLabel, forecastItemTypeLabel, groupForecastEvents, lowestForecastDate, plannedDebtEditorParams } from "@/lib/forecastDisplay";
 import type { FinancialEvent } from "@/lib/forecast";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { buildOverdueBillOccurrences } from "@/lib/overdueBills";
@@ -973,6 +973,7 @@ export default function MonthlyScreen() {
     const validDate = isValidDateInMonth(selectedPaymentDate, month, selectedYear);
     const preview = previewDebtSnowball(month, selectedYear, total, surplus - previousSource, validDate ? selectedPaymentDate : undefined);
     const safeNewSurplus = Math.max(0, preview.safeMaximum - existingOtherExtra);
+    const safetyDate = lowestForecastDate(getDailyBalances, month, selectedYear, settings.forecast_horizon_months);
     return {
       preview,
       total,
@@ -983,10 +984,12 @@ export default function MonthlyScreen() {
       safe: validDate && preview.selectedExtra + 0.005 >= total,
       safeNewSurplus,
       snowballReason: validDate && preview.selectedExtra + 0.005 < total
-        ? `Flo says this money is safer kept available. Sending the full $${surplus.toFixed(2)} to Snowball would use more than your safe room and could take the forecast below the $${settings.safety_floor.toFixed(2)} safety floor. I can safely route up to $${safeNewSurplus.toFixed(2)} of this extra payment.`
-        : undefined,
+        ? `Flo says this money is safer kept available. Sending the full $${surplus.toFixed(2)} to Snowball would take your forecast below the $${settings.safety_floor.toFixed(2)} safety floor on ${formatForecastDateLabel(safetyDate)}. I'm protecting that date so upcoming bills and your cash cushion stay covered.`
+        : !validDate
+          ? `Flo can't place this on a dated Snowball payment yet. I'm keeping $${surplus.toFixed(2)} available to protect your $${settings.safety_floor.toFixed(2)} safety floor on ${formatForecastDateLabel(safetyDate)}.`
+          : undefined,
     };
-  }, [surplusPrompt, surplusPaymentDate, surplusRouteMode, getExtraPayment, getRemainingDebtPlanForMonth, previewDebtSnowball, month, selectedYear, settings.debtPayoffEnabled]);
+  }, [surplusPrompt, surplusPaymentDate, surplusRouteMode, getDailyBalances, getExtraPayment, getRemainingDebtPlanForMonth, previewDebtSnowball, month, selectedYear, settings.debtPayoffEnabled, settings.forecast_horizon_months, settings.safety_floor]);
 
   const askToTreatPaidAsFullPayment = useCallback((prompt: { bill: Bill; budgeted: number; actual: number; paidDate: string }) => {
     const { bill, budgeted, actual, paidDate } = prompt;

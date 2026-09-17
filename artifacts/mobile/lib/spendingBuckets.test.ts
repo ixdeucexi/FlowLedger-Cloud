@@ -359,8 +359,8 @@ test("Review Center matches a partial bucket purchase before offering explicit c
     resolve(process.cwd(), "components/BillSurplusModal.tsx"),
     "utf8",
   );
-  assert.match(modalSource, /Ask Flo why this is not safe/);
-  assert.match(modalSource, /Flo says: keep this available/);
+  assert.match(modalSource, /Continue · keep/);
+  assert.match(modalSource, /I can't safely move this to Snowball/);
   assert.match(modalSource, /itemType === "bucket" \? `Close bucket/);
 });
 

@@ -1,6 +1,6 @@
 import Feather from "@expo/vector-icons/Feather";
 import React from "react";
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { DatePickerField } from "@/components/DatePickerField";
 import { FloLogo } from "@/components/FloLogo";
@@ -49,25 +49,10 @@ export function BillSurplusModal({ visible, billName, itemType = "bill", budgete
   useBackDismiss(visible, requestClose);
   const difference = Math.max(0, budgeted - actual);
   const itemLabel = itemType === "debt" ? "debt payment" : itemType === "bucket" ? "spending bucket" : "bill";
+  const snowballBlocked = snowballEnabled && Boolean(targetDebt) && !snowballSafe;
   const message = itemType === "bucket"
     ? `${billName} has $${difference.toFixed(2)} left. Close the bucket and choose where that remainder goes.`
     : `Hey, I see ${billName} was paid under the planned ${itemLabel}. You have $${difference.toFixed(2)} available.`;
-  const handleSnowballPress = () => {
-    if (!targetDebt) return;
-    if (!paymentDateValid) {
-      Alert.alert("Flo needs a date", "Choose a valid payment date first so I can check the safety floor for this Snowball payment.", [{ text: "Got it" }]);
-      return;
-    }
-    if (!snowballSafe) {
-      Alert.alert(
-        "Flo says: keep this available",
-        snowballReason ?? `Sending this money to Snowball would take your forecast below the $${safetyFloor.toFixed(0)} safety floor across ${forecastHorizonMonths} months. Keeping it available protects upcoming bills and your cash cushion.`,
-        [{ text: "Keep it available" }],
-      );
-      return;
-    }
-    onSnowball();
-  };
   return (
     <Modal visible={visible} transparent animationType="fade" presentationStyle="overFullScreen" statusBarTranslucent onRequestClose={requestClose}>
       <Pressable style={styles.overlay} onPress={requestClose}>
@@ -81,15 +66,15 @@ export function BillSurplusModal({ visible, billName, itemType = "bill", budgete
             {message}
           </Text>
           <Text style={[styles.sub, { color: c.mutedForeground }]}>
-            {snowballEnabled ? `I can add it to ${targetDebt ?? "your snowball"} for you, or you can keep it available.` : "Your current planning mode keeps this difference available in your cash flow."}
+            {snowballBlocked ? "I can't safely move this to Snowball right now. I'll keep it available to protect your plan." : snowballEnabled ? `I can add it to ${targetDebt ?? "your snowball"} for you, or you can keep it available.` : "Your current planning mode keeps this difference available in your cash flow."}
           </Text>
           <View style={[styles.breakdown, { backgroundColor: c.background, borderColor: c.border }]}>
             <View style={styles.row}><Text style={[styles.rowLabel, { color: c.mutedForeground }]}>Budgeted</Text><Text style={[styles.rowValue, { color: c.foreground }]}>${budgeted.toFixed(2)}</Text></View>
             <View style={styles.row}><Text style={[styles.rowLabel, { color: c.mutedForeground }]}>Actual</Text><Text style={[styles.rowValue, { color: c.foreground }]}>${actual.toFixed(2)}</Text></View>
             <View style={styles.row}><Text style={[styles.rowLabel, { color: c.success }]}>Available</Text><Text style={[styles.rowValue, { color: c.success }]}>${difference.toFixed(2)}</Text></View>
           </View>
-          {snowballEnabled && <Text style={[styles.routeLabel, { color: c.foreground }]}>What would you like me to do with this extra money?</Text>}
-          {snowballEnabled && <View style={styles.routeChoices}>
+          {snowballEnabled && !snowballBlocked && <Text style={[styles.routeLabel, { color: c.foreground }]}>What would you like me to do with this extra money?</Text>}
+          {snowballEnabled && !snowballBlocked && <View style={styles.routeChoices}>
             <Pressable
               accessibilityRole="radio"
               accessibilityLabel={nextPaymentDate ? `Add to next planned payment on ${shortDate(nextPaymentDate)}` : "No next planned payment is available"}
@@ -123,7 +108,7 @@ export function BillSurplusModal({ visible, billName, itemType = "bill", budgete
               <Text style={[styles.routeChoiceMeta, { color: c.mutedForeground }]}>Choose this month</Text>
             </Pressable>
           </View>}
-          {snowballEnabled && routeMode === "date" && <DatePickerField
+          {snowballEnabled && !snowballBlocked && routeMode === "date" && <DatePickerField
             label="Apply leftover on"
             value={paymentDate}
             onChange={onPaymentDateChange}
@@ -131,26 +116,24 @@ export function BillSurplusModal({ visible, billName, itemType = "bill", budgete
             minDate={paymentDateMin}
             maxDate={paymentDateMax}
           />}
-          {snowballEnabled && <Text style={[styles.dateHelp, { color: c.mutedForeground }]}>
+          {snowballEnabled && !snowballBlocked && <Text style={[styles.dateHelp, { color: c.mutedForeground }]}>
             {routeMode === "next" && nextPaymentDate
               ? `Combines with ${targetDebt ?? "the debt"} on ${shortDate(nextPaymentDate)} so Forecast shows one payment.`
               : "Adds the debt payment to your calendar on the date you choose."}
           </Text>}
-          {snowballEnabled && !targetDebt && <Text style={[styles.note, { color: c.mutedForeground }]}>No snowball debt selected.</Text>}
-          {snowballEnabled && routeMode === "next" && targetDebt && !nextPaymentDate && <Text style={[styles.note, { color: c.warning }]}>I couldn't find a planned {targetDebt} payment after this one. Choose a date and I'll place it there safely.</Text>}
-          {snowballEnabled && routeMode === "date" && targetDebt && !paymentDateValid && <Text style={[styles.note, { color: c.warning }]}>Choose a valid date in this {itemType === "bucket" ? "Snowball" : "bill"} month.</Text>}
-          {snowballEnabled && targetDebt && paymentDateValid && !snowballSafe && <Text style={[styles.note, { color: c.warning }]}>{snowballReason ?? `Flo says this money is safer kept available: sending it to Snowball would put your forecast below the $${safetyFloor.toFixed(0)} safety floor across ${forecastHorizonMonths} months.`}</Text>}
-          {snowballEnabled && <Pressable disabled={saving || !targetDebt} onPress={handleSnowballPress} accessibilityLabel={snowballSafe ? "Add available money to Snowball" : "Ask Flo why Snowball is not safe"} style={[styles.primary, { backgroundColor: targetDebt && snowballSafe ? c.primary : c.warning + "22", borderWidth: targetDebt && snowballSafe ? 0 : 1, borderColor: c.warning, opacity: saving ? 0.55 : 1 }]}>
-            <Feather name={snowballSafe ? "zap" : "shield"} size={16} color={targetDebt && snowballSafe ? c.primaryForeground : c.warning} />
-            <Text style={[styles.primaryText, { color: targetDebt && snowballSafe ? c.primaryForeground : c.warning }]}>
-              {snowballSafe
-                ? (routeMode === "next" && nextPaymentDate
-                  ? `Add $${difference.toFixed(2)} to next payment`
-                  : `Add $${difference.toFixed(2)} to ${targetDebt ?? "Snowball"}`)
-                : "Ask Flo why this is not safe"}
+          {snowballEnabled && !snowballBlocked && !targetDebt && <Text style={[styles.note, { color: c.mutedForeground }]}>No snowball debt selected.</Text>}
+          {snowballEnabled && !snowballBlocked && routeMode === "next" && targetDebt && !nextPaymentDate && <Text style={[styles.note, { color: c.warning }]}>I couldn't find a planned {targetDebt} payment after this one. Choose a date and I'll place it there safely.</Text>}
+          {snowballEnabled && !snowballBlocked && routeMode === "date" && targetDebt && !paymentDateValid && <Text style={[styles.note, { color: c.warning }]}>Choose a valid date in this {itemType === "bucket" ? "Snowball" : "bill"} month.</Text>}
+          {snowballBlocked && <Text style={[styles.note, { color: c.warning }]}>{snowballReason ?? `Flo says this money is safer kept available: sending it to Snowball would put your forecast below the $${safetyFloor.toFixed(0)} safety floor across ${forecastHorizonMonths} months. I'm protecting upcoming bills and your cash cushion.`}</Text>}
+          {snowballEnabled && !snowballBlocked && <Pressable disabled={saving || !targetDebt} onPress={onSnowball} accessibilityLabel="Add available money to Snowball" style={[styles.primary, { backgroundColor: c.primary, opacity: saving ? 0.55 : 1 }]}>
+            <Feather name="zap" size={16} color={c.primaryForeground} />
+            <Text style={[styles.primaryText, { color: c.primaryForeground }]}>
+              {routeMode === "next" && nextPaymentDate
+                ? `Add $${difference.toFixed(2)} to next payment`
+                : `Add $${difference.toFixed(2)} to ${targetDebt ?? "Snowball"}`}
             </Text>
           </Pressable>}
-          <Pressable disabled={saving} onPress={onKeep} style={[styles.secondary, { borderColor: c.border, opacity: saving ? 0.55 : 1 }]}><Text style={[styles.secondaryText, { color: c.foreground }]}>{itemType === "bucket" ? `Close bucket · keep $${difference.toFixed(2)} available` : `No, keep $${difference.toFixed(2)} available`}</Text></Pressable>
+          <Pressable disabled={saving} onPress={onKeep} style={[snowballBlocked ? styles.primary : styles.secondary, { backgroundColor: snowballBlocked ? c.primary : undefined, borderColor: c.border, opacity: saving ? 0.55 : 1 }]}><Text style={[snowballBlocked ? styles.primaryText : styles.secondaryText, { color: snowballBlocked ? c.primaryForeground : c.foreground }]}>{snowballBlocked ? `Continue · keep $${difference.toFixed(2)} available` : itemType === "bucket" ? `Close bucket · keep $${difference.toFixed(2)} available` : `No, keep $${difference.toFixed(2)} available`}</Text></Pressable>
         </Pressable>
         </ScrollView>
       </Pressable>
