@@ -71,7 +71,7 @@ export function BillSurplusModal({ visible, billName, itemType = "bill", budgete
             <View style={styles.row}><Text style={[styles.rowLabel, { color: c.mutedForeground }]}>Actual</Text><Text style={[styles.rowValue, { color: c.foreground }]}>${actual.toFixed(2)}</Text></View>
             <View style={styles.row}><Text style={[styles.rowLabel, { color: c.success }]}>Available</Text><Text style={[styles.rowValue, { color: c.success }]}>${difference.toFixed(2)}</Text></View>
           </View>
-          {snowballEnabled && <Text style={[styles.routeLabel, { color: c.foreground }]}>When should Flo add it?</Text>}
+          {snowballEnabled && <Text style={[styles.routeLabel, { color: c.foreground }]}>What would you like me to do with this extra money?</Text>}
           {snowballEnabled && <View style={styles.routeChoices}>
             <Pressable
               accessibilityRole="radio"
@@ -120,7 +120,7 @@ export function BillSurplusModal({ visible, billName, itemType = "bill", budgete
               : "Adds the debt payment to your calendar on the date you choose."}
           </Text>}
           {snowballEnabled && !targetDebt && <Text style={[styles.note, { color: c.mutedForeground }]}>No snowball debt selected.</Text>}
-          {snowballEnabled && routeMode === "next" && targetDebt && !nextPaymentDate && <Text style={[styles.note, { color: c.warning }]}>No later planned payment was found. Pick a date instead.</Text>}
+          {snowballEnabled && routeMode === "next" && targetDebt && !nextPaymentDate && <Text style={[styles.note, { color: c.warning }]}>I couldn't find a planned {targetDebt} payment after this one. Choose a date and I'll place it there safely.</Text>}
           {snowballEnabled && routeMode === "date" && targetDebt && !paymentDateValid && <Text style={[styles.note, { color: c.warning }]}>Choose a valid date in this {itemType === "bucket" ? "Snowball" : "bill"} month.</Text>}
           {snowballEnabled && targetDebt && paymentDateValid && !snowballSafe && <Text style={[styles.note, { color: c.warning }]}>Keep this money available to preserve your ${safetyFloor.toFixed(0)} floor across {forecastHorizonMonths} months.</Text>}
           {snowballEnabled && <Pressable disabled={saving || !targetDebt || !snowballSafe} onPress={onSnowball} style={[styles.primary, { backgroundColor: targetDebt && snowballSafe ? c.primary : c.muted, opacity: saving ? 0.55 : 1 }]}>

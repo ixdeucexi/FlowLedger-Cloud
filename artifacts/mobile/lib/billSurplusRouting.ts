@@ -10,10 +10,13 @@ export type NextPlannedDebtPayment = {
 const cents = (value: number) => Math.round(Math.max(0, Number(value) || 0) * 100) / 100;
 
 /**
- * Finds the next canonical payment for the debt that will receive a routed
- * bill surplus. A required or rollover allocation determines the next date;
- * the displayed amount includes every allocation already planned for that
- * debt on that date so the add flow matches Forecast exactly.
+ * Finds the next planned payment for the debt that will receive a routed bill
+ * surplus. Required/rollover allocations are preferred because they are the
+ * canonical recurring payment schedule. If those have already been consumed
+ * or are absent, an existing saved extra allocation is still a valid planned
+ * date (and is visible on Forecast), so we use it as a fallback. The displayed
+ * amount includes every allocation already planned for that debt on that date
+ * so the add flow matches Forecast exactly.
  */
 export function nextPlannedDebtPayment(
   allocations: readonly DatedDebtAllocation[],
@@ -22,10 +25,15 @@ export function nextPlannedDebtPayment(
 ): NextPlannedDebtPayment | undefined {
   if (!debtId || !/^\d{4}-\d{2}-\d{2}$/.test(onOrAfterDate)) return undefined;
 
-  const nextDate = allocations
-    .filter(allocation => allocation.kind !== "extra")
+  const matchingAllocations = allocations
     .filter(allocation => allocation.targetBillId === debtId)
-    .filter(allocation => allocation.date >= onOrAfterDate && allocation.amount > 0.005)
+    .filter(allocation => allocation.date >= onOrAfterDate && allocation.amount > 0.005);
+  const canonicalDates = matchingAllocations
+    .filter(allocation => allocation.kind !== "extra")
+    .map(allocation => allocation.date)
+    .sort((left, right) => left.localeCompare(right))[0];
+  const nextDate = canonicalDates ?? matchingAllocations
+    .filter(allocation => allocation.kind === "extra")
     .map(allocation => allocation.date)
     .sort((left, right) => left.localeCompare(right))[0];
   if (!nextDate) return undefined;

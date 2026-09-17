@@ -43,9 +43,20 @@ test("bill surplus uses the full amount already planned on the target debt's nex
   });
 });
 
-test("bill surplus next-payment routing fails closed when no later canonical payment exists", () => {
-  assert.equal(nextPlannedDebtPayment([
+test("bill surplus can use an existing saved extra date when no canonical date remains", () => {
+  assert.deepEqual(nextPlannedDebtPayment([
     allocation("saved-extra", "2026-08-29", "extra", "concert", 9.11),
+  ], "concert", "2026-08-13"), {
+    amount: 9.11,
+    date: "2026-08-29",
+    debtId: "concert",
+    debtName: "Concert",
+  });
+});
+
+test("bill surplus routing fails closed when no later payment exists", () => {
+  assert.equal(nextPlannedDebtPayment([
+    allocation("past-extra", "2026-08-12", "extra", "concert", 9.11),
   ], "concert", "2026-08-13"), undefined);
   assert.equal(nextPlannedDebtPayment([], undefined, "2026-08-13"), undefined);
 });
