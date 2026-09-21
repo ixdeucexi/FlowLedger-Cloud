@@ -7,6 +7,10 @@ const migration = readFileSync(
   resolve(process.cwd(), "../../supabase/migrations/20260827121836_atomic_financial_mutations.sql"),
   "utf8",
 ).toLowerCase();
+const pendingTransactionMigration = readFileSync(
+  resolve(process.cwd(), "../../supabase/migrations/20260921035906_create_pending_activity_transaction.sql"),
+  "utf8",
+).toLowerCase();
 
 test("subscription candidates are explicitly exposed behind household RLS", () => {
   assert.match(migration, /create table public\.subscription_candidates/);
@@ -109,4 +113,17 @@ test("clients call atomic RPCs instead of sequential durable writes", () => {
   assert.match(review, /assertFinancialMutationOnline\(\)[\s\S]*createForgottenBillAndReconcile/);
   assert.match(due, /completeDecisionAtomically\(/);
   assert.doesNotMatch(review.slice(review.indexOf("const saveForgottenBill"), review.indexOf("const resolveTarget")), /deleteBillMistake|await addBill/);
+});
+
+test("pending charge transaction creation is atomic, scoped, and retry safe", () => {
+  assert.match(pendingTransactionMigration, /create or replace function private\.create_pending_activity_transaction\([\s\S]+security definer[\s\S]+set search_path = ''/);
+  assert.match(pendingTransactionMigration, /create or replace function public\.create_pending_activity_transaction\([\s\S]+security invoker[\s\S]+set search_path = ''/);
+  assert.match(pendingTransactionMigration, /from public\.plaid_transactions[\s\S]+for update/);
+  assert.match(pendingTransactionMigration, /insert into public\.transactions[\s\S]+insert into public\.pending_plan_matches/);
+  assert.match(pendingTransactionMigration, /on conflict \(household_id, pending_plaid_transaction_id\) do update/);
+  assert.match(pendingTransactionMigration, /date_trunc\('month',[\s\S]+pending\.transaction_date/);
+  assert.match(pendingTransactionMigration, /private\.is_household_editor\(p_household_id\)/);
+  assert.match(pendingTransactionMigration, /revoke all on function public\.create_pending_activity_transaction\([\s\S]+from public, anon/);
+  assert.match(pendingTransactionMigration, /do \$acl_audit\$[\s\S]+has_function_privilege/);
+  assert.doesNotMatch(pendingTransactionMigration, /auth\.role\(\)/);
 });

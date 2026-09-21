@@ -88,6 +88,20 @@ test("review and pending attention remain separate actionable destinations", () 
   assert.doesNotMatch(mobileActivity, /activityAttentionCount/);
 });
 
+test("pending charges can create one prefilled replacement-safe Activity transaction", () => {
+  assert.match(
+    mobileActivity,
+    /accessibilityLabel="Create transaction for pending charge"/,
+  );
+  assert.match(mobileActivity, /pendingChargeTransactionDraft/);
+  assert.match(mobileActivity, /createTransactionForPendingCharge/);
+  assert.match(mobileActivity, /creationContext=\{/);
+  assert.match(
+    mobileActivity,
+    /When it posts, FlowLedger will replace this entry so it is not counted twice\./,
+  );
+});
+
 test("compact desktop Activity keeps its hero and feed at intrinsic height", () => {
   assert.match(
     desktopActivity,

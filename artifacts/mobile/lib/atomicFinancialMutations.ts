@@ -150,6 +150,68 @@ export type FundGoalIntent = {
   accountId?: string | null;
 };
 
+export type CreatePendingActivityTransactionIntent = {
+  pendingPlaidTransactionId: string;
+  transactionId: string;
+  householdId: string;
+  budgetId: string;
+  amount: number;
+  date: string;
+  category: string;
+  note: string;
+  accountId?: string | null;
+};
+
+export async function createPendingActivityTransactionAtomically(
+  intent: CreatePendingActivityTransactionIntent,
+) {
+  if (!intent.pendingPlaidTransactionId || !intent.transactionId) {
+    throw new Error("The pending charge is missing its transaction identity.");
+  }
+  if (!intent.householdId || !intent.budgetId) {
+    throw new Error("Choose a household before creating this transaction.");
+  }
+  if (
+    !Number.isFinite(intent.amount)
+    || intent.amount >= 0
+    || Math.abs(intent.amount) > 1_000_000_000
+  ) {
+    throw new Error("Pending charges require a finite expense amount.");
+  }
+  dateOnly(intent.date, "Transaction date");
+  if (!intent.category.trim()) {
+    throw new Error("Choose a transaction category.");
+  }
+  const { data, error } = await supabase.rpc(
+    "create_pending_activity_transaction",
+    {
+      p_pending_plaid_transaction_id: intent.pendingPlaidTransactionId,
+      p_transaction_id: intent.transactionId,
+      p_household_id: intent.householdId,
+      p_budget_id: intent.budgetId,
+      p_amount: intent.amount,
+      p_date: intent.date,
+      p_category: intent.category.trim(),
+      p_note: intent.note.trim(),
+      p_account_id: intent.accountId ?? null,
+    },
+  );
+  if (error) throw new Error(error.message);
+  const result = responseRecord(data, "Pending transaction creation");
+  const transaction = responseRecord(result.transaction, "Pending transaction creation");
+  const pendingMatch = responseRecord(result.pending_match, "Pending transaction creation");
+  return {
+    transactionId: requiredId(
+      result.transaction_id,
+      intent.transactionId,
+      "Pending transaction creation",
+    ),
+    transaction,
+    pendingMatch,
+    retry: result.retry === true,
+  };
+}
+
 export async function fundGoalAtomically(intent: FundGoalIntent) {
   finiteMoney(intent.amount, "Contribution", false);
   finiteMoney(intent.expectedCurrentAmount, "Goal balance", true);

@@ -146,7 +146,10 @@ import {
 import { dateIdKeysetFilter, loadAllDateIdKeysetRows } from "@/lib/pagedQuery";
 import { debtSyncRefreshPlan, replaceRowsById, rowsExactlyMatchRequestedIds } from "@/lib/debtSyncResult";
 import { goalAffordabilityFromProjectedBalance } from "@/lib/goalAffordability";
-import { updateManualAccountWithAnchorAtomically } from "@/lib/atomicFinancialMutations";
+import {
+  createPendingActivityTransactionAtomically,
+  updateManualAccountWithAnchorAtomically,
+} from "@/lib/atomicFinancialMutations";
 import {
   budgetPlanCacheCanHydrateBeforeMembership,
   budgetPlanCacheWriteMatchesHydratedRecord,
@@ -367,6 +370,7 @@ interface BudgetContextType {
   unmatchTransactionFromBill: (transactionId: string) => Promise<void>;
   matchPendingTransactionToBill: (pendingPlaidTransactionId: string, billId: string, occurrenceDate: string, plannedAmount: number) => Promise<void>;
   matchPendingTransactionToManual: (pendingPlaidTransactionId: string, manualTransactionId: string) => Promise<void>;
+  createTransactionForPendingCharge: (pendingPlaidTransactionId: string, tx: Omit<Transaction, "id">) => Promise<string>;
   removePendingPlanMatch: (matchId: string) => Promise<void>;
   reconcileTransaction: (input: ReconcileTransactionInput) => Promise<void>;
   createSpendingBucketForTransaction: (input: CreateSpendingBucketForTransactionInput) => Promise<CreateSpendingBucketForTransactionResult>;
@@ -4057,6 +4061,99 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     );
   }, [matchPendingTransactionToPlan, pendingBankTransactions, transactions]);
 
+  const createTransactionForPendingCharge = useCallback(async (
+    pendingPlaidTransactionId: string,
+    tx: Omit<Transaction, "id">,
+  ): Promise<string> => {
+    if (!user) throw new Error("Sign in to create a transaction");
+    assertCanEditHousehold("create a transaction for this pending charge");
+    const pending = pendingBankTransactions.find(
+      item => item.plaid_transaction_id === pendingPlaidTransactionId,
+    );
+    if (!pending || pending.amount >= 0) {
+      throw new Error("This pending money-out charge is no longer available");
+    }
+    if (
+      tx.amount >= 0
+      || tx.transfer_group_id
+      || tx.linked_bill_id
+      || tx.linked_plan_id
+    ) {
+      throw new Error("Create a regular expense transaction for this pending charge");
+    }
+    if (tx.date.slice(0, 7) !== pending.transaction_date.slice(0, 7)) {
+      throw new Error("The transaction date must stay in the same month as the pending charge");
+    }
+
+    const scope = householdScopeRef.current;
+    if (!scope?.householdId || !scope.budgetId) {
+      throw new Error("Choose a household before creating this transaction");
+    }
+    const transactionId = genId();
+    const transaction: Transaction = {
+      ...tx,
+      id: transactionId,
+      account_id: tx.account_id,
+    };
+    const now = new Date().toISOString();
+    const optimisticMatch: PendingPlanMatch = {
+      id: genId(),
+      pending_plaid_transaction_id: pendingPlaidTransactionId,
+      pending_account_id: pending.plaid_account_id,
+      target_type: "manual",
+      target_id: transactionId,
+      target_name: transaction.note?.trim() || transaction.category || "Manual Activity",
+      occurrence_date: transaction.date,
+      planned_amount: roundMoney(Math.abs(transaction.amount)),
+      pending_amount: roundMoney(Math.abs(pending.amount)),
+      pending_transaction_date: pending.transaction_date,
+      status: "active",
+      created_at: now,
+      updated_at: now,
+    };
+
+    if (demoMode) {
+      setTransactions(previous => [...previous, transaction]);
+      setPendingPlanMatches(previous => [
+        ...previous.filter(item => item.pending_plaid_transaction_id !== pendingPlaidTransactionId),
+        optimisticMatch,
+      ]);
+      return transactionId;
+    }
+
+    const persist: () => Promise<string> = () => runTrackedFinancialMutation(async () => {
+      const result = await createPendingActivityTransactionAtomically({
+        pendingPlaidTransactionId,
+        transactionId,
+        householdId: scope.householdId,
+        budgetId: scope.budgetId!,
+        amount: transaction.amount,
+        date: transaction.date,
+        category: transaction.category,
+        note: transaction.note,
+        accountId: transaction.account_id,
+      });
+      const savedTransaction = normalizeTransactionRow(result.transaction);
+      const savedMatch = normalizePendingPlanMatchRow(result.pendingMatch);
+      setTransactions(previous => [
+        ...previous.filter(item => item.id !== savedTransaction.id),
+        savedTransaction,
+      ]);
+      setPendingPlanMatches(previous => [
+        ...previous.filter(item => item.pending_plaid_transaction_id !== pendingPlaidTransactionId),
+        savedMatch,
+      ]);
+      return result.transactionId;
+    }, persist);
+    return persist();
+  }, [
+    assertCanEditHousehold,
+    demoMode,
+    pendingBankTransactions,
+    runTrackedFinancialMutation,
+    user,
+  ]);
+
   const removePendingPlanMatch = useCallback(async (matchId: string) => {
     if (!user) throw new Error("Sign in to remove this pending match");
     assertCanEditHousehold("remove a pending match");
@@ -5975,7 +6072,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence, getBillDateMovesForMonth,
       getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal, getDebtMonthSettlements, getDebtSourceCommitment, getDebtPlanForMonth, getRemainingDebtPlanForMonth,
       runSnowball, previewDebtSnowball, applyDebtSnowballPayment, saveExtraPayment, getExtraPayment, deleteExtraPayment, removeDebtSnowballPayment, finalizeBillPayment,
-      addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, matchPendingTransactionToBill, matchPendingTransactionToManual, removePendingPlanMatch, reconcileTransaction, createSpendingBucketForTransaction, undoTransactionReconciliation, removeReviewSurplusFunding, getTransactionsForMonth,
+      addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, matchPendingTransactionToBill, matchPendingTransactionToManual, createTransactionForPendingCharge, removePendingPlanMatch, reconcileTransaction, createSpendingBucketForTransaction, undoTransactionReconciliation, removeReviewSurplusFunding, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome, getIncomeOccurrencesInMonth,
       addGoal, updateGoal, closeSpendingBucket, closeSpendingBucketAndRouteRemainder, reopenSpendingBucket, archiveSpendingBucket, restoreArchivedSpendingBucket, deleteGoal, checkGoalAffordability,
       getCashFlow, getDailyBalances, getCalendarDailyBalances, getPlanSimulationBaseline,

@@ -107,6 +107,10 @@ import {
   pendingMatchStatusLabel,
   unmatchedPendingTransactions,
 } from "@/lib/pendingPlanMatches";
+import {
+  pendingChargeTransactionDraft,
+  pendingDraftStaysInChargeMonth,
+} from "@/lib/pendingTransactionDraft";
 import { transactionDebt } from "@/lib/transactionDebt";
 import {
   readInterfacePreferences,
@@ -370,6 +374,7 @@ export function ActivityScreen() {
     unmatchTransactionFromBill,
     matchPendingTransactionToBill,
     matchPendingTransactionToManual,
+    createTransactionForPendingCharge,
     removePendingPlanMatch,
     reconcileTransaction,
     undoTransactionReconciliation,
@@ -515,6 +520,8 @@ export function ActivityScreen() {
   const [forgottenBillVisible, setForgottenBillVisible] = useState(false);
   const [pendingMatchTx, setPendingMatchTx] =
     useState<PendingBankTransaction | null>(null);
+  const [pendingTransactionSource, setPendingTransactionSource] =
+    useState<PendingBankTransaction | null>(null);
   const [savingMatch, setSavingMatch] = useState(false);
   const [fullPaymentPrompt, setFullPaymentPrompt] =
     useState<MatchedPaymentPrompt | null>(null);
@@ -569,6 +576,15 @@ export function ActivityScreen() {
     }, MODAL_HANDOFF_DELAY_MS);
     return () => clearTimeout(timer);
   }, [fullPaymentPrompt, queuedSurplusPrompt, surplusPrompt]);
+
+  useEffect(() => {
+    if (!pendingTransactionSource || pendingMatchTx || editModalVisible) return;
+    const timer = setTimeout(() => {
+      setEditTx(null);
+      setEditModalVisible(true);
+    }, MODAL_HANDOFF_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [editModalVisible, pendingMatchTx, pendingTransactionSource]);
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
   const activityTopInset =
@@ -1370,8 +1386,39 @@ export function ActivityScreen() {
   };
 
   const handleSave = async (data: Omit<Transaction, "id"> | Transaction) => {
-    if ("id" in data) await updateTransaction(data as Transaction);
-    else await addTransaction(data);
+    if (pendingTransactionSource) {
+      if ("id" in data) {
+        throw new Error("Create a new transaction for this pending charge.");
+      }
+      if (
+        !pendingDraftStaysInChargeMonth(
+          pendingTransactionSource.transaction_date,
+          data.date,
+        )
+      ) {
+        throw new Error(
+          "Keep the transaction date in the same month as the pending charge.",
+        );
+      }
+      const transactionId = await createTransactionForPendingCharge(
+        pendingTransactionSource.plaid_transaction_id,
+        data,
+      );
+      setPendingTransactionSource(null);
+      setDetailItem(null);
+      Alert.alert(
+        "Transaction created",
+        "The charge is reserved in Activity now. When it posts, FlowLedger will replace this entry so it is not counted twice.",
+      );
+      return transactionId;
+    }
+    if ("id" in data) {
+      await updateTransaction(data as Transaction);
+    } else {
+      const transactionId = await addTransaction(data);
+      showTransactionDebtNotice(data);
+      return transactionId;
+    }
     showTransactionDebtNotice(data);
   };
 
@@ -1764,6 +1811,33 @@ export function ActivityScreen() {
       setSavingMatch(false);
     }
   };
+
+  const openPendingTransactionCreator = () => {
+    if (!pendingMatchTx || savingMatch) return;
+    setPendingTransactionSource(pendingMatchTx);
+    setPendingMatchTx(null);
+  };
+
+  const pendingTransactionInitialValues = useMemo(() => {
+    if (!pendingTransactionSource) return undefined;
+    const connectedIdentity = connectedBankAccounts.find(
+      account =>
+        account.plaid_account_id === pendingTransactionSource.plaid_account_id
+        || account.id === pendingTransactionSource.plaid_account_id,
+    );
+    const accountId = accounts.find(
+      account =>
+        account.is_active
+        && (
+          account.id === pendingTransactionSource.plaid_account_id
+          || account.id === connectedIdentity?.id
+        ),
+    )?.id;
+    return {
+      ...pendingChargeTransactionDraft(pendingTransactionSource, categories),
+      account_id: accountId,
+    };
+  }, [accounts, categories, connectedBankAccounts, pendingTransactionSource]);
 
   const handleRemovePendingMatch = async () => {
     if (!selectedPendingPlanMatch || savingMatch) return;
@@ -3536,9 +3610,38 @@ export function ActivityScreen() {
             ) : (
               <>
                 <Text style={[styles.matchIntro, { color: c.mutedForeground }]}>
-                  Choose the bill or manual Activity entry this pending payment
-                  is expected to cover.
+                  Create a new Activity transaction for this charge, or link it
+                  to something you already planned.
                 </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Create transaction for pending charge"
+                  accessibilityHint="Opens a prefilled transaction form"
+                  disabled={savingMatch}
+                  onPress={openPendingTransactionCreator}
+                  style={({ pressed }) => [
+                    styles.pendingCreateTransactionButton,
+                    {
+                      backgroundColor: c.primary + "18",
+                      borderColor: c.primary + "66",
+                      opacity: savingMatch ? 0.55 : pressed ? 0.82 : 1,
+                    },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.matchIcon,
+                      { backgroundColor: c.primary + "22" },
+                    ]}
+                  >
+                    <Feather name="plus" size={19} color={c.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.matchRowTitle, { color: c.foreground }]}>Create transaction</Text>
+                    <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>Amount, merchant, date, and category are filled in for you</Text>
+                  </View>
+                  <Feather name="chevron-right" size={17} color={c.mutedForeground} />
+                </Pressable>
                 <ScrollView
                   style={[
                     styles.matchList,
@@ -3673,8 +3776,8 @@ export function ActivityScreen() {
                           { color: c.mutedForeground },
                         ]}
                       >
-                        Add a bill or manual Activity entry first, then return
-                        to this pending charge.
+                        Create a transaction above, add a bill, or return after
+                        you have another planned entry to match.
                       </Text>
                     </View>
                   )}
@@ -4578,11 +4681,14 @@ export function ActivityScreen() {
         onClose={() => {
           setEditModalVisible(false);
           setEditTx(null);
+          setPendingTransactionSource(null);
         }}
         onSave={handleSave}
         onDelete={handleDelete}
         onDeleteTransfer={handleDeleteTransfer}
         editTx={editTx}
+        initialValues={pendingTransactionInitialValues}
+        creationContext={pendingTransactionSource ? "pending_charge" : undefined}
       />
       <DebtPaymentAppliedModal
         visible={!!debtPaymentNotice}
@@ -5209,6 +5315,16 @@ const styles = StyleSheet.create({
   matchList: { flexGrow: 0, maxHeight: 420 },
   desktopMatchList: { maxHeight: 360 },
   matchBody: { gap: 12 },
+  pendingCreateTransactionButton: {
+    minHeight: 68,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
   matchRow: {
     borderWidth: 1,
     borderRadius: 16,

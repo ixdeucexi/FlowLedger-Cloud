@@ -37,9 +37,11 @@ interface Props {
   onDeleteTransfer?: (transferGroupId: string) => void | Promise<unknown>;
   editTx?: Transaction | null;
   defaultDate?: string;
+  initialValues?: Partial<Omit<Transaction, "id">>;
+  creationContext?: "pending_charge";
 }
 
-export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDeleteTransfer, editTx, defaultDate }: Props) {
+export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDeleteTransfer, editTx, defaultDate, initialValues, creationContext }: Props) {
   const c = useColors();
   const isDesktop = useDesktopExperience();
   useBackDismiss(visible, onClose);
@@ -84,18 +86,25 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
       setTransferToAccountId(editTx.amount < 0 ? transferMate?.account_id : editTx.account_id);
       setLinkedBillId(editDebtId);
     } else {
-      const init = defaultDate ?? localDateString();
-      setAmount("");
-      setCategory("Other");
-      setNote("");
+      const initialAmount = Number(initialValues?.amount);
+      const hasInitialAmount = Number.isFinite(initialAmount) && initialAmount !== 0;
+      const init = initialValues?.date ?? defaultDate ?? localDateString();
+      setAmount(hasInitialAmount ? Math.abs(initialAmount).toString() : "");
+      setCategory(initialValues?.category || "Other");
+      setNote(initialValues?.note || "");
       setDate(init);
-      setIsExpense(true);
+      setIsExpense(creationContext === "pending_charge" || !hasInitialAmount || initialAmount < 0);
       setIsTransfer(false);
-      setAccountId(accounts.find(account => account.is_active)?.id);
+      setAccountId(
+        initialValues?.account_id ??
+          (creationContext === "pending_charge"
+            ? undefined
+            : accounts.find(account => account.is_active)?.id),
+      );
       setTransferToAccountId(accounts.filter(account => account.is_active)[1]?.id);
       setLinkedBillId(undefined);
     }
-  }, [editTx, visible, defaultDate, accounts, transferMate, editDebtId]);
+  }, [editTx, visible, defaultDate, accounts, transferMate, editDebtId, initialValues?.amount, initialValues?.category, initialValues?.note, initialValues?.date, initialValues?.account_id, creationContext]);
 
   const buildForecastBaseline = (startDate: string) => {
     const [startYear, startMonth] = startDate.split("-").map(Number);
@@ -206,7 +215,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
       linked_bill_id: isExpense ? linkedBillId : undefined,
     };
     const payload = editTx ? { ...editTx, ...data, id: editTx.id } : data;
-    const warning = previewSafetyStop(payload);
+    const warning = creationContext === "pending_charge" ? null : previewSafetyStop(payload);
     if (warning) {
       setPendingStandardTx(payload);
       setSafetyStop(warning);
@@ -268,12 +277,17 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
         <Pressable accessibilityLabel="Close transaction editor" onPress={onClose} style={StyleSheet.absoluteFillObject} />
         <View style={[styles.container, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_REGULAR]}>
           <View style={styles.header}>
-            <Text style={[styles.title, { color: c.foreground }]}>{editTx ? "Edit Transaction" : "Add Transaction"}</Text>
+            <Text style={[styles.title, { color: c.foreground }]}>{editTx ? "Edit Transaction" : creationContext === "pending_charge" ? "Create Transaction" : "Add Transaction"}</Text>
             <Pressable onPress={onClose} hitSlop={8}><Feather name="x" size={22} color={c.mutedForeground} /></Pressable>
           </View>
 
           <ScrollView showsVerticalScrollIndicator={isDesktop} keyboardShouldPersistTaps="handled">
-            <View style={[styles.typeToggle, { backgroundColor: c.muted, borderRadius: 10 }]}>
+            {creationContext === "pending_charge" ? (
+              <View style={[styles.pendingContext, { backgroundColor: c.primary + "12", borderColor: c.primary + "45" }]}>
+                <Feather name="clock" size={18} color={c.primary} />
+                <Text style={[styles.pendingContextText, { color: c.foreground }]}>This reserves the expected charge now. When it posts, FlowLedger will replace this entry so it is not counted twice.</Text>
+              </View>
+            ) : <View style={[styles.typeToggle, { backgroundColor: c.muted, borderRadius: 10 }]}>
               <Pressable
                 onPress={() => { setIsTransfer(false); setIsExpense(true); }}
                 style={[styles.typeBtn, { backgroundColor: !isTransfer && isExpense ? c.destructive : "transparent", borderRadius: 8 }]}
@@ -294,7 +308,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
                   <Text style={[styles.typeBtnText, { color: isTransfer ? c.primaryForeground : c.mutedForeground }]}>Transfer</Text>
                 </Pressable>
               )}
-            </View>
+            </View>}
 
             <Text style={labelStyle}>Amount ($)</Text>
             <TextInput style={inputStyle} value={amount} onChangeText={setAmount} placeholder="0.00" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
@@ -325,7 +339,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
               </View>
             </>}
 
-            {!isTransfer && isExpense && (activeDebts.length > 0 || selectedDebt) && <>
+            {creationContext !== "pending_charge" && !isTransfer && isExpense && (activeDebts.length > 0 || selectedDebt) && <>
               <Text style={labelStyle}>Apply Toward Debt (Optional)</Text>
               <Text style={[styles.helpText, { color: c.mutedForeground }]}>Reduces the debt on this date.</Text>
               <View style={styles.categoryGrid}>
@@ -378,7 +392,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
               onPress={handleSave}
               style={({ pressed }) => [styles.saveBtn, { backgroundColor: c.primary, borderRadius: colors.radius, opacity: saving ? 0.55 : pressed ? 0.85 : 1 }]}
             >
-              <Text style={[styles.saveBtnText, { color: c.primaryForeground }]}>{saving ? "Saving…" : editTx ? "Update" : isTransfer ? "Add Transfer" : "Add Transaction"}</Text>
+              <Text style={[styles.saveBtnText, { color: c.primaryForeground }]}>{saving ? "Saving…" : editTx ? "Update" : isTransfer ? "Add Transfer" : creationContext === "pending_charge" ? "Create Transaction" : "Add Transaction"}</Text>
             </Pressable>
 
             {editTx && onDelete && (
@@ -412,6 +426,8 @@ const styles = StyleSheet.create({
   container: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: "90%" },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
   title: { fontSize: 20, fontFamily: "Inter_700Bold" },
+  pendingContext: { minHeight: 58, borderWidth: 1, borderRadius: 12, paddingHorizontal: 13, paddingVertical: 12, flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  pendingContextText: { flex: 1, fontSize: 13, lineHeight: 18, fontFamily: "Inter_500Medium" },
   typeToggle: { flexDirection: "row", padding: 4, gap: 4, marginBottom: 4 },
   typeBtn: { flex: 1, paddingVertical: 10, alignItems: "center" },
   typeBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
