@@ -2,7 +2,6 @@
 
 import Feather from "@expo/vector-icons/Feather";
 import { FloLauncherSetting } from "@/components/FloLauncherSetting";
-import { TodayWithFloSetting } from "@/components/TodayWithFloSetting";
 import { AccountDeletionSetting } from "@/components/AccountDeletionSetting";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as DocumentPicker from "expo-document-picker";
@@ -2594,7 +2593,6 @@ export default function MoreScreen({
         {activeSettingsSection === "appearance" && (
           <>
             <FloLauncherSetting />
-            <TodayWithFloSetting />
             <SLabel c={c} text="Theme" />
             <View
               style={[

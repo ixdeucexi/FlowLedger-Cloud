@@ -1,5 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { clearTodayWithFloStoresForUser, type TodayWithFloSaved } from "./todayWithFloPreferences";
 import { clearFloLauncherPreferenceStoresForUser } from "./floLauncherVisibility";
 import type { DashboardLayoutPreference } from "./dashboardCustomization";
 import type { NotificationCenterState } from "./notificationCenter";
@@ -24,7 +23,6 @@ export type ActivityPresentationState = {
 };
 
 export type InterfacePreferences = {
-  todayWithFlo?: TodayWithFloSaved;
   floLauncherEnabled?: boolean;
   lastRoute?: string;
   sidebarCollapsed?: boolean;
@@ -87,7 +85,6 @@ export async function updateInterfacePreferences(
 }
 
 export async function clearInterfacePreferencesForUser(userId: string) {
-  clearTodayWithFloStoresForUser(userId);
   clearFloLauncherPreferenceStoresForUser(userId);
   try {
     const prefix = `${PREFERENCE_PREFIX}:${cleanScopePart(userId)}:`;

@@ -180,15 +180,15 @@
   },
   {
     "eyebrow": "STEP 7",
-    "title": "Notifications and in-app guidance",
-    "intro": "Today with Flo offers one relevant daily takeaway. Use reminders and the Guided Tour when you need more detail.",
+    "title": "Notifications and guidance",
+    "intro": "Use focused reminders and the Guided Tour when you need help.",
     "icon": "bell",
     "accent": "#FF9D4D",
     "sections": [
       {
         "title": "Keep reminders useful",
         "items": [
-          { "title": "Today with Flo", "body": "An optional daily overlay appears after your plan is ready. Topics rotate; unresolved risks can repeat. Use X or Got it to dismiss, or turn it off in Settings on this device.", "icon": "sun" },
+          { "title": "Review what needs attention", "body": "Use the alert center for bills, debts, and account items that need a decision without interrupting the rest of your day.", "icon": "bell" },
           { "title": "Open the related item", "body": "A reminder should take you directly to the bill or debt to review.", "icon": "external-link" },
           { "title": "Dismiss finished work", "body": "Remove a reminder when it is complete.", "icon": "x" },
           { "title": "Close inactive items", "body": "Paid-off or closed debts should stop creating future reminders.", "icon": "archive" }

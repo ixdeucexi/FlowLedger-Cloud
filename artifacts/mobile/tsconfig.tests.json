@@ -11,8 +11,6 @@
     "outDir": ".test-dist"
   },
   "include": [
-    "lib/todayWithFlo.test.ts",
-    "lib/todayWithFloSchedule.test.ts",
     "lib/financialProjection.test.ts",
     "lib/settingsNavigation.test.ts",
     "lib/stabilityActions.test.ts",

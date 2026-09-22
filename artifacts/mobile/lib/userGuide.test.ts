@@ -47,6 +47,8 @@ test("the website keeps opening the PDF", () => {
 });
 
 test("the in-app guide matches the current navigation and launch plan", () => {
+  const rootLayout = readFileSync("app/_layout.tsx", "utf8");
+  const mobileSettings = readFileSync("app/(tabs)/more.tsx", "utf8");
   const guideScreen = readFileSync("app/user-guide.tsx", "utf8");
   const desktopSettings = readFileSync(
     "components/desktop/DesktopSettingsPage.tsx",
@@ -105,6 +107,10 @@ test("the in-app guide matches the current navigation and launch plan", () => {
     serializedCatalog,
     /2027|Today.?s Decisions|actual close|projected close/i,
   );
+  assert.doesNotMatch(serializedCatalog, /Today with Flo/i);
+  assert.doesNotMatch(rootLayout, /TodayWithFlo/);
+  assert.doesNotMatch(mobileSettings, /TodayWithFloSetting/);
+  assert.doesNotMatch(desktopSettings, /TodayWithFloSetting/);
   assert.match(
     guideScreen,
     /import guideSlidesContent from "@\/lib\/userGuideContent\.json"/,

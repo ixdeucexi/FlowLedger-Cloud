@@ -33,7 +33,6 @@ import { FloLauncher } from "@/components/FloLauncher";
 import { BiometricLockGate } from "@/components/BiometricLockGate";
 import { ConfirmActionModal } from "@/components/ConfirmActionModal";
 import { PwaInstallPrompt } from "@/components/PwaInstallPrompt";
-import { TodayWithFlo } from "@/components/TodayWithFlo";
 import { overlayActivity } from "@/lib/overlayActivity";
 import { PlaidOAuthResume } from "@/components/PlaidOAuthResume";
 import { AppLoadingIntro } from "@/components/AppLoadingIntro";
@@ -852,7 +851,6 @@ function RootNavigator({
                 <Stack.Screen name="(tabs)" />
               </Stack>
               <PwaInstallPrompt />
-              <TodayWithFlo ready={readyToReveal && !effectivePrivacyShielded && !privacyRefreshError && !biometricLocked && !budgetLoading && !budgetLoadError && !!session} />
               <PlaidOAuthResume />
               <ConfirmActionModal />
               {!biometricLocked &&
