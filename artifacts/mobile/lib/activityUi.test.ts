@@ -7,6 +7,10 @@ const desktopActivity = readFileSync(
   "components/desktop/DesktopActivityPage.tsx",
   "utf8",
 );
+const transactionModal = readFileSync(
+  "components/AddTransactionModal.tsx",
+  "utf8",
+);
 
 test("Activity uses the competitive money-movement hierarchy on phone and desktop", () => {
   assert.match(mobileActivity, /MONEY MOVEMENT/);
@@ -99,6 +103,18 @@ test("pending charges can create one prefilled replacement-safe Activity transac
   assert.match(
     mobileActivity,
     /When it posts, FlowLedger will replace this entry so it is not counted twice\./,
+  );
+});
+
+test("transaction creation blocks a second tap before React can rerender", () => {
+  assert.match(transactionModal, /const savingRef = useRef\(false\)/);
+  assert.match(
+    transactionModal,
+    /if \(savingRef\.current \|\| saving\) return;/,
+  );
+  assert.match(
+    transactionModal,
+    /savingRef\.current = true;[\s\S]*?await onSave\(payload\)/,
   );
 });
 

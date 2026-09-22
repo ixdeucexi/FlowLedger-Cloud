@@ -1,6 +1,6 @@
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -56,6 +56,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
   const [transferToAccountId, setTransferToAccountId] = useState<string | undefined>();
   const [linkedBillId, setLinkedBillId] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [confirmation, setConfirmation] = useState<ConfirmActionOptions | null>(null);
   const [safetyStop, setSafetyStop] = useState<SafetyStopWarning | null>(null);
   const [pendingStandardTx, setPendingStandardTx] = useState<Omit<Transaction, "id"> | Transaction | null>(null);
@@ -144,6 +145,8 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
   };
 
   const saveStandardTransaction = async (payload: Omit<Transaction, "id"> | Transaction) => {
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       await onSave(payload);
@@ -153,12 +156,13 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
     } catch (error) {
       Alert.alert("Could not save transaction", error instanceof Error ? error.message : "Please try again.");
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
 
   const handleSave = async () => {
-    if (saving) return;
+    if (savingRef.current || saving) return;
     const parsed = parseFloat(amount);
     if (isNaN(parsed) || parsed <= 0) return;
     if (isTransfer && (!accountId || !transferToAccountId || accountId === transferToAccountId)) {
@@ -170,6 +174,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
       const fromName = accounts.find(account => account.id === accountId)?.name ?? "account";
       const toName = accounts.find(account => account.id === transferToAccountId)?.name ?? "account";
       const transferGroupId = editTx?.transfer_group_id ?? `transfer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      savingRef.current = true;
       setSaving(true);
       const createdIds: string[] = [];
       try {
@@ -202,6 +207,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
         }
         Alert.alert("Could not save transfer", error instanceof Error ? error.message : "Please try again.");
       } finally {
+        savingRef.current = false;
         setSaving(false);
       }
       return;
