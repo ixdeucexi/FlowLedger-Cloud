@@ -83,12 +83,15 @@ export function billBaseAmountForMonth(
   bill: Bill,
   override?: MonthlyOverride,
 ): number {
+  const savedAmount = Number.isFinite(bill.amount)
+    ? Math.max(0, bill.amount)
+    : 0;
   const customAmount = override?.custom_amount;
   if (customAmount === undefined || !Number.isFinite(customAmount))
-    return bill.amount;
+    return savedAmount;
   // Debt bills should never disappear because of a stale/blank $0 override.
   // Positive overrides still allow one-month debt payment changes from Monthly.
-  if (bill.is_debt && customAmount <= 0.005) return bill.amount;
+  if (bill.is_debt && customAmount <= 0.005) return savedAmount;
   return Math.max(0, customAmount);
 }
 

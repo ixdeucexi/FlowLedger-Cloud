@@ -9,10 +9,41 @@ import { createFinancialProjectionReader } from "./financialProjectionReader";
 import type { FinancialProjectionSnapshot } from "./financialProjectionTypes";
 import {
   accountAwareTransactionCollections,
+  normalizeBillRow,
   normalizeConnectedBankRows,
   normalizeMonthlyOverrideRow,
   normalizeTransactionRow,
 } from "./financialProjectionInput";
+
+test("malformed saved bill amounts cannot poison the forecast", () => {
+  const bill = normalizeBillRow({
+    id: "utility",
+    name: "Utility",
+    amount: "NaN",
+    balance: "NaN",
+    interest_rate: "NaN",
+    category: "Utilities",
+    priority: 1,
+    is_debt: false,
+    due_day: 10,
+    is_recurring: true,
+    created_at: "2026-09-01T00:00:00.000Z",
+  });
+  const override = normalizeMonthlyOverrideRow({
+    id: "override",
+    bill_id: bill.id,
+    month: 9,
+    year: 2026,
+    custom_amount: "NaN",
+    paid_amount: "NaN",
+    actual_amount: "NaN",
+  });
+
+  assert.equal(bill.amount, 0);
+  assert.equal(bill.balance, 0);
+  assert.equal(override.custom_amount, undefined);
+  assert.equal(override.paid_amount, 0);
+});
 
 for (const fixture of golden.cases) {
   test(`legacy BudgetContext parity: ${fixture.name}`, () => {

@@ -31,6 +31,17 @@ export const DEFAULT_SETTINGS: Settings = {
   onboarding_completed: false,
 };
 
+function finiteNumber(value: unknown, fallback = 0): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function optionalFiniteNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 export function normalizeSettingsRow(
   row: any,
   fallback: Settings = DEFAULT_SETTINGS,
@@ -66,15 +77,15 @@ export function normalizeBillRow(bill: any): Bill {
       | "weekly",
     day_of_week: bill.day_of_week ?? 0,
     next_payment_date: bill.next_payment_date ?? undefined,
-    amount: Number(bill.amount),
-    balance: Number(bill.balance),
-    interest_rate: Number(bill.interest_rate),
+    amount: finiteNumber(bill.amount),
+    balance: finiteNumber(bill.balance),
+    interest_rate: finiteNumber(bill.interest_rate),
     smart_priority: normalizeBillImportance(
       bill.smart_priority,
       Boolean(bill.is_debt),
     ),
     include_in_snowball: bill.include_in_snowball !== false,
-    snowball_minimum_boost: Number(bill.snowball_minimum_boost ?? 0),
+    snowball_minimum_boost: finiteNumber(bill.snowball_minimum_boost),
   };
 }
 
@@ -274,29 +285,12 @@ export function normalizeAccountRow(account: any): Account {
 export function normalizeMonthlyOverrideRow(override: any): MonthlyOverride {
   return {
     ...override,
-    paid_amount: Number(override.paid_amount),
-    custom_amount:
-      override.custom_amount !== null
-        ? Number(override.custom_amount)
-        : undefined,
-    planned_debt_amount:
-      override.planned_debt_amount !== null &&
-      override.planned_debt_amount !== undefined
-        ? Number(override.planned_debt_amount)
-        : undefined,
-    required_debt_amount:
-      override.required_debt_amount !== null &&
-      override.required_debt_amount !== undefined
-        ? Number(override.required_debt_amount)
-        : undefined,
-    custom_due_day:
-      override.custom_due_day !== null
-        ? Number(override.custom_due_day)
-        : undefined,
-    actual_amount:
-      override.actual_amount !== null
-        ? Number(override.actual_amount)
-        : undefined,
+    paid_amount: finiteNumber(override.paid_amount),
+    custom_amount: optionalFiniteNumber(override.custom_amount),
+    planned_debt_amount: optionalFiniteNumber(override.planned_debt_amount),
+    required_debt_amount: optionalFiniteNumber(override.required_debt_amount),
+    custom_due_day: optionalFiniteNumber(override.custom_due_day),
+    actual_amount: optionalFiniteNumber(override.actual_amount),
     paid_date: override.paid_date ?? undefined,
   };
 }
