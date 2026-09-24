@@ -103,6 +103,15 @@ describe("bill scheduling", () => {
     assert.deepEqual(moved, [3]);
   });
 
+  it("moves one bill occurrence across months while preserving the next recurring occurrence", () => {
+    const moves = [
+      { bill_id: "utilities", from_date: "2026-07-04", to_date: "2026-08-03" },
+    ];
+
+    assert.deepEqual(applyBillDateMovesToOccurrenceDays("utilities", 6, 2026, [4], moves), []);
+    assert.deepEqual(applyBillDateMovesToOccurrenceDays("utilities", 7, 2026, [4], moves), [3, 4]);
+  });
+
   it("uses the newest move when the same occurrence was moved more than once", () => {
     const moved = applyBillDateMovesToOccurrenceDays("utilities", 6, 2026, [4], [
       { bill_id: "utilities", from_date: "2026-07-04", to_date: "2026-07-03", updated_at: "2026-07-04T10:00:00.000Z" },

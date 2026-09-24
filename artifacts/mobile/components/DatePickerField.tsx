@@ -122,13 +122,25 @@ export function DatePickerField({ value, onChange, placeholder = "Pick a date…
         <View style={[styles.panel, { backgroundColor: c.card, borderColor: c.border }]}>
           {/* Month navigation */}
           <View style={[styles.monthNav, { backgroundColor: c.muted }]}>
-            <Pressable onPress={() => shiftMonth(-1)} hitSlop={10} style={styles.navBtn}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Previous month"
+              onPress={() => shiftMonth(-1)}
+              hitSlop={10}
+              style={styles.navBtn}
+            >
               <Feather name="chevron-left" size={18} color={c.foreground} />
             </Pressable>
             <Text style={[styles.monthLabel, { color: c.foreground }]}>
               {MONTH_NAMES[pickerMonth]} {pickerYear}
             </Text>
-            <Pressable onPress={() => shiftMonth(1)} hitSlop={10} style={styles.navBtn}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Next month"
+              onPress={() => shiftMonth(1)}
+              hitSlop={10}
+              style={styles.navBtn}
+            >
               <Feather name="chevron-right" size={18} color={c.foreground} />
             </Pressable>
           </View>

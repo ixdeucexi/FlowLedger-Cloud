@@ -14,6 +14,7 @@ import { BillSurplusModal } from "@/components/BillSurplusModal";
 import { CalendarView } from "@/components/CalendarView";
 import { CommandPlusButton } from "@/components/CommandPlusButton";
 import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
+import { DatePickerField } from "@/components/DatePickerField";
 import { DebtPaymentAppliedModal, type DebtPaymentAppliedDetail } from "@/components/DebtPaymentAppliedModal";
 import { DesktopCalendarPage } from "@/components/desktop/DesktopCalendarPage";
 import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
@@ -514,7 +515,7 @@ export default function MonthlyScreen() {
   const [dueDayPicker, setDueDayPicker] = useState<DueDayPickerState | null>(null);
   const dueDayPickerBill = dueDayPicker?.bill ?? null;
   const [savingDueDay, setSavingDueDay] = useState(false);
-  const [incomeDatePicker, setIncomeDatePicker] = useState<{ income: IncomeItem; day: number; amount: number } | null>(null);
+  const [incomeDatePicker, setIncomeDatePicker] = useState<{ income: IncomeItem; date: string; amount: number } | null>(null);
   const [savingIncomeDate, setSavingIncomeDate] = useState(false);
   const [snowballModalVisible, setSnowballModalVisible] = useState(false);
   const [snowballPreview, setSnowballPreview] = useState<SnowballProjectionResult | null>(null);
@@ -1275,21 +1276,21 @@ export default function MonthlyScreen() {
     setEditingAmounts(p => { const n = { ...p }; delete n[key]; return n; });
   }, [editingAmounts, setCustomAmount, month, selectedYear]);
 
-  const saveDueDayChange = useCallback(async (picker: DueDayPickerState, day: number | undefined) => {
+  const saveDueDayChange = useCallback(async (picker: DueDayPickerState, targetDate: string | undefined) => {
     if (savingDueDay) return;
     setSavingDueDay(true);
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       const cleanFrom = picker.fromDate.slice(0, 10);
       const existingMove = getBillDateMoveForOccurrence(picker.bill.id, cleanFrom);
-      if (day === undefined) {
+      if (targetDate === undefined) {
         if (existingMove) await removeBillOccurrenceMove(existingMove.id);
       } else {
-        const targetDate = isoDateForMonthDay(selectedYear, month, day);
-        if (targetDate === cleanFrom) {
+        const cleanTarget = targetDate.slice(0, 10);
+        if (cleanTarget === cleanFrom) {
           if (existingMove) await removeBillOccurrenceMove(existingMove.id);
         } else {
-          await moveBillOccurrence(picker.bill.id, cleanFrom, targetDate);
+          await moveBillOccurrence(picker.bill.id, cleanFrom, cleanTarget);
         }
       }
       setDueDayPicker(null);
@@ -1298,14 +1299,13 @@ export default function MonthlyScreen() {
     } finally {
       setSavingDueDay(false);
     }
-  }, [getBillDateMoveForOccurrence, month, moveBillOccurrence, removeBillOccurrenceMove, savingDueDay, selectedYear]);
+  }, [getBillDateMoveForOccurrence, moveBillOccurrence, removeBillOccurrenceMove, savingDueDay]);
 
-  const saveIncomeDateChange = useCallback(async (income: IncomeItem, day: number) => {
+  const saveIncomeDateChange = useCallback(async (income: IncomeItem, date: string) => {
     if (savingIncomeDate) return;
     setSavingIncomeDate(true);
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const date = `${selectedYear}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
       await updateIncome({
         ...income,
         next_payment_date: date,
@@ -1317,7 +1317,7 @@ export default function MonthlyScreen() {
     } finally {
       setSavingIncomeDate(false);
     }
-  }, [month, savingIncomeDate, selectedYear, updateIncome]);
+  }, [savingIncomeDate, updateIncome]);
 
 
   const handleQuickPaid = useCallback(async (billId: string, amount: number, isPaid: boolean) => {
@@ -1719,7 +1719,7 @@ export default function MonthlyScreen() {
       const occurrence = incomeOccurrences.find(item => item.incomeId === event.sourceId && item.day === dayFromIsoDate(event.date));
       if (!occurrence) return;
       setSelectedDate(null);
-      setIncomeDatePicker({ income: occurrence.income, day: occurrence.day, amount: occurrence.amount });
+      setIncomeDatePicker({ income: occurrence.income, date: event.date, amount: occurrence.amount });
       return;
     }
     if (event.sourceType === "goal") {
@@ -2298,7 +2298,7 @@ export default function MonthlyScreen() {
                                 onPress={() => {
                                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                                   setSelectedDate(null);
-                                  setIncomeDatePicker({ income: item.income, day: item.day, amount: item.amount });
+                                  setIncomeDatePicker({ income: item.income, date: selectedDate ?? isoDateForMonthDay(selectedYear, month, item.day), amount: item.amount });
                                 }}
                                 style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.primary + "16", borderColor: c.primary + "35", opacity: pressed ? 0.74 : 1 }]}
                               >
@@ -3046,11 +3046,8 @@ export default function MonthlyScreen() {
           <Pressable style={[styles.pickerSheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_REGULAR]} onPress={e => e.stopPropagation()}>
             {dueDayPicker && (() => {
               const { bill, fromDate } = dueDayPicker;
-              const daysInMonth = new Date(selectedYear, month + 1, 0).getDate();
               const movedDate = getBillDateMoveForOccurrence(bill.id, fromDate)?.to_date;
               const effectiveDate = movedDate ?? fromDate;
-              const effectiveDay = dayFromIsoDate(effectiveDate);
-              const originalDay = dayFromIsoDate(fromDate);
               return (
                 <>
                   <View style={[styles.pickerHandle, isDesktop && DESKTOP_MODAL_HANDLE]} />
@@ -3067,50 +3064,15 @@ export default function MonthlyScreen() {
                     </Pressable>
                   </View>
 
-                  <Text style={[styles.pickerLabel, { color: c.mutedForeground }]}>
-                    Select the new due day for this month only
+                  <DatePickerField
+                    label="Move this occurrence to"
+                    value={effectiveDate}
+                    onChange={(date) => { void saveDueDayChange(dueDayPicker, date); }}
+                    placeholder="Choose a new date"
+                  />
+                  <Text style={[styles.pickerDateHelp, { color: c.mutedForeground }]}>
+                    Use the arrows to choose another month. Only this occurrence moves; the recurring schedule stays the same.
                   </Text>
-
-                  {/* Day-of-week headers */}
-                  <View style={styles.pickerCalDowRow}>
-                    {["Su","Mo","Tu","We","Th","Fr","Sa"].map(d => (
-                      <Text key={d} style={[styles.pickerCalDowLabel, { color: c.mutedForeground }]}>{d}</Text>
-                    ))}
-                  </View>
-
-                  {/* Calendar grid — days aligned to correct weekday column */}
-                  <View style={styles.pickerDayGrid}>
-                    {[
-                      ...Array(new Date(selectedYear, month, 1).getDay()).fill(null),
-                      ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-                    ].map((day, idx) => {
-                      if (day === null) return <View key={`e${idx}`} style={styles.pickerDayBtn} />;
-                      const isCurrent = day === effectiveDay;
-                      const isOriginal = day === originalDay && !movedDate;
-                      return (
-                        <Pressable
-                          key={day}
-                          disabled={savingDueDay}
-                          onPress={() => saveDueDayChange(dueDayPicker, day)}
-                          style={({ pressed }) => [
-                            styles.pickerDayBtn,
-                            {
-                              backgroundColor: isCurrent ? c.primary : isOriginal ? c.primary + "25" : c.muted,
-                              opacity: pressed ? 0.7 : 1,
-                              borderRadius: 8,
-                            },
-                          ]}
-                        >
-                          <Text style={[
-                            styles.pickerDayText,
-                            { color: isCurrent ? c.primaryForeground : c.foreground },
-                          ]}>
-                            {day}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
 
                   {movedDate && (
                     <Pressable
@@ -3143,8 +3105,6 @@ export default function MonthlyScreen() {
         <Pressable style={[styles.pickerOverlay, isDesktop && DESKTOP_MODAL_OVERLAY]} onPress={() => setIncomeDatePicker(null)}>
           <Pressable style={[styles.pickerSheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_REGULAR]} onPress={e => e.stopPropagation()}>
             {incomeDatePicker && (() => {
-              const daysInMonth = new Date(selectedYear, month + 1, 0).getDate();
-              const effectiveDay = incomeDatePicker.day;
               return (
                 <>
                   <View style={[styles.pickerHandle, isDesktop && DESKTOP_MODAL_HANDLE]} />
@@ -3152,7 +3112,7 @@ export default function MonthlyScreen() {
                     <View>
                       <Text style={[styles.pickerTitle, { color: c.foreground }]}>{incomeDatePicker.income.name}</Text>
                       <Text style={[styles.pickerSub, { color: c.mutedForeground }]}>
-                        {MONTH_FULL[month]} {selectedYear} · Currently {MONTH_FULL[month]} {effectiveDay}, {selectedYear}
+                        Currently {formatShortDate(incomeDatePicker.date)}
                       </Text>
                     </View>
                     <Pressable onPress={() => setIncomeDatePicker(null)} hitSlop={8}>
@@ -3160,44 +3120,15 @@ export default function MonthlyScreen() {
                     </Pressable>
                   </View>
 
-                  <Text style={[styles.pickerLabel, { color: c.mutedForeground }]}>
-                    Select the new payday for this income schedule
+                  <DatePickerField
+                    label="Move this payday to"
+                    value={incomeDatePicker.date}
+                    onChange={(date) => { void saveIncomeDateChange(incomeDatePicker.income, date); }}
+                    placeholder="Choose a new payday"
+                  />
+                  <Text style={[styles.pickerDateHelp, { color: c.mutedForeground }]}>
+                    Use the arrows to choose another month. This becomes the next date for this income schedule.
                   </Text>
-
-                  <View style={styles.pickerCalDowRow}>
-                    {["Su","Mo","Tu","We","Th","Fr","Sa"].map(d => (
-                      <Text key={d} style={[styles.pickerCalDowLabel, { color: c.mutedForeground }]}>{d}</Text>
-                    ))}
-                  </View>
-
-                  <View style={styles.pickerDayGrid}>
-                    {[
-                      ...Array(new Date(selectedYear, month, 1).getDay()).fill(null),
-                      ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-                    ].map((day, idx) => {
-                      if (day === null) return <View key={`income-empty-${idx}`} style={styles.pickerDayBtn} />;
-                      const isCurrent = day === effectiveDay;
-                      return (
-                        <Pressable
-                          key={day}
-                          disabled={savingIncomeDate}
-                          onPress={() => saveIncomeDateChange(incomeDatePicker.income, day)}
-                          style={({ pressed }) => [
-                            styles.pickerDayBtn,
-                            {
-                              backgroundColor: isCurrent ? c.primary : c.muted,
-                              opacity: pressed ? 0.7 : 1,
-                              borderRadius: 8,
-                            },
-                          ]}
-                        >
-                          <Text style={[styles.pickerDayText, { color: isCurrent ? c.primaryForeground : c.foreground }]}>
-                            {day}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
                 </>
               );
             })()}
@@ -3568,6 +3499,7 @@ const styles = StyleSheet.create({
   pickerTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
   pickerSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   pickerLabel: { fontSize: 11, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 12 },
+  pickerDateHelp: { fontSize: 12, lineHeight: 17, marginTop: 8, marginBottom: 4 },
   pickerCalDowRow: { flexDirection: "row", marginBottom: 4 },
   pickerCalDowLabel: { width: "14.285714%", textAlign: "center", fontSize: 11, fontFamily: "Inter_600SemiBold" },
   pickerDayGrid: { flexDirection: "row", flexWrap: "wrap", marginBottom: 16 },
