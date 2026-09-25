@@ -11,6 +11,7 @@ type Props = {
   conversations: FloConversation[];
   activeId: string | null;
   disabled?: boolean;
+  preferencesDisabled?: boolean;
   desktop?: boolean;
   householdName: string;
   preferences: FloPreferences;
@@ -37,6 +38,7 @@ export function FloConversationBar(props: Props) {
   const [actionError, setActionError] = useState("");
   const [preferenceDraft, setPreferenceDraft] = useState(props.preferences.preferenceNote);
   const [contentMatches, setContentMatches] = useState<Set<string>>(new Set());
+  const preferencesDisabled = Boolean(props.disabled || props.preferencesDisabled);
   const titleMatches = searchFloHistory(props.conversations, deferredSearch);
   const filtered = deferredSearch.trim()
     ? props.conversations.filter(item => titleMatches.includes(item) || contentMatches.has(item.id))
@@ -67,7 +69,7 @@ export function FloConversationBar(props: Props) {
   };
 
   const runDelete = async () => {
-    if (!deleteTarget || busy) return;
+    if (!deleteTarget || busy || props.disabled) return;
     setBusy(true);
     setActionError("");
     try {
@@ -81,7 +83,7 @@ export function FloConversationBar(props: Props) {
   };
 
   const runDeleteAll = async () => {
-    if (busy) return;
+    if (busy || props.disabled) return;
     setBusy(true);
     setActionError("");
     try {
@@ -137,8 +139,8 @@ export function FloConversationBar(props: Props) {
         }) : <Text style={[styles.empty, { color: c.mutedForeground }]}>{search ? "No conversations match your search." : "Your private Flo conversations will appear here."}</Text>}
       </ScrollView>
       <View style={[styles.controls, { borderTopColor: c.border }]}>
-        <SettingRow label="Save conversation history" detail="Turn off to keep new chats out of history." value={props.preferences.historyEnabled} onValueChange={value => props.onPreferencesChange({ ...props.preferences, historyEnabled: value })} />
-        <SettingRow label="Remember one Flo preference" detail="Opt in to one household-scoped preference you choose." value={props.preferences.rememberPreferences} onValueChange={value => {
+        <SettingRow disabled={preferencesDisabled} label="Save conversation history" detail="Turn off to keep new chats out of history." value={props.preferences.historyEnabled} onValueChange={value => props.onPreferencesChange({ ...props.preferences, historyEnabled: value })} />
+        <SettingRow disabled={preferencesDisabled} label="Remember one Flo preference" detail="Opt in to one household-scoped preference you choose." value={props.preferences.rememberPreferences} onValueChange={value => {
           if (!value) setPreferenceDraft("");
           props.onPreferencesChange({ ...props.preferences, rememberPreferences: value, preferenceNote: value ? preferenceDraft.trim().slice(0, 240) : "" });
         }} />
@@ -148,8 +150,9 @@ export function FloConversationBar(props: Props) {
             <TextInput
               accessibilityLabel="Preference for Flo to remember"
               value={preferenceDraft}
+              editable={!preferencesDisabled}
               onChangeText={value => setPreferenceDraft(value.slice(0, 240))}
-              onBlur={() => props.onPreferencesChange({ ...props.preferences, preferenceNote: preferenceDraft.trim().slice(0, 240) })}
+              onBlur={() => { if (!preferencesDisabled) props.onPreferencesChange({ ...props.preferences, preferenceNote: preferenceDraft.trim().slice(0, 240) }); }}
               placeholder="Example: Keep explanations short and focus on debt first."
               placeholderTextColor={c.mutedForeground}
               maxLength={240}
@@ -163,7 +166,7 @@ export function FloConversationBar(props: Props) {
           <Pressable accessibilityRole="button" disabled={!props.conversations.length || busy} onPress={() => void props.onExport()} style={[styles.secondaryButton, { backgroundColor: c.muted, opacity: props.conversations.length ? 1 : 0.5 }]}>
             <Feather name="download" size={14} color={c.foreground} /><Text style={[styles.secondaryText, { color: c.foreground }]}>Export</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" disabled={!props.conversations.length || busy} onPress={() => setConfirmDeleteAll(true)} style={[styles.secondaryButton, { backgroundColor: c.destructive + "14", opacity: props.conversations.length ? 1 : 0.5 }]}>
+          <Pressable accessibilityRole="button" disabled={!props.conversations.length || busy || props.disabled} onPress={() => setConfirmDeleteAll(true)} style={[styles.secondaryButton, { backgroundColor: c.destructive + "14", opacity: props.conversations.length && !props.disabled ? 1 : 0.5 }]}>
             <Feather name="trash-2" size={14} color={c.destructive} /><Text style={[styles.secondaryText, { color: c.destructive }]}>Delete all</Text>
           </Pressable>
         </View>
@@ -192,18 +195,18 @@ export function FloConversationBar(props: Props) {
         <View style={styles.dialogActions}><DialogButton label="Cancel" onPress={() => setRenameTarget(null)} /><DialogButton primary label="Save" disabled={!title.trim()} onPress={() => { if (!renameTarget || !title.trim()) return; void props.onRename(renameTarget.id, title).then(() => setRenameTarget(null)); }} /></View>
       </ConfirmDialog>
       <ConfirmDialog visible={Boolean(deleteTarget)} title="Delete this conversation?" body="This conversation and all of its messages will be permanently deleted." error={actionError} c={c} onClose={() => !busy && setDeleteTarget(null)}>
-        <View style={styles.dialogActions}><DialogButton label="Cancel" disabled={busy} onPress={() => setDeleteTarget(null)} /><DialogButton destructive label={busy ? "Deleting..." : "Delete"} disabled={busy} onPress={() => void runDelete()} /></View>
+        <View style={styles.dialogActions}><DialogButton label="Cancel" disabled={busy} onPress={() => setDeleteTarget(null)} /><DialogButton destructive label={busy ? "Deleting..." : "Delete"} disabled={busy || props.disabled} onPress={() => void runDelete()} /></View>
       </ConfirmDialog>
       <ConfirmDialog visible={confirmDeleteAll} title="Delete all Flo history?" body="Every private conversation for this household will be permanently deleted." error={actionError} c={c} onClose={() => !busy && setConfirmDeleteAll(false)}>
-        <View style={styles.dialogActions}><DialogButton label="Cancel" disabled={busy} onPress={() => setConfirmDeleteAll(false)} /><DialogButton destructive label={busy ? "Deleting..." : "Delete all"} disabled={busy} onPress={() => void runDeleteAll()} /></View>
+        <View style={styles.dialogActions}><DialogButton label="Cancel" disabled={busy} onPress={() => setConfirmDeleteAll(false)} /><DialogButton destructive label={busy ? "Deleting..." : "Delete all"} disabled={busy || props.disabled} onPress={() => void runDeleteAll()} /></View>
       </ConfirmDialog>
     </>
   );
 }
 
-function SettingRow({ label, detail, value, onValueChange }: { label: string; detail: string; value: boolean; onValueChange: (value: boolean) => void }) {
+function SettingRow({ label, detail, value, onValueChange, disabled }: { label: string; detail: string; value: boolean; onValueChange: (value: boolean) => void; disabled?: boolean }) {
   const c = useColors();
-  return <View style={styles.settingRow}><View style={styles.settingCopy}><Text style={[styles.settingLabel, { color: c.foreground }]}>{label}</Text><Text style={[styles.settingDetail, { color: c.mutedForeground }]}>{detail}</Text></View><Switch accessibilityLabel={label} value={value} onValueChange={onValueChange} trackColor={{ false: c.muted, true: c.primary + "80" }} thumbColor={value ? c.primary : c.mutedForeground} /></View>;
+  return <View style={styles.settingRow}><View style={styles.settingCopy}><Text style={[styles.settingLabel, { color: c.foreground }]}>{label}</Text><Text style={[styles.settingDetail, { color: c.mutedForeground }]}>{detail}</Text></View><Switch accessibilityLabel={label} disabled={disabled} value={value} onValueChange={onValueChange} trackColor={{ false: c.muted, true: c.primary + "80" }} thumbColor={value ? c.primary : c.mutedForeground} /></View>;
 }
 
 function ConfirmDialog({ visible, title, body, error, c, onClose, children }: { visible: boolean; title: string; body?: string; error: string; c: ReturnType<typeof useColors>; onClose: () => void; children: React.ReactNode }) {

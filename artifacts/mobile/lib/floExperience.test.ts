@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { collectFloHistoryPages, floAnswerAsOf, floConversationForRequest, floEphemeralCleanupError, floFreshnessLabel, floSourceDescription, floProposalMatchesAuthoritative, isFloRequestGenerationCurrent, nextFloRequestGeneration, oldestFloSourceAsOf, safeFloSourceRoute, searchFloHistory } from "./floExperience";
+import { collectFloHistoryPages, FLO_CONVERSATION_CONTEXT_MAX_BYTES, floAnswerAsOf, floConversationContext, floConversationForRequest, floEphemeralCleanupError, floFreshnessLabel, floPreferencesReadyForScope, floSourceDescription, floProposalMatchesAuthoritative, isFloRequestGenerationCurrent, nextFloRequestGeneration, oldestFloSourceAsOf, safeFloSourceRoute, searchFloHistory } from "./floExperience";
 
 test("searchFloHistory matches titles and summaries without changing order", () => {
   const rows = [
@@ -107,4 +107,51 @@ test("history-off never reuses a retained active conversation", () => {
 test("history-off surfaces a server cleanup failure", () => {
   assert.match(floEphemeralCleanupError(false) ?? "", /could not be cleaned up/i);
   assert.equal(floEphemeralCleanupError(true), null);
+});
+
+test("temporary chat context retains both sides of the conversation without unfinished or retry messages", () => {
+  const messages = [
+    { id: "q1", role: "user" as const, text: "Which debt should I pay first?" },
+    { id: "a1", role: "flo" as const, text: "Your smallest debt is Harbor Card." },
+    { id: "q2", role: "user" as const, text: "Why that one?" },
+    { id: "a2", role: "flo" as const, text: "Checking...", thinking: true },
+  ];
+  assert.deepEqual(floConversationContext(messages, ["q2", "a2"]), [
+    { role: "user", content: "Which debt should I pay first?" },
+    { role: "assistant", content: "Your smallest debt is Harbor Card." },
+  ]);
+});
+
+test("temporary context bounds older and unusually long messages", () => {
+  const messages = Array.from({ length: 15 }, (_, index) => ({ id: String(index), role: "user" as const, text: `${index}: ${"x".repeat(3000)}` }));
+  const context = floConversationContext(messages);
+  assert.equal(context.length, 11);
+  assert.match(context[0].content, /^4:/);
+  assert.ok(context.every(message => message.content.length === 2000));
+});
+
+test("temporary context respects the serialized UTF-8 budget and preserves newest message order", () => {
+  for (const content of ["漢".repeat(2000), "💰".repeat(1000), "\u0000".repeat(2000)]) {
+    const messages = Array.from({ length: 15 }, (_, index) => ({ id: String(index), role: "user" as const, text: `${index}: ${content}` }));
+    const context = floConversationContext(messages);
+    assert.ok(new TextEncoder().encode(JSON.stringify(context)).byteLength <= FLO_CONVERSATION_CONTEXT_MAX_BYTES);
+    assert.ok(context.length > 0);
+    assert.match(context.at(-1)!.content, /^14:/);
+    const indices = context.map(message => Number(message.content.split(":")[0]));
+    assert.deepEqual(indices, Array.from({ length: context.length }, (_, index) => 15 - context.length + index));
+  }
+});
+
+test("Flo waits for preferences and cannot reuse readiness across household or user switches", async () => {
+  let loadedScope: string | null = null;
+  let resolveFirst!: () => void;
+  const firstRead = new Promise<void>(resolve => { resolveFirst = resolve; }).then(() => { loadedScope = "user-a:household-a"; });
+  assert.equal(floPreferencesReadyForScope(loadedScope, "user-a:household-a"), false);
+  resolveFirst();
+  await firstRead;
+  assert.equal(floPreferencesReadyForScope(loadedScope, "user-a:household-a"), true);
+  assert.equal(floPreferencesReadyForScope(loadedScope, "user-a:household-b"), false);
+  assert.equal(floPreferencesReadyForScope(loadedScope, "user-b:household-a"), false);
+  loadedScope = "user-a:household-b";
+  assert.equal(floPreferencesReadyForScope(loadedScope, "user-a:household-b"), true);
 });

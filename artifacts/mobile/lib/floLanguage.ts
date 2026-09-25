@@ -39,11 +39,12 @@ export function humanizeFloText(text: string): string {
   FRIENDLY_TERMS.forEach(([pattern, replacement]) => {
     friendly = friendly.replace(pattern, replacement);
   });
-  if (isWeakFloReply(friendly)) return "I couldn't finish that answer. Ask again and I'll use your latest numbers.";
-  return compactFloText(friendly
+  // Answers may contain requested details or essential limitations after the
+  // opening summary. Formatting must never discard those verified details.
+  return friendly
     .replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, friendlyDate)
     .replace(/(^|\n)[ \t]*-[ \t]+/g, "$1• ")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
-    .trim());
+    .trim();
 }

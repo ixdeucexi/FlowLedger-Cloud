@@ -1,0 +1,532 @@
+{
+  "candidate": "synthetic-v8-final-debt-guard",
+  "date": "2026-09-25",
+  "count": 4,
+  "independentReview": "PASS for the four targeted cases and supported-source repairs; not universal capability certification",
+  "qualifier": "Repeated targeted debt-scope retest after v7. Full79 was not rerun on v8. Synthetic household, not a universal or production end-to-end pass.",
+  "results": [
+    {
+      "run": 0,
+      "index": 81,
+      "status": 200,
+      "family": "debt_scope",
+      "question": "How much total debt do I have across all my accounts?",
+      "ms": 14345,
+      "legacy": false,
+      "plan": {
+        "legacy": false,
+        "requests": [
+          {
+            "planDays": null,
+            "timelineUnit": null,
+            "metric": null,
+            "amountRole": "none",
+            "contribution": null,
+            "accountGroup": null,
+            "groupBy": "none",
+            "incomeTiming": "expected",
+            "startDate": null,
+            "endDate": null,
+            "dateEvent": "none",
+            "merchant": null,
+            "category": null,
+            "amount": null,
+            "comparisonStart": null,
+            "comparisonEnd": null,
+            "target": "none",
+            "debtMethod": "snowball",
+            "purpose": "general",
+            "domain": "debt",
+            "operation": "summary",
+            "entity": null,
+            "scenario": null
+          }
+        ]
+      },
+      "attempts": [
+        {
+          "legacy": false,
+          "requests": [
+            {
+              "planDays": null,
+              "timelineUnit": null,
+              "metric": null,
+              "amountRole": "none",
+              "contribution": null,
+              "accountGroup": null,
+              "groupBy": "none",
+              "incomeTiming": "expected",
+              "startDate": null,
+              "endDate": null,
+              "dateEvent": "none",
+              "merchant": null,
+              "category": null,
+              "amount": null,
+              "comparisonStart": null,
+              "comparisonEnd": null,
+              "target": "none",
+              "debtMethod": "snowball",
+              "purpose": "general",
+              "domain": "debt",
+              "operation": "summary",
+              "entity": null,
+              "scenario": null
+            }
+          ]
+        }
+      ],
+      "answer": "Your configured FlowLedger debt-plan balances total $1,000.00 across 1 debts. Connected credit balances are reviewed separately and may not be included here; this is not a verified total of every debt.\n\nTest Card: $1,000.00; configured payment $35.00; APR 18%.\n\nSmallest-balance eligible target: Test Card. This month's recorded required obligations total $35.00, with $35.00 remaining. Preserve that required remainder before adding extra.\n\nAt today's balances and recorded APRs, one month's simple interest estimate is $15.00. Actual statements may use daily balances and additional fees.\n\nWhat I could not verify: A reconciled total across configured debts and connected credit accounts has not been verified.\n\nAssumptions: Configured payments are your FlowLedger plan, not independently verified lender minimums. Check the latest statement before changing a required payment.\n\nI need the missing information listed here before drawing a stronger conclusion.",
+      "followups": [],
+      "partial": true,
+      "missing": [
+        "A reconciled total across configured debts and connected credit accounts has not been verified"
+      ],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "totalDebt": 1000,
+          "debtCount": 1,
+          "debtScope": "configured_plan_only",
+          "nextDebt": "Test Card",
+          "minimumPayments": 35,
+          "minimumRemaining": 35,
+          "configuredOngoingPayments": 35,
+          "monthlyInterestEstimate": 15
+        }
+      ],
+      "usage": {
+        "inputTokens": 9095,
+        "outputTokens": 886
+      }
+    },
+    {
+      "run": 1,
+      "index": 81,
+      "status": 200,
+      "family": "debt_scope",
+      "question": "How much total debt do I have across all my accounts?",
+      "ms": 13926,
+      "legacy": false,
+      "plan": {
+        "legacy": false,
+        "requests": [
+          {
+            "planDays": null,
+            "timelineUnit": null,
+            "metric": null,
+            "amountRole": "none",
+            "contribution": null,
+            "accountGroup": null,
+            "groupBy": "none",
+            "incomeTiming": "expected",
+            "startDate": null,
+            "endDate": null,
+            "dateEvent": "none",
+            "merchant": null,
+            "category": null,
+            "amount": null,
+            "comparisonStart": null,
+            "comparisonEnd": null,
+            "target": "none",
+            "debtMethod": "snowball",
+            "purpose": "general",
+            "domain": "debt",
+            "operation": "summary",
+            "entity": null,
+            "scenario": null
+          }
+        ]
+      },
+      "attempts": [
+        {
+          "legacy": false,
+          "requests": [
+            {
+              "planDays": null,
+              "timelineUnit": null,
+              "metric": null,
+              "amountRole": "none",
+              "contribution": null,
+              "accountGroup": null,
+              "groupBy": "none",
+              "incomeTiming": "expected",
+              "startDate": null,
+              "endDate": null,
+              "dateEvent": "none",
+              "merchant": null,
+              "category": null,
+              "amount": null,
+              "comparisonStart": null,
+              "comparisonEnd": null,
+              "target": "none",
+              "debtMethod": "snowball",
+              "purpose": "current_balance",
+              "domain": "money",
+              "operation": "detail",
+              "entity": null,
+              "scenario": null
+            }
+          ]
+        },
+        {
+          "legacy": false,
+          "requests": [
+            {
+              "planDays": null,
+              "timelineUnit": null,
+              "metric": null,
+              "amountRole": "none",
+              "contribution": null,
+              "accountGroup": null,
+              "groupBy": "none",
+              "incomeTiming": "expected",
+              "startDate": null,
+              "endDate": null,
+              "dateEvent": "none",
+              "merchant": null,
+              "category": null,
+              "amount": null,
+              "comparisonStart": null,
+              "comparisonEnd": null,
+              "target": "none",
+              "debtMethod": "snowball",
+              "purpose": "general",
+              "domain": "debt",
+              "operation": "summary",
+              "entity": null,
+              "scenario": null
+            }
+          ]
+        }
+      ],
+      "answer": "Your configured FlowLedger debt-plan balances total $1,000.00 across 1 debts. Connected credit balances are reviewed separately and may not be included here; this is not a verified total of every debt.\n\nTest Card: $1,000.00; configured payment $35.00; APR 18%.\n\nSmallest-balance eligible target: Test Card. This month's recorded required obligations total $35.00, with $35.00 remaining. Preserve that required remainder before adding extra.\n\nAt today's balances and recorded APRs, one month's simple interest estimate is $15.00. Actual statements may use daily balances and additional fees.\n\nWhat I could not verify: A reconciled total across configured debts and connected credit accounts has not been verified.\n\nAssumptions: Configured payments are your FlowLedger plan, not independently verified lender minimums. Check the latest statement before changing a required payment.\n\nI need the missing information listed here before drawing a stronger conclusion.",
+      "followups": [],
+      "partial": true,
+      "missing": [
+        "A reconciled total across configured debts and connected credit accounts has not been verified"
+      ],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "totalDebt": 1000,
+          "debtCount": 1,
+          "debtScope": "configured_plan_only",
+          "nextDebt": "Test Card",
+          "minimumPayments": 35,
+          "minimumRemaining": 35,
+          "configuredOngoingPayments": 35,
+          "monthlyInterestEstimate": 15
+        }
+      ],
+      "usage": {
+        "inputTokens": 17174,
+        "outputTokens": 835
+      }
+    },
+    {
+      "run": 2,
+      "index": 87,
+      "status": 200,
+      "family": "debt_compound",
+      "question": "What is my total debt and checking balance?",
+      "ms": 20040,
+      "legacy": false,
+      "plan": {
+        "legacy": false,
+        "requests": [
+          {
+            "planDays": null,
+            "timelineUnit": null,
+            "metric": null,
+            "amountRole": "none",
+            "contribution": null,
+            "accountGroup": null,
+            "groupBy": "none",
+            "incomeTiming": "expected",
+            "startDate": null,
+            "endDate": null,
+            "dateEvent": "none",
+            "merchant": null,
+            "category": null,
+            "amount": null,
+            "comparisonStart": null,
+            "comparisonEnd": null,
+            "target": "none",
+            "debtMethod": "snowball",
+            "purpose": "general",
+            "domain": "debt",
+            "operation": "summary",
+            "entity": null,
+            "scenario": null
+          },
+          {
+            "planDays": null,
+            "timelineUnit": null,
+            "metric": null,
+            "amountRole": "none",
+            "contribution": null,
+            "accountGroup": "checking",
+            "groupBy": "none",
+            "incomeTiming": "expected",
+            "startDate": null,
+            "endDate": null,
+            "dateEvent": "none",
+            "merchant": null,
+            "category": null,
+            "amount": null,
+            "comparisonStart": null,
+            "comparisonEnd": null,
+            "target": "none",
+            "debtMethod": "snowball",
+            "purpose": "current_balance",
+            "domain": "money",
+            "operation": "detail",
+            "entity": null,
+            "scenario": null
+          }
+        ]
+      },
+      "attempts": [
+        {
+          "legacy": false,
+          "requests": [
+            {
+              "planDays": null,
+              "timelineUnit": null,
+              "metric": null,
+              "amountRole": "none",
+              "contribution": null,
+              "accountGroup": null,
+              "groupBy": "none",
+              "incomeTiming": "received",
+              "startDate": null,
+              "endDate": null,
+              "dateEvent": "none",
+              "merchant": null,
+              "category": null,
+              "amount": null,
+              "comparisonStart": null,
+              "comparisonEnd": null,
+              "target": "none",
+              "debtMethod": "snowball",
+              "purpose": "current_balance",
+              "domain": "money",
+              "operation": "detail",
+              "entity": "Main Checking",
+              "scenario": null
+            },
+            {
+              "planDays": null,
+              "timelineUnit": null,
+              "metric": null,
+              "amountRole": "none",
+              "contribution": null,
+              "accountGroup": "all",
+              "groupBy": "none",
+              "incomeTiming": "received",
+              "startDate": null,
+              "endDate": null,
+              "dateEvent": "none",
+              "merchant": null,
+              "category": null,
+              "amount": null,
+              "comparisonStart": null,
+              "comparisonEnd": null,
+              "target": "none",
+              "debtMethod": "snowball",
+              "purpose": "current_balance",
+              "domain": "money",
+              "operation": "detail",
+              "entity": null,
+              "scenario": null
+            }
+          ]
+        },
+        {
+          "legacy": false,
+          "requests": [
+            {
+              "planDays": null,
+              "timelineUnit": null,
+              "metric": null,
+              "amountRole": "none",
+              "contribution": null,
+              "accountGroup": null,
+              "groupBy": "none",
+              "incomeTiming": "expected",
+              "startDate": null,
+              "endDate": null,
+              "dateEvent": "none",
+              "merchant": null,
+              "category": null,
+              "amount": null,
+              "comparisonStart": null,
+              "comparisonEnd": null,
+              "target": "none",
+              "debtMethod": "snowball",
+              "purpose": "general",
+              "domain": "debt",
+              "operation": "summary",
+              "entity": null,
+              "scenario": null
+            },
+            {
+              "planDays": null,
+              "timelineUnit": null,
+              "metric": null,
+              "amountRole": "none",
+              "contribution": null,
+              "accountGroup": "checking",
+              "groupBy": "none",
+              "incomeTiming": "expected",
+              "startDate": null,
+              "endDate": null,
+              "dateEvent": "none",
+              "merchant": null,
+              "category": null,
+              "amount": null,
+              "comparisonStart": null,
+              "comparisonEnd": null,
+              "target": "none",
+              "debtMethod": "snowball",
+              "purpose": "current_balance",
+              "domain": "money",
+              "operation": "detail",
+              "entity": null,
+              "scenario": null
+            }
+          ]
+        }
+      ],
+      "answer": "Your configured FlowLedger debt-plan balances total $1,000.00 across 1 debts. Connected credit balances are reviewed separately and may not be included here; this is not a verified total of every debt.\n\nTest Card: $1,000.00; configured payment $35.00; APR 18%.\n\nSmallest-balance eligible target: Test Card. This month's recorded required obligations total $35.00, with $35.00 remaining. Preserve that required remainder before adding extra.\n\nAt today's balances and recorded APRs, one month's simple interest estimate is $15.00. Actual statements may use daily balances and additional fees.\n\nChecking/cash: $500.00 recorded as of 2026-09-10.\n\nThis is not a live available-funds or safe-to-spend amount.\n\nWhat I could not verify: A reconciled total across configured debts and connected credit accounts has not been verified.\n\nAssumptions: Configured payments are your FlowLedger plan, not independently verified lender minimums. Check the latest statement before changing a required payment. These are recorded balance observations, not live bank funds or safe-to-spend amounts. Pending transactions and future obligations are not deducted here. For household totals, connected balances take precedence over manual balances of the same planning group, matching the app; savings are kept separate from checking/cash.",
+      "followups": [],
+      "partial": true,
+      "missing": [
+        "A reconciled total across configured debts and connected credit accounts has not been verified"
+      ],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "totalDebt": 1000,
+          "debtCount": 1,
+          "debtScope": "configured_plan_only",
+          "nextDebt": "Test Card",
+          "minimumPayments": 35,
+          "minimumRemaining": 35,
+          "configuredOngoingPayments": 35,
+          "monthlyInterestEstimate": 15
+        },
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:1",
+          "recordedBalance": 500,
+          "accountCount": 1,
+          "accountName": null,
+          "accountType": "checking/cash",
+          "balanceAsOf": "2026-09-10",
+          "oldestObservationDate": "2026-09-10",
+          "newestObservationDate": "2026-09-10",
+          "safeToSpend": null
+        }
+      ],
+      "usage": {
+        "inputTokens": 16104,
+        "outputTokens": 951
+      }
+    },
+    {
+      "run": 3,
+      "index": 88,
+      "status": 200,
+      "family": "plan_debt_scope",
+      "question": "What is the total debt in my plan?",
+      "ms": 9305,
+      "legacy": false,
+      "plan": {
+        "legacy": false,
+        "requests": [
+          {
+            "planDays": null,
+            "timelineUnit": null,
+            "metric": null,
+            "amountRole": "none",
+            "contribution": null,
+            "accountGroup": null,
+            "groupBy": "none",
+            "incomeTiming": "expected",
+            "startDate": null,
+            "endDate": null,
+            "dateEvent": "none",
+            "merchant": null,
+            "category": null,
+            "amount": null,
+            "comparisonStart": null,
+            "comparisonEnd": null,
+            "target": "none",
+            "debtMethod": "snowball",
+            "purpose": "general",
+            "domain": "debt",
+            "operation": "summary",
+            "entity": null,
+            "scenario": null
+          }
+        ]
+      },
+      "attempts": [
+        {
+          "legacy": false,
+          "requests": [
+            {
+              "planDays": null,
+              "timelineUnit": null,
+              "metric": null,
+              "amountRole": "none",
+              "contribution": null,
+              "accountGroup": null,
+              "groupBy": "none",
+              "incomeTiming": "expected",
+              "startDate": null,
+              "endDate": null,
+              "dateEvent": "none",
+              "merchant": null,
+              "category": null,
+              "amount": null,
+              "comparisonStart": null,
+              "comparisonEnd": null,
+              "target": "none",
+              "debtMethod": "snowball",
+              "purpose": "general",
+              "domain": "debt",
+              "operation": "summary",
+              "entity": null,
+              "scenario": null
+            }
+          ]
+        }
+      ],
+      "answer": "Your configured FlowLedger debt-plan balances total $1,000.00 across 1 debts. Connected credit balances are reviewed separately and may not be included here; this is not a verified total of every debt.\n\nTest Card: $1,000.00; configured payment $35.00; APR 18%.\n\nSmallest-balance eligible target: Test Card. This month's recorded required obligations total $35.00, with $35.00 remaining. Preserve that required remainder before adding extra.\n\nAt today's balances and recorded APRs, one month's simple interest estimate is $15.00. Actual statements may use daily balances and additional fees.\n\nAssumptions: Configured payments are your FlowLedger plan, not independently verified lender minimums. Check the latest statement before changing a required payment.\n\nA debt-payment plan does not establish whether extra payments fit your cash flow. I’d check that separately and preserve required payments.",
+      "followups": [
+        "Show me my debt payoff plan.",
+        "How much extra can I safely pay toward debt?"
+      ],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "totalDebt": 1000,
+          "debtCount": 1,
+          "debtScope": "configured_plan_only",
+          "nextDebt": "Test Card",
+          "minimumPayments": 35,
+          "minimumRemaining": 35,
+          "configuredOngoingPayments": 35,
+          "monthlyInterestEstimate": 15
+        }
+      ],
+      "usage": {
+        "inputTokens": 9086,
+        "outputTokens": 579
+      }
+    }
+  ]
+}

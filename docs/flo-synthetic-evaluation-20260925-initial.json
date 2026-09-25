@@ -1,0 +1,2375 @@
+{
+  "note": "Synthetic-only initial candidate, not production. Incorrect transaction-account matching found; superseded after repair. Real OpenAI connection, in-memory fictional data, no database reads or writes.",
+  "results": [
+    {
+      "index": 0,
+      "status": 200,
+      "family": "paycheck_allocation",
+      "question": "How should I split my next paycheck between bills, spending, saving and debt?",
+      "ms": 10286,
+      "legacy": false,
+      "answer": "For the expected $1,500.00 household paycheck on 2026-09-11, reserve through 2026-09-24. Confirm it posts before allocating it.\n\n$950.00 reserved for recorded bills, debt and other existing plan commitments.\n\n$550.00 remains unassigned from this paycheck. Keep it held until all reserves are checked; at most $300.00 is part of the one shared optional capacity, not separate debt and savings allowances.\n\nAssumptions: Read-only draft: no payments, transfers, budgets or dates were changed. Expected deposits are not guaranteed bank funds. The cash cushion is a balance reserve, not a monthly expense. Any spare capacity is one shared amount: choose between buffer, extra debt or other goals; do not add independent maxima.\n\nAn ending balance and a low point answer different questions. I’d consider both when planning around the timing of bills and income.",
+      "followups": [
+        "What bills are due before my next paycheck?",
+        "How can I build a cash buffer with my current plan?"
+      ],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "startDate": "2026-09-10",
+          "endDate": "2026-10-09",
+          "safeSharedCapacity": 300,
+          "cashCushion": 200,
+          "minimumProjectedBalance": 500,
+          "minimumDate": "2026-09-10",
+          "householdCushionShortfall": 0,
+          "planStatus": "checked_draft",
+          "payday": "2026-09-11",
+          "expectedPaycheck": 1500,
+          "allocatedPaycheck": 950,
+          "unassignedPaycheck": 550,
+          "paycheckOnlyGap": 0,
+          "cycleEnd": "2026-09-24",
+          "optionalSharedCapacity": 300
+        }
+      ],
+      "usage": {
+        "inputTokens": 4941,
+        "outputTokens": 586
+      }
+    },
+    {
+      "index": 1,
+      "status": 200,
+      "family": "escape_plan",
+      "question": "Make me a 30-day plan to stop living paycheck to paycheck.",
+      "ms": 11223,
+      "legacy": false,
+      "answer": "30-day action plan: 2026-09-10–2026-10-09. This is a dated checklist, not a promised escape-from-debt date.\n\n2026-09-10: reconcile checking, review pending payments and resolve older unpaid obligations before committing extra money.\n\n2026-09-15: protect $900.00 for Rent under the recorded schedule.\n\n2026-09-20: protect $35.00 for Test Card debt payment under the recorded schedule.\n\n2026-09-24: protect $15.00 for Streaming under the recorded schedule.\n\nFull-window totals: 3 bill/debt occurrences totaling $950.00, and 3 expected household paydays totaling $4,500.00. Showing 3 of 3 due items and 3 of 3 paydays; open Forecast for every dated item.\n\n2026-09-11: after the expected income posts, review the next bill window and living-cost reserve before assigning extra money.\n\n2026-09-25: after the expected income posts, review the next bill window and living-cost reserve before assigning extra money.\n\n2026-10-09: after the expected income posts, review the next bill window and living-cost reserve before assigning extra money.\n\n$300.00 is the single shared additional capacity checked through 2026-10-09. Choose its destination once—buffer or extra debt—not that amount for each.\n\n2026-10-09: review actual posted spending, debt principal and the next forecast window, then revise this plan.\n\nAssumptions: Read-only draft: no payments, transfers, budgets or dates were changed. Expected deposits are not guaranteed bank funds. The cash cushion is a balance reserve, not a monthly expense. Any spare capacity is one shared amount: choose between buffer, extra debt or other goals; do not add independent maxima.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "startDate": "2026-09-10",
+          "endDate": "2026-10-09",
+          "safeSharedCapacity": 300,
+          "cashCushion": 200,
+          "minimumProjectedBalance": 500,
+          "minimumDate": "2026-09-10",
+          "householdCushionShortfall": 0,
+          "planStatus": "checked_draft",
+          "dueOccurrenceCount": 3,
+          "dueAmountTotal": 950,
+          "displayedDueCount": 3,
+          "expectedPaydayCount": 3,
+          "displayedPaydayCount": 3,
+          "expectedIncomeTotal": 4500
+        }
+      ],
+      "usage": {
+        "inputTokens": 3803,
+        "outputTokens": 328
+      }
+    },
+    {
+      "index": 2,
+      "status": 200,
+      "family": "escape_plan",
+      "question": "What should I do over the next 90 days to get ahead?",
+      "ms": 9105,
+      "legacy": false,
+      "answer": "90-day action plan: 2026-09-10–2026-12-08. This is a dated checklist, not a promised escape-from-debt date.\n\n2026-09-10: reconcile checking, review pending payments and resolve older unpaid obligations before committing extra money.\n\n2026-09-15: protect $900.00 for Rent under the recorded schedule.\n\n2026-09-20: protect $35.00 for Test Card debt payment under the recorded schedule.\n\n2026-09-24: protect $15.00 for Streaming under the recorded schedule.\n\n2026-10-15: protect $900.00 for Rent under the recorded schedule.\n\n2026-10-20: protect $35.00 for Test Card debt payment under the recorded schedule.\n\n2026-10-24: protect $15.00 for Streaming under the recorded schedule.\n\n2026-11-15: protect $900.00 for Rent under the recorded schedule.\n\n2026-11-20: protect $35.00 for Test Card debt payment under the recorded schedule.\n\n2026-11-24: protect $15.00 for Streaming under the recorded schedule.\n\nFull-window totals: 9 bill/debt occurrences totaling $2,850.00, and 7 expected household paydays totaling $10,500.00. Showing 9 of 9 due items and 4 of 7 paydays; open Forecast for every dated item.\n\n2026-09-11: after the expected income posts, review the next bill window and living-cost reserve before assigning extra money.\n\n2026-09-25: after the expected income posts, review the next bill window and living-cost reserve before assigning extra money.\n\n2026-10-09: after the expected income posts, review the next bill window and living-cost reserve before assigning extra money.\n\n2026-10-23: after the expected income posts, review the next bill window and living-cost reserve before assigning extra money.\n\n$300.00 is the single shared additional capacity checked through 2026-12-08. Choose its destination once—buffer or extra debt—not that amount for each.\n\n2026-12-08: review actual posted spending, debt principal and the next forecast window, then revise this plan.\n\nAssumptions: Read-only draft: no payments, transfers, budgets or dates were changed. Expected deposits are not guaranteed bank funds. The cash cushion is a balance reserve, not a monthly expense. Any spare capacity is one shared amount: choose between buffer, extra debt or other goals; do not add independent maxima.\n\nAn ending balance and a low point answer different questions. I’d consider both when planning around the timing of bills and income.",
+      "followups": [
+        "What bills are due before my next paycheck?",
+        "How can I build a cash buffer with my current plan?"
+      ],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "startDate": "2026-09-10",
+          "endDate": "2026-12-08",
+          "safeSharedCapacity": 300,
+          "cashCushion": 200,
+          "minimumProjectedBalance": 500,
+          "minimumDate": "2026-09-10",
+          "householdCushionShortfall": 0,
+          "planStatus": "checked_draft",
+          "dueOccurrenceCount": 9,
+          "dueAmountTotal": 2850,
+          "displayedDueCount": 9,
+          "expectedPaydayCount": 7,
+          "displayedPaydayCount": 4,
+          "expectedIncomeTotal": 10500
+        }
+      ],
+      "usage": {
+        "inputTokens": 5294,
+        "outputTokens": 469
+      }
+    },
+    {
+      "index": 3,
+      "status": 200,
+      "family": "financial_health",
+      "question": "How is my financial health, and what is my biggest risk right now?",
+      "ms": 10972,
+      "legacy": false,
+      "answer": "$35.00 in recorded net spending from 2026-09-01 through 2026-09-10.\n\nLargest categories: Groceries $35.00.\n\nCompared with 2026-08-01–2026-08-10, spending is $1,535.00 higher.\n\nIncome: +$1,500.00.\n\nGroceries: +$35.00.\n\nConfirmed income: $0.00. Recorded debt repayments: $0.00. Payments alone do not establish the change in debt principal.\n\nCurrent outlook (separate from the historical review):\n\nYour checked plan has $300.00 of additional cash buffer above the $200.00 cushion. Its lowest projected balance is $500.00 on 2026-09-10.\n\nYour next expected paycheck is $1,500.00 on 2026-09-11. $950.00 (63.33%) of that amount corresponds to recorded obligations through 2026-09-24, before additional everyday spending.\n\nA paycheck/buffer target is $1,500.00, needing another $1,200.00 beyond that available buffer.\n\nRecorded monthly average: $0.00 confirmed income versus -$2,595.00 consumption and debt payments, leaving $2,595.00 before other unclassified flows.\n\nScenario: setting aside $300.00/month would need about 4 months. Recheck each payday; the current forecast does not guarantee that surplus indefinitely.\n\nCategories to review first (not automatically nonessential): Groceries $400.00/month; Subscriptions $5.00/month; Income -$3,000.00/month.\n\nNext steps: leave the bill reserve and cushion untouched, review everyday-spending needs, then direct verified spare cash toward your chosen buffer or debt target.\n\nObserved monthly lows: 2026-06 $270.00 (1 recorded days); 2026-07 $290.00 (1 recorded days); 2026-08 $310.00 (1 recorded days).\n\n2026-09 Groceries: $35.00 classified spending of $450.00; $415.00 remaining (month start through 2026-09-10).\n\nWhat I could not verify: Not enough recorded pre-payday balances for a reliable paycheck-to-paycheck diagnosis; a single low balance is not enough.\n\nAssumptions: Totals cover recorded posted history only. Own-account transfers, linked savings contributions and identified debt/card repayments are excluded from consumption spending; merchant refunds reduce spending. Debt repayments remain cash-flow obligations. This plan uses recorded obligations and expected paychecks. Estimated spending is included only when a three-month baseline is available. No balances or plans are changed. Historical progress uses recorded daily closes only, never today's forecast rewritten as past actuals. Debt principal changes cannot be reconstructed from payments alone. Debt-principal and savings changes require historical balance observations; payment totals are not substituted for those changes.",
+      "followups": [],
+      "partial": true,
+      "missing": [
+        "Not enough recorded pre-payday balances for a reliable paycheck-to-paycheck diagnosis; a single low balance is not enough"
+      ],
+      "facts": [
+        {
+          "id": "financialAnalysis:4dff1f1a2d5c3d21:0",
+          "review_spending": 35,
+          "review_income": 0,
+          "review_debtRepayments": 0,
+          "review_startDate": "2026-09-01",
+          "review_endDate": "2026-09-10",
+          "review_previousSpending": -1500,
+          "review_spendingChange": 1535,
+          "current_currentPlanBuffer": 300,
+          "current_cashCushion": 200,
+          "current_nextPayday": "2026-09-11",
+          "current_nextPaycheck": 1500,
+          "current_oneMonthTarget": 950,
+          "current_target": 1500,
+          "current_remaining": 1200,
+          "current_minimumBalance": 500,
+          "current_minimumDate": "2026-09-10",
+          "current_paycheckCommitted": 950,
+          "current_paycheckCommittedPercent": 63.33,
+          "current_historicalMonthlySurplus": 2595,
+          "current_monthsToTargetScenario": 4,
+          "current_targetMonthScenario": "2027-01"
+        }
+      ],
+      "usage": {
+        "inputTokens": 3805,
+        "outputTokens": 398
+      }
+    },
+    {
+      "index": 4,
+      "status": 200,
+      "family": "daily_briefing",
+      "question": "What should I focus on with my money today?",
+      "ms": 9937,
+      "legacy": false,
+      "answer": "1-day action plan: 2026-09-10–2026-09-10. This is a dated checklist, not a promised escape-from-debt date.\n\n2026-09-10: reconcile checking, review pending payments and resolve older unpaid obligations before committing extra money.\n\nFull-window totals: 0 bill/debt occurrences totaling $0.00, and 0 expected household paydays totaling $0.00. Showing 0 of 0 due items and 0 of 0 paydays; open Forecast for every dated item.\n\n$300.00 is the single shared additional capacity checked through 2026-09-10. Choose its destination once—buffer or extra debt—not that amount for each.\n\n2026-09-10: review actual posted spending, debt principal and the next forecast window, then revise this plan.\n\nAssumptions: Read-only draft: no payments, transfers, budgets or dates were changed. Expected deposits are not guaranteed bank funds. The cash cushion is a balance reserve, not a monthly expense. Any spare capacity is one shared amount: choose between buffer, extra debt or other goals; do not add independent maxima.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "startDate": "2026-09-10",
+          "endDate": "2026-09-10",
+          "safeSharedCapacity": 300,
+          "cashCushion": 200,
+          "minimumProjectedBalance": 500,
+          "minimumDate": "2026-09-10",
+          "householdCushionShortfall": 0,
+          "planStatus": "checked_draft",
+          "dueOccurrenceCount": 0,
+          "dueAmountTotal": 0,
+          "displayedDueCount": 0,
+          "expectedPaydayCount": 0,
+          "displayedPaydayCount": 0,
+          "expectedIncomeTotal": 0
+        }
+      ],
+      "usage": {
+        "inputTokens": 3800,
+        "outputTokens": 352
+      }
+    },
+    {
+      "index": 5,
+      "status": 200,
+      "family": "daily_briefing",
+      "question": "Give me today's financial plan.",
+      "ms": 10506,
+      "legacy": false,
+      "answer": "1-day action plan: 2026-09-10–2026-09-10. This is a dated checklist, not a promised escape-from-debt date.\n\n2026-09-10: reconcile checking, review pending payments and resolve older unpaid obligations before committing extra money.\n\nFull-window totals: 0 bill/debt occurrences totaling $0.00, and 0 expected household paydays totaling $0.00. Showing 0 of 0 due items and 0 of 0 paydays; open Forecast for every dated item.\n\n$300.00 is the single shared additional capacity checked through 2026-09-10. Choose its destination once—buffer or extra debt—not that amount for each.\n\n2026-09-10: review actual posted spending, debt principal and the next forecast window, then revise this plan.\n\nAssumptions: Read-only draft: no payments, transfers, budgets or dates were changed. Expected deposits are not guaranteed bank funds. The cash cushion is a balance reserve, not a monthly expense. Any spare capacity is one shared amount: choose between buffer, extra debt or other goals; do not add independent maxima.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "startDate": "2026-09-10",
+          "endDate": "2026-09-10",
+          "safeSharedCapacity": 300,
+          "cashCushion": 200,
+          "minimumProjectedBalance": 500,
+          "minimumDate": "2026-09-10",
+          "householdCushionShortfall": 0,
+          "planStatus": "checked_draft",
+          "dueOccurrenceCount": 0,
+          "dueAmountTotal": 0,
+          "displayedDueCount": 0,
+          "expectedPaydayCount": 0,
+          "displayedPaydayCount": 0,
+          "expectedIncomeTotal": 0
+        }
+      ],
+      "usage": {
+        "inputTokens": 3795,
+        "outputTokens": 403
+      }
+    },
+    {
+      "index": 6,
+      "status": 200,
+      "family": "current_named_account",
+      "question": "How much is in Main Checking right now?",
+      "ms": 9805,
+      "legacy": false,
+      "answer": "Main Checking: $500.00 recorded as of 2026-09-10.\n\nThis is not a live available-funds or safe-to-spend amount.\n\nAssumptions: These are recorded balance observations, not live bank funds or safe-to-spend amounts. Pending transactions and future obligations are not deducted here.\n\nThat is a recorded account balance, not a spending allowance. I’d check upcoming obligations before making a spending decision.",
+      "followups": [
+        "How much can I safely spend before my next paycheck?",
+        "What bills are due before my next paycheck?"
+      ],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:82b462dfddf15d20:0",
+          "recordedBalance": 500,
+          "accountCount": 1,
+          "accountName": "Main Checking",
+          "accountType": "checking",
+          "balanceAsOf": "2026-09-10",
+          "oldestObservationDate": "2026-09-10",
+          "newestObservationDate": "2026-09-10",
+          "safeToSpend": null
+        }
+      ],
+      "usage": {
+        "inputTokens": 4777,
+        "outputTokens": 674
+      }
+    },
+    {
+      "index": 7,
+      "status": 200,
+      "family": "current_named_account",
+      "question": "How much is in Rainy Day Savings?",
+      "ms": 9946,
+      "legacy": false,
+      "answer": "Rainy Day Savings: $300.00 recorded as of 2026-09-10.\n\nThis is not a live available-funds or safe-to-spend amount.\n\nAssumptions: These are recorded balance observations, not live bank funds or safe-to-spend amounts. Pending transactions and future obligations are not deducted here.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:82b462dfddf15d20:0",
+          "recordedBalance": 300,
+          "accountCount": 1,
+          "accountName": "Rainy Day Savings",
+          "accountType": "savings",
+          "balanceAsOf": "2026-09-10",
+          "oldestObservationDate": "2026-09-10",
+          "newestObservationDate": "2026-09-10",
+          "safeToSpend": null
+        }
+      ],
+      "usage": {
+        "inputTokens": 3799,
+        "outputTokens": 211
+      }
+    },
+    {
+      "index": 8,
+      "status": 200,
+      "family": "safe_spending",
+      "question": "How much can I safely spend today?",
+      "ms": 23510,
+      "legacy": false,
+      "answer": "Your projected end-of-day account balance on 2026-09-10 is $500.00, or $500.00 after estimated everyday spending.\n\nYour recorded checking/cash balance is $500.00 as of 2026-09-10; this is not a live bank-funds guarantee.\n\nBetween 2026-09-10 and 2026-09-10, the lowest projected balance is $500.00 on 2026-09-10. That window includes $0.00 of expected income and $0.00 of remaining obligations.\n\nUp to $300.00 of additional spending fits this checked plan while keeping your $200.00 cushion through 2026-10-31, capped by recorded funds after pending outflows. This is not a guarantee of available bank funds.\n\nThe affordability check continues beyond the displayed balance date through 2026-10-31; its lowest projected balance is $500.00 on 2026-09-10. Bills beyond that assessment horizon are not included.\n\nAssumptions: Forecasts reuse FlowLedger's current bills, date moves, income schedule, debt allocations, pending-payment matches, and planned goals. Future deposits are expected, not guaranteed. Same-day end balances do not establish the order a bank will post payments. Estimated additional daily spending is $0.00, based on the last three completed months of recorded non-bill-linked spending; this may overlap unlinked recurring charges.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "startDate": "2026-09-10",
+          "contextStartDate": "2026-09-10",
+          "projectedBalance": 500,
+          "projectedAfterEstimatedSpending": 500,
+          "safeToSpendUnderPlan": 300,
+          "obligations": 0,
+          "expectedIncome": 0,
+          "minimumProjectedBalance": 500,
+          "minimumDate": "2026-09-10",
+          "targetDate": "2026-09-10",
+          "cashCushion": 200,
+          "nextPayday": "2026-09-11",
+          "observedBalance": 500,
+          "balanceAsOf": "2026-09-10",
+          "conservativeAvailableNow": 500,
+          "affordabilityAssessmentThrough": "2026-10-31",
+          "affordabilityMinimumBalance": 500,
+          "affordabilityMinimumDate": "2026-09-10"
+        }
+      ],
+      "usage": {
+        "inputTokens": 7617,
+        "outputTokens": 1389
+      }
+    },
+    {
+      "index": 9,
+      "status": 200,
+      "family": "safe_spending",
+      "question": "What can I spend without touching my bill money?",
+      "ms": 22,
+      "legacy": false,
+      "answer": "Your projected end-of-day account balance on 2026-09-10 is $500.00, or $500.00 after estimated everyday spending.\n\nYour recorded checking/cash balance is $500.00 as of 2026-09-10; this is not a live bank-funds guarantee.\n\nBetween 2026-09-10 and 2026-09-10, the lowest projected balance is $500.00 on 2026-09-10. That window includes $0.00 of expected income and $0.00 of remaining obligations.\n\nUp to $300.00 of additional spending fits this checked plan while keeping your $200.00 cushion through 2026-10-31, capped by recorded funds after pending outflows. This is not a guarantee of available bank funds.\n\nThe affordability check continues beyond the displayed balance date through 2026-10-31; its lowest projected balance is $500.00 on 2026-09-10. Bills beyond that assessment horizon are not included.\n\nAssumptions: Forecasts reuse FlowLedger's current bills, date moves, income schedule, debt allocations, pending-payment matches, and planned goals. Future deposits are expected, not guaranteed. Same-day end balances do not establish the order a bank will post payments. Estimated additional daily spending is $0.00, based on the last three completed months of recorded non-bill-linked spending; this may overlap unlinked recurring charges.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "startDate": "2026-09-10",
+          "contextStartDate": "2026-09-10",
+          "projectedBalance": 500,
+          "projectedAfterEstimatedSpending": 500,
+          "safeToSpendUnderPlan": 300,
+          "obligations": 0,
+          "expectedIncome": 0,
+          "minimumProjectedBalance": 500,
+          "minimumDate": "2026-09-10",
+          "targetDate": "2026-09-10",
+          "cashCushion": 200,
+          "nextPayday": "2026-09-11",
+          "observedBalance": 500,
+          "balanceAsOf": "2026-09-10",
+          "conservativeAvailableNow": 500,
+          "affordabilityAssessmentThrough": "2026-10-31",
+          "affordabilityMinimumBalance": 500,
+          "affordabilityMinimumDate": "2026-09-10"
+        }
+      ],
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0
+      }
+    },
+    {
+      "index": 10,
+      "status": 200,
+      "family": "dated_balance",
+      "question": "What will my balance be September 25?",
+      "ms": 9405,
+      "legacy": false,
+      "answer": "Your projected end-of-day account balance on 2026-09-25 is $2,550.00, or $2,550.00 after estimated everyday spending.\n\nYour recorded checking/cash balance is $500.00 as of 2026-09-10; this is not a live bank-funds guarantee.\n\nBetween 2026-09-10 and 2026-09-25, the lowest projected balance is $500.00 on 2026-09-10. That window includes $3,000.00 of expected income and $950.00 of remaining obligations.\n\nUp to $300.00 of additional spending fits this checked plan while keeping your $200.00 cushion through 2026-10-31, capped by recorded funds after pending outflows. This is not a guarantee of available bank funds.\n\nThe affordability check continues beyond the displayed balance date through 2026-10-31; its lowest projected balance is $500.00 on 2026-09-10. Bills beyond that assessment horizon are not included.\n\nAssumptions: Forecasts reuse FlowLedger's current bills, date moves, income schedule, debt allocations, pending-payment matches, and planned goals. Future deposits are expected, not guaranteed. Same-day end balances do not establish the order a bank will post payments. Estimated additional daily spending is $0.00, based on the last three completed months of recorded non-bill-linked spending; this may overlap unlinked recurring charges.\n\nAn ending balance and a low point answer different questions. I’d consider both when planning around the timing of bills and income.",
+      "followups": [
+        "When and how much is my next paycheck?",
+        "When will my projected balance be lowest?"
+      ],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "startDate": "2026-09-10",
+          "contextStartDate": "2026-09-10",
+          "projectedBalance": 2550,
+          "projectedAfterEstimatedSpending": 2550,
+          "safeToSpendUnderPlan": 300,
+          "obligations": 950,
+          "expectedIncome": 3000,
+          "minimumProjectedBalance": 500,
+          "minimumDate": "2026-09-10",
+          "targetDate": "2026-09-25",
+          "cashCushion": 200,
+          "nextPayday": "2026-09-11",
+          "observedBalance": 500,
+          "balanceAsOf": "2026-09-10",
+          "conservativeAvailableNow": 500,
+          "affordabilityAssessmentThrough": "2026-10-31",
+          "affordabilityMinimumBalance": 500,
+          "affordabilityMinimumDate": "2026-09-10"
+        }
+      ],
+      "usage": {
+        "inputTokens": 5119,
+        "outputTokens": 663
+      }
+    },
+    {
+      "index": 11,
+      "status": 200,
+      "family": "dated_balance",
+      "question": "How much will I have next Friday?",
+      "ms": 17225,
+      "legacy": false,
+      "answer": "Your projected end-of-day account balance on 2026-09-17 is $1,100.00, or $1,100.00 after estimated everyday spending.\n\nYour recorded checking/cash balance is $500.00 as of 2026-09-10; this is not a live bank-funds guarantee.\n\nBetween 2026-09-10 and 2026-09-17, the lowest projected balance is $500.00 on 2026-09-10. That window includes $1,500.00 of expected income and $900.00 of remaining obligations.\n\nUp to $300.00 of additional spending fits this checked plan while keeping your $200.00 cushion through 2026-10-31, capped by recorded funds after pending outflows. This is not a guarantee of available bank funds.\n\nThe affordability check continues beyond the displayed balance date through 2026-10-31; its lowest projected balance is $500.00 on 2026-09-10. Bills beyond that assessment horizon are not included.\n\nAssumptions: Forecasts reuse FlowLedger's current bills, date moves, income schedule, debt allocations, pending-payment matches, and planned goals. Future deposits are expected, not guaranteed. Same-day end balances do not establish the order a bank will post payments. Estimated additional daily spending is $0.00, based on the last three completed months of recorded non-bill-linked spending; this may overlap unlinked recurring charges.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "startDate": "2026-09-10",
+          "contextStartDate": "2026-09-10",
+          "projectedBalance": 1100,
+          "projectedAfterEstimatedSpending": 1100,
+          "safeToSpendUnderPlan": 300,
+          "obligations": 900,
+          "expectedIncome": 1500,
+          "minimumProjectedBalance": 500,
+          "minimumDate": "2026-09-10",
+          "targetDate": "2026-09-17",
+          "cashCushion": 200,
+          "nextPayday": "2026-09-11",
+          "observedBalance": 500,
+          "balanceAsOf": "2026-09-10",
+          "conservativeAvailableNow": 500,
+          "affordabilityAssessmentThrough": "2026-10-31",
+          "affordabilityMinimumBalance": 500,
+          "affordabilityMinimumDate": "2026-09-10"
+        }
+      ],
+      "usage": {
+        "inputTokens": 7621,
+        "outputTokens": 817
+      }
+    },
+    {
+      "index": 12,
+      "status": 200,
+      "family": "named_account_forecast",
+      "question": "What will Main Checking have September 25?",
+      "ms": 9250,
+      "legacy": false,
+      "answer": "The available forecast covers household checking/cash, not an individual named account. Ask for the household forecast or the named account's recorded balance.\n\nWhat I could not verify: Named-account forecast scope is not available.\n\nI need the missing information listed here before drawing a stronger conclusion.",
+      "followups": [],
+      "partial": true,
+      "missing": [
+        "Named-account forecast scope is not available"
+      ],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0"
+        }
+      ],
+      "usage": {
+        "inputTokens": 4679,
+        "outputTokens": 634
+      }
+    },
+    {
+      "index": 13,
+      "status": 200,
+      "family": "payday_relative_balance",
+      "question": "What will be left before my next paycheck?",
+      "ms": 12393,
+      "legacy": false,
+      "answer": "Your projected end-of-day account balance on 2026-09-10 is $500.00, or $500.00 after estimated everyday spending.\n\nYour recorded checking/cash balance is $500.00 as of 2026-09-10; this is not a live bank-funds guarantee.\n\nBetween 2026-09-10 and 2026-09-10, the lowest projected balance is $500.00 on 2026-09-10. That window includes $0.00 of expected income and $0.00 of remaining obligations.\n\nUp to $300.00 of additional spending fits this checked plan while keeping your $200.00 cushion through 2027-08-31, capped by recorded funds after pending outflows. This is not a guarantee of available bank funds.\n\nThe affordability check continues beyond the displayed balance date through 2027-08-31; its lowest projected balance is $500.00 on 2026-09-10. Bills beyond that assessment horizon are not included.\n\nAssumptions: Forecasts reuse FlowLedger's current bills, date moves, income schedule, debt allocations, pending-payment matches, and planned goals. Future deposits are expected, not guaranteed. Same-day end balances do not establish the order a bank will post payments. Estimated additional daily spending is $0.00, based on the last three completed months of recorded non-bill-linked spending; this may overlap unlinked recurring charges.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "startDate": "2026-09-10",
+          "contextStartDate": "2026-09-10",
+          "projectedBalance": 500,
+          "projectedAfterEstimatedSpending": 500,
+          "safeToSpendUnderPlan": 300,
+          "obligations": 0,
+          "expectedIncome": 0,
+          "minimumProjectedBalance": 500,
+          "minimumDate": "2026-09-10",
+          "targetDate": "2026-09-10",
+          "cashCushion": 200,
+          "nextPayday": "2026-09-11",
+          "observedBalance": 500,
+          "balanceAsOf": "2026-09-10",
+          "conservativeAvailableNow": 500,
+          "affordabilityAssessmentThrough": "2027-08-31",
+          "affordabilityMinimumBalance": 500,
+          "affordabilityMinimumDate": "2026-09-10"
+        }
+      ],
+      "usage": {
+        "inputTokens": 3799,
+        "outputTokens": 538
+      }
+    },
+    {
+      "index": 14,
+      "status": 200,
+      "family": "payday_relative_balance",
+      "question": "What will I have after Salary arrives?",
+      "ms": 9545,
+      "error": "structured_output_invalid",
+      "codes": [
+        "entity_scope"
+      ],
+      "legacy": false
+    },
+    {
+      "index": 15,
+      "status": 200,
+      "family": "bill_relative_balance",
+      "question": "What will remain after Rent is paid?",
+      "ms": 44,
+      "legacy": false,
+      "answer": "Your projected end-of-day account balance on 2026-09-15 is $1,100.00, or $1,100.00 after estimated everyday spending.\n\nYour recorded checking/cash balance is $500.00 as of 2026-09-10; this is not a live bank-funds guarantee.\n\nBetween 2026-09-10 and 2026-09-15, the lowest projected balance is $500.00 on 2026-09-10. That window includes $1,500.00 of expected income and $900.00 of remaining obligations.\n\nUp to $300.00 of additional spending fits this checked plan while keeping your $200.00 cushion through 2027-08-31, capped by recorded funds after pending outflows. This is not a guarantee of available bank funds.\n\nThe affordability check continues beyond the displayed balance date through 2027-08-31; its lowest projected balance is $500.00 on 2026-09-10. Bills beyond that assessment horizon are not included.\n\nAssumptions: Forecasts reuse FlowLedger's current bills, date moves, income schedule, debt allocations, pending-payment matches, and planned goals. Future deposits are expected, not guaranteed. Same-day end balances do not establish the order a bank will post payments. Estimated additional daily spending is $0.00, based on the last three completed months of recorded non-bill-linked spending; this may overlap unlinked recurring charges.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "startDate": "2026-09-10",
+          "contextStartDate": "2026-09-10",
+          "projectedBalance": 1100,
+          "projectedAfterEstimatedSpending": 1100,
+          "safeToSpendUnderPlan": 300,
+          "obligations": 900,
+          "expectedIncome": 1500,
+          "minimumProjectedBalance": 500,
+          "minimumDate": "2026-09-10",
+          "targetDate": "2026-09-15",
+          "cashCushion": 200,
+          "nextPayday": "2026-09-11",
+          "observedBalance": 500,
+          "balanceAsOf": "2026-09-10",
+          "conservativeAvailableNow": 500,
+          "affordabilityAssessmentThrough": "2027-08-31",
+          "affordabilityMinimumBalance": 500,
+          "affordabilityMinimumDate": "2026-09-10"
+        }
+      ],
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0
+      }
+    },
+    {
+      "index": 16,
+      "status": 200,
+      "family": "forecast_extrema",
+      "question": "What is my lowest balance next month?",
+      "ms": 11226,
+      "legacy": false,
+      "answer": "The lowest projected end balance between 2026-10-01 and 2026-10-31 is $2,550.00 on 2026-10-01 after estimated everyday spending.\n\nYour projected end-of-day account balance on 2026-10-31 is $4,600.00, or $4,600.00 after estimated everyday spending.\n\nYour recorded checking/cash balance is $500.00 as of 2026-09-10; this is not a live bank-funds guarantee.\n\nBetween 2026-10-01 and 2026-10-31, the lowest projected balance is $2,550.00 on 2026-10-01. That window includes $3,000.00 of expected income and $950.00 of remaining obligations.\n\nUp to $300.00 of additional spending fits this checked plan while keeping your $200.00 cushion through 2026-11-30, capped by recorded funds after pending outflows. This is not a guarantee of available bank funds.\n\nThe affordability check continues beyond the displayed balance date through 2026-11-30; its lowest projected balance is $500.00 on 2026-09-10. Bills beyond that assessment horizon are not included.\n\nAssumptions: Forecasts reuse FlowLedger's current bills, date moves, income schedule, debt allocations, pending-payment matches, and planned goals. Future deposits are expected, not guaranteed. Same-day end balances do not establish the order a bank will post payments. Estimated additional daily spending is $0.00, based on the last three completed months of recorded non-bill-linked spending; this may overlap unlinked recurring charges.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "startDate": "2026-10-01",
+          "contextStartDate": "2026-10-01",
+          "projectedBalance": 4600,
+          "projectedAfterEstimatedSpending": 4600,
+          "safeToSpendUnderPlan": 300,
+          "obligations": 950,
+          "expectedIncome": 3000,
+          "minimumProjectedBalance": 2550,
+          "minimumDate": "2026-10-01",
+          "targetDate": "2026-10-31",
+          "cashCushion": 200,
+          "nextPayday": "2026-10-09",
+          "observedBalance": 500,
+          "balanceAsOf": "2026-09-10",
+          "conservativeAvailableNow": 500,
+          "affordabilityAssessmentThrough": "2026-11-30",
+          "affordabilityMinimumBalance": 500,
+          "affordabilityMinimumDate": "2026-09-10"
+        }
+      ],
+      "usage": {
+        "inputTokens": 3798,
+        "outputTokens": 499
+      }
+    },
+    {
+      "index": 17,
+      "status": 200,
+      "family": "forecast_extrema",
+      "question": "When will my balance be highest next month?",
+      "ms": 19397,
+      "legacy": false,
+      "answer": "The highest projected end balance between 2026-10-01 and 2026-10-31 is $4,615.00 on 2026-10-23 after estimated everyday spending.\n\nYour projected end-of-day account balance on 2026-10-31 is $4,600.00, or $4,600.00 after estimated everyday spending.\n\nYour recorded checking/cash balance is $500.00 as of 2026-09-10; this is not a live bank-funds guarantee.\n\nBetween 2026-10-01 and 2026-10-31, the lowest projected balance is $2,550.00 on 2026-10-01. That window includes $3,000.00 of expected income and $950.00 of remaining obligations.\n\nUp to $300.00 of additional spending fits this checked plan while keeping your $200.00 cushion through 2026-11-30, capped by recorded funds after pending outflows. This is not a guarantee of available bank funds.\n\nThe affordability check continues beyond the displayed balance date through 2026-11-30; its lowest projected balance is $500.00 on 2026-09-10. Bills beyond that assessment horizon are not included.\n\nAssumptions: Forecasts reuse FlowLedger's current bills, date moves, income schedule, debt allocations, pending-payment matches, and planned goals. Future deposits are expected, not guaranteed. Same-day end balances do not establish the order a bank will post payments. Estimated additional daily spending is $0.00, based on the last three completed months of recorded non-bill-linked spending; this may overlap unlinked recurring charges.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "startDate": "2026-10-01",
+          "contextStartDate": "2026-10-01",
+          "projectedBalance": 4600,
+          "projectedAfterEstimatedSpending": 4600,
+          "safeToSpendUnderPlan": 300,
+          "obligations": 950,
+          "expectedIncome": 3000,
+          "minimumProjectedBalance": 2550,
+          "minimumDate": "2026-10-01",
+          "targetDate": "2026-10-31",
+          "cashCushion": 200,
+          "nextPayday": "2026-10-09",
+          "observedBalance": 500,
+          "balanceAsOf": "2026-09-10",
+          "conservativeAvailableNow": 500,
+          "affordabilityAssessmentThrough": "2026-11-30",
+          "affordabilityMinimumBalance": 500,
+          "affordabilityMinimumDate": "2026-09-10",
+          "maximumProjectedBalance": 4615,
+          "maximumDate": "2026-10-23"
+        }
+      ],
+      "usage": {
+        "inputTokens": 7623,
+        "outputTokens": 1022
+      }
+    },
+    {
+      "index": 18,
+      "status": 200,
+      "family": "balance_threshold",
+      "question": "When will checking reach $1000?",
+      "ms": 41,
+      "legacy": false,
+      "answer": "The first projected end balance at or above $1,000.00 is 2026-09-11.\n\nThe first end balance below that threshold is 2026-09-10.\n\nYour projected end-of-day account balance on 2026-09-30 is $2,550.00, or $2,550.00 after estimated everyday spending.\n\nYour recorded checking/cash balance is $500.00 as of 2026-09-10; this is not a live bank-funds guarantee.\n\nBetween 2026-09-10 and 2026-09-30, the lowest projected balance is $500.00 on 2026-09-10. That window includes $3,000.00 of expected income and $950.00 of remaining obligations.\n\nUp to $300.00 of additional spending fits this checked plan while keeping your $200.00 cushion through 2026-10-31, capped by recorded funds after pending outflows. This is not a guarantee of available bank funds.\n\nThe affordability check continues beyond the displayed balance date through 2026-10-31; its lowest projected balance is $500.00 on 2026-09-10. Bills beyond that assessment horizon are not included.\n\nAssumptions: Forecasts reuse FlowLedger's current bills, date moves, income schedule, debt allocations, pending-payment matches, and planned goals. Future deposits are expected, not guaranteed. Same-day end balances do not establish the order a bank will post payments. Estimated additional daily spending is $0.00, based on the last three completed months of recorded non-bill-linked spending; this may overlap unlinked recurring charges.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "startDate": "2026-09-10",
+          "contextStartDate": "2026-09-10",
+          "projectedBalance": 2550,
+          "projectedAfterEstimatedSpending": 2550,
+          "safeToSpendUnderPlan": 300,
+          "obligations": 950,
+          "expectedIncome": 3000,
+          "minimumProjectedBalance": 500,
+          "minimumDate": "2026-09-10",
+          "targetDate": "2026-09-30",
+          "cashCushion": 200,
+          "nextPayday": "2026-09-11",
+          "observedBalance": 500,
+          "balanceAsOf": "2026-09-10",
+          "conservativeAvailableNow": 500,
+          "affordabilityAssessmentThrough": "2026-10-31",
+          "affordabilityMinimumBalance": 500,
+          "affordabilityMinimumDate": "2026-09-10"
+        }
+      ],
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0
+      }
+    },
+    {
+      "index": 19,
+      "status": 200,
+      "family": "forecast_comparison",
+      "question": "Compare the last week of this month with the first week of next month.",
+      "ms": 46,
+      "legacy": false,
+      "answer": "Forecast comparison: 2026-09-24–2026-09-30 ends at $2,550.00 with a low of $1,050.00 on 2026-09-24; 2026-10-01–2026-10-07 ends at $2,550.00 with a low of $2,550.00 on 2026-10-01. The first window's end balance is $0.00 higher. Both use the same estimated everyday-spending baseline.\n\nYour projected end-of-day account balance on 2026-09-30 is $2,550.00, or $2,550.00 after estimated everyday spending.\n\nYour recorded checking/cash balance is $500.00 as of 2026-09-10; this is not a live bank-funds guarantee.\n\nBetween 2026-09-24 and 2026-09-30, the lowest projected balance is $1,050.00 on 2026-09-24. That window includes $1,500.00 of expected income and $15.00 of remaining obligations.\n\nUp to $300.00 of additional spending fits this checked plan while keeping your $200.00 cushion through 2026-10-31, capped by recorded funds after pending outflows. This is not a guarantee of available bank funds.\n\nThe affordability check continues beyond the displayed balance date through 2026-10-31; its lowest projected balance is $500.00 on 2026-09-10. Bills beyond that assessment horizon are not included.\n\nAssumptions: Forecasts reuse FlowLedger's current bills, date moves, income schedule, debt allocations, pending-payment matches, and planned goals. Future deposits are expected, not guaranteed. Same-day end balances do not establish the order a bank will post payments. Estimated additional daily spending is $0.00, based on the last three completed months of recorded non-bill-linked spending; this may overlap unlinked recurring charges.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "startDate": "2026-09-24",
+          "contextStartDate": "2026-09-24",
+          "projectedBalance": 2550,
+          "projectedAfterEstimatedSpending": 2550,
+          "safeToSpendUnderPlan": 300,
+          "obligations": 15,
+          "expectedIncome": 1500,
+          "minimumProjectedBalance": 1050,
+          "minimumDate": "2026-09-24",
+          "targetDate": "2026-09-30",
+          "cashCushion": 200,
+          "nextPayday": "2026-09-25",
+          "observedBalance": 500,
+          "balanceAsOf": "2026-09-10",
+          "conservativeAvailableNow": 500,
+          "affordabilityAssessmentThrough": "2026-10-31",
+          "affordabilityMinimumBalance": 500,
+          "affordabilityMinimumDate": "2026-09-10",
+          "comparisonStartDate": "2026-10-01",
+          "comparisonEndDate": "2026-10-07",
+          "comparisonEndBalance": 2550,
+          "comparisonMinimumBalance": 2550,
+          "comparisonMinimumDate": "2026-10-01",
+          "endBalanceDifference": 0,
+          "minimumBalanceDifference": -1500
+        }
+      ],
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0
+      }
+    },
+    {
+      "index": 20,
+      "status": 200,
+      "family": "purchase_affordability",
+      "question": "Can I afford a $250 purchase?",
+      "ms": 23,
+      "legacy": false,
+      "answer": "A $250.00 purchase fits this projection through 2026-10-31, with the listed assumptions.\n\nYour projected end-of-day account balance on 2026-09-10 is $500.00, or $500.00 after estimated everyday spending.\n\nYour recorded checking/cash balance is $500.00 as of 2026-09-10; this is not a live bank-funds guarantee.\n\nBetween 2026-09-10 and 2026-09-10, the lowest projected balance is $500.00 on 2026-09-10. That window includes $0.00 of expected income and $0.00 of remaining obligations.\n\nUp to $300.00 of additional spending fits this checked plan while keeping your $200.00 cushion through 2026-10-31, capped by recorded funds after pending outflows. This is not a guarantee of available bank funds.\n\nThe affordability check continues beyond the displayed balance date through 2026-10-31; its lowest projected balance is $500.00 on 2026-09-10. Bills beyond that assessment horizon are not included.\n\nAssumptions: Forecasts reuse FlowLedger's current bills, date moves, income schedule, debt allocations, pending-payment matches, and planned goals. Future deposits are expected, not guaranteed. Same-day end balances do not establish the order a bank will post payments. Estimated additional daily spending is $0.00, based on the last three completed months of recorded non-bill-linked spending; this may overlap unlinked recurring charges.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "startDate": "2026-09-10",
+          "contextStartDate": "2026-09-10",
+          "projectedBalance": 500,
+          "projectedAfterEstimatedSpending": 500,
+          "safeToSpendUnderPlan": 300,
+          "obligations": 0,
+          "expectedIncome": 0,
+          "minimumProjectedBalance": 500,
+          "minimumDate": "2026-09-10",
+          "targetDate": "2026-09-10",
+          "cashCushion": 200,
+          "nextPayday": "2026-09-11",
+          "observedBalance": 500,
+          "balanceAsOf": "2026-09-10",
+          "conservativeAvailableNow": 500,
+          "affordabilityAssessmentThrough": "2026-10-31",
+          "affordabilityMinimumBalance": 500,
+          "affordabilityMinimumDate": "2026-09-10",
+          "purchaseAmount": 250,
+          "purchaseRiskAssessmentThrough": "2026-10-31",
+          "afterPurchaseLow": 250
+        }
+      ],
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0
+      }
+    },
+    {
+      "index": 21,
+      "status": 200,
+      "family": "purchase_date",
+      "question": "When is the earliest safe day to buy a $250 appliance?",
+      "ms": 9310,
+      "legacy": false,
+      "answer": "The earliest projected purchase date for $250.00 is 2026-09-10, after that day's expected payments have posted. The projected balance stays at or above $250.00 through 2026-10-31, preserving your $200.00 cushion. This is projected future ability, not money verified available now; recheck your bank funds before buying.\n\nYour projected end-of-day account balance on 2026-09-30 is $2,550.00, or $2,550.00 after estimated everyday spending.\n\nYour recorded checking/cash balance is $500.00 as of 2026-09-10; this is not a live bank-funds guarantee.\n\nBetween 2026-09-10 and 2026-09-30, the lowest projected balance is $500.00 on 2026-09-10. That window includes $3,000.00 of expected income and $950.00 of remaining obligations.\n\nUp to $300.00 of additional spending fits this checked plan while keeping your $200.00 cushion through 2026-10-31, capped by recorded funds after pending outflows. This is not a guarantee of available bank funds.\n\nThe affordability check continues beyond the displayed balance date through 2026-10-31; its lowest projected balance is $500.00 on 2026-09-10. Bills beyond that assessment horizon are not included.\n\nAssumptions: Forecasts reuse FlowLedger's current bills, date moves, income schedule, debt allocations, pending-payment matches, and planned goals. Future deposits are expected, not guaranteed. Same-day end balances do not establish the order a bank will post payments. Estimated additional daily spending is $0.00, based on the last three completed months of recorded non-bill-linked spending; this may overlap unlinked recurring charges. The purchase-date check uses checking/cash only, not savings. It assumes one purchase after that day's expected cash flows; it covers only the stated forecast horizon, not bills beyond it.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "startDate": "2026-09-10",
+          "contextStartDate": "2026-09-10",
+          "projectedBalance": 2550,
+          "projectedAfterEstimatedSpending": 2550,
+          "safeToSpendUnderPlan": 300,
+          "obligations": 950,
+          "expectedIncome": 3000,
+          "minimumProjectedBalance": 500,
+          "minimumDate": "2026-09-10",
+          "targetDate": "2026-09-30",
+          "cashCushion": 200,
+          "nextPayday": "2026-09-11",
+          "observedBalance": 500,
+          "balanceAsOf": "2026-09-10",
+          "conservativeAvailableNow": 500,
+          "affordabilityAssessmentThrough": "2026-10-31",
+          "affordabilityMinimumBalance": 500,
+          "affordabilityMinimumDate": "2026-09-10",
+          "purchaseAmount": 250,
+          "purchaseRiskAssessmentThrough": "2026-10-31",
+          "afterPurchaseLow": 250,
+          "earliestProjectedPurchaseDate": "2026-09-10",
+          "purchaseProjectionThrough": "2026-10-31"
+        }
+      ],
+      "usage": {
+        "inputTokens": 3803,
+        "outputTokens": 342
+      }
+    },
+    {
+      "index": 22,
+      "status": 200,
+      "family": "dated_purchase_scenario",
+      "question": "What if I spend $250 this weekend?",
+      "ms": 11966,
+      "legacy": false,
+      "answer": "Scenario only — nothing was changed.\n\nBy 2026-09-12, the projected balance would be $1,750.00, compared with $2,000.00 in the baseline. Looking beyond the change through 2026-10-31, the scenario's lowest balance is $500.00 on 2026-09-10; the baseline low is $500.00.\n\nThe scenario stays above the configured cushion under the checked assumptions, but this is not a guarantee of affordability.\n\nAssumptions: The scenario applies on 2026-09-12 (one occurrence). Changes are applied to a copy of the canonical forecast. Savings transfers reduce checking but do not reduce net worth. Extra debt payments here show cash impact; interest/payoff changes require the separate debt projection. Additional spending estimate: $0.00/day.\n\nThis is a what-if comparison, not a change to your accounts or plan.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "scenarioEndBalance": 1750,
+          "baselineEndBalance": 2000,
+          "scenarioLow": 500,
+          "scenarioLowDate": "2026-09-10",
+          "assessmentEndDate": "2026-10-31"
+        }
+      ],
+      "usage": {
+        "inputTokens": 4852,
+        "outputTokens": 951
+      }
+    },
+    {
+      "index": 23,
+      "status": 200,
+      "family": "dated_purchase_scenario",
+      "question": "What if I spend $1000 tomorrow?",
+      "ms": 18087,
+      "legacy": false,
+      "answer": "Scenario only — nothing was changed.\n\nBy 2026-09-11, the projected balance would be $1,000.00, compared with $2,000.00 in the baseline. Looking beyond the change through 2026-10-31, the scenario's lowest balance is $50.00 on 2026-09-24; the baseline low is $500.00.\n\nThis scenario falls below your configured cash cushion.\n\nAssumptions: The scenario applies on 2026-09-11 (one occurrence). Changes are applied to a copy of the canonical forecast. Savings transfers reduce checking but do not reduce net worth. Extra debt payments here show cash impact; interest/payoff changes require the separate debt projection. Additional spending estimate: $0.00/day.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "scenarioEndBalance": 1000,
+          "baselineEndBalance": 2000,
+          "scenarioLow": 50,
+          "scenarioLowDate": "2026-09-24",
+          "assessmentEndDate": "2026-10-31"
+        }
+      ],
+      "usage": {
+        "inputTokens": 7617,
+        "outputTokens": 976
+      }
+    },
+    {
+      "index": 24,
+      "status": 200,
+      "family": "upcoming_and_overdue_bills",
+      "question": "What bills are due before payday?",
+      "ms": 14122,
+      "legacy": false,
+      "answer": "0 recorded bill/debt occurrences from 2026-09-10 through 2026-09-10; $0.00 remains against recorded obligations.\n\nAssumptions: Payment status uses recorded reviewed settlements and overrides. Configured debt payments are not verified lender minimums. Pending payments are not treated as paid; no account balance or affordability is inferred.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:30ae8dcf4e576f9b:0",
+          "startDate": "2026-09-10",
+          "endDate": "2026-09-10",
+          "occurrenceCount": 0,
+          "displayedOccurrenceCount": 0,
+          "configuredObligations": 0,
+          "recordedPaid": 0,
+          "remainingObligations": 0,
+          "settledCount": 0
+        }
+      ],
+      "usage": {
+        "inputTokens": 7624,
+        "outputTokens": 945
+      }
+    },
+    {
+      "index": 25,
+      "status": 200,
+      "family": "upcoming_and_overdue_bills",
+      "question": "What bills remain overdue?",
+      "ms": 11759,
+      "legacy": false,
+      "answer": "All 9 recorded obligations due in this range are satisfied in FlowLedger.\n\n9 recorded bill/debt occurrences from 2026-06-01 through 2026-09-09; $0.00 remains against recorded obligations.\n\n0 occurrences still have a recorded unpaid remainder.\n\nAssumptions: Payment status uses recorded reviewed settlements and overrides. Configured debt payments are not verified lender minimums. Pending payments are not treated as paid; no account balance or affordability is inferred. This checks configured occurrences and recorded settlements, not unrecorded bills or bank confirmation. Future bills are not counted as unpaid past obligations.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:30ae8dcf4e576f9b:0",
+          "startDate": "2026-06-01",
+          "endDate": "2026-09-09",
+          "occurrenceCount": 9,
+          "displayedOccurrenceCount": 0,
+          "unpaidOccurrenceCount": 0,
+          "configuredObligations": 2850,
+          "recordedPaid": 2850,
+          "remainingObligations": 0,
+          "settledCount": 9,
+          "allRecordedDueSettled": true
+        }
+      ],
+      "usage": {
+        "inputTokens": 3795,
+        "outputTokens": 463
+      }
+    },
+    {
+      "index": 26,
+      "status": 200,
+      "family": "historical_bill_settlement",
+      "question": "Did I pay all my bills last month?",
+      "ms": 9775,
+      "legacy": false,
+      "answer": "All 3 recorded obligations due in this range are satisfied in FlowLedger.\n\n3 recorded bill/debt occurrences from 2026-08-01 through 2026-08-31; $0.00 remains against recorded obligations.\n\n2026-08-15: Rent — settled; $0.00 remaining ($900.00 recorded paid).\n\n2026-08-20: Test Card — settled; $0.00 remaining ($35.00 recorded paid).\n\n2026-08-24: Streaming — settled; $0.00 remaining ($15.00 recorded paid).\n\nAssumptions: Payment status uses recorded reviewed settlements and overrides. Configured debt payments are not verified lender minimums. Pending payments are not treated as paid; no account balance or affordability is inferred. This checks configured occurrences and recorded settlements, not unrecorded bills or bank confirmation. Future bills are not counted as unpaid past obligations.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:30ae8dcf4e576f9b:0",
+          "startDate": "2026-08-01",
+          "endDate": "2026-08-31",
+          "occurrenceCount": 3,
+          "displayedOccurrenceCount": 3,
+          "configuredObligations": 950,
+          "recordedPaid": 950,
+          "remainingObligations": 0,
+          "settledCount": 3,
+          "allRecordedDueSettled": true
+        }
+      ],
+      "usage": {
+        "inputTokens": 3799,
+        "outputTokens": 371
+      }
+    },
+    {
+      "index": 27,
+      "status": 200,
+      "family": "last_merchant_payment",
+      "question": "When did I last pay Netflix?",
+      "ms": 8388,
+      "legacy": false,
+      "answer": "The latest matching recorded payment date is 2026-08-24 for Netflix. Netflix: $15.00.\n\nSearched retained posted history from 2026-06-05 through 2026-09-10; records outside that coverage are not checked. Same-day payments have no verified posting order.\n\nAssumptions: Totals cover recorded posted history only. Own-account transfers, linked savings contributions and identified debt/card repayments are excluded from consumption spending; merchant refunds reduce spending. Debt repayments remain cash-flow obligations.\n\nA matching-period comparison can help separate an ongoing spending pattern from a timing difference. I can check the categories or merchants behind it.",
+      "followups": [
+        "Which spending categories changed compared with last month?",
+        "How can I build a cash buffer with my current plan?"
+      ],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:1513b1b63422be8b:0",
+          "spending": 15,
+          "income": 0,
+          "debtRepayments": 0,
+          "startDate": "2026-06-05",
+          "endDate": "2026-09-10",
+          "lastPaymentDate": "2026-08-24",
+          "matchCount": 1,
+          "latestDayPaymentCount": 1
+        }
+      ],
+      "usage": {
+        "inputTokens": 4806,
+        "outputTokens": 551
+      }
+    },
+    {
+      "index": 28,
+      "status": 200,
+      "family": "subscriptions",
+      "question": "What subscriptions do I have?",
+      "ms": 20010,
+      "error": "timeout",
+      "codes": [],
+      "legacy": false
+    },
+    {
+      "index": 29,
+      "status": 200,
+      "family": "subscriptions",
+      "question": "Which recurring charges increased?",
+      "ms": 6438,
+      "legacy": false,
+      "answer": "3 recorded bill/debt occurrences from 2026-09-10 through 2026-09-30; $950.00 remains against recorded obligations.\n\n2026-09-15: Rent — scheduled; $900.00 remaining ($0.00 recorded paid).\n\n2026-09-20: Test Card — scheduled; $35.00 remaining ($0.00 recorded paid).\n\n2026-09-24: Streaming — scheduled; $15.00 remaining ($0.00 recorded paid).\n\nThere is not enough repeated merchant-charge history to assess price increases. No observed comparison is not proof that prices stayed the same.\n\nWhat I could not verify: Repeated merchant-charge history is insufficient to assess changes or repeated-charge patterns.\n\nAssumptions: Payment status uses recorded reviewed settlements and overrides. Configured debt payments are not verified lender minimums. Pending payments are not treated as paid; no account balance or affordability is inferred.\n\nI need the missing information listed here before drawing a stronger conclusion.",
+      "followups": [],
+      "partial": true,
+      "missing": [
+        "Repeated merchant-charge history is insufficient to assess changes or repeated-charge patterns"
+      ],
+      "facts": [
+        {
+          "id": "financialAnalysis:30ae8dcf4e576f9b:0",
+          "startDate": "2026-09-10",
+          "endDate": "2026-09-30",
+          "occurrenceCount": 3,
+          "displayedOccurrenceCount": 3,
+          "configuredObligations": 950,
+          "recordedPaid": 0,
+          "remainingObligations": 950,
+          "settledCount": 0,
+          "comparableRecurringMerchantCount": 0,
+          "increasedRecurringMerchantCount": null
+        }
+      ],
+      "usage": {
+        "inputTokens": 4888,
+        "outputTokens": 421
+      }
+    },
+    {
+      "index": 30,
+      "status": 200,
+      "family": "subscriptions",
+      "question": "Am I paying for duplicate subscriptions?",
+      "ms": 9799,
+      "legacy": false,
+      "answer": "1 recorded subscription-category occurrences from 2026-09-10 through 2026-09-30; $15.00 remains against recorded obligations.\n\n2026-09-24: Streaming — scheduled; $15.00 remaining ($0.00 recorded paid).\n\nThere is not enough repeated merchant-charge history to assess price increases. No observed comparison is not proof that prices stayed the same.\n\nConfigured subscription-category bills total about $15.00/month at their current rates. Canceling one would avoid its future charges only after the provider confirms cancellation; do not remove its next bill before then.\n\nNo repeated subscription names appear in the configured bill records. This does not rule out duplicate services, differently named subscriptions or unrecorded charges.\n\nWhat I could not verify: Repeated merchant-charge history is insufficient to assess changes or repeated-charge patterns.\n\nAssumptions: Payment status uses recorded reviewed settlements and overrides. Configured debt payments are not verified lender minimums. Pending payments are not treated as paid; no account balance or affordability is inferred. Subscription selection uses recorded categories, not an inference that every recurring bill is a subscription. Merchant patterns are possible recurring charges, not confirmed subscriptions. They are not added to the configured subscription total, which avoids counting the same bill twice.",
+      "followups": [],
+      "partial": true,
+      "missing": [
+        "Repeated merchant-charge history is insufficient to assess changes or repeated-charge patterns"
+      ],
+      "facts": [
+        {
+          "id": "financialAnalysis:30ae8dcf4e576f9b:0",
+          "startDate": "2026-09-10",
+          "endDate": "2026-09-30",
+          "occurrenceCount": 1,
+          "displayedOccurrenceCount": 1,
+          "configuredObligations": 15,
+          "recordedPaid": 0,
+          "remainingObligations": 15,
+          "settledCount": 0,
+          "comparableRecurringMerchantCount": 0,
+          "increasedRecurringMerchantCount": null,
+          "configuredSubscriptionMonthlyCost": 15,
+          "repeatedConfiguredSubscriptionNames": 0
+        }
+      ],
+      "usage": {
+        "inputTokens": 3797,
+        "outputTokens": 299
+      }
+    },
+    {
+      "index": 31,
+      "status": 200,
+      "family": "received_income",
+      "question": "How much income did I receive last month?",
+      "ms": 8914,
+      "legacy": false,
+      "answer": "$0.00 in confirmed recorded income from 2026-08-01 through 2026-08-31.\n\nAssumptions: Totals cover recorded posted history only. Own-account transfers, linked savings contributions and identified debt/card repayments are excluded from consumption spending; merchant refunds reduce spending. Debt repayments remain cash-flow obligations.\n\nA matching-period comparison can help separate an ongoing spending pattern from a timing difference. I can check the categories or merchants behind it.",
+      "followups": [
+        "Which spending categories changed compared with last month?",
+        "How can I build a cash buffer with my current plan?"
+      ],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:1513b1b63422be8b:0",
+          "spending": -2585,
+          "income": 0,
+          "debtRepayments": 0,
+          "startDate": "2026-08-01",
+          "endDate": "2026-08-31",
+          "paycheckCount": 0,
+          "averagePaycheck": null
+        }
+      ],
+      "usage": {
+        "inputTokens": 4763,
+        "outputTokens": 583
+      }
+    },
+    {
+      "index": 32,
+      "status": 200,
+      "family": "expected_income",
+      "question": "When and how much is my next paycheck?",
+      "ms": 8225,
+      "legacy": false,
+      "answer": "Your next expected Salary date is 2026-09-11, totaling $1,500.00. This is scheduled income, not confirmation of receipt or bank posting.\n\nAssumptions: Expected dates use recorded recurrence, amount history and excluded dates. No account balance or affordability is inferred.\n\nExpected income is not confirmation that money has arrived. I’d check receipt before relying on it for a payment.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:4982ace0ccf03d39:0",
+          "nextPayday": "2026-09-11",
+          "expectedIncome": 1500,
+          "targetDate": "2026-09-11"
+        }
+      ],
+      "usage": {
+        "inputTokens": 4733,
+        "outputTokens": 659
+      }
+    },
+    {
+      "index": 33,
+      "status": 200,
+      "family": "income_average",
+      "question": "What is my average monthly income?",
+      "ms": 10,
+      "legacy": false,
+      "answer": "$0.00 in confirmed recorded income from 2026-06-01 through 2026-08-31.\n\nAverage per calendar month in that recorded range: $0.00.\n\nAssumptions: Totals cover recorded posted history only. Own-account transfers, linked savings contributions and identified debt/card repayments are excluded from consumption spending; merchant refunds reduce spending. Debt repayments remain cash-flow obligations.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:1513b1b63422be8b:0",
+          "spending": -7785,
+          "income": 0,
+          "debtRepayments": 0,
+          "startDate": "2026-06-01",
+          "endDate": "2026-08-31",
+          "paycheckCount": 0,
+          "averagePaycheck": null,
+          "averageMonthlyIncome": 0
+        }
+      ],
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0
+      }
+    },
+    {
+      "index": 34,
+      "status": 200,
+      "family": "spending_filters",
+      "question": "How much did I spend on groceries last month?",
+      "ms": 8606,
+      "legacy": false,
+      "answer": "$400.00 in recorded net spending from 2026-08-01 through 2026-08-31.\n\nLargest categories: Groceries $400.00.\n\nAssumptions: Totals cover recorded posted history only. Own-account transfers, linked savings contributions and identified debt/card repayments are excluded from consumption spending; merchant refunds reduce spending. Debt repayments remain cash-flow obligations.\n\nA matching-period comparison can help separate an ongoing spending pattern from a timing difference. I can check the categories or merchants behind it.",
+      "followups": [
+        "Which spending categories changed compared with last month?"
+      ],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:1513b1b63422be8b:0",
+          "spending": 400,
+          "income": 0,
+          "debtRepayments": 0,
+          "startDate": "2026-08-01",
+          "endDate": "2026-08-31"
+        }
+      ],
+      "usage": {
+        "inputTokens": 4762,
+        "outputTokens": 605
+      }
+    },
+    {
+      "index": 35,
+      "status": 200,
+      "family": "spending_filters",
+      "question": "How much did I spend at Walmart last month?",
+      "ms": 11661,
+      "legacy": false,
+      "answer": "$400.00 in recorded net spending from 2026-08-01 through 2026-08-31.\n\nLargest merchant totals: Walmart $400.00.\n\nAssumptions: Totals cover recorded posted history only. Own-account transfers, linked savings contributions and identified debt/card repayments are excluded from consumption spending; merchant refunds reduce spending. Debt repayments remain cash-flow obligations.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:1513b1b63422be8b:0",
+          "spending": 400,
+          "income": 0,
+          "debtRepayments": 0,
+          "startDate": "2026-08-01",
+          "endDate": "2026-08-31"
+        }
+      ],
+      "usage": {
+        "inputTokens": 3800,
+        "outputTokens": 429
+      }
+    },
+    {
+      "index": 36,
+      "status": 200,
+      "family": "spending_comparison",
+      "question": "Where did spending rise compared with last month?",
+      "ms": 10,
+      "legacy": false,
+      "answer": "$35.00 in recorded net spending from 2026-09-01 through 2026-09-10.\n\nLargest categories: Groceries $35.00.\n\nCompared with 2026-08-01–2026-08-10, spending is $1,535.00 higher.\n\nIncome: +$1,500.00.\n\nGroceries: +$35.00.\n\nAssumptions: Totals cover recorded posted history only. Own-account transfers, linked savings contributions and identified debt/card repayments are excluded from consumption spending; merchant refunds reduce spending. Debt repayments remain cash-flow obligations.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:1513b1b63422be8b:0",
+          "spending": 35,
+          "income": 0,
+          "debtRepayments": 0,
+          "startDate": "2026-09-01",
+          "endDate": "2026-09-10",
+          "previousSpending": -1500,
+          "spendingChange": 1535
+        }
+      ],
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0
+      }
+    },
+    {
+      "index": 37,
+      "status": 200,
+      "family": "transaction_search",
+      "question": "Find my $35 transaction.",
+      "ms": 7004,
+      "legacy": false,
+      "answer": "1 matching recorded transactions from 2026-09-01 through 2026-09-10.\n\n2026-09-06: Walmart, -$35.00 (Groceries).\n\nAssumptions: Totals cover recorded posted history only. Own-account transfers, linked savings contributions and identified debt/card repayments are excluded from consumption spending; merchant refunds reduce spending. Debt repayments remain cash-flow obligations.\n\nA matching-period comparison can help separate an ongoing spending pattern from a timing difference. I can check the categories or merchants behind it.",
+      "followups": [
+        "Which spending categories changed compared with last month?",
+        "How can I build a cash buffer with my current plan?"
+      ],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:1513b1b63422be8b:0",
+          "spending": 35,
+          "income": 0,
+          "debtRepayments": 0,
+          "startDate": "2026-09-01",
+          "endDate": "2026-09-10",
+          "matchCount": 1
+        }
+      ],
+      "usage": {
+        "inputTokens": 4761,
+        "outputTokens": 387
+      }
+    },
+    {
+      "index": 38,
+      "status": 200,
+      "family": "unusual_charges_and_fees",
+      "question": "Are there unusual charges?",
+      "ms": 9145,
+      "legacy": false,
+      "answer": "0 unusually large merchant charges and 0 same-day repeated-charge patterns to review.\n\nThese patterns may be legitimate; they are not proof of duplicate billing or fraud.\n\nAssumptions: Totals cover recorded posted history only. Own-account transfers, linked savings contributions and identified debt/card repayments are excluded from consumption spending; merchant refunds reduce spending. Debt repayments remain cash-flow obligations.\n\nA matching-period comparison can help separate an ongoing spending pattern from a timing difference. I can check the categories or merchants behind it.",
+      "followups": [
+        "Which spending categories changed compared with last month?",
+        "How can I build a cash buffer with my current plan?"
+      ],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:1513b1b63422be8b:0",
+          "spending": 35,
+          "income": 0,
+          "debtRepayments": 0,
+          "startDate": "2026-09-01",
+          "endDate": "2026-09-10",
+          "unusualCount": 0,
+          "repeatCount": 0
+        }
+      ],
+      "usage": {
+        "inputTokens": 4759,
+        "outputTokens": 643
+      }
+    },
+    {
+      "index": 39,
+      "status": 200,
+      "family": "unusual_charges_and_fees",
+      "question": "How much did I pay in fees?",
+      "ms": 10023,
+      "legacy": false,
+      "answer": "$0.00 in recorded fee-labeled charges from 2026-09-01 through 2026-09-10.\n\nThese are category/name matches, not confirmation that every fee was identified.\n\nAssumptions: Totals cover recorded posted history only. Own-account transfers, linked savings contributions and identified debt/card repayments are excluded from consumption spending; merchant refunds reduce spending. Debt repayments remain cash-flow obligations.\n\nA matching-period comparison can help separate an ongoing spending pattern from a timing difference. I can check the categories or merchants behind it.",
+      "followups": [
+        "Which spending categories changed compared with last month?"
+      ],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:1513b1b63422be8b:0",
+          "spending": 35,
+          "income": 0,
+          "debtRepayments": 0,
+          "startDate": "2026-09-01",
+          "endDate": "2026-09-10",
+          "fees": 0
+        }
+      ],
+      "usage": {
+        "inputTokens": 4767,
+        "outputTokens": 680
+      }
+    },
+    {
+      "index": 40,
+      "status": 200,
+      "family": "snowball_and_minimums",
+      "question": "Show me my debt snowball target.",
+      "ms": 10220,
+      "legacy": false,
+      "answer": "Your recorded active debt is $1,000.00 across 1 debts.\n\nTest Card: $1,000.00; configured payment $35.00; APR 18%.\n\nSmallest-balance eligible target: Test Card. This month's recorded required obligations total $35.00, with $35.00 remaining. Preserve that required remainder before adding extra.\n\nAt today's balances and recorded APRs, one month's simple interest estimate is $15.00. Actual statements may use daily balances and additional fees.\n\nFixed-payment scenario: no additional payment, with freed payments rolling forward. Estimated included-plan payoff month: 2029-10. Baseline: 2029-10. Excluded debts still receive their configured payments but are not counted as paid off by this plan.\n\nNext projected payoff: Test Card in 2029-10.\n\nAssumptions: Configured payments are your FlowLedger plan, not independently verified lender minimums. Check the latest statement before changing a required payment. This is a monthly fixed-payment hypothetical, not a verified affordable cash-flow plan. It starts from the canonical current-month settlement, then assumes unchanged payments and APRs, no new borrowing/fees, and no later overrides or schedule changes. Extra payments are applied in their specified month, not as an exact daily-interest quote. Required payments stay on every debt; freed payments roll to the next included debt.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "totalDebt": 1000,
+          "debtCount": 1,
+          "nextDebt": "Test Card",
+          "minimumPayments": 35,
+          "minimumRemaining": 35,
+          "configuredOngoingPayments": 35,
+          "monthlyInterestEstimate": 15,
+          "baselineDebtFreeMonth": "2029-10",
+          "scenarioDebtFreeMonth": "2029-10",
+          "timelineOutcome": "duration",
+          "timelineTargetMonth": "2029-10"
+        }
+      ],
+      "usage": {
+        "inputTokens": 3797,
+        "outputTokens": 338
+      }
+    },
+    {
+      "index": 41,
+      "status": 200,
+      "family": "snowball_and_minimums",
+      "question": "What required minimum payments remain?",
+      "ms": 11726,
+      "legacy": false,
+      "answer": "Your recorded active debt is $1,000.00 across 1 debts.\n\nTest Card: $1,000.00; configured payment $35.00; APR 18%.\n\nSmallest-balance eligible target: Test Card. This month's recorded required obligations total $35.00, with $35.00 remaining. Preserve that required remainder before adding extra.\n\nAt today's balances and recorded APRs, one month's simple interest estimate is $15.00. Actual statements may use daily balances and additional fees.\n\nAssumptions: Configured payments are your FlowLedger plan, not independently verified lender minimums. Check the latest statement before changing a required payment.\n\nA debt-payment plan does not establish whether extra payments fit your cash flow. I’d check that separately and preserve required payments.",
+      "followups": [
+        "How much extra can I safely pay toward debt?",
+        "Show me my debt payoff plan."
+      ],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "totalDebt": 1000,
+          "debtCount": 1,
+          "nextDebt": "Test Card",
+          "minimumPayments": 35,
+          "minimumRemaining": 35,
+          "configuredOngoingPayments": 35,
+          "monthlyInterestEstimate": 15
+        }
+      ],
+      "usage": {
+        "inputTokens": 4817,
+        "outputTokens": 896
+      }
+    },
+    {
+      "index": 42,
+      "status": 200,
+      "family": "debt_payoff_scenario",
+      "question": "When will I be debt-free?",
+      "ms": 10291,
+      "legacy": false,
+      "answer": "Your recorded active debt is $1,000.00 across 1 debts.\n\nTest Card: $1,000.00; configured payment $35.00; APR 18%.\n\nSmallest-balance eligible target: Test Card. This month's recorded required obligations total $35.00, with $35.00 remaining. Preserve that required remainder before adding extra.\n\nAt today's balances and recorded APRs, one month's simple interest estimate is $15.00. Actual statements may use daily balances and additional fees.\n\nFixed-payment scenario: no additional payment, with freed payments rolling forward. Estimated included-plan payoff month: 2029-10. Baseline: 2029-10. Excluded debts still receive their configured payments but are not counted as paid off by this plan.\n\nNext projected payoff: Test Card in 2029-10.\n\nAssumptions: Configured payments are your FlowLedger plan, not independently verified lender minimums. Check the latest statement before changing a required payment. This is a monthly fixed-payment hypothetical, not a verified affordable cash-flow plan. It starts from the canonical current-month settlement, then assumes unchanged payments and APRs, no new borrowing/fees, and no later overrides or schedule changes. Extra payments are applied in their specified month, not as an exact daily-interest quote. Required payments stay on every debt; freed payments roll to the next included debt.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "totalDebt": 1000,
+          "debtCount": 1,
+          "nextDebt": "Test Card",
+          "minimumPayments": 35,
+          "minimumRemaining": 35,
+          "configuredOngoingPayments": 35,
+          "monthlyInterestEstimate": 15,
+          "baselineDebtFreeMonth": "2029-10",
+          "scenarioDebtFreeMonth": "2029-10",
+          "timelineOutcome": "duration",
+          "timelineTargetMonth": "2029-10"
+        }
+      ],
+      "usage": {
+        "inputTokens": 3797,
+        "outputTokens": 348
+      }
+    },
+    {
+      "index": 43,
+      "status": 200,
+      "family": "debt_payoff_scenario",
+      "question": "How much faster if I add $100 each month?",
+      "ms": 1,
+      "legacy": false,
+      "answer": "What would you like to put that contribution toward—a cash buffer, a savings goal, or debt?\n\nWhat I could not verify: Choose a target for the contribution.",
+      "followups": [],
+      "partial": true,
+      "missing": [
+        "Choose a target for the contribution"
+      ],
+      "facts": [
+        {
+          "id": "financialAnalysis:clarification:0"
+        }
+      ],
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0
+      }
+    },
+    {
+      "index": 44,
+      "status": 200,
+      "family": "named_debt_payoff",
+      "question": "When will I finish paying Test Card?",
+      "ms": 9017,
+      "legacy": false,
+      "answer": "For Test Card, the fixed-payment scenario projects payoff in 2029-10; its baseline payoff month is 2029-10. This is that debt's date, not the whole plan's debt-free date.\n\nYour recorded active debt is $1,000.00 across 1 debts.\n\nTest Card: $1,000.00; configured payment $35.00; APR 18%.\n\nSmallest-balance eligible target: Test Card. This month's recorded required obligations total $35.00, with $35.00 remaining. Preserve that required remainder before adding extra.\n\nAt today's balances and recorded APRs, one month's simple interest estimate is $15.00. Actual statements may use daily balances and additional fees.\n\nFixed-payment scenario: no additional payment toward Test Card, with freed payments rolling forward. Estimated included-plan payoff month: 2029-10. Baseline: 2029-10. Excluded debts still receive their configured payments but are not counted as paid off by this plan.\n\nNext projected payoff: Test Card in 2029-10.\n\nAssumptions: Configured payments are your FlowLedger plan, not independently verified lender minimums. Check the latest statement before changing a required payment. This is a monthly fixed-payment hypothetical, not a verified affordable cash-flow plan. It starts from the canonical current-month settlement, then assumes unchanged payments and APRs, no new borrowing/fees, and no later overrides or schedule changes. Extra payments are applied in their specified month, not as an exact daily-interest quote. Required payments stay on every debt; freed payments roll to the next included debt.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "totalDebt": 1000,
+          "debtCount": 1,
+          "nextDebt": "Test Card",
+          "minimumPayments": 35,
+          "minimumRemaining": 35,
+          "configuredOngoingPayments": 35,
+          "monthlyInterestEstimate": 15,
+          "baselineDebtFreeMonth": "2029-10",
+          "scenarioDebtFreeMonth": "2029-10",
+          "namedDebtPayoffMonth": "2029-10",
+          "namedDebtBaselineMonth": "2029-10",
+          "namedDebt": "Test Card",
+          "timelineOutcome": "duration",
+          "timelineTargetMonth": "2029-10"
+        }
+      ],
+      "usage": {
+        "inputTokens": 3798,
+        "outputTokens": 280
+      }
+    },
+    {
+      "index": 45,
+      "status": 200,
+      "family": "buffer_timeline",
+      "question": "How long will it take to have 1000 buffer",
+      "ms": 12783,
+      "legacy": false,
+      "answer": "The checked scenario needs about 3 months to build $1,000.00 of additional cash buffer above your $200.00 cushion, targeting 2026-12. This uses recorded surplus, not an assumed contribution equal to your target.\n\nYour checked plan has $300.00 of additional cash buffer above the $200.00 cushion. Its lowest projected balance is $500.00 on 2026-09-10.\n\nYour next expected paycheck is $1,500.00 on 2026-09-11. $950.00 (63.33%) of that amount corresponds to recorded obligations through 2026-09-24, before additional everyday spending.\n\nA paycheck/buffer target is $1,000.00, needing another $700.00 beyond that available buffer.\n\nRecorded monthly average: $0.00 confirmed income versus -$2,595.00 consumption and debt payments, leaving $2,595.00 before other unclassified flows.\n\nScenario: setting aside $300.00/month would need about 3 months. Recheck each payday; the current forecast does not guarantee that surplus indefinitely.\n\nCategories to review first (not automatically nonessential): Groceries $400.00/month; Subscriptions $5.00/month; Income -$3,000.00/month.\n\nNext steps: leave the bill reserve and cushion untouched, review everyday-spending needs, then direct verified spare cash toward your chosen buffer or debt target.\n\nAssumptions: This plan uses recorded obligations and expected paychecks. Estimated spending is included only when a three-month baseline is available. No balances or plans are changed.\n\nAn ending balance and a low point answer different questions. I’d consider both when planning around the timing of bills and income.\n\nA savings target and a contribution decision are different questions. I’d check upcoming obligations before committing to contributions.",
+      "followups": [
+        "How can I build a cash buffer with my current plan?",
+        "When and how much is my next paycheck?"
+      ],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:f560df131f343962:0",
+          "currentPlanBuffer": 300,
+          "cashCushion": 200,
+          "nextPayday": "2026-09-11",
+          "nextPaycheck": 1500,
+          "oneMonthTarget": 950,
+          "target": 1000,
+          "remaining": 700,
+          "minimumBalance": 500,
+          "minimumDate": "2026-09-10",
+          "paycheckCommitted": 950,
+          "paycheckCommittedPercent": 63.33,
+          "historicalMonthlySurplus": 2595,
+          "monthsToTargetScenario": 3,
+          "targetMonthScenario": "2026-12",
+          "timelineOutcome": "duration",
+          "timelineDuration": 3,
+          "timelineUnit": "months"
+        }
+      ],
+      "usage": {
+        "inputTokens": 5114,
+        "outputTokens": 899
+      }
+    },
+    {
+      "index": 46,
+      "status": 200,
+      "family": "buffer_timeline",
+      "question": "When can I build a $1,000 cushion?",
+      "ms": 10334,
+      "legacy": false,
+      "answer": "The checked scenario needs about 3 months to build $1,000.00 of additional cash buffer above your $200.00 cushion, targeting 2026-12. This uses recorded surplus, not an assumed contribution equal to your target.\n\nYour checked plan has $300.00 of additional cash buffer above the $200.00 cushion. Its lowest projected balance is $500.00 on 2026-09-10.\n\nYour next expected paycheck is $1,500.00 on 2026-09-11. $950.00 (63.33%) of that amount corresponds to recorded obligations through 2026-09-24, before additional everyday spending.\n\nA paycheck/buffer target is $1,000.00, needing another $700.00 beyond that available buffer.\n\nRecorded monthly average: $0.00 confirmed income versus -$2,595.00 consumption and debt payments, leaving $2,595.00 before other unclassified flows.\n\nScenario: setting aside $300.00/month would need about 3 months. Recheck each payday; the current forecast does not guarantee that surplus indefinitely.\n\nCategories to review first (not automatically nonessential): Groceries $400.00/month; Subscriptions $5.00/month; Income -$3,000.00/month.\n\nNext steps: leave the bill reserve and cushion untouched, review everyday-spending needs, then direct verified spare cash toward your chosen buffer or debt target.\n\nAssumptions: This plan uses recorded obligations and expected paychecks. Estimated spending is included only when a three-month baseline is available. No balances or plans are changed.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:f560df131f343962:0",
+          "currentPlanBuffer": 300,
+          "cashCushion": 200,
+          "nextPayday": "2026-09-11",
+          "nextPaycheck": 1500,
+          "oneMonthTarget": 950,
+          "target": 1000,
+          "remaining": 700,
+          "minimumBalance": 500,
+          "minimumDate": "2026-09-10",
+          "paycheckCommitted": 950,
+          "paycheckCommittedPercent": 63.33,
+          "historicalMonthlySurplus": 2595,
+          "monthsToTargetScenario": 3,
+          "targetMonthScenario": "2026-12",
+          "timelineOutcome": "duration",
+          "timelineDuration": 3,
+          "timelineUnit": "months"
+        }
+      ],
+      "usage": {
+        "inputTokens": 3801,
+        "outputTokens": 318
+      }
+    },
+    {
+      "index": 47,
+      "status": 200,
+      "family": "buffer_timeline",
+      "question": "How many paychecks until I have a thousand-dollar buffer?",
+      "ms": 9517,
+      "legacy": false,
+      "answer": "The checked scenario needs about 3 months to build $1,000.00 of additional cash buffer above your $200.00 cushion, targeting 2026-12. This uses recorded surplus, not an assumed contribution equal to your target.\n\nYour checked plan has $300.00 of additional cash buffer above the $200.00 cushion. Its lowest projected balance is $500.00 on 2026-09-10.\n\nYour next expected paycheck is $1,500.00 on 2026-09-11. $950.00 (63.33%) of that amount corresponds to recorded obligations through 2026-09-24, before additional everyday spending.\n\nA paycheck/buffer target is $1,000.00, needing another $700.00 beyond that available buffer.\n\nRecorded monthly average: $0.00 confirmed income versus -$2,595.00 consumption and debt payments, leaving $2,595.00 before other unclassified flows.\n\nScenario: setting aside $300.00/month would need about 3 months. Recheck each payday; the current forecast does not guarantee that surplus indefinitely.\n\nCategories to review first (not automatically nonessential): Groceries $400.00/month; Subscriptions $5.00/month; Income -$3,000.00/month.\n\nNext steps: leave the bill reserve and cushion untouched, review everyday-spending needs, then direct verified spare cash toward your chosen buffer or debt target.\n\nAssumptions: This plan uses recorded obligations and expected paychecks. Estimated spending is included only when a three-month baseline is available. No balances or plans are changed.\n\nA savings target and a contribution decision are different questions. I’d check upcoming obligations before committing to contributions.",
+      "followups": [
+        "When and how much is my next paycheck?",
+        "How can I build a cash buffer with my current plan?"
+      ],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:f560df131f343962:0",
+          "currentPlanBuffer": 300,
+          "cashCushion": 200,
+          "nextPayday": "2026-09-11",
+          "nextPaycheck": 1500,
+          "oneMonthTarget": 950,
+          "target": 1000,
+          "remaining": 700,
+          "minimumBalance": 500,
+          "minimumDate": "2026-09-10",
+          "paycheckCommitted": 950,
+          "paycheckCommittedPercent": 63.33,
+          "historicalMonthlySurplus": 2595,
+          "monthsToTargetScenario": 3,
+          "targetMonthScenario": "2026-12",
+          "timelineOutcome": "duration",
+          "timelineDuration": 3,
+          "timelineUnit": "months"
+        }
+      ],
+      "usage": {
+        "inputTokens": 5116,
+        "outputTokens": 762
+      }
+    },
+    {
+      "index": 48,
+      "status": 200,
+      "family": "paycheck_or_month_ahead",
+      "question": "How can I get one paycheck ahead?",
+      "ms": 13430,
+      "legacy": false,
+      "answer": "The checked scenario needs about 4 months to build $1,500.00 of additional cash buffer above your $200.00 cushion, targeting 2027-01. This uses recorded surplus, not an assumed contribution equal to your target.\n\nYour checked plan has $300.00 of additional cash buffer above the $200.00 cushion. Its lowest projected balance is $500.00 on 2026-09-10.\n\nYour next expected paycheck is $1,500.00 on 2026-09-11. $950.00 (63.33%) of that amount corresponds to recorded obligations through 2026-09-24, before additional everyday spending.\n\nA paycheck/buffer target is $1,500.00, needing another $1,200.00 beyond that available buffer.\n\nRecorded monthly average: $0.00 confirmed income versus -$2,595.00 consumption and debt payments, leaving $2,595.00 before other unclassified flows.\n\nScenario: setting aside $300.00/month would need about 4 months. Recheck each payday; the current forecast does not guarantee that surplus indefinitely.\n\nCategories to review first (not automatically nonessential): Groceries $400.00/month; Subscriptions $5.00/month; Income -$3,000.00/month.\n\nNext steps: leave the bill reserve and cushion untouched, review everyday-spending needs, then direct verified spare cash toward your chosen buffer or debt target.\n\nAssumptions: This plan uses recorded obligations and expected paychecks. Estimated spending is included only when a three-month baseline is available. No balances or plans are changed.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:f560df131f343962:0",
+          "currentPlanBuffer": 300,
+          "cashCushion": 200,
+          "nextPayday": "2026-09-11",
+          "nextPaycheck": 1500,
+          "oneMonthTarget": 950,
+          "target": 1500,
+          "remaining": 1200,
+          "minimumBalance": 500,
+          "minimumDate": "2026-09-10",
+          "paycheckCommitted": 950,
+          "paycheckCommittedPercent": 63.33,
+          "historicalMonthlySurplus": 2595,
+          "monthsToTargetScenario": 4,
+          "targetMonthScenario": "2027-01",
+          "timelineOutcome": "duration",
+          "timelineDuration": 4,
+          "timelineUnit": "months"
+        }
+      ],
+      "usage": {
+        "inputTokens": 3798,
+        "outputTokens": 572
+      }
+    },
+    {
+      "index": 49,
+      "status": 200,
+      "family": "paycheck_or_month_ahead",
+      "question": "How can I get a month ahead?",
+      "ms": 10315,
+      "legacy": false,
+      "answer": "The checked scenario needs about 3 months to build $950.00 of additional cash buffer above your $200.00 cushion, targeting 2026-12. This uses recorded surplus, not an assumed contribution equal to your target.\n\nYour checked plan has $300.00 of additional cash buffer above the $200.00 cushion. Its lowest projected balance is $500.00 on 2026-09-10.\n\nYour next expected paycheck is $1,500.00 on 2026-09-11. $950.00 (63.33%) of that amount corresponds to recorded obligations through 2026-09-24, before additional everyday spending.\n\nA month-ahead target is $950.00, needing another $650.00 beyond that available buffer.\n\nRecorded monthly average: $0.00 confirmed income versus -$2,595.00 consumption and debt payments, leaving $2,595.00 before other unclassified flows.\n\nScenario: setting aside $300.00/month would need about 3 months. Recheck each payday; the current forecast does not guarantee that surplus indefinitely.\n\nCategories to review first (not automatically nonessential): Groceries $400.00/month; Subscriptions $5.00/month; Income -$3,000.00/month.\n\nNext steps: leave the bill reserve and cushion untouched, review everyday-spending needs, then direct verified spare cash toward your chosen buffer or debt target.\n\nAssumptions: This plan uses recorded obligations and expected paychecks. Estimated spending is included only when a three-month baseline is available. No balances or plans are changed.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:f560df131f343962:0",
+          "currentPlanBuffer": 300,
+          "cashCushion": 200,
+          "nextPayday": "2026-09-11",
+          "nextPaycheck": 1500,
+          "oneMonthTarget": 950,
+          "target": 950,
+          "remaining": 650,
+          "minimumBalance": 500,
+          "minimumDate": "2026-09-10",
+          "paycheckCommitted": 950,
+          "paycheckCommittedPercent": 63.33,
+          "historicalMonthlySurplus": 2595,
+          "monthsToTargetScenario": 3,
+          "targetMonthScenario": "2026-12",
+          "timelineOutcome": "duration",
+          "timelineDuration": 3,
+          "timelineUnit": "months"
+        }
+      ],
+      "usage": {
+        "inputTokens": 3798,
+        "outputTokens": 432
+      }
+    },
+    {
+      "index": 50,
+      "status": 200,
+      "family": "paycheck_or_month_ahead",
+      "question": "What is my buffer now?",
+      "ms": 9653,
+      "legacy": false,
+      "answer": "Your checked plan has $300.00 of additional cash buffer above the $200.00 cushion. Its lowest projected balance is $500.00 on 2026-09-10.\n\nYour next expected paycheck is $1,500.00 on 2026-09-11. $950.00 (63.33%) of that amount corresponds to recorded obligations through 2026-09-24, before additional everyday spending.\n\nA paycheck/buffer target is $1,500.00, needing another $1,200.00 beyond that available buffer.\n\nRecorded monthly average: $0.00 confirmed income versus -$2,595.00 consumption and debt payments, leaving $2,595.00 before other unclassified flows.\n\nScenario: setting aside $300.00/month would need about 4 months. Recheck each payday; the current forecast does not guarantee that surplus indefinitely.\n\nCategories to review first (not automatically nonessential): Groceries $400.00/month; Subscriptions $5.00/month; Income -$3,000.00/month.\n\nNext steps: leave the bill reserve and cushion untouched, review everyday-spending needs, then direct verified spare cash toward your chosen buffer or debt target.\n\nAssumptions: This plan uses recorded obligations and expected paychecks. Estimated spending is included only when a three-month baseline is available. No balances or plans are changed.\n\nAn ending balance and a low point answer different questions. I’d consider both when planning around the timing of bills and income.",
+      "followups": [
+        "How can I build a cash buffer with my current plan?",
+        "When and how much is my next paycheck?"
+      ],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:f560df131f343962:0",
+          "currentPlanBuffer": 300,
+          "cashCushion": 200,
+          "nextPayday": "2026-09-11",
+          "nextPaycheck": 1500,
+          "oneMonthTarget": 950,
+          "target": 1500,
+          "remaining": 1200,
+          "minimumBalance": 500,
+          "minimumDate": "2026-09-10",
+          "paycheckCommitted": 950,
+          "paycheckCommittedPercent": 63.33,
+          "historicalMonthlySurplus": 2595,
+          "monthsToTargetScenario": 4,
+          "targetMonthScenario": "2027-01"
+        }
+      ],
+      "usage": {
+        "inputTokens": 5043,
+        "outputTokens": 682
+      }
+    },
+    {
+      "index": 51,
+      "status": 200,
+      "family": "paycheck_dependence",
+      "question": "Am I still living paycheck to paycheck?",
+      "ms": 14363,
+      "legacy": false,
+      "answer": "Your checked plan has $300.00 of additional cash buffer above the $200.00 cushion. Its lowest projected balance is $500.00 on 2026-09-10.\n\nYour next expected paycheck is $1,500.00 on 2026-09-11. $950.00 (63.33%) of that amount corresponds to recorded obligations through 2026-09-24, before additional everyday spending.\n\nA paycheck/buffer target is $1,500.00, needing another $1,200.00 beyond that available buffer.\n\nRecorded monthly average: $0.00 confirmed income versus -$2,595.00 consumption and debt payments, leaving $2,595.00 before other unclassified flows.\n\nScenario: setting aside $300.00/month would need about 4 months. Recheck each payday; the current forecast does not guarantee that surplus indefinitely.\n\nCategories to review first (not automatically nonessential): Groceries $400.00/month; Subscriptions $5.00/month; Income -$3,000.00/month.\n\nNext steps: leave the bill reserve and cushion untouched, review everyday-spending needs, then direct verified spare cash toward your chosen buffer or debt target.\n\nObserved monthly lows: 2026-06 $270.00 (1 recorded days); 2026-07 $290.00 (1 recorded days); 2026-08 $310.00 (1 recorded days).\n\nWhat I could not verify: Not enough recorded pre-payday balances for a reliable paycheck-to-paycheck diagnosis; a single low balance is not enough.\n\nAssumptions: This plan uses recorded obligations and expected paychecks. Estimated spending is included only when a three-month baseline is available. No balances or plans are changed. Historical progress uses recorded daily closes only, never today's forecast rewritten as past actuals. Debt principal changes cannot be reconstructed from payments alone.\n\nI need the missing information listed here before drawing a stronger conclusion.",
+      "followups": [],
+      "partial": true,
+      "missing": [
+        "Not enough recorded pre-payday balances for a reliable paycheck-to-paycheck diagnosis; a single low balance is not enough"
+      ],
+      "facts": [
+        {
+          "id": "financialAnalysis:f560df131f343962:0",
+          "currentPlanBuffer": 300,
+          "cashCushion": 200,
+          "nextPayday": "2026-09-11",
+          "nextPaycheck": 1500,
+          "oneMonthTarget": 950,
+          "target": 1500,
+          "remaining": 1200,
+          "minimumBalance": 500,
+          "minimumDate": "2026-09-10",
+          "paycheckCommitted": 950,
+          "paycheckCommittedPercent": 63.33,
+          "historicalMonthlySurplus": 2595,
+          "monthsToTargetScenario": 4,
+          "targetMonthScenario": "2027-01"
+        }
+      ],
+      "usage": {
+        "inputTokens": 8940,
+        "outputTokens": 1034
+      }
+    },
+    {
+      "index": 52,
+      "status": 200,
+      "family": "historical_progress",
+      "question": "Am I improving over the past three months?",
+      "ms": 10706,
+      "legacy": false,
+      "answer": "-$6,250.00 in recorded net spending from 2026-06-10 through 2026-09-10.\n\nLargest categories: Groceries $1,235.00; Subscriptions $15.00; Income -$7,500.00.\n\nCompared with 2026-03-09–2026-06-09, spending is $4,750.00 lower.\n\nIncome: −$6,000.00.\n\nGroceries: +$1,235.00.\n\nSubscriptions: +$15.00.\n\nConfirmed income: $0.00. Recorded debt repayments: $0.00. Payments alone do not establish the change in debt principal.\n\nCurrent outlook (separate from the historical review):\n\nYour checked plan has $300.00 of additional cash buffer above the $200.00 cushion. Its lowest projected balance is $500.00 on 2026-09-10.\n\nYour next expected paycheck is $1,500.00 on 2026-09-11. $950.00 (63.33%) of that amount corresponds to recorded obligations through 2026-09-24, before additional everyday spending.\n\nA paycheck/buffer target is $1,500.00, needing another $1,200.00 beyond that available buffer.\n\nRecorded monthly average: $0.00 confirmed income versus -$2,595.00 consumption and debt payments, leaving $2,595.00 before other unclassified flows.\n\nScenario: setting aside $300.00/month would need about 4 months. Recheck each payday; the current forecast does not guarantee that surplus indefinitely.\n\nCategories to review first (not automatically nonessential): Groceries $400.00/month; Subscriptions $5.00/month; Income -$3,000.00/month.\n\nNext steps: leave the bill reserve and cushion untouched, review everyday-spending needs, then direct verified spare cash toward your chosen buffer or debt target.\n\nObserved monthly lows: 2026-06 $270.00 (1 recorded days); 2026-07 $290.00 (1 recorded days); 2026-08 $310.00 (1 recorded days).\n\n2026-09 Groceries: $35.00 classified spending of $450.00; $415.00 remaining (month start through 2026-09-10).\n\nWhat I could not verify: Not enough recorded pre-payday balances for a reliable paycheck-to-paycheck diagnosis; a single low balance is not enough.\n\nAssumptions: Totals cover recorded posted history only. Own-account transfers, linked savings contributions and identified debt/card repayments are excluded from consumption spending; merchant refunds reduce spending. Debt repayments remain cash-flow obligations. This plan uses recorded obligations and expected paychecks. Estimated spending is included only when a three-month baseline is available. No balances or plans are changed. Historical progress uses recorded daily closes only, never today's forecast rewritten as past actuals. Debt principal changes cannot be reconstructed from payments alone. Debt-principal and savings changes require historical balance observations; payment totals are not substituted for those changes.\n\nI need the missing information listed here before drawing a stronger conclusion.",
+      "followups": [],
+      "partial": true,
+      "missing": [
+        "Not enough recorded pre-payday balances for a reliable paycheck-to-paycheck diagnosis; a single low balance is not enough"
+      ],
+      "facts": [
+        {
+          "id": "financialAnalysis:4dff1f1a2d5c3d21:0",
+          "review_spending": -6250,
+          "review_income": 0,
+          "review_debtRepayments": 0,
+          "review_startDate": "2026-06-10",
+          "review_endDate": "2026-09-10",
+          "review_previousSpending": -1500,
+          "review_spendingChange": -4750,
+          "current_currentPlanBuffer": 300,
+          "current_cashCushion": 200,
+          "current_nextPayday": "2026-09-11",
+          "current_nextPaycheck": 1500,
+          "current_oneMonthTarget": 950,
+          "current_target": 1500,
+          "current_remaining": 1200,
+          "current_minimumBalance": 500,
+          "current_minimumDate": "2026-09-10",
+          "current_paycheckCommitted": 950,
+          "current_paycheckCommittedPercent": 63.33,
+          "current_historicalMonthlySurplus": 2595,
+          "current_monthsToTargetScenario": 4,
+          "current_targetMonthScenario": "2027-01"
+        }
+      ],
+      "usage": {
+        "inputTokens": 5442,
+        "outputTokens": 600
+      }
+    },
+    {
+      "index": 53,
+      "status": 200,
+      "family": "historical_progress",
+      "question": "How much has my debt fallen?",
+      "ms": 10508,
+      "legacy": false,
+      "answer": "Historical debt-principal balances are not available in the recorded history. Repayments, current debt balances and saved projections do not establish how much principal changed.\n\nWhat I could not verify: Historical debt-principal balances are not available in the recorded history. Repayments, current debt balances and saved projections do not establish how much principal changed..\n\nAssumptions: Only retained manual-account balance observations are compared. Current balances, bank balances, goals and payment totals are not added to this history. Account grouping uses the retained account's current type; deleted accounts and changes in classification may limit historical household coverage.\n\nI need the missing information listed here before drawing a stronger conclusion.",
+      "followups": [],
+      "partial": true,
+      "missing": [
+        "Historical debt-principal balances are not available in the recorded history. Repayments, current debt balances and saved projections do not establish how much principal changed."
+      ],
+      "facts": [
+        {
+          "id": "financialAnalysis:a6530816db189b86:0",
+          "historyStatus": "unavailable"
+        }
+      ],
+      "usage": {
+        "inputTokens": 4754,
+        "outputTokens": 662
+      }
+    },
+    {
+      "index": 54,
+      "status": 200,
+      "family": "historical_progress",
+      "question": "How much have my savings grown?",
+      "ms": 14624,
+      "legacy": false,
+      "answer": "Rainy Day Savings needs at least two dated balance observations inside 2026-06-01 through 2026-09-10. Current balances and observations outside this range are not substituted.\n\nWhat I could not verify: Rainy Day Savings needs at least two dated balance observations inside 2026-06-01 through 2026-09-10. Current balances and observations outside this range are not substituted..\n\nAssumptions: Only retained manual-account balance observations are compared. Current balances, bank balances, goals and payment totals are not added to this history. Account grouping uses the retained account's current type; deleted accounts and changes in classification may limit historical household coverage.\n\nI need the missing information listed here before drawing a stronger conclusion.",
+      "followups": [],
+      "partial": true,
+      "missing": [
+        "Rainy Day Savings needs at least two dated balance observations inside 2026-06-01 through 2026-09-10. Current balances and observations outside this range are not substituted."
+      ],
+      "facts": [
+        {
+          "id": "financialAnalysis:a6530816db189b86:0",
+          "historyStatus": "unavailable"
+        }
+      ],
+      "usage": {
+        "inputTokens": 8592,
+        "outputTokens": 1084
+      }
+    },
+    {
+      "index": 55,
+      "status": 200,
+      "family": "emergency_fund",
+      "question": "How much emergency savings do I need for three months?",
+      "ms": 10999,
+      "legacy": false,
+      "answer": "Your recorded savings-account balance is $300.00. Goal earmarks are not added again.\n\nVacation: $100.00 toward $1,000.00 by 2026-12-31.\n\nWhat I could not verify: Three complete months of classified expenses and identified loan/card repayments are needed for a reliable emergency-fund target.\n\nI need the missing information listed here before drawing a stronger conclusion.",
+      "followups": [],
+      "partial": true,
+      "missing": [
+        "Three complete months of classified expenses and identified loan/card repayments are needed for a reliable emergency-fund target"
+      ],
+      "facts": [
+        {
+          "id": "financialAnalysis:1513b1b63422be8b:0",
+          "savingsBalance": 300
+        }
+      ],
+      "usage": {
+        "inputTokens": 4713,
+        "outputTokens": 603
+      }
+    },
+    {
+      "index": 56,
+      "status": 200,
+      "family": "emergency_fund",
+      "question": "Do I have six months of expenses saved?",
+      "ms": 10360,
+      "legacy": false,
+      "answer": "Your recorded savings-account balance is $300.00. Goal earmarks are not added again.\n\nVacation: $100.00 toward $1,000.00 by 2026-12-31.\n\nWhat I could not verify: Three complete months of classified expenses and identified loan/card repayments are needed for a reliable emergency-fund target.",
+      "followups": [],
+      "partial": true,
+      "missing": [
+        "Three complete months of classified expenses and identified loan/card repayments are needed for a reliable emergency-fund target"
+      ],
+      "facts": [
+        {
+          "id": "financialAnalysis:1513b1b63422be8b:0",
+          "savingsBalance": 300
+        }
+      ],
+      "usage": {
+        "inputTokens": 3799,
+        "outputTokens": 381
+      }
+    },
+    {
+      "index": 57,
+      "status": 200,
+      "family": "goal_timeline",
+      "question": "When will Vacation be funded if I save $100 per paycheck?",
+      "ms": 10582,
+      "legacy": false,
+      "answer": "Scenario: Vacation needs 9 household-payday contributions at your stated $100.00 to reach $1,000.00 from its $100.00 earmarked funding. This is not confirmation those contributions are affordable.\n\nYour recorded savings-account balance is $300.00. Goal earmarks are not added again.\n\nVacation: $100.00 toward $1,000.00 by 2026-12-31.\n\nA savings target and a contribution decision are different questions. I’d check upcoming obligations before committing to contributions.",
+      "followups": [
+        "How much can I safely spend before my next paycheck?",
+        "How can I build a cash buffer with my current plan?"
+      ],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:1513b1b63422be8b:0",
+          "savingsBalance": 300,
+          "timelineOutcome": "duration",
+          "timelineDuration": 9,
+          "timelineUnit": "household_paydays"
+        }
+      ],
+      "usage": {
+        "inputTokens": 4768,
+        "outputTokens": 802
+      }
+    },
+    {
+      "index": 58,
+      "status": 200,
+      "family": "goal_timeline",
+      "question": "How long to save $1000 for Vacation?",
+      "ms": 8685,
+      "legacy": false,
+      "answer": "I cannot estimate when Vacation will reach $1,000.00 without a contribution amount and frequency. Its $900.00 remaining target is not a per-contribution amount.\n\nYour recorded savings-account balance is $300.00. Goal earmarks are not added again.\n\nVacation: $100.00 toward $1,000.00 by 2026-12-31.\n\nWhat I could not verify: State a contribution amount and frequency for a goal timeline.\n\nI need the missing information listed here before drawing a stronger conclusion.",
+      "followups": [],
+      "partial": true,
+      "missing": [
+        "State a contribution amount and frequency for a goal timeline"
+      ],
+      "facts": [
+        {
+          "id": "financialAnalysis:1513b1b63422be8b:0",
+          "savingsBalance": 300,
+          "timelineOutcome": "not_estimable",
+          "timelineDuration": null
+        }
+      ],
+      "usage": {
+        "inputTokens": 4748,
+        "outputTokens": 496
+      }
+    },
+    {
+      "index": 59,
+      "status": 200,
+      "family": "goal_timeline",
+      "question": "I can contribute $100 per paycheck.",
+      "ms": 2,
+      "legacy": false,
+      "answer": "What would you like to put that contribution toward—a cash buffer, a savings goal, or debt?\n\nWhat I could not verify: Choose a target for the contribution.",
+      "followups": [],
+      "partial": true,
+      "missing": [
+        "Choose a target for the contribution"
+      ],
+      "facts": [
+        {
+          "id": "financialAnalysis:clarification:0"
+        }
+      ],
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0
+      }
+    },
+    {
+      "index": 60,
+      "status": 200,
+      "family": "credit_utilization",
+      "question": "What is my credit utilization?",
+      "ms": 9639,
+      "legacy": false,
+      "answer": "The 1 cards with verified limits use 20% of their combined limit: $400.00 of $2,000.00.\n\n$0.00 would bring the combined balance below 30%, assuming no new charges, interest, or limit changes.\n\n$200.01 would bring the combined balance below 10%, assuming no new charges, interest, or limit changes.\n\nMain Card: $400.00, APR 22%.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:0b53ef497f9e61cb:0",
+          "cardBalance": 400,
+          "creditLimit": 2000,
+          "utilizationPercent": 20,
+          "paymentBelow30Percent": 0,
+          "paymentBelow10Percent": 200.01
+        }
+      ],
+      "usage": {
+        "inputTokens": 3796,
+        "outputTokens": 299
+      }
+    },
+    {
+      "index": 61,
+      "status": 200,
+      "family": "credit_utilization",
+      "question": "What payment gets Main Card below 30%?",
+      "ms": 9845,
+      "legacy": false,
+      "answer": "The 1 cards with verified limits use 20% of their combined limit: $400.00 of $2,000.00.\n\n$0.00 would bring the combined balance below 30%, assuming no new charges, interest, or limit changes.\n\n$200.01 would bring the combined balance below 10%, assuming no new charges, interest, or limit changes.\n\nMain Card: $400.00, APR 22%.\n\nA debt-payment plan does not establish whether extra payments fit your cash flow. I’d check that separately and preserve required payments.",
+      "followups": [
+        "How much extra can I safely pay toward debt?",
+        "Show me my debt payoff plan."
+      ],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:0b53ef497f9e61cb:0",
+          "cardBalance": 400,
+          "creditLimit": 2000,
+          "utilizationPercent": 20,
+          "paymentBelow30Percent": 0,
+          "paymentBelow10Percent": 200.01
+        }
+      ],
+      "usage": {
+        "inputTokens": 4778,
+        "outputTokens": 809
+      }
+    },
+    {
+      "index": 62,
+      "status": 200,
+      "family": "credit_ranking",
+      "question": "Which card has my highest APR?",
+      "ms": 8536,
+      "legacy": false,
+      "answer": "Main Card has the highest apr among 1 checked connected cards: 22%.\n\nAssumptions: Ranks recorded values, not live statement data. Ties are retained; credit limits are required only for utilization. A ranking alone does not establish which payment is affordable.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:0b53ef497f9e61cb:0",
+          "rankedNames": "Main Card",
+          "rankedValue": 22,
+          "rankedCount": 1,
+          "metric": "apr"
+        }
+      ],
+      "usage": {
+        "inputTokens": 3797,
+        "outputTokens": 336
+      }
+    },
+    {
+      "index": 63,
+      "status": 200,
+      "family": "credit_ranking",
+      "question": "Which card has the highest utilization?",
+      "ms": 10586,
+      "legacy": false,
+      "answer": "Main Card has the highest utilization among 1 checked connected cards: 20%.\n\nAssumptions: Ranks recorded values, not live statement data. Ties are retained; credit limits are required only for utilization. A ranking alone does not establish which payment is affordable.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:0b53ef497f9e61cb:0",
+          "rankedNames": "Main Card",
+          "rankedValue": 20,
+          "rankedCount": 1,
+          "metric": "utilization"
+        }
+      ],
+      "usage": {
+        "inputTokens": 3797,
+        "outputTokens": 365
+      }
+    },
+    {
+      "index": 64,
+      "status": 200,
+      "family": "budget_remaining",
+      "question": "How much grocery budget is left this month?",
+      "ms": 5681,
+      "legacy": false,
+      "answer": "\n\nWhat I could not verify: No matching category budget is recorded for that month.",
+      "followups": [],
+      "partial": true,
+      "missing": [
+        "No matching category budget is recorded for that month"
+      ],
+      "facts": [
+        {
+          "id": "financialAnalysis:0ede5823aa2a1e31:0"
+        }
+      ],
+      "usage": {
+        "inputTokens": 3799,
+        "outputTokens": 340
+      }
+    },
+    {
+      "index": 65,
+      "status": 200,
+      "family": "feasible_budget_plan",
+      "question": "Make a budget that covers bills, debt and saving without overdrafting.",
+      "ms": 10032,
+      "legacy": false,
+      "answer": "Budget draft for 2026-09-10–2026-10-09: $4,500.00 expected scheduled income; $950.00 recorded bill/debt obligations; $0.00 other plan commitments.\n\n$0.00 estimated living-cost allowance from classified non-bill-linked spending. Total planned outflows: $950.00. Expected income covers these draft outflows, subject to the dated cash-flow check.\n\nA category split is unavailable until refund offsets and category coverage are reviewed. The aggregate estimate is not a guessed set of category cuts.\n\nKeep the $200.00 cash cushion separate from monthly expenses. The household's dated cushion shortfall is $0.00; existing cash and payment timing matter in addition to the income-only budget.\n\nWhat I could not verify: Category composition needs review: net refunds or missing category spending cannot be treated as recurring future income.\n\nAssumptions: Read-only draft: no payments, transfers, budgets or dates were changed. Expected deposits are not guaranteed bank funds. The cash cushion is a balance reserve, not a monthly expense. Any spare capacity is one shared amount: choose between buffer, extra debt or other goals; do not add independent maxima.\n\nI need the missing information listed here before drawing a stronger conclusion.",
+      "followups": [],
+      "partial": true,
+      "missing": [
+        "Category composition needs review: net refunds or missing category spending cannot be treated as recurring future income"
+      ],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "startDate": "2026-09-10",
+          "endDate": "2026-10-09",
+          "safeSharedCapacity": 300,
+          "cashCushion": 200,
+          "minimumProjectedBalance": 500,
+          "minimumDate": "2026-09-10",
+          "householdCushionShortfall": 0,
+          "planStatus": "checked_draft",
+          "expectedIncome": 4500,
+          "recordedBillDebtReserve": 950,
+          "otherPlanReserve": 0,
+          "livingCostAllowance": 0,
+          "plannedOutflows": 950,
+          "incomeOnlyDeficit": 0,
+          "livingCategoryDraftStatus": "unavailable"
+        }
+      ],
+      "usage": {
+        "inputTokens": 4996,
+        "outputTokens": 640
+      }
+    },
+    {
+      "index": 66,
+      "status": 200,
+      "family": "weekly_monthly_review",
+      "question": "Give me a weekly financial review.",
+      "ms": 8976,
+      "legacy": false,
+      "answer": "$35.00 in recorded net spending from 2026-09-04 through 2026-09-10.\n\nLargest categories: Groceries $35.00.\n\nThe comparison with 2026-08-28–2026-09-03 is unavailable until both periods are classified.\n\nConfirmed income: $0.00. Recorded debt repayments: $0.00. Payments alone do not establish the change in debt principal.\n\nCurrent outlook (separate from the historical review):\n\nYour checked plan has $300.00 of additional cash buffer above the $200.00 cushion. Its lowest projected balance is $500.00 on 2026-09-10.\n\nYour next expected paycheck is $1,500.00 on 2026-09-11. $950.00 (63.33%) of that amount corresponds to recorded obligations through 2026-09-24, before additional everyday spending.\n\nA paycheck/buffer target is $1,500.00, needing another $1,200.00 beyond that available buffer.\n\nRecorded monthly average: $0.00 confirmed income versus -$2,595.00 consumption and debt payments, leaving $2,595.00 before other unclassified flows.\n\nScenario: setting aside $300.00/month would need about 4 months. Recheck each payday; the current forecast does not guarantee that surplus indefinitely.\n\nCategories to review first (not automatically nonessential): Groceries $400.00/month; Subscriptions $5.00/month; Income -$3,000.00/month.\n\nNext steps: leave the bill reserve and cushion untouched, review everyday-spending needs, then direct verified spare cash toward your chosen buffer or debt target.\n\nObserved monthly lows: 2026-06 $270.00 (1 recorded days); 2026-07 $290.00 (1 recorded days); 2026-08 $310.00 (1 recorded days).\n\n2026-09 Groceries: $35.00 classified spending of $450.00; $415.00 remaining (month start through 2026-09-10).\n\nWhat I could not verify: A spending increase/decrease cannot be established while either comparison period has unclassified or unavailable transactions; Not enough recorded pre-payday balances for a reliable paycheck-to-paycheck diagnosis; a single low balance is not enough.\n\nAssumptions: Totals cover recorded posted history only. Own-account transfers, linked savings contributions and identified debt/card repayments are excluded from consumption spending; merchant refunds reduce spending. Debt repayments remain cash-flow obligations. This plan uses recorded obligations and expected paychecks. Estimated spending is included only when a three-month baseline is available. No balances or plans are changed. Historical progress uses recorded daily closes only, never today's forecast rewritten as past actuals. Debt principal changes cannot be reconstructed from payments alone. Debt-principal and savings changes require historical balance observations; payment totals are not substituted for those changes.\n\nI need the missing information listed here before drawing a stronger conclusion.",
+      "followups": [],
+      "partial": true,
+      "missing": [
+        "A spending increase/decrease cannot be established while either comparison period has unclassified or unavailable transactions",
+        "Not enough recorded pre-payday balances for a reliable paycheck-to-paycheck diagnosis; a single low balance is not enough"
+      ],
+      "facts": [
+        {
+          "id": "financialAnalysis:4dff1f1a2d5c3d21:0",
+          "review_spending": 35,
+          "review_income": 0,
+          "review_debtRepayments": 0,
+          "review_startDate": "2026-09-04",
+          "review_endDate": "2026-09-10",
+          "current_currentPlanBuffer": 300,
+          "current_cashCushion": 200,
+          "current_nextPayday": "2026-09-11",
+          "current_nextPaycheck": 1500,
+          "current_oneMonthTarget": 950,
+          "current_target": 1500,
+          "current_remaining": 1200,
+          "current_minimumBalance": 500,
+          "current_minimumDate": "2026-09-10",
+          "current_paycheckCommitted": 950,
+          "current_paycheckCommittedPercent": 63.33,
+          "current_historicalMonthlySurplus": 2595,
+          "current_monthsToTargetScenario": 4,
+          "current_targetMonthScenario": "2027-01"
+        }
+      ],
+      "usage": {
+        "inputTokens": 5384,
+        "outputTokens": 566
+      }
+    },
+    {
+      "index": 67,
+      "status": 200,
+      "family": "weekly_monthly_review",
+      "question": "Review last month and tell me what to focus on.",
+      "ms": 9909,
+      "legacy": false,
+      "answer": "-$2,585.00 in recorded net spending from 2026-08-01 through 2026-08-31.\n\nLargest categories: Groceries $400.00; Subscriptions $15.00; Income -$3,000.00.\n\nCompared with 2026-07-01–2026-07-31, spending is $15.00 higher.\n\nSubscriptions: +$15.00.\n\nGroceries: +$0.00.\n\nIncome: +$0.00.\n\nConfirmed income: $0.00. Recorded debt repayments: $0.00. Payments alone do not establish the change in debt principal.\n\nCurrent outlook (separate from the historical review):\n\nYour checked plan has $300.00 of additional cash buffer above the $200.00 cushion. Its lowest projected balance is $500.00 on 2026-09-10.\n\nYour next expected paycheck is $1,500.00 on 2026-09-11. $950.00 (63.33%) of that amount corresponds to recorded obligations through 2026-09-24, before additional everyday spending.\n\nA paycheck/buffer target is $1,500.00, needing another $1,200.00 beyond that available buffer.\n\nRecorded monthly average: $0.00 confirmed income versus -$2,595.00 consumption and debt payments, leaving $2,595.00 before other unclassified flows.\n\nScenario: setting aside $300.00/month would need about 4 months. Recheck each payday; the current forecast does not guarantee that surplus indefinitely.\n\nCategories to review first (not automatically nonessential): Groceries $400.00/month; Subscriptions $5.00/month; Income -$3,000.00/month.\n\nNext steps: leave the bill reserve and cushion untouched, review everyday-spending needs, then direct verified spare cash toward your chosen buffer or debt target.\n\nObserved monthly lows: 2026-06 $270.00 (1 recorded days); 2026-07 $290.00 (1 recorded days); 2026-08 $310.00 (1 recorded days).\n\nWhat I could not verify: Not enough recorded pre-payday balances for a reliable paycheck-to-paycheck diagnosis; a single low balance is not enough.\n\nAssumptions: Totals cover recorded posted history only. Own-account transfers, linked savings contributions and identified debt/card repayments are excluded from consumption spending; merchant refunds reduce spending. Debt repayments remain cash-flow obligations. This plan uses recorded obligations and expected paychecks. Estimated spending is included only when a three-month baseline is available. No balances or plans are changed. Historical progress uses recorded daily closes only, never today's forecast rewritten as past actuals. Debt principal changes cannot be reconstructed from payments alone. Debt-principal and savings changes require historical balance observations; payment totals are not substituted for those changes.\n\nI need the missing information listed here before drawing a stronger conclusion.",
+      "followups": [],
+      "partial": true,
+      "missing": [
+        "Not enough recorded pre-payday balances for a reliable paycheck-to-paycheck diagnosis; a single low balance is not enough"
+      ],
+      "facts": [
+        {
+          "id": "financialAnalysis:4dff1f1a2d5c3d21:0",
+          "review_spending": -2585,
+          "review_income": 0,
+          "review_debtRepayments": 0,
+          "review_startDate": "2026-08-01",
+          "review_endDate": "2026-08-31",
+          "review_previousSpending": -2600,
+          "review_spendingChange": 15,
+          "current_currentPlanBuffer": 300,
+          "current_cashCushion": 200,
+          "current_nextPayday": "2026-09-11",
+          "current_nextPaycheck": 1500,
+          "current_oneMonthTarget": 950,
+          "current_target": 1500,
+          "current_remaining": 1200,
+          "current_minimumBalance": 500,
+          "current_minimumDate": "2026-09-10",
+          "current_paycheckCommitted": 950,
+          "current_paycheckCommittedPercent": 63.33,
+          "current_historicalMonthlySurplus": 2595,
+          "current_monthsToTargetScenario": 4,
+          "current_targetMonthScenario": "2027-01"
+        }
+      ],
+      "usage": {
+        "inputTokens": 5397,
+        "outputTokens": 631
+      }
+    },
+    {
+      "index": 68,
+      "status": 200,
+      "family": "income_bill_scenarios",
+      "question": "What if my pay falls $200?",
+      "ms": 13649,
+      "legacy": false,
+      "answer": "Scenario only — nothing was changed.\n\nBy 2026-10-31, the projected balance would be $3,800.00, compared with $4,600.00 in the baseline. Looking beyond the change through 2026-10-31, the scenario's lowest balance is $500.00 on 2026-09-10; the baseline low is $500.00.\n\nThe scenario stays above the configured cushion under the checked assumptions, but this is not a guarantee of affordability.\n\nAssumptions: The scenario applies on 2026-09-11, 2026-09-25, 2026-10-09, 2026-10-23 (repeated scheduled occurrences). Changes are applied to a copy of the canonical forecast. Savings transfers reduce checking but do not reduce net worth. Extra debt payments here show cash impact; interest/payoff changes require the separate debt projection. Additional spending estimate: $0.00/day.\n\nThis is a what-if comparison, not a change to your accounts or plan.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "scenarioEndBalance": 3800,
+          "baselineEndBalance": 4600,
+          "scenarioLow": 500,
+          "scenarioLowDate": "2026-09-10",
+          "assessmentEndDate": "2026-10-31"
+        }
+      ],
+      "usage": {
+        "inputTokens": 4876,
+        "outputTokens": 1089
+      }
+    },
+    {
+      "index": 69,
+      "status": 200,
+      "family": "income_bill_scenarios",
+      "question": "What if Rent rises by $100?",
+      "ms": 32,
+      "legacy": false,
+      "answer": "Scenario only — nothing was changed.\n\nBy 2026-09-15, the projected balance would be $1,000.00, compared with $1,100.00 in the baseline. Looking beyond the change through 2026-10-31, the scenario's lowest balance is $500.00 on 2026-09-10; the baseline low is $500.00.\n\nThe scenario stays above the configured cushion under the checked assumptions, but this is not a guarantee of affordability.\n\nAssumptions: The scenario applies on 2026-09-15 (one occurrence). Changes are applied to a copy of the canonical forecast. Savings transfers reduce checking but do not reduce net worth. Extra debt payments here show cash impact; interest/payoff changes require the separate debt projection. Additional spending estimate: $0.00/day.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "scenarioEndBalance": 1000,
+          "baselineEndBalance": 1100,
+          "scenarioLow": 500,
+          "scenarioLowDate": "2026-09-10",
+          "assessmentEndDate": "2026-10-31"
+        }
+      ],
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0
+      }
+    },
+    {
+      "index": 70,
+      "status": 200,
+      "family": "income_bill_scenarios",
+      "question": "What if Rent rises to $1200?",
+      "ms": 41,
+      "legacy": false,
+      "answer": "Scenario only — nothing was changed.\n\nBy 2026-09-15, the projected balance would be $800.00, compared with $1,100.00 in the baseline. Looking beyond the change through 2026-10-31, the scenario's lowest balance is $500.00 on 2026-09-10; the baseline low is $500.00.\n\nThe scenario stays above the configured cushion under the checked assumptions, but this is not a guarantee of affordability.\n\nAssumptions: The scenario applies on 2026-09-15 (one occurrence). Changes are applied to a copy of the canonical forecast. Savings transfers reduce checking but do not reduce net worth. Extra debt payments here show cash impact; interest/payoff changes require the separate debt projection. Additional spending estimate: $0.00/day.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "scenarioEndBalance": 800,
+          "baselineEndBalance": 1100,
+          "scenarioLow": 500,
+          "scenarioLowDate": "2026-09-10",
+          "assessmentEndDate": "2026-10-31"
+        }
+      ],
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0
+      }
+    },
+    {
+      "index": 71,
+      "status": 200,
+      "family": "income_bill_scenarios",
+      "question": "What if I cancel Streaming?",
+      "ms": 13342,
+      "legacy": false,
+      "answer": "Scenario only — nothing was changed.\n\nBy 2026-09-24, the projected balance would be $1,065.00, compared with $1,050.00 in the baseline. Looking beyond the change through 2026-10-31, the scenario's lowest balance is $500.00 on 2026-09-10; the baseline low is $500.00.\n\nThe scenario stays above the configured cushion under the checked assumptions, but this is not a guarantee of affordability.\n\nAssumptions: The scenario applies on 2026-09-24 (one occurrence). Changes are applied to a copy of the canonical forecast. Savings transfers reduce checking but do not reduce net worth. Extra debt payments here show cash impact; interest/payoff changes require the separate debt projection. Additional spending estimate: $0.00/day.\n\nThis is a what-if comparison, not a change to your accounts or plan.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "scenarioEndBalance": 1065,
+          "baselineEndBalance": 1050,
+          "scenarioLow": 500,
+          "scenarioLowDate": "2026-09-10",
+          "assessmentEndDate": "2026-10-31"
+        }
+      ],
+      "usage": {
+        "inputTokens": 4846,
+        "outputTokens": 1020
+      }
+    },
+    {
+      "index": 72,
+      "status": 200,
+      "family": "bill_date_scenario",
+      "question": "What if I move Rent from September 15 to September 20?",
+      "ms": 9808,
+      "legacy": false,
+      "answer": "Choose one bill occurrence and its new date. Recurring date changes need individual dates to avoid stacking payments on one day.\n\nWhat I could not verify: A single source occurrence is required for a bill-date scenario.\n\nThis is a what-if comparison, not a change to your accounts or plan.",
+      "followups": [],
+      "partial": true,
+      "missing": [
+        "A single source occurrence is required for a bill-date scenario"
+      ],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0"
+        }
+      ],
+      "usage": {
+        "inputTokens": 4693,
+        "outputTokens": 837
+      }
+    },
+    {
+      "index": 73,
+      "status": 200,
+      "family": "debt_vs_savings_recommendation",
+      "question": "Should I put $100 toward debt or savings?",
+      "ms": 23,
+      "legacy": false,
+      "answer": "The $100.00 fits within one shared optional capacity of $300.00 through 2026-10-09 under the checked records. It is not $100.00 for debt plus another $100.00 for savings. Keeping it in accessible savings preserves cash for surprises; extra debt payment reduces the amount owed but leaves less cash available. I need your savings priority and the debt's verified terms to recommend which matters more; this check does not establish an optimal choice.\n\nAssumptions: Read-only draft: no payments, transfers, budgets or dates were changed. Expected deposits are not guaranteed bank funds. The cash cushion is a balance reserve, not a monthly expense. Any spare capacity is one shared amount: choose between buffer, extra debt or other goals; do not add independent maxima.",
+      "followups": [],
+      "partial": false,
+      "missing": [],
+      "facts": [
+        {
+          "id": "financialAnalysis:ea1fcf7c81b2f139:0",
+          "startDate": "2026-09-10",
+          "endDate": "2026-10-09",
+          "safeSharedCapacity": 300,
+          "cashCushion": 200,
+          "minimumProjectedBalance": 500,
+          "minimumDate": "2026-09-10",
+          "householdCushionShortfall": 0,
+          "planStatus": "checked_draft",
+          "proposedAllocation": 100,
+          "allocationChoice": "priority_needed"
+        }
+      ],
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0
+      }
+    }
+  ]
+}

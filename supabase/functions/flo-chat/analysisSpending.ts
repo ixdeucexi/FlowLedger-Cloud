@@ -1,23 +1,28 @@
-import { dayAdd, dollars, label, matches, monthStart, numeric, requireSources, round, shiftMonth, sum, validDate, type AnalysisRequest, type AnalysisResult, type AnalysisSnapshot } from "./analysisTypes.ts";
+import { dayAdd, dollars, label, matches, monthEnd, monthStart, numeric, requireSources, round, shiftMonth, sum, validDate, type AnalysisRequest, type AnalysisResult, type AnalysisSnapshot } from "./analysisTypes.ts";
 
 export type AnalyticTransaction = { id: string; date: string; amount: number; merchant: string; category: string; account: string; accountKey?: string; kind: "spending" | "income" | "refund" | "transfer" | "repayment" | "unresolved"; repaymentKind?: "card" | "loan" | "unknown"; billId?: string };
+const hasIdentity = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
+const sameIdentity = (left: unknown, right: unknown): boolean => hasIdentity(left) && hasIdentity(right) && left === right;
 /** Stored Plaid amounts already use FlowLedger's sign convention. */
 export function analyticTransactions(snapshot: AnalysisSnapshot): { rows: AnalyticTransaction[]; missing: string[] } {
   const source = (table: string) => snapshot.sources[table]?.rows ?? [];
   const accounts = source("plaid_accounts");
   const manual = source("transactions");
-  const byProvider = new Map(source("plaid_transactions").map(r => [r.plaid_transaction_id, r]));
-  const manualIds = new Set(manual.map(r => r.id));
-  const providerIds = new Set(manual.map(r => r.plaid_transaction_id).filter(Boolean));
-  const debts = new Set(source("bills").filter(r => r.is_debt).map(r => r.id));
+  const byProvider = new Map(source("plaid_transactions").filter(r => hasIdentity(r.plaid_transaction_id)).map(r => [r.plaid_transaction_id, r]));
+  const manualIds = new Set(manual.map(r => r.id).filter(hasIdentity));
+  const providerIds = new Set(manual.map(r => r.plaid_transaction_id).filter(hasIdentity));
+  const debts = new Set(source("bills").filter(r => r.is_debt).map(r => r.id).filter(hasIdentity));
   const imported = source("plaid_transactions").filter(r => !providerIds.has(r.plaid_transaction_id) && !manualIds.has(r.flowledger_transaction_id));
   const rows: AnalyticTransaction[] = [];
   const missing = requireSources(snapshot, ["transactions", "plaid_transactions", "plaid_accounts", "bills", "goals"]);
   for (const entry of [...manual.map(r => ({ r, bank: false })), ...imported.map(r => ({ r, bank: true }))]) {
     const { r, bank } = entry;
     if (r.pending || r.removed_at || r.deleted_at) continue;
-    const bankRow = bank ? r : byProvider.get(r.plaid_transaction_id);
-    const account = accounts.find(a => a.id === r.plaid_account_id || a.plaid_account_id === r.plaid_account_id || a.id === bankRow?.plaid_account_id);
+    const bankRow = bank ? r : hasIdentity(r.plaid_transaction_id) ? byProvider.get(r.plaid_transaction_id) : undefined;
+    // Missing identifiers do not establish a relationship. Matching undefined
+    // values previously attached manual salary to the first connected card and
+    // classified income as a card refund.
+    const account = accounts.find(a => sameIdentity(a.id, r.plaid_account_id) || sameIdentity(a.plaid_account_id, r.plaid_account_id) || sameIdentity(a.id, bankRow?.plaid_account_id) || sameIdentity(a.plaid_account_id, bankRow?.plaid_account_id));
     const credit = account?.account_type === "credit";
     const amount = numeric(r.amount);
     if (amount === null || !validDate(r.date ?? r.transaction_date)) { missing.push("Some transaction amounts or dates are invalid"); continue; }
@@ -25,7 +30,7 @@ export function analyticTransactions(snapshot: AnalysisSnapshot): { rows: Analyt
     if (String(r.date ?? r.transaction_date) > snapshot.today) continue;
     const category = String(r.category ?? bankRow?.category ?? "Other");
     const pfc = `${bankRow?.primary_category ?? ""} ${bankRow?.detailed_category ?? ""}`;
-    const savingsGoal=r.linked_plan_type==="goal"&&source("goals").some(g=>g.id===r.linked_plan_id&&g.goal_type==="savings");
+    const savingsGoal=r.linked_plan_type==="goal"&&source("goals").some(g=>sameIdentity(g.id,r.linked_plan_id)&&g.goal_type==="savings");
     const transfer = savingsGoal || r.review_resolution === "transfer" || r.review_status === "transfer" || Boolean(r.transfer_group_id) || /TRANSFER_(?:IN|OUT)_ACCOUNT_TRANSFER/.test(pfc);
     const cardRepayment = /CREDIT_CARD_PAYMENT|CREDIT CARD PAYMENT/i.test(`${category} ${pfc}`);
     const loanRepayment = /LOAN_PAYMENTS_(?:CAR|MORTGAGE|STUDENT|OTHER)_PAYMENT|^(?:Mortgage|Auto loan|Student loan)$/i.test(`${category} ${pfc}`.trim());
@@ -35,11 +40,11 @@ export function analyticTransactions(snapshot: AnalysisSnapshot): { rows: Analyt
     if ((bank || r.source === "plaid") && !account) kind = "unresolved";
     if(!transfer&&/TRANSFER_(?:IN|OUT)/.test(pfc))kind="unresolved";
     if(!transfer&&/^savings$/i.test(category))kind="unresolved";
-    if(!transfer&&r.linked_plan_type==="goal"&&!source("goals").some(g=>g.id===r.linked_plan_id&&g.goal_type==="planned_expense"))kind="unresolved";
+    if(!transfer&&r.linked_plan_type==="goal"&&!source("goals").some(g=>sameIdentity(g.id,r.linked_plan_id)&&g.goal_type==="planned_expense"))kind="unresolved";
     // Raw credit loan-payment credits are repayments, not merchant refunds.
     if (credit && amount > 0 && /LOAN_PAYMENTS/.test(pfc)) kind = "repayment";
-    const manualAccount=source("accounts").find(a=>a.id===r.account_id);
-    const accountKey=account?.id?`connected:${account.id}`:r.account_id?`manual:${r.account_id}`:undefined;
+    const manualAccount=source("accounts").find(a=>sameIdentity(a.id,r.account_id));
+    const accountKey=hasIdentity(account?.id)?`connected:${account.id}`:hasIdentity(r.account_id)?`manual:${r.account_id}`:undefined;
     const base:AnalyticTransaction = { id: String(r.id), date: String(r.date ?? r.transaction_date), amount, merchant: label(r.merchant_name ?? r.note ?? r.name), category: label(category), account: label(account?.display_name ?? account?.name ?? manualAccount?.name ?? r.account_id ?? "Unassigned account"), accountKey, kind, repaymentKind:repayment ? cardRepayment||credit ? "card" : loanRepayment ? "loan" : "unknown" : undefined, billId: r.linked_bill_id };
     const allocations = Array.isArray(r.review_allocations) ? r.review_allocations : [];
     if (kind === "spending" && allocations.length && Math.abs(sum(allocations.map((a: any) => Math.abs(numeric(a.amount) ?? NaN))) - Math.abs(amount)) < .005) {
@@ -61,6 +66,34 @@ export function aggregateSpending(rows: AnalyticTransaction[], start: string, en
     return [...totals].map(([name, value]) => ({ name, amount: value / 100 })).sort((a, b) => b.amount - a.amount);
   };
   return { start, end, spending: -sum(spending.map(r => r.amount)) || 0, income: sum(period.filter(r => r.kind === "income").map(r => r.amount)), repayments: -sum(period.filter(r => r.kind === "repayment" && r.amount < 0).map(r => r.amount)) || 0, nonCardRepayments:-sum(period.filter(r=>r.kind==="repayment"&&r.repaymentKind==="loan"&&r.amount<0).map(r=>r.amount))||0, unclassifiedDebt:period.filter(r=>r.kind==="repayment"&&(!r.repaymentKind||r.repaymentKind==="unknown")).length, unresolved: period.filter(r => r.kind === "unresolved").length, categories: group("category"), merchants: group("merchant"), rows: period };
+}
+
+/** A recorded settlement cannot be treated as expense history unless its
+ * payment is present in classified posted activity. Transfers and refunds do
+ * not prove that an expense or required repayment was included. */
+export function historicalExpenseCoverage(snapshot: AnalysisSnapshot, rows: readonly AnalyticTransaction[], start: string, end: string): { complete: boolean; missing: string[] } {
+  const missing = requireSources(snapshot, ["monthly_overrides"]);
+  const period = rows.filter(r => r.date >= start && r.date <= end);
+  let unreconciled = false;
+  for (const settlement of snapshot.sources.monthly_overrides?.rows ?? []) {
+    const year = numeric(settlement.year), monthIndex = numeric(settlement.month);
+    if (year === null || monthIndex === null || !Number.isInteger(year) || year < 1900 || year > 9999 || !Number.isInteger(monthIndex) || monthIndex < 0 || monthIndex > 11) {
+      missing.push("A bill settlement period is invalid, so its expense-history coverage cannot be verified");
+      continue;
+    }
+    const month = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+    if (month < start.slice(0, 7) || month > end.slice(0, 7)) continue;
+    const paid = numeric(settlement.paid_amount), actual = settlement.actual_amount == null ? null : numeric(settlement.actual_amount);
+    if (paid === null || paid < 0 || (settlement.actual_amount != null && (actual === null || actual < 0))) {
+      missing.push("A bill settlement amount is invalid; its recorded payment cannot be verified against expense history");
+      continue;
+    }
+    if (paid === 0) continue;
+    const linked = sum(period.filter(t => sameIdentity(t.billId, settlement.bill_id) && t.date.slice(0, 7) === month && t.amount < 0 && (t.kind === "spending" || t.kind === "repayment")).map(t => -t.amount));
+    if (linked + .005 < paid) unreconciled = true;
+  }
+  if (unreconciled) missing.push("Some recorded bill payments are not reconciled to posted transaction history; the expense baseline could omit obligations. Match those payments before relying on a historical expense baseline");
+  return { complete: missing.length === 0, missing: [...new Set(missing)] };
 }
 
 export function spendingAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequest): AnalysisResult {
@@ -136,7 +169,24 @@ export function spendingAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
       const previousStart = request.comparisonStart ?? (calendarAligned?shiftMonth(start,-1):dayAdd(start,-dayCount));
       const previousEnd = request.comparisonEnd ?? (calendarAligned?dayAdd(previousStart,Math.min(dayCount,new Date(Date.UTC(Number(previousStart.slice(0,4)),Number(previousStart.slice(5,7)),0)).getUTCDate())-1):dayAdd(previousStart,dayCount-1));
       const previous = aggregateSpending(filtered, previousStart, previousEnd);
-      if(previous.unresolved||current.unresolved||all.missing.length||!previous.rows.length) {
+      // Complete source pagination does not establish historical coverage.
+      // Check unfiltered posted activity in every month of each window so a
+      // missing merchant/category can legitimately have zero recorded spending,
+      // but absent earlier months cannot masquerade as a zero-spending period.
+      const uncoveredPeriods=(from:string,to:string)=>{
+        const gaps:string[]=[];
+        for(let month=monthStart(from);month<=to;month=shiftMonth(month,1)) {
+          const first=month>from?month:from,last=monthEnd(month)<to?monthEnd(month):to;
+          if(!all.rows.some(r=>r.date>=first&&r.date<=last&&r.kind!=="unresolved"))gaps.push(`${first}–${last}`);
+        }
+        return gaps;
+      };
+      const previousGaps=uncoveredPeriods(previousStart,previousEnd), currentGaps=uncoveredPeriods(start,end);
+      if(previousGaps.length||currentGaps.length) {
+        if(previousGaps.length)missing.push(`Prior comparison history has no observed classified activity for ${previousGaps.join(", ")}; missing periods cannot be assumed to have zero spending`);
+        if(currentGaps.length)missing.push(`Current comparison history has no observed classified activity for ${currentGaps.join(", ")}; missing periods cannot be assumed to have zero spending`);
+        lines.push(`I cannot establish a spending increase or decrease against ${previousStart}–${previousEnd}: the retained history does not cover every requested period. Missing coverage: ${[...previousGaps,...currentGaps].join(", ")}.`);
+      } else if(previous.unresolved||current.unresolved||all.missing.length) {
         missing.push("A spending increase/decrease cannot be established while either comparison period has unclassified or unavailable transactions");
         lines.push(`The comparison with ${previousStart}–${previousEnd} is unavailable until both periods are classified.`);
       } else {
@@ -146,7 +196,6 @@ export function spendingAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
       const categoryNames=[...new Set([...current.categories,...previous.categories].map(c=>c.name))];
       const changes = categoryNames.map(name => ({ name, difference: round((current.categories.find(c=>c.name===name)?.amount??0) - (previous.categories.find(p => p.name === name)?.amount ?? 0)) })).sort((a,b)=>Math.abs(b.difference)-Math.abs(a.difference));
       lines.push(...changes.slice(0,3).map(c=>`${c.name}: ${c.difference >= 0 ? "+" : "−"}${dollars(Math.abs(c.difference))}.`));
-      if (!previous.rows.length) missing.push("No earlier matching recorded transactions; the comparison is not proof of a complete prior month");
       }
     }
     if (request.domain === "review") lines.push(`Confirmed income: ${dollars(current.income)}. Recorded debt repayments: ${dollars(current.repayments)}. Payments alone do not establish the change in debt principal.`);

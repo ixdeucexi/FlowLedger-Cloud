@@ -1,4 +1,4 @@
-import { localDay, type AnalysisSnapshot, type SourceRows } from "./analysisTypes.ts";
+import { localDay, type AnalysisRequest, type AnalysisSnapshot, type SourceRows } from "./analysisTypes.ts";
 
 // Explicit columns keep bank credentials, raw bank payloads, and unrelated
 // household data out of both the calculator and the model context.
@@ -22,6 +22,29 @@ export const analysisColumns: Record<string, string> = {
   category_budgets: "id,household_id,category,month,year,amount,updated_at",
   household_daily_checking_closes: "household_id,balance_date,checking_balance,observed_at,account_count,source",
 };
+
+export const analysisProjectionSources = ["household_settings", "bills", "monthly_overrides", "bill_date_moves", "transactions", "accounts", "plaid_accounts", "plaid_transactions", "pending_plan_matches", "incomes", "goals", "extra_payments", "decisions"];
+const spendingSources = ["transactions", "plaid_transactions", "plaid_accounts", "accounts", "bills", "goals"];
+/** Dependencies include identity/classification reads, not just output tables.
+ * Unknown routes retain full coverage rather than treating unloaded data as empty. */
+export function analysisSourceDependencies(request: AnalysisRequest): string[] {
+  const withSettings = (tables: readonly string[]) => [...new Set(["household_settings", ...tables])];
+  if (request.purpose === "balance_history") return withSettings(["accounts", "account_balances", "plaid_accounts", "household_daily_checking_closes"]);
+  if (request.scenario || ["paycheck_allocation", "action_plan", "budget_plan", "allocation_choice"].includes(request.purpose ?? "")) return withSettings(analysisProjectionSources);
+  if (request.domain === "money" && request.operation === "detail" && request.dateEvent === "none") return withSettings(["accounts", "plaid_accounts"]);
+  if (["credit", "debt"].includes(request.domain) && ["minimum", "maximum"].includes(request.operation)) return withSettings([request.domain === "credit" ? "plaid_accounts" : "bills"]);
+  if (["spending", "transactions", "unusual", "fees"].includes(request.domain) || request.domain === "income" && request.incomeTiming === "received") return withSettings(spendingSources);
+  if (request.domain === "income") return withSettings(["incomes"]);
+  if (["bills", "subscriptions"].includes(request.domain)) return withSettings([...spendingSources, "monthly_overrides", "bill_date_moves", "incomes"]);
+  if (request.domain === "credit") return withSettings(["plaid_accounts"]);
+  if (request.domain === "emergency") return withSettings([...spendingSources, "monthly_overrides"]);
+  if (request.domain === "savings") return withSettings(spendingSources);
+  if (request.domain === "budget") return withSettings([...spendingSources, "category_budgets"]);
+  if (request.domain === "review") return withSettings([...analysisProjectionSources, "category_budgets", "household_daily_checking_closes"]);
+  if (["stability", "progress", "health", "buffer", "paycheck"].includes(request.domain)) return withSettings([...analysisProjectionSources, "household_daily_checking_closes"]);
+  if (["money", "forecast", "purchase", "debt"].includes(request.domain)) return withSettings(analysisProjectionSources);
+  return Object.keys(analysisColumns);
+}
 
 const PAGE = 1000;
 export const ANALYSIS_MAX_ROWS = 20000;
@@ -53,8 +76,10 @@ async function digest(value: unknown) {
   return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(value))))).map(x => x.toString(16).padStart(2, "0")).join("");
 }
 
-export async function loadAnalysisSnapshot(client: any, householdId: string, now: string): Promise<AnalysisSnapshot> {
-  const sources = Object.fromEntries(await Promise.all(Object.keys(analysisColumns).map(async table => [table, await readAnalysisSource(client, householdId, table)])));
+export async function loadAnalysisSnapshot(client: any, householdId: string, now: string, tables?: readonly string[]): Promise<AnalysisSnapshot> {
+  const requested = [...new Set(["household_settings", ...(tables ?? Object.keys(analysisColumns))])];
+  if (requested.some(table => !Object.hasOwn(analysisColumns, table))) throw new Error("Unknown financial analysis source");
+  const sources = Object.fromEntries(await Promise.all(requested.map(async table => [table, await readAnalysisSource(client, householdId, table)])));
   let timeZone = sources.household_settings.rows[0]?.time_zone;
   try { if (!timeZone) throw new Error(); localDay(now, timeZone); } catch {
     timeZone = "UTC";

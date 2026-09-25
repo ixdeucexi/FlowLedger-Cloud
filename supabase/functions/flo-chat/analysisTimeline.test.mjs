@@ -20,7 +20,7 @@ test('absolute bill price preserves partial settlement and never invents a refun
 
 test('undated single bill scenario reports the canonical affected occurrence, preserving explicit windows and move endpoints',()=>{
   const s=snapshot();s.sources.bills.rows=[{id:'rent',name:'Rent',amount:900,is_debt:false,is_recurring:true,frequency:'monthly',due_day:15,start_date:s.today}];
-  const direct=deterministicAnalysisPlan('What if Rent rises to $1200?',s.today).requests[0];
+  const direct=deterministicAnalysisPlan('What if Rent rises to $1200 for the next payment?',s.today).requests[0];
   const result=calculateFinancialAnalysis(s,direct);assert.match(result.text,/By 2026-09-15/);assert.equal(Math.round((result.facts.baselineEndBalance-result.facts.scenarioEndBalance)*100),30000);
   const explicit=calculateFinancialAnalysis(s,{...direct,endDate:'2026-09-12'});assert.match(explicit.text,/By 2026-09-12/);assert.equal(explicit.facts.scenarioEndBalance,explicit.facts.baselineEndBalance);
   for(const date of ['2026-09-12','2026-09-20']){const moved=calculateFinancialAnalysis(s,{...direct,scenario:{kind:'move_bill',amount:0,date,sourceDate:'2026-09-15',entity:'Rent',repeat:'once'}});assert.match(moved.text,new RegExp(`By ${date<'2026-09-15'?'2026-09-15':date}`));}
@@ -29,6 +29,40 @@ test('month-ahead target is not a complete reserve without living history',()=>{
 function snapshot(){const sources=Object.fromEntries([...projectionSources,'household_daily_checking_closes'].map(t=>[t,{rows:[],complete:true}]));sources.household_settings.rows=[{starting_balance:500,starting_balance_date:'2026-09-10',safety_floor:200,forecast_horizon_months:6}];sources.incomes.rows=[{id:'pay',name:'Pay',amount:1500,frequency:'monthly',start_date:'2026-09-01',next_payment_date:'2026-09-15'}];sources.transactions.rows=[6,7,8].flatMap(m=>[{id:`income${m}`,date:`2026-0${m}-01`,amount:1500,category:'Income'},{id:`expense${m}`,date:`2026-0${m}-02`,amount:-100,category:'Food'}]);return {householdId:'h',today:'2026-09-10',capturedAt:'2026-09-10T15:00:00Z',timeZone:'America/Chicago',hash:'test',sources};}
 test('question-level seam retries savings misroute then calculators produce a buffer duration',async()=>{let calls=0;const plan=await interpretAnalysisQuestion('How long will it take to have 1000 buffer',async correction=>{calls++;if(!correction)return {legacy:false,requests:[request({domain:'savings',operation:'summary',purpose:'general'})]};return {legacy:false,requests:[request()]};});assert.equal(calls,2);const r=calculateFinancialAnalysis(snapshot(),plan.requests[0]);assert.equal(r.facts.timelineOutcome,'duration');assert.ok(r.facts.timelineDuration>0);assert.match(r.text,/^The checked scenario needs about/);assert.match(r.text,/above your \$200\.00 cushion/);});
 test('buffer already reached returns zero duration, not generic savings',()=>{const r=calculateFinancialAnalysis(snapshot(),request({amount:100}));assert.equal(r.facts.timelineOutcome,'already_reached');assert.equal(r.facts.timelineDuration,0);assert.match(r.text,/^You already have/);});
+
+test('requested paycheck count asks for per-paycheck contribution instead of answering in months',()=>{
+  const r=calculateFinancialAnalysis(snapshot(),request({timelineUnit:'household_paydays'}));
+  assert.equal(r.facts.timelineOutcome,'not_estimable');assert.equal(r.facts.timelineDuration,null);assert.equal(r.facts.timelineUnit,'household_paydays');
+  assert.equal(r.facts.monthsToTargetScenario,undefined);assert.equal(r.facts.paydaysToTargetScenario,undefined);assert.equal(r.facts.contributionPerPaydayScenario,undefined);
+  assert.match(r.text,/^How much would you like to set aside from each paycheck/);assert.ok(r.missing.some(reason=>/contribution amount per paycheck/.test(reason)));
+});
+
+test('requested paycheck count uses the stated contribution while preserving the existing buffer',()=>{
+  const r=calculateFinancialAnalysis(snapshot(),request({timelineUnit:'household_paydays',contribution:{amount:100,frequency:'paycheck'}}));
+  assert.equal(r.facts.timelineOutcome,'duration');assert.equal(r.facts.timelineDuration,8);assert.equal(r.facts.timelineUnit,'household_paydays');
+  assert.equal(r.facts.explicitContribution,100);assert.equal(r.facts.monthsToTargetScenario,undefined);assert.match(r.text,/8 distinct household paydays at your stated \$100\.00 each/);
+  assert.ok(!r.missing.some(reason=>/contribution amount per paycheck/.test(reason)));assert.match(r.text,/not been confirmed affordable/);
+});
+
+test('monthly contribution is not silently recast as a per-paycheck contribution',()=>{
+  const r=calculateFinancialAnalysis(snapshot(),request({timelineUnit:'household_paydays',contribution:{amount:100,frequency:'monthly'}}));
+  assert.equal(r.facts.timelineOutcome,'not_estimable');assert.equal(r.facts.timelineDuration,null);assert.equal(r.facts.timelineUnit,'household_paydays');
+  assert.match(r.text,/You specified \$100\.00 per month/);assert.ok(r.missing.some(reason=>/contribution amount per paycheck/.test(reason)));
+});
+
+test('requested buffer months do not silently become a paycheck contribution count',()=>{
+  const r=calculateFinancialAnalysis(snapshot(),request({timelineUnit:'months',contribution:{amount:100,frequency:'paycheck'}}));
+  assert.equal(r.facts.timelineOutcome,'not_estimable');assert.equal(r.facts.timelineDuration,null);assert.equal(r.facts.timelineUnit,'months');
+  assert.equal(r.facts.explicitContribution,100);assert.equal(r.facts.contributionPeriods,8);
+  assert.match(r.text,/cannot translate those paychecks into calendar months without verified contribution dates/);
+  assert.ok(r.missing.some(reason=>/buffer timeline in the requested months/.test(reason)));
+});
+
+test('paycheck-count questions need no contribution when the buffer is already reached',()=>{
+  const r=calculateFinancialAnalysis(snapshot(),request({amount:100,timelineUnit:'household_paydays'}));
+  assert.equal(r.facts.timelineOutcome,'already_reached');assert.equal(r.facts.timelineDuration,0);assert.equal(r.facts.timelineUnit,'household_paydays');
+  assert.match(r.text,/^You already have/);assert.ok(!r.missing.some(reason=>/contribution amount per paycheck/.test(reason)));
+});
 test('unknown buffer and no contribution capacity have explicit non-estimable outcomes',()=>{const s=snapshot();s.sources.transactions.rows=[];const unknown=calculateFinancialAnalysis(s,request());assert.equal(unknown.facts.timelineOutcome,'not_estimable');assert.match(unknown.text,/cannot estimate how long/i);const deficit=snapshot();deficit.sources.household_settings.rows[0].starting_balance=5000;deficit.sources.transactions.rows.forEach(t=>{if(t.amount<0)t.amount=-2000;});const r=calculateFinancialAnalysis(deficit,request({amount:10000}));assert.equal(r.facts.timelineOutcome,'not_estimable');assert.match(r.text,/no positive sustainable contribution/);});
 
 test('unknown buffer acknowledges proposed contribution without claiming capacity or a date',()=>{

@@ -33,7 +33,7 @@ import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
 import { type FloFacts } from "@/lib/flo";
 import { createFloAiConsent, floAiConsentStorageKey, parseFloAiConsent } from "@/lib/floAiConsent";
 import { humanizeFloText } from "@/lib/floLanguage";
-import { exportFloHistoryText, floConversationForRequest, floProposalMatchesAuthoritative, isFloRequestGenerationCurrent, nextFloRequestGeneration, type FloReviewProposal } from "@/lib/floExperience";
+import { exportFloHistoryText, floConversationContext, floConversationForRequest, floPreferencesReadyForScope, floProposalMatchesAuthoritative, isFloRequestGenerationCurrent, nextFloRequestGeneration, type FloReviewProposal } from "@/lib/floExperience";
 import { DEFAULT_FLO_PREFERENCES, readFloPreferences, saveFloPreferences, type FloPreferences } from "@/lib/floPreferences";
 import {
   createFloConversation,
@@ -58,7 +58,7 @@ import {
   reduceFloChat,
   type FloChatState,
 } from "@/lib/floPolicy";
-import { isFloTimeoutCode, type FloVerifiedFallback } from "@/lib/floStream";
+import { floFailureDisplay, type FloVerifiedFallback } from "@/lib/floStream";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { buildDecisionHistory } from "@/lib/decisionHistory";
 import { buildDecisionRiskAlerts } from "@/lib/decisionRisk";
@@ -135,11 +135,15 @@ export default function FloScreen() {
       : {},
   );
   const [floPreferences, setFloPreferences] = useState<FloPreferences>(DEFAULT_FLO_PREFERENCES);
+  const [preferencesScopeKey, setPreferencesScopeKey] = useState<string | null>(null);
+  const [memoryScopeKey, setMemoryScopeKey] = useState<string | null>(null);
   const [reviewProposal, setReviewProposal] = useState<FloReviewProposal | null>(null);
   const [proposalConfirmState, setProposalConfirmState] = useState<"idle" | "reviewing" | "confirming" | "failed">("idle");
   const [proposalConfirmError, setProposalConfirmError] = useState("");
   const [proposalReceipt, setProposalReceipt] = useState<{ previousAmount: number; newAmount: number; confirmedAt: string } | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [retryAllowed, setRetryAllowed] = useState(true);
+  const [historyBusy, setHistoryBusy] = useState(false);
   const [lastPrompt, setLastPrompt] = useState("");
   const [aiConsentAccepted, setAiConsentAccepted] = useState(false);
   const [aiConsentReady, setAiConsentReady] = useState(false);
@@ -151,7 +155,12 @@ export default function FloScreen() {
   const skipConversationLoadRef = useRef<string | null>(null);
   const retryRequestRef = useRef<{ text: string; userMessageId: string; assistantMessageId: string; conversationId: string | null } | null>(null);
   const requestGenerationRef = useRef(0);
+  const activeRequestRef = useRef<number | null>(null);
+  const historyMutationRef = useRef(false);
+  const preferenceEditGenerationRef = useRef(0);
   const floDataScopeKey = `${user?.id ?? "anonymous"}:${activeHousehold?.householdId ?? "none"}`;
+  const preferencesReady = floPreferencesReadyForScope(preferencesScopeKey, floDataScopeKey);
+  const preferencesControlsReady = preferencesReady && floPreferencesReadyForScope(memoryScopeKey, floDataScopeKey);
   const floDataScopeKeyRef = useRef(floDataScopeKey);
   floDataScopeKeyRef.current = floDataScopeKey;
   const activeConversationIdRef = useRef(activeConversationId);
@@ -182,8 +191,13 @@ export default function FloScreen() {
   useEffect(() => {
     let cancelled = false;
     requestGenerationRef.current = nextFloRequestGeneration(requestGenerationRef.current);
+    const loadGeneration = requestGenerationRef.current;
     streamAbortRef.current?.abort();
     streamAbortRef.current = null;
+    retryRequestRef.current = null;
+    setConversations([]);
+    setActiveConversationId(null);
+    setLastPrompt("");
     dispatch({ type: "hydrate", messages: demoMode ? storeCaptureChat.messages : [] });
     setSourcesByMessageId({});
     setFollowUpsByMessageId({});
@@ -199,26 +213,44 @@ export default function FloScreen() {
       return () => { cancelled = true; };
     }
     void listFloConversations(activeHousehold.householdId).then(next => {
-      if (cancelled) return;
+      if (cancelled || loadGeneration !== requestGenerationRef.current) return;
       setConversations(next);
       setActiveConversationId(next[0]?.id ?? null);
     }).catch(() => {
-      if (!cancelled) setChatError("Private Flo history is unavailable right now.");
+      if (!cancelled && loadGeneration === requestGenerationRef.current) setChatError("Private Flo history is unavailable right now.");
     });
     return () => { cancelled = true; };
   }, [activeHousehold?.householdId, demoMode, floProLocked, user?.id]);
 
   useEffect(() => {
     let cancelled = false;
-    if (demoMode || !user?.id || !activeHousehold?.householdId) return () => { cancelled = true; };
-    void Promise.all([
-      readFloPreferences(user.id, activeHousehold.householdId),
-      readFloHouseholdMemory(activeHousehold.householdId, user.id).catch(() => ({ enabled: false, note: "" })),
-    ]).then(([preferences, memory]) => {
-      if (!cancelled) setFloPreferences({ ...preferences, rememberPreferences: memory.enabled, preferenceNote: memory.enabled ? memory.note : "" });
+    setPreferencesScopeKey(null);
+    setMemoryScopeKey(null);
+    setFloPreferences({ ...DEFAULT_FLO_PREFERENCES, historyEnabled: false });
+    if (demoMode) {
+      setPreferencesScopeKey(floDataScopeKey);
+      setMemoryScopeKey(floDataScopeKey);
+      return () => { cancelled = true; };
+    }
+    if (!user?.id || !activeHousehold?.householdId) return () => { cancelled = true; };
+    const loadedScope = floDataScopeKey;
+    const editGeneration = preferenceEditGenerationRef.current;
+    const memoryPromise = readFloHouseholdMemory(activeHousehold.householdId, user.id).catch(() => ({ enabled: false, note: "" }));
+    void readFloPreferences(user.id, activeHousehold.householdId).then(preferences => {
+      if (cancelled || loadedScope !== floDataScopeKeyRef.current) return;
+      setFloPreferences({ ...preferences, rememberPreferences: false, preferenceNote: "" });
+      setPreferencesScopeKey(loadedScope);
+      // History is a local preference. A slower memory read must not delay it
+      // or later overwrite a privacy preference the user has just changed.
+      void memoryPromise.then(memory => {
+        if (!cancelled && loadedScope === floDataScopeKeyRef.current && editGeneration === preferenceEditGenerationRef.current) {
+          setFloPreferences(previous => ({ ...previous, rememberPreferences: memory.enabled, preferenceNote: memory.enabled ? memory.note : "" }));
+          setMemoryScopeKey(loadedScope);
+        }
+      });
     });
     return () => { cancelled = true; };
-  }, [activeHousehold?.householdId, demoMode, user?.id]);
+  }, [activeHousehold?.householdId, demoMode, user?.id, floDataScopeKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -732,6 +764,7 @@ export default function FloScreen() {
   }, [categoryPlan, decisionHistory, decisionRiskAlerts, demoMode, hasSetupAnswers, setupPersonalization]);
 
   const startNewConversation = () => {
+    if (activeRequestRef.current !== null || historyMutationRef.current) return;
     requestGenerationRef.current = nextFloRequestGeneration(requestGenerationRef.current);
     streamAbortRef.current?.abort();
     streamAbortRef.current = null;
@@ -747,6 +780,7 @@ export default function FloScreen() {
   };
 
   const selectConversation = (conversationId: string) => {
+    if (activeRequestRef.current !== null || historyMutationRef.current) return;
     requestGenerationRef.current = nextFloRequestGeneration(requestGenerationRef.current);
     streamAbortRef.current?.abort();
     streamAbortRef.current = null;
@@ -761,31 +795,49 @@ export default function FloScreen() {
   };
 
   const removeConversation = async (conversationId: string) => {
-    if (conversationId === activeConversationId) {
-      requestGenerationRef.current = nextFloRequestGeneration(requestGenerationRef.current);
+    if (activeRequestRef.current !== null || historyMutationRef.current) throw new Error("Wait for Flo to finish before deleting history.");
+    historyMutationRef.current = true;
+    setHistoryBusy(true);
+    try {
+      const mutationGeneration = nextFloRequestGeneration(requestGenerationRef.current);
+      requestGenerationRef.current = mutationGeneration;
       streamAbortRef.current?.abort();
       streamAbortRef.current = null;
+      await deleteFloConversation(conversationId);
+      if (mutationGeneration !== requestGenerationRef.current) return;
+      const remaining = conversations.filter(conversation => conversation.id !== conversationId);
+      setConversations(remaining);
+      if (conversationId === activeConversationId) setActiveConversationId(remaining[0]?.id ?? null);
+      if (!remaining.length) dispatch({ type: "hydrate", messages: [] });
+    } finally {
+      historyMutationRef.current = false;
+      setHistoryBusy(false);
     }
-    await deleteFloConversation(conversationId);
-    const remaining = conversations.filter(conversation => conversation.id !== conversationId);
-    setConversations(remaining);
-    setActiveConversationId(remaining[0]?.id ?? null);
-    if (!remaining.length) dispatch({ type: "hydrate", messages: [] });
   };
 
   const removeAllConversations = async () => {
     if (!activeHousehold?.householdId) throw new Error("An active household is required.");
-    await deleteAllFloConversations(activeHousehold.householdId);
-    requestGenerationRef.current = nextFloRequestGeneration(requestGenerationRef.current);
-    streamAbortRef.current?.abort();
-    streamAbortRef.current = null;
-    setConversations([]);
-    setActiveConversationId(null);
-    setSourcesByMessageId({});
-    setFollowUpsByMessageId({});
-    setProposalByMessageId({});
-    setGroundingByMessageId({});
-    dispatch({ type: "hydrate", messages: demoMode ? storeCaptureChat.messages : [] });
+    if (activeRequestRef.current !== null || historyMutationRef.current) throw new Error("Wait for Flo to finish before deleting history.");
+    historyMutationRef.current = true;
+    setHistoryBusy(true);
+    try {
+      const mutationGeneration = nextFloRequestGeneration(requestGenerationRef.current);
+      requestGenerationRef.current = mutationGeneration;
+      streamAbortRef.current?.abort();
+      streamAbortRef.current = null;
+      await deleteAllFloConversations(activeHousehold.householdId);
+      if (mutationGeneration !== requestGenerationRef.current) return;
+      setConversations([]);
+      setActiveConversationId(null);
+      setSourcesByMessageId({});
+      setFollowUpsByMessageId({});
+      setProposalByMessageId({});
+      setGroundingByMessageId({});
+      dispatch({ type: "hydrate", messages: demoMode ? storeCaptureChat.messages : [] });
+    } finally {
+      historyMutationRef.current = false;
+      setHistoryBusy(false);
+    }
   };
 
   const exportConversations = async () => {
@@ -799,6 +851,9 @@ export default function FloScreen() {
   };
 
   const updatePreferences = (preferences: FloPreferences) => {
+    if (!preferencesControlsReady || activeRequestRef.current !== null || historyMutationRef.current) return;
+    preferenceEditGenerationRef.current += 1;
+    if (preferences.historyEnabled !== floPreferences.historyEnabled) retryRequestRef.current = null;
     setFloPreferences(preferences);
     if (user?.id && activeHousehold?.householdId) {
       void Promise.all([
@@ -896,24 +951,27 @@ export default function FloScreen() {
 
   const send = async (text = input, retry = false, consentOverride = false) => {
     const clean = text.trim();
-    if (!clean || chat.sending || floProLocked || !user?.id || !activeHousehold?.householdId) return;
-    if (!aiConsentReady) return;
+    if (!clean || chat.sending || activeRequestRef.current !== null || historyMutationRef.current || floProLocked || !user?.id || !activeHousehold?.householdId) return;
+    if (!aiConsentReady || !preferencesReady) return;
     if (!aiConsentAccepted && !consentOverride) {
       setAiConsentPrompt(clean);
       return;
     }
-    const requestGeneration = requestGenerationRef.current;
+    const requestGeneration = nextFloRequestGeneration(requestGenerationRef.current);
+    requestGenerationRef.current = requestGeneration;
+    activeRequestRef.current = requestGeneration;
     const requestUserId = user.id;
     const requestHouseholdId = activeHousehold.householdId;
     const requestIsCurrent = () => isFloRequestGenerationCurrent(requestGeneration, requestGenerationRef.current);
     setInput("");
     setChatError(null);
+    setRetryAllowed(true);
     setLastPrompt(clean);
     const priorRequest = retry && retryRequestRef.current?.text === clean ? retryRequestRef.current : null;
     const userMessageId = priorRequest?.userMessageId ?? createFloId();
     const assistantMessageId = priorRequest?.assistantMessageId ?? createFloId();
     dispatch({ type: "submit", id: userMessageId, assistantId: assistantMessageId, text: clean });
-    let conversationId = priorRequest?.conversationId ?? floConversationForRequest(floPreferences.historyEnabled, activeConversationId);
+    let conversationId = floConversationForRequest(floPreferences.historyEnabled, priorRequest?.conversationId ?? activeConversationId);
     retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId };
     let reply = "";
     const verifiedFallback: { current: FloVerifiedFallback | null } = { current: null };
@@ -946,6 +1004,7 @@ export default function FloScreen() {
           label: Array.isArray(params.label) ? params.label[0] : params.label,
         },
         historyEnabled: floPreferences.historyEnabled,
+        conversationContext: floPreferences.historyEnabled ? undefined : floConversationContext(chat.messages, [userMessageId, assistantMessageId]),
         signal: controller.signal,
         onEvent: event => {
           if (!requestIsCurrent()) return;
@@ -988,8 +1047,7 @@ export default function FloScreen() {
       streamAbortRef.current = null;
       const stopped = error instanceof Error && error.name === "AbortError";
       const cleanupFailed = error instanceof Error && error.message.includes("ephemeral_cleanup_failed");
-      const timeout = isFloTimeoutCode(streamFailure.current?.code)
-        || isFloTimeoutCode(error instanceof Error ? error.message : null);
+      const failure = floFailureDisplay(streamFailure.current?.code ?? (error instanceof Error ? error.message : null));
       if (cleanupFailed) {
         dispatch({ type: "hydrate", messages: [] });
         setSourcesByMessageId({});
@@ -1019,9 +1077,7 @@ export default function FloScreen() {
       } else {
         reply = stopped
           ? "Response stopped before Flo could verify an answer."
-          : timeout
-            ? "Flo needed more time to verify this answer. Nothing changed in your plan."
-            : "I couldn't verify an answer from your account just now.";
+          : failure.answer;
         dispatch({ type: "replace", id: assistantMessageId, text: reply });
         setSourcesByMessageId(previous => ({ ...previous, [assistantMessageId]: [] }));
         setFollowUpsByMessageId(previous => ({ ...previous, [assistantMessageId]: [] }));
@@ -1029,10 +1085,11 @@ export default function FloScreen() {
         setGroundingByMessageId(previous => ({ ...previous, [assistantMessageId]: { partial: true, coverage: "No verified account data" } }));
         setChatError(stopped
           ? "Response stopped. You can retry the last question."
-          : timeout
-            ? "That check took longer than expected. Tap Retry to ask again."
-            : "Flo couldn't verify this answer. Retry to check your account again.");
+          : failure.action);
+        setRetryAllowed(stopped || failure.retryable);
       }
+    } finally {
+      if (activeRequestRef.current === requestGeneration) activeRequestRef.current = null;
     }
     if (!requestIsCurrent()) return;
     if (!floPreferences.historyEnabled) retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: null };
@@ -1056,10 +1113,10 @@ export default function FloScreen() {
     const promptId = Array.isArray(params.promptId) ? params.promptId[0] : params.promptId;
     const cleanPrompt = typeof prompt === "string" ? prompt.trim() : "";
     const promptKey = `${promptId || "manual"}:${cleanPrompt}`;
-    if (!aiConsentReady || !cleanPrompt || handledPromptRef.current === promptKey || chat.sending) return;
+    if (!aiConsentReady || !preferencesReady || !user?.id || !activeHousehold?.householdId || floProLocked || historyBusy || !cleanPrompt || handledPromptRef.current === promptKey || chat.sending) return;
     handledPromptRef.current = promptKey;
     void send(cleanPrompt);
-  }, [aiConsentReady, params.prompt, params.promptId, chat.sending]);
+  }, [aiConsentReady, preferencesReady, params.prompt, params.promptId, chat.sending, user?.id, activeHousehold?.householdId, floProLocked, historyBusy]);
 
   const composerBottom = Platform.OS === "web" ? 88 : Math.max(insets.bottom, 8) + 54;
 
@@ -1088,7 +1145,7 @@ export default function FloScreen() {
         <Feather name="message-circle" size={24} color={colors.primaryForeground} />
       </LinearGradient>
 
-      {isDesktop ? <View style={styles.desktopHistoryLayer}><FloConversationBar desktop conversations={conversations} activeId={activeConversationId} disabled={chat.sending} householdName={activeHousehold?.name ?? "Personal household"} preferences={floPreferences} onNew={startNewConversation} onSelect={selectConversation} onRename={renameConversation} onDelete={removeConversation} onDeleteAll={removeAllConversations} onExport={exportConversations} onSearchHistory={searchHistory} onPreferencesChange={updatePreferences} /></View> : <FloConversationBar conversations={conversations} activeId={activeConversationId} disabled={chat.sending} householdName={activeHousehold?.name ?? "Personal household"} preferences={floPreferences} onNew={startNewConversation} onSelect={selectConversation} onRename={renameConversation} onDelete={removeConversation} onDeleteAll={removeAllConversations} onExport={exportConversations} onSearchHistory={searchHistory} onPreferencesChange={updatePreferences} />}
+      {isDesktop ? <View style={styles.desktopHistoryLayer}><FloConversationBar desktop conversations={conversations} activeId={activeConversationId} disabled={chat.sending || historyBusy} preferencesDisabled={!preferencesControlsReady} householdName={activeHousehold?.name ?? "Personal household"} preferences={floPreferences} onNew={startNewConversation} onSelect={selectConversation} onRename={renameConversation} onDelete={removeConversation} onDeleteAll={removeAllConversations} onExport={exportConversations} onSearchHistory={searchHistory} onPreferencesChange={updatePreferences} /></View> : <FloConversationBar conversations={conversations} activeId={activeConversationId} disabled={chat.sending || historyBusy} preferencesDisabled={!preferencesControlsReady} householdName={activeHousehold?.name ?? "Personal household"} preferences={floPreferences} onNew={startNewConversation} onSelect={selectConversation} onRename={renameConversation} onDelete={removeConversation} onDeleteAll={removeAllConversations} onExport={exportConversations} onSearchHistory={searchHistory} onPreferencesChange={updatePreferences} />}
 
       <ScrollView
         ref={scrollRef}
@@ -1181,7 +1238,7 @@ export default function FloScreen() {
         {chatError ? (
           <View style={styles.errorRow}>
             <Text style={[styles.chatError, { color: colors.mutedForeground }]}>{chatError}</Text>
-            {lastPrompt && !chat.sending ? (
+            {lastPrompt && retryAllowed && !chat.sending ? (
               <Pressable accessibilityRole="button" onPress={() => void send(lastPrompt, true)} style={[styles.retryButton, { backgroundColor: colors.primary + "18" }]}>
                 <Feather name="rotate-ccw" size={13} color={colors.primary} />
                 <Text style={[styles.retryText, { color: colors.primary }]}>Retry</Text>
@@ -1201,7 +1258,7 @@ export default function FloScreen() {
               key={prompt}
               accessibilityRole="button"
               accessibilityLabel={`Ask Flo: ${prompt}`}
-              disabled={chat.sending}
+              disabled={chat.sending || historyBusy || !preferencesReady}
               onPress={() => void send(prompt)}
               style={({ pressed }) => [
                 styles.quickPromptChip,
@@ -1221,9 +1278,11 @@ export default function FloScreen() {
             nativeID="guided-tour-flo"
             accessibilityLabel="Ask Flo anything"
             value={input}
+            editable={!historyBusy && preferencesReady}
+            maxLength={4000}
             onChangeText={setInput}
             onSubmitEditing={() => void send()}
-            placeholder={sampleQuestions[sampleIndex]}
+            placeholder={preferencesReady ? sampleQuestions[sampleIndex] : "Loading your chat preferences…"}
             placeholderTextColor={colors.mutedForeground}
             style={[styles.input, { color: colors.foreground }]}
             returnKeyType="send"
@@ -1234,7 +1293,7 @@ export default function FloScreen() {
             accessibilityRole="button"
             accessibilityLabel={chat.sending ? "Stop response" : "Send message"}
             onPress={chat.sending ? stopStreaming : () => void send()}
-            disabled={!chat.sending && !input.trim()}
+            disabled={historyBusy || !preferencesReady || (!chat.sending && !input.trim())}
             style={[
               styles.send,
               { backgroundColor: chat.sending ? colors.destructive : colors.primary, opacity: !chat.sending && !input.trim() ? 0.45 : 1 },

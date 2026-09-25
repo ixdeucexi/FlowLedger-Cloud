@@ -30,5 +30,19 @@ test("Flo replies stay concise", () => {
 test("weak model fallbacks are recognized", () => {
   assert.equal(isWeakFloReply("I couldn't form a reliable account answer."), true);
   assert.equal(isWeakFloReply("You have two bills left."), false);
-  assert.equal(humanizeFloText("I couldn't form a reliable account answer."), "I couldn't finish that answer. Ask again and I'll use your latest numbers.");
+  assert.equal(humanizeFloText("I couldn't form a reliable account answer."), "I couldn't form a reliable account answer.");
+});
+
+test("complete account answers retain late calculations, dates, and next steps", () => {
+  const introduction = "I checked your current balance and your scheduled bills. ".repeat(9);
+  const result = humanizeFloText(`${introduction}\nYour lowest balance is $318.42 on 2026-10-03. Keep $423.58 reserved for bills.`);
+  assert.match(result, /\$318\.42 on October 3, 2026/);
+  assert.match(result, /Keep \$423\.58 reserved for bills\.$/);
+  assert.ok(result.split(/\s+/).length > 65);
+  assert.equal(result.includes("…"), false);
+});
+
+test("missing-data explanations preserve the reason and the way to complete the calculation", () => {
+  const explanation = "There is not enough information to answer the payoff date because this debt has no APR. Add the APR on Bills to calculate interest.";
+  assert.equal(humanizeFloText(explanation), explanation);
 });

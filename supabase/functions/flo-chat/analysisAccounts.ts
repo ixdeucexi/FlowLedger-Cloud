@@ -24,29 +24,35 @@ export function currentBalanceAnalysis(snapshot: AnalysisSnapshot, request: Anal
     return {id:String(row.id), name:label(row.display_name || row.name), aliases:[row.display_name,row.name,row.official_name].map(normalize).filter(Boolean), kind:String(row.account_subtype), balance:numeric(row.current_balance), date, connected:true};
   });
   const entity = normalize(request.entity);
+  const accountGroup = request.accountGroup ?? (request.domain === "savings" ? "savings" : "checking");
   let selected: BalanceRow[];
   if (entity) {
     selected = [...connected, ...manual].filter(row => row.aliases.includes(entity));
     if (selected.length !== 1) return unavailable(selected.length ? "That name matches more than one active account. Give the account a unique display name before asking for its balance." : "No active checking, cash or savings account exactly matches that name. Please use its full recorded name.");
+    if (request.accountGroup && request.accountGroup !== "all" && (request.accountGroup === "savings" ? selected[0].kind !== "savings" : !["checking", "cash"].includes(selected[0].kind))) return unavailable("The named account does not belong to the requested account group. Confirm whether you mean that account or the group total.");
   } else {
-    const savings = request.domain === "savings";
-    const bank = connected.filter(row => row.kind === (savings ? "savings" : "checking"));
-    selected = bank.length ? bank : manual.filter(row => savings ? row.kind === "savings" : ["checking", "cash"].includes(row.kind));
+    const selectGroup = (group: "checking" | "savings") => {
+      const bank = connected.filter(row => row.kind === group);
+      return bank.length ? bank : manual.filter(row => group === "savings" ? row.kind === "savings" : ["checking", "cash"].includes(row.kind));
+    };
+    selected = accountGroup === "all" ? [...selectGroup("checking"), ...selectGroup("savings")] : selectGroup(accountGroup);
     assumptions.push("For household totals, connected balances take precedence over manual balances of the same planning group, matching the app; savings are kept separate from checking/cash.");
-    if (!selected.length && !savings) {
+    if (accountGroup !== "savings" && !selected.some(row => ["checking", "cash"].includes(row.kind))) {
       sources.push("household_settings");
       missing.push(...requireSources(snapshot, ["household_settings"]));
       const settings = rows("household_settings")[0];
-      if (settings && !missing.length) selected = [{id:"starting-balance",name:"Configured checking/cash starting balance",aliases:[],kind:"checking",balance:numeric(settings.starting_balance),date:validDate(settings.starting_balance_date) ? settings.starting_balance_date : null,connected:false}];
+      if (settings && !missing.length) selected = [...selected, {id:"starting-balance",name:"Configured checking/cash starting balance",aliases:[],kind:"checking",balance:numeric(settings.starting_balance),date:validDate(settings.starting_balance_date) ? settings.starting_balance_date : null,connected:false}];
+      if (!settings && accountGroup === "all") missing.push("No checking/cash balance observation is available for the combined total");
     }
+    if (missing.length) return unavailable("I could not fully check the recorded account groups, so I cannot confirm the total.");
     if (!selected.length) return unavailable("No recorded active balance is available for this account group; an absent balance is not zero.");
   }
   if (selected.some(row => row.balance === null)) return unavailable("A selected account has a missing or invalid balance. I cannot treat it as zero or return a partial total.");
   if (selected.some(row => !row.date || row.date > snapshot.today)) return unavailable("A selected account has a missing, invalid or future balance observation date. Reconcile or refresh it before using the balance.");
   const dates = [...new Set(selected.map(row => row.date!))].sort();
   const total = sum(selected.map(row => row.balance!));
-  const scope = entity ? selected[0].name : request.domain === "savings" ? "Savings" : "Checking/cash";
+  const scope = entity ? selected[0].name : accountGroup === "all" ? "Checking/cash and savings" : accountGroup === "savings" ? "Savings" : "Checking/cash";
   const dated = dates.length === 1 ? `as of ${dates[0]}` : `from observations dated ${dates[0]} through ${dates[dates.length-1]} (not one simultaneous balance)`;
   const detail = selected.length > 1 ? `\n\n${selected.map(row => `${row.name}: ${dollars(row.balance!)} as of ${row.date}.`).join("\n")}` : "";
-  return {text:`${scope}: ${dollars(total)} recorded ${dated}.${detail}\n\nThis is not a live available-funds or safe-to-spend amount.`, facts:{recordedBalance:total,accountCount:selected.length,accountName:entity?selected[0].name:null,accountType:entity?selected[0].kind:request.domain === "savings"?"savings":"checking/cash",balanceAsOf:dates.length===1?dates[0]:null,oldestObservationDate:dates[0],newestObservationDate:dates[dates.length-1],safeToSpend:null},sources,assumptions,missing,scenario:false};
+  return {text:`${scope}: ${dollars(total)} recorded ${dated}.${detail}\n\nThis is not a live available-funds or safe-to-spend amount.`, facts:{recordedBalance:total,accountCount:selected.length,accountName:entity?selected[0].name:null,accountType:entity?selected[0].kind:accountGroup === "all"?"checking/cash and savings":accountGroup === "savings"?"savings":"checking/cash",balanceAsOf:dates.length===1?dates[0]:null,oldestObservationDate:dates[0],newestObservationDate:dates[dates.length-1],safeToSpend:null},sources,assumptions,missing,scenario:false};
 }

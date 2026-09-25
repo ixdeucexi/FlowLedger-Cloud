@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { FLO_CLIENT_RESPONSE_TIMEOUT_MS, floStreamErrorCode, isFloTerminalEvent, isFloTimeoutCode, parseFloSseChunk } from "./floStream";
+import { FLO_CLIENT_RESPONSE_TIMEOUT_MS, floFailureDisplay, floStreamErrorCode, isFloTerminalEvent, isFloTimeoutCode, parseFloSseChunk } from "./floStream";
 
 test("parses grounded Flo v3 events split across arbitrary chunks", () => {
   const first = parseFloSseChunk("", 'data: {"type":"meta","version":3,"conversationId":"c","assistantMessageId":"a","dataAsOf":"2026-08-12T12:00:00Z","partial":false}\n\ndata: {"type":"text-');
@@ -59,4 +59,60 @@ test("saved interrupted Flo streams render a useful message instead of an empty 
   assert.match(source, /That earlier Flo check was interrupted/);
   assert.match(source, /Flo is finishing this account check/);
   assert.match(source, /staleStream \? "error" : status/);
+  assert.match(source, /status === "error" && !storedText.trim\(\)/);
+  assert.match(source, /floFailureDisplay\(row.error_code\)/);
+});
+
+test("Flo distinguishes expired sessions, limits, and deleted conversations from missing account data", () => {
+  const session = floFailureDisplay("session_required");
+  assert.match(session.action, /Sign in again/);
+  assert.equal(session.retryable, false);
+  const daily = floFailureDisplay("usage_limited");
+  assert.match(daily.action, /tomorrow/);
+  assert.equal(daily.retryable, false);
+  assert.match(floFailureDisplay("rate_limited").action, /Wait a minute/);
+  const deleted = floFailureDisplay("conversation_deleted");
+  assert.match(deleted.answer, /deleted while I was answering/);
+  assert.match(deleted.action, /New/);
+  assert.equal(deleted.retryable, false);
+  assert.match(floFailureDisplay("audit_unavailable").answer, /couldn't save/);
+  assert.equal(floFailureDisplay("answer_timeout").retryable, true);
+  assert.equal(floFailureDisplay("internal secret detail").answer.includes("secret"), false);
+});
+
+test("history cannot delete an active answer or hydrate over a newly sent question", () => {
+  const screen = readFileSync("app/(tabs)/flo.tsx", "utf8");
+  const bar = readFileSync("components/FloConversationBar.tsx", "utf8");
+  const send = screen.slice(screen.indexOf("const send = async"), screen.indexOf("const acceptAiConsent"));
+  assert.match(send, /const requestGeneration = nextFloRequestGeneration\(requestGenerationRef.current\)/);
+  assert.match(screen, /loadGeneration !== requestGenerationRef.current/);
+  const deleteAll = screen.slice(screen.indexOf("const removeAllConversations"), screen.indexOf("const exportConversations"));
+  assert.match(deleteAll, /activeRequestRef.current !== null \|\| historyMutationRef.current/);
+  assert.ok(deleteAll.indexOf("streamAbortRef.current?.abort()") < deleteAll.indexOf("await deleteAllFloConversations"));
+  assert.match(bar, /disabled=\{!props.conversations.length \|\| busy \|\| props.disabled\} onPress=\{\(\) => setConfirmDeleteAll/);
+  assert.match(bar, /if \(busy \|\| props.disabled\) return/);
+});
+
+test("temporary context is only sent with history disabled", () => {
+  const source = readFileSync("lib/floChat.ts", "utf8");
+  const screen = readFileSync("app/(tabs)/flo.tsx", "utf8");
+  assert.match(source, /input.historyEnabled === false \? \{ conversationContext: input.conversationContext \?\? \[\] \} : \{\}/);
+  assert.match(screen, /floConversationForRequest\(floPreferences.historyEnabled, priorRequest\?\.conversationId \?\? activeConversationId\)/);
+  assert.match(screen, /preferences.historyEnabled !== floPreferences.historyEnabled\) retryRequestRef.current = null/);
+});
+
+test("send and route prompts wait for scoped history preferences and controls lock during a request", () => {
+  const screen = readFileSync("app/(tabs)/flo.tsx", "utf8");
+  const bar = readFileSync("components/FloConversationBar.tsx", "utf8");
+  const preferences = readFileSync("lib/floPreferences.ts", "utf8");
+  const send = screen.slice(screen.indexOf("const send = async"), screen.indexOf("const acceptAiConsent"));
+  assert.match(send, /if \(!aiConsentReady \|\| !preferencesReady\) return/);
+  assert.ok(send.indexOf("!preferencesReady") < send.indexOf("createFloConversation"));
+  assert.match(screen, /floPreferencesReadyForScope\(preferencesScopeKey, floDataScopeKey\)/);
+  assert.match(screen, /!aiConsentReady \|\| !preferencesReady \|\| !user\?\.id/);
+  assert.match(screen, /editable=\{!historyBusy && preferencesReady\}/);
+  assert.match(screen, /loadedScope !== floDataScopeKeyRef.current/);
+  assert.match(preferences, /catch \{[\s\S]*historyEnabled: false/);
+  assert.match(bar, /Boolean\(props.disabled \|\| props.preferencesDisabled\)/);
+  assert.match(bar, /Switch accessibilityLabel=\{label\} disabled=\{disabled\}/);
 });

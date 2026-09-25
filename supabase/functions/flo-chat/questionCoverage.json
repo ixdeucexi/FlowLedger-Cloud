@@ -1,5 +1,15 @@
 {
   "version": 2,
+  "developmentEvaluation20260925": {
+    "status": "Supported-source safety and observed repairs passed independent review; universal natural-language support remains release-unverified.",
+    "receipt": "docs/flo-account-ai-upgrade-20260925.md",
+    "latestFullCorpus": {"candidate": "synthetic-v5", "questions": 79, "fullFinalCandidateRerun": false},
+    "subsequentTargetedRuns": [16, 8, 4],
+    "finalBackendTestsPassed": 364,
+    "productionDeployed": false,
+    "allNaturalLanguageCasesPassed": false,
+    "temporaryEvaluationEndpoint": "Retired to JWT-protected inert 404 handler; verified September 25, 2026 15:17 UTC"
+  },
   "auditDate": "2026-09-10",
   "evaluationStatus": "Finite representative corpus. Final v14 targeted repairs passed independently, but all 74 questions were not rerun on v14. No universal natural-language all-pass is claimed. Untested phrasings remain release-unverified. Per-family statuses describe source capability, not blanket passing results; production status is tracked in the linked receipt.",
   "liveEvaluationProgress": {

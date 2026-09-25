@@ -2,8 +2,8 @@ import { fetch as expoFetch } from "expo/fetch";
 
 import { supabase, supabaseAnonKey, supabaseUrl } from "@/lib/supabase";
 import { humanizeFloText } from "@/lib/floLanguage";
-import { collectFloHistoryPages, type FloReviewProposal } from "@/lib/floExperience";
-import { FLO_CLIENT_RESPONSE_TIMEOUT_MS, isFloTerminalEvent, parseFloSseChunk, type FloSource, type FloStreamEvent } from "@/lib/floStream";
+import { collectFloHistoryPages, type FloConversationContext, type FloReviewProposal } from "@/lib/floExperience";
+import { FLO_CLIENT_RESPONSE_TIMEOUT_MS, floFailureDisplay, isFloTerminalEvent, parseFloSseChunk, type FloSource, type FloStreamEvent } from "@/lib/floStream";
 
 export { parseFloSseChunk } from "@/lib/floStream";
 export type { FloSource, FloStreamEvent } from "@/lib/floStream";
@@ -47,7 +47,9 @@ export function mapFloStoredMessage(row: Record<string, any>, now = Date.now()):
       ? "That earlier Flo check was interrupted. Ask again when you're ready."
       : status === "streaming" && !storedText.trim()
         ? "Flo is finishing this account check..."
-        : humanizeFloText(storedText)
+        : status === "error" && !storedText.trim()
+          ? `${floFailureDisplay(row.error_code).answer} ${floFailureDisplay(row.error_code).action}`
+          : humanizeFloText(storedText)
     : storedText;
   return {
     id: String(row.id),
@@ -267,7 +269,7 @@ export async function listFloMessages(
 ): Promise<{ messages: FloStoredMessage[]; nextCursor: string | null }> {
   let query = supabase
     .from("flo_messages")
-    .select("id,role,content,status,source_refs,proposal,answer,followups,data_as_of,coverage,partial,created_at")
+    .select("id,role,content,status,error_code,source_refs,proposal,answer,followups,data_as_of,coverage,partial,created_at")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
@@ -292,6 +294,7 @@ export async function streamFloChat(input: {
   timezone: string;
   context?: { route?: string; entityType?: string; entityId?: string; date?: string; label?: string };
   historyEnabled?: boolean;
+  conversationContext?: FloConversationContext;
   previewTier?: "free" | "pro" | null;
   signal?: AbortSignal;
   onEvent: (event: FloStreamEvent) => void;
@@ -326,6 +329,7 @@ export async function streamFloChat(input: {
         assistantMessageId: input.assistantMessageId,
         context: input.context,
         historyEnabled: input.historyEnabled !== false,
+        ...(input.historyEnabled === false ? { conversationContext: input.conversationContext ?? [] } : {}),
         timezone: input.timezone,
         previewTier: input.previewTier ?? null,
       }),
@@ -369,7 +373,7 @@ export async function listAllFloMessages(conversationId: string): Promise<FloSto
   const rows = await collectFloHistoryPages(async (from, to) => {
     const { data, error } = await supabase
       .from("flo_messages")
-      .select("id,role,content,status,source_refs,proposal,answer,followups,data_as_of,coverage,partial,created_at")
+      .select("id,role,content,status,error_code,source_refs,proposal,answer,followups,data_as_of,coverage,partial,created_at")
       .eq("conversation_id", conversationId)
       .order("created_at", { ascending: true })
       .order("id", { ascending: true })

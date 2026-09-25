@@ -7,7 +7,7 @@ import { isBillActiveForMonth } from "../../../artifacts/mobile/lib/schedule.ts"
 import { requiredDebtPlanTotal } from "../../../artifacts/mobile/lib/debtPaymentPlan.ts";
 import { recordedSnowballTarget } from "./snowballTarget.ts";
 import { projectionInput, buildAnalysisForecast } from "./analysisProjection.ts";
-import { analyticTransactions, aggregateSpending } from "./analysisSpending.ts";
+import { analyticTransactions, aggregateSpending, historicalExpenseCoverage } from "./analysisSpending.ts";
 import { dayAdd, dollars, label, matches, monthEnd, monthStart, numeric, requireSources, round, shiftMonth, sum, type AnalysisRequest, type AnalysisResult, type AnalysisSnapshot } from "./analysisTypes.ts";
 
 export function wealthAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequest): AnalysisResult {
@@ -45,8 +45,8 @@ export function wealthAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequ
     if(request.entity && named.length!==1)return {text:"Please use the full recorded name of exactly one active debt. I cannot substitute the whole plan's payoff date for an unidentified debt.",facts,sources,assumptions,missing:["The debt name does not identify exactly one active debt; use its full name"],scenario:Boolean(request.scenario)};
     if(rows("bills").some(r=>r.is_debt && numeric(r.balance)===null)) missing.push("A debt balance is missing");
     const total=sum(raw.map(r=>Number(r.balance)));
-    facts.totalDebt=total; facts.debtCount=raw.length;
-    lines.push(`Your recorded active debt is ${dollars(total)} across ${raw.length} debts.`);
+    facts.totalDebt=total; facts.debtCount=raw.length; facts.debtScope="configured_plan_only";
+    lines.push(`Your configured FlowLedger debt-plan balances total ${dollars(total)} across ${raw.length} debts. Connected credit balances are reviewed separately and may not be included here; this is not a verified total of every debt.`);
     if(named.length) lines.push(...named.slice(0,6).map(r=>`${label(r.name)}: ${dollars(Number(r.balance))}; configured payment ${numeric(r.amount)===null ? "unavailable" : dollars(Number(r.amount))}; APR ${numeric(r.interest_rate)===null ? "unavailable" : `${r.interest_rate}%`}.`));
     assumptions.push("Configured payments are your FlowLedger plan, not independently verified lender minimums. Check the latest statement before changing a required payment.");
     if(raw.some(r=>numeric(r.amount)===null || numeric(r.interest_rate)===null || !["monthly",null,undefined].includes(r.frequency))) missing.push("A complete monthly payoff projection needs every debt's APR and monthly payment; nonmonthly debt schedules must be reviewed in the dated planner");
@@ -98,15 +98,21 @@ export function wealthAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequ
   } else if(request.domain === "budget") {
     sources=["category_budgets","transactions","plaid_transactions","plaid_accounts","bills","goals"];
     const activity=analyticTransactions(snapshot); missing.push(...activity.missing);
-    const start=request.startDate??monthStart(snapshot.today), end=request.endDate??snapshot.today;
+    const start=request.startDate??monthStart(snapshot.today), requestedEnd=request.endDate??snapshot.today;
+    const end=requestedEnd<snapshot.today?requestedEnd:snapshot.today;
     const totals=aggregateSpending(activity.rows,start,end);
-    const budgets=rows("category_budgets").filter(r=>{const date=`${r.year}-${String(Number(r.month)+1).padStart(2,"0")}-01`;return date>=monthStart(start)&&date<=monthStart(end)&&matches(r.category,request.category);});
+    const budgets=rows("category_budgets").filter(r=>{const date=`${r.year}-${String(Number(r.month)+1).padStart(2,"0")}-01`;return date>=monthStart(start)&&date<=monthStart(requestedEnd)&&matches(r.category,request.category);});
     if(!budgets.length) missing.push("No matching category budget is recorded for that month");
     for(const b of budgets.slice(0,10)) {
       const budgetStart=`${b.year}-${String(Number(b.month)+1).padStart(2,"0")}-01`,budgetEnd=monthEnd(budgetStart)<end?monthEnd(budgetStart):end;
       const monthly=aggregateSpending(activity.rows,budgetStart,budgetEnd);
       const spent=monthly.categories.find(c=>c.name.toLowerCase()===String(b.category).toLowerCase())?.amount??0;
       if(numeric(b.amount)===null) { missing.push(`Budget amount unavailable for ${label(b.category)}`); continue; }
+      if(budgetStart>snapshot.today) {
+        lines.push(`${budgetStart.slice(0,7)} ${label(b.category)}: ${dollars(Number(b.amount))} planned budget. That month has not started; its spending and remaining budget are not yet known.`);
+        missing.push("Future budget spending and remaining amounts cannot be established from posted history");
+        continue;
+      }
       lines.push(`${budgetStart.slice(0,7)} ${label(b.category)}: ${dollars(spent)} classified spending of ${dollars(Number(b.amount))}; ${monthly.unresolved||activity.missing.length?"remaining unavailable until activity is fully classified":`${dollars(Number(b.amount)-spent)} remaining`} (month start through ${budgetEnd}).`);
     }
     if(request.operation==="plan") {
@@ -130,17 +136,20 @@ export function wealthAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequ
     if(goals.some(g=>numeric(g.current_amount)===null||numeric(g.target_amount)===null))missing.push("Goal target or current funding is unavailable");
     lines.push(...goals.slice(0,5).map(g=>`${label(g.name)}: ${numeric(g.current_amount)===null ? "unavailable" : dollars(Number(g.current_amount))} toward ${numeric(g.target_amount)===null ? "unavailable" : dollars(Number(g.target_amount))}${g.target_date?` by ${g.target_date}`:""}.`));
     if(request.domain==="emergency") {
-      const activity=analyticTransactions(snapshot); const start=shiftMonth(snapshot.today,-3), end=dayAdd(monthStart(snapshot.today),-1);
+      sources.push("monthly_overrides");
+      const activity=analyticTransactions(snapshot); const start=monthStart(shiftMonth(snapshot.today,-3)), end=dayAdd(monthStart(snapshot.today),-1);
       const prior=aggregateSpending(activity.rows,start,end);
       const monthly=round((prior.spending+prior.nonCardRepayments)/3);
       missing.push(...activity.missing);
-      const baselinePresent=[1,2,3].every(offset=>activity.rows.some(r=>r.date>=shiftMonth(snapshot.today,-offset)&&r.date<=monthEnd(shiftMonth(snapshot.today,-offset))));
-      if(!baselinePresent||activity.missing.length||prior.unresolved||prior.unclassifiedDebt||monthly<=0) missing.push("Three complete months of classified expenses and identified loan/card repayments are needed for a reliable emergency-fund target");
+      const expenseCoverage=historicalExpenseCoverage(snapshot,prior.rows,start,end);
+      missing.push(...expenseCoverage.missing);
+      const baselinePresent=[1,2,3].every(offset=>activity.rows.some(r=>r.date>=monthStart(shiftMonth(snapshot.today,-offset))&&r.date<=monthEnd(shiftMonth(snapshot.today,-offset))));
+      if(!baselinePresent||activity.missing.length||!expenseCoverage.complete||prior.unresolved||prior.unclassifiedDebt||monthly<=0) missing.push("Three complete months of classified expenses and identified loan/card repayments are needed for a reliable emergency-fund target");
       else {
         facts.monthlyExpenseBaseline=monthly; facts.threeMonthTarget=round(monthly*3); facts.sixMonthTarget=round(monthly*6);
         lines.push(`Using ${dollars(monthly)}/month of recorded consumption plus debt repayments, three months is ${dollars(monthly*3)} and six months is ${dollars(monthly*6)}.`);
         if(savings!==null) {facts.monthsCovered=round(savings/monthly); lines.push(`Savings cover approximately ${facts.monthsCovered} months of that baseline; ${dollars(Math.max(0,monthly*(request.target==="six_months"?6:3)-savings))} remains for the selected target.`);}
-        assumptions.push("This estimate uses all recorded expenses, not an inferred essential-only budget. Any earmarked or inaccessible savings should be deducted before treating it as an emergency fund.");
+        assumptions.push("This estimate uses retained posted transactions, not an inferred essential-only budget or proof every expense was recorded. Required payments must be reconciled to that history. Any earmarked or inaccessible savings should be deducted before treating it as an emergency fund.");
       }
     }
     if(request.amountRole==="contribution_amount" && request.amount!==null && request.amount>0 && goals.length===1) {
@@ -150,17 +159,28 @@ export function wealthAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequ
     }
     if(request.purpose==="goal_timeline" || request.domain==="savings"&&request.operation==="plan") {
       facts.timelineOutcome="not_estimable";facts.timelineDuration=null;
+      if(request.timelineUnit)facts.timelineUnit=request.timelineUnit;
       const exactGoals=goals.filter(g=>!request.entity||String(g.name).trim().toLowerCase()===request.entity.trim().toLowerCase());
       const goal=request.entity&&exactGoals.length===1?exactGoals[0]:null;
       const current=goal?numeric(goal.current_amount):null;
       const goalTarget=request.amountRole==="target_balance"?request.amount:goal?numeric(goal.target_amount):null;
       const contribution=request.contribution;
+      if(contribution){facts.explicitContribution=contribution.amount;facts.contributionFrequency=contribution.frequency;}
       if(!goal||current===null||goalTarget===null) {
         lines.unshift("I cannot estimate that goal's timeline until one specific goal and its recorded funding and target are known. A total savings balance is not the same as that goal's earmarked funds.");
         missing.push("A unique goal with known funding and target is required for its timeline");
       } else if(current>=goalTarget) {
         facts.timelineOutcome="already_reached";facts.timelineDuration=0;
         lines.unshift(`Your recorded ${label(goal.name)} funding already reaches the ${dollars(goalTarget)} target; no additional waiting time is needed.`);
+      } else if(request.timelineUnit==="household_paydays"&&contribution?.frequency!=="paycheck") {
+        const cadence=contribution?` You specified ${dollars(contribution.amount)} ${contribution.frequency==="monthly"?"per month":"once"}; that does not establish an amount per paycheck.`:"";
+        lines.unshift(`How much would you like to set aside from each paycheck for ${label(goal.name)}? I need that amount to calculate how many paychecks will cover its ${dollars(goalTarget-current)} remaining target.${cadence}`);
+        missing.push("A stated contribution amount per paycheck is needed to calculate the requested goal paycheck count");
+      } else if(request.timelineUnit==="months"&&contribution?.frequency==="paycheck") {
+        const periods=Math.ceil((goalTarget-current)/contribution.amount);
+        facts.contributionPeriods=periods;
+        lines.unshift(`Scenario: ${label(goal.name)} needs ${periods} contributions at your stated ${dollars(contribution.amount)} per paycheck. I cannot translate those paychecks into calendar months without verified contribution dates. This does not confirm the contributions are affordable.`);
+        missing.push("Verified payday contribution dates are needed to express the goal timeline in the requested months");
       } else if(contribution&&contribution.frequency!=="once") {
         const periods=Math.ceil((goalTarget-current)/contribution.amount);
         facts.timelineOutcome="duration";facts.timelineDuration=periods;facts.timelineUnit=contribution.frequency==="monthly"?"months":"household_paydays";

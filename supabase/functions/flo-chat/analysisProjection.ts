@@ -6,16 +6,33 @@ import type { FinancialProjectionSnapshot } from "../../../artifacts/mobile/lib/
 import { analyticTransactions, aggregateSpending } from "./analysisSpending.ts";
 import { scheduleAnalysis } from "./analysisSchedule.ts";
 import { validIncomeEffectiveFrom, validIncomeExcludedDate } from "./analysisIncomeDates.ts";
+import { analysisProjectionSources } from "./analysisSnapshot.ts";
 import { dayAdd, dollars, label, matches, monthEnd, monthStart, numeric, requireSources, round, shiftMonth, sum, validDate, type AnalysisRequest, type AnalysisResult, type AnalysisSnapshot } from "./analysisTypes.ts";
 
-export const projectionSources = ["household_settings", "bills", "monthly_overrides", "bill_date_moves", "transactions", "accounts", "plaid_accounts", "plaid_transactions", "pending_plan_matches", "incomes", "goals", "extra_payments", "decisions"];
+export const projectionSources = analysisProjectionSources;
 
 const strictNumber = (v: unknown): number | null => (typeof v === "number" || (typeof v === "string" && /^[-+]?(?:\d+\.?\d*|\.\d+)$/.test(v.trim()))) && Number.isFinite(Number(v)) ? Number(v) : null;
 const exactName = (value: unknown, query: string | null) => !query || String(value ?? "").trim().toLocaleLowerCase() === query.trim().toLocaleLowerCase();
 
-export function projectionInput(snapshot: AnalysisSnapshot): { input: FinancialProjectionSnapshot; missing: string[]; anchorDate: string | null; current: number | null; availableNow: number | null; savings: number | null } {
-  const rows = (name: string) => snapshot.sources[name]?.rows ?? [];
+export function projectionInput(snapshot: AnalysisSnapshot): { input: FinancialProjectionSnapshot; missing: string[]; exclusions: string[]; anchorDate: string | null; current: number | null; availableNow: number | null; savings: number | null } {
+  const retainedRows = (name: string) => snapshot.sources[name]?.rows ?? [];
+  // Hidden posted bank entries remain real cash movements. Only records the
+  // canonical ledger excludes may bypass validation; hiding a bank debit must
+  // never silently erase it from the forecast.
+  const relevantRows: Record<string, Record<string, any>[]> = {
+    transactions: retainedRows("transactions").filter(row => !row.removed_at && row.pending !== true && (!row.deleted_at || row.source === "plaid" || Boolean(row.import_hash))),
+    plaid_transactions: retainedRows("plaid_transactions").filter(row => !row.removed_at),
+    // An archived bucket with no close is inconsistent but could still be an
+    // obligation. Keep it visible to validation rather than erase its amount.
+    goals: retainedRows("goals").filter(row => !row.closed_at && (!row.archived_at || row.goal_type === "planned_expense")),
+  };
+  const rows = (name: string) => relevantRows[name] ?? retainedRows(name);
+  const exclusions = Object.entries(relevantRows).flatMap(([table, relevant]) => {
+    const count = retainedRows(table).length - relevant.length;
+    return count ? [`${count} ${table === "goals" ? "closed or archived goals/buckets" : table === "transactions" ? "removed, pending, or deleted manual activity records" : "removed bank activity records"} are excluded from current-plan inputs under the app's ledger rules.`] : [];
+  });
   const missing = requireSources(snapshot, projectionSources);
+  if (rows("goals").some(row => row.archived_at && row.goal_type === "planned_expense" && !row.closed_at)) missing.push("An archived spending bucket is still open; verify whether its obligation was released");
   const rawSettings = rows("household_settings")[0];
   const numberFields = (table: string, fields: string[], optional = false) => rows(table).forEach(r => fields.forEach(field => {
     if (optional && r[field] == null) return;
@@ -98,7 +115,7 @@ export function projectionInput(snapshot: AnalysisSnapshot): { input: FinancialP
   };
   const pendingOutflows = -sum(input.pendingBankTransactions.filter(r => r.amount < 0).map(r => r.amount));
   const availableNow = anchor ? round(anchor.balance - pendingOutflows) : null;
-  return { input, missing: [...new Set(missing)], current: anchor?.balance ?? null, availableNow, anchorDate: anchor?.date ?? null, savings };
+  return { input, missing: [...new Set(missing)], exclusions, current: anchor?.balance ?? null, availableNow, anchorDate: anchor?.date ?? null, savings };
 }
 
 export function buildAnalysisForecast(snapshot: AnalysisSnapshot, endDate: string) {
@@ -188,7 +205,7 @@ export function forecastAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
   const safe = forecast.historyAvailable && !forecast.missing.length && !forecast.affordabilityMissing.length && forecast.availableNow !== null && forecast.anchorDate === snapshot.today ? round(Math.max(0, Math.min(forecast.availableNow, throughLow) - floor)) : null;
   const facts: AnalysisResult["facts"] = { startDate:start, contextStartDate:contextStart, projectedBalance: last.balance, projectedAfterEstimatedSpending: forecast.historyAvailable ? last.estimatedBalance : null, safeToSpendUnderPlan: safe, obligations, expectedIncome: income, minimumProjectedBalance: lowest.estimatedBalance, minimumDate: lowest.date, targetDate: end, cashCushion: floor, nextPayday: nextPayday ?? null, observedBalance: forecast.current, balanceAsOf: forecast.anchorDate, conservativeAvailableNow:forecast.availableNow };
   facts.affordabilityAssessmentThrough=riskEnd;facts.affordabilityMinimumBalance=riskLow.estimatedBalance;facts.affordabilityMinimumDate=riskLow.date;
-  const assumptions = ["Forecasts reuse FlowLedger's current bills, date moves, income schedule, debt allocations, pending-payment matches, and planned goals. Future deposits are expected, not guaranteed. Same-day end balances do not establish the order a bank will post payments.", forecast.historyAvailable ? `Estimated additional daily spending is ${dollars(forecast.dailyEstimate)}, based on the last three completed months of recorded non-bill-linked spending; this may overlap unlinked recurring charges.` : "No reliable three-month spending baseline is available. This is a scheduled-plan projection, not assurance that unrecorded living expenses are covered."];
+  const assumptions = ["Forecasts reuse FlowLedger's current bills, date moves, income schedule, debt allocations, pending-payment matches, and planned goals. Future deposits are expected, not guaranteed. Same-day end balances do not establish the order a bank will post payments.", forecast.historyAvailable ? `Estimated additional daily spending is ${dollars(forecast.dailyEstimate)}, based on the last three completed months of recorded non-bill-linked spending; this may overlap unlinked recurring charges.` : "No reliable three-month spending baseline is available. This is a scheduled-plan projection, not assurance that unrecorded living expenses are covered.", ...forecast.exclusions];
   const missing = [...forecast.missing,...forecast.affordabilityMissing];
   const lines: string[] = [];
   if (request.domain === "bills" || request.domain === "subscriptions") {

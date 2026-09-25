@@ -869,7 +869,9 @@ test("v3 endpoint enforces privacy, legacy rejection, and server-owned persisten
   assert.match(terminalMigration, /error_code = 'response_interrupted'/);
   assert.match(source, /code === "answer_timeout"/);
   assert.doesNotMatch(source, /error\.message\.slice\(0, 80\)/);
-  assert.match(source, /filter\(\(row: any\) => row\.role === "user"\)/);
+  assert.match(source, /loadAnalysisConversation\(\{client,householdId,conversationId,historyEnabled,userMessageId/);
+  assert.match(source, /transientContext:historyEnabled\?undefined:body\.conversationContext/);
+  assert.match(source, /conversation_deleted/);
   assert.doesNotMatch(source, /LEGACY DETERMINISTIC SNAPSHOT|body\.snapshot|legacyResponse/);
   assert.match(migration, /revoke insert on table public\.flo_usage from authenticated/i);
   assert.match(guardMigration, /current_user in \('authenticated', 'anon'\)/i);

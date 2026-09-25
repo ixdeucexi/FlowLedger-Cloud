@@ -53,6 +53,28 @@ export function floConversationForRequest(historyEnabled: boolean, activeConvers
   return historyEnabled ? activeConversationId : null;
 }
 
+export type FloConversationContext = Array<{ role: "user" | "assistant"; content: string }>;
+export const FLO_CONVERSATION_CONTEXT_MAX_BYTES = 24_000;
+
+export function floPreferencesReadyForScope(loadedScope: string | null, currentScope: string): boolean {
+  return loadedScope !== null && loadedScope === currentScope;
+}
+
+export function floConversationContext(
+  messages: Array<{ id: string; role: "user" | "flo"; text: string; thinking?: boolean }>,
+  excludedIds: string[] = [],
+): FloConversationContext {
+  const context: FloConversationContext = messages
+    .filter(message => !message.thinking && !excludedIds.includes(message.id) && message.text.trim())
+    .slice(-12)
+    .map(message => ({ role: message.role === "flo" ? "assistant" : "user", content: message.text.trim().slice(0, 2000) }));
+  const encoder = new TextEncoder();
+  while (context.length && encoder.encode(JSON.stringify(context)).byteLength > FLO_CONVERSATION_CONTEXT_MAX_BYTES) {
+    context.shift();
+  }
+  return context;
+}
+
 export function floEphemeralCleanupError(cleanedUp: boolean | undefined): string | null {
   return cleanedUp === false ? "Flo answered, but the private temporary chat could not be cleaned up. Retry cleanup before continuing." : null;
 }

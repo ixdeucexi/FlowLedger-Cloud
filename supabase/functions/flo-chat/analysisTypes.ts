@@ -6,7 +6,11 @@ export type AnalysisRequest = {
   metric?: "balance" | "apr" | "utilization" | "amount" | null;
   amountRole?: "none" | "target_balance" | "contribution_amount" | "payment_amount" | "purchase_amount" | "threshold";
   contribution?: { amount: number; frequency: "once" | "monthly" | "paycheck" } | null;
+  /** Preserve the duration unit requested by the user; it is not a contribution cadence. */
+  timelineUnit?: "months" | "household_paydays" | null;
   domain: AnalysisDomain;
+  /** Account grouping is independent of the calculator domain and named entity. */
+  accountGroup?: "checking" | "savings" | "all" | null;
   operation: "summary" | "detail" | "compare" | "minimum" | "maximum" | "threshold" | "plan" | "scenario" | "search" | "average";
   groupBy?: "category" | "merchant" | "none";
   incomeTiming?: "received" | "expected";

@@ -1,6 +1,5 @@
 import { evaluateDecision, type DecisionBaselineDay, type DecisionScenario } from "./decisions";
 import { localDateString } from "./dateLabels";
-import { compactFloText } from "./floLanguage";
 import type { PaycheckPlanResult } from "./paycheckPlanning";
 
 export interface FloBillMoveFact {
@@ -777,8 +776,7 @@ function buildLocalFloAnswer(message: string, facts: FloFacts, days: DecisionBas
 }
 
 export function localFloAnswer(message: string, facts: FloFacts, days: DecisionBaselineDay[]): string | null {
-  const answer = buildLocalFloAnswer(message, facts, days);
-  return answer ? compactFloText(answer) : null;
+  return buildLocalFloAnswer(message, facts, days);
 }
 
 export function fallbackFloAnswer(message: string, facts: FloFacts): string {

@@ -111,7 +111,8 @@ test('bill due cutoff cannot be consumed by elapsed settlement and next paycheck
 test('minimum payments and last-month merchant totals preserve their own readers',()=>{
   const last={...allocation,purpose:'transaction_last',domain:'transactions',operation:'detail'};
   assert.ok(validateAnalysisPlan('How much did I spend at Walmart last month?',{legacy:false,requests:[last]}).length);
-  assert.deepEqual(validateAnalysisPlan('How much did I spend at Walmart last month?',{legacy:false,requests:[{...last,purpose:'general',operation:'summary',merchant:'Walmart'}]}),[]);
+  assert.ok(validateAnalysisPlan('How much did I spend at Walmart last month?',{legacy:false,requests:[{...last,purpose:'general',operation:'summary',merchant:'Walmart'}]}).length);
+  assert.deepEqual(validateAnalysisPlan('How much did I spend at Walmart last month?',{legacy:false,requests:[{...last,purpose:'general',domain:'spending',operation:'summary',merchant:'Walmart'}]}),[]);
   assert.ok(validateAnalysisPlan('What required minimum payments remain?',{legacy:false,requests:[{...last,domain:'bills',purpose:'bill_settlement'}]}).length);
   assert.deepEqual(validateAnalysisPlan('What required minimum payments remain?',{legacy:false,requests:[{...last,domain:'debt',purpose:'general',operation:'summary'}]}),[]);
 });
@@ -272,24 +273,33 @@ test('emergency reserve months never become dollar amounts or contribution sched
 test('self-contained deterministic plans preserve typed intent slots and avoid dependence on model output',()=>{
   const cases=[['What will my balance be next Friday?','forecast'],['When will my checking balance reach $1000?','forecast'],['Compare the last week this month with the first week next month.','forecast'],['Am I spending more than last month?','spending'],['Find the $35 transaction.','transactions'],['How much do I need for three and six months of emergency savings?','emergency'],['What if CORE Test Rent increases to $1200?','forecast'],['What if my paycheck is $200 lower?','forecast'],['Should I put $100 toward debt or savings?','stability'],['What if I pay an extra $100 toward debt every month?','debt']];
   for(const [question,domain] of cases){const plan=deterministicAnalysisPlan(question,'2026-09-10','avalanche');assert.ok(plan,question);assert.equal(plan.requests[0].domain,domain);assert.equal(validateAnalysisRequest(plan.requests[0],'2026-09-10'),null,question);assert.equal(plan.requests[0].debtMethod,'avalanche');}
-  const rent=deterministicAnalysisPlan(cases[6][0],'2026-09-10').requests[0];assert.equal(rent.scenario.amountMode,'absolute');assert.equal(rent.scenario.entity,'CORE Test Rent');assert.equal(rent.scenario.repeat,'once');
+  const rent=deterministicAnalysisPlan(cases[6][0],'2026-09-10').requests[0];assert.equal(rent.scenario.amountMode,'absolute');assert.equal(rent.scenario.entity,'CORE Test Rent');assert.equal(rent.scenario.repeat,'monthly');
   const pay=deterministicAnalysisPlan(cases[7][0],'2026-09-10').requests[0];assert.equal(pay.scenario.amount,-200);assert.equal(pay.dateEvent,'next_payday');
   const add=deterministicAnalysisPlan('What if I add $100 per month toward my debt?','2026-09-10','avalanche').requests[0];assert.equal(add.scenario.amount,100);assert.equal(add.scenario.repeat,'monthly');assert.equal(add.debtMethod,'avalanche');
   for(const question of ['What will my Main Checking balance be next Friday?','What if Rent increases to $1200 monthly starting October 1?','What if my rent increases by $100?','What if our rent increases by $100?','What if the rent increases by $100?','What if "CORE Test Rent" increases by $100?','Should I put $100 toward debt or savings next month?','Find the $35 transaction at Walmart last month','What if I pay an extra $100 toward Main Card debt every month?'])assert.equal(deterministicAnalysisPlan(question,'2026-09-10'),null,question);
 });
 
-test('runtime skips direct grammar plans when conversation context exists and clarifies orphan before interpretation',()=>{
+test('runtime preserves conversational scope except explicit current account groups and clarifies orphan before interpretation',()=>{
   const source=readFileSync(new URL('./analysisPlanner.ts',import.meta.url),'utf8');
-  assert.match(source,/prior\.length===0\?deterministicAnalysisPlan\(question,today,settings\?\.payment_method/);
+  assert.match(source,/!prior\.length\|\|candidate\?\.requests\.every\(r=>r\.purpose==="current_balance"&&r\.accountGroup\)/);
   assert.ok(source.indexOf('if(clarification)return recordAnalysis')<source.indexOf('const interpret='));
   assert.match(source,/if\(clarification\)return recordAnalysis\(runtime,\[clarification\],null,\{inputTokens:0,outputTokens:0\}\)/);
-  assert.match(source,/data:priorRows,error:historyError/);
-  assert.ok(source.indexOf('if(historyError)return recordAnalysis')<source.indexOf('const prior='));
-  assert.ok(source.indexOf('if(historyError)return recordAnalysis')<source.indexOf('const interpret='));
+  assert.match(source,/loadAnalysisConversation/);
+  assert.ok(source.indexOf('catch {return recordAnalysis')<source.indexOf('const prior='));
+  assert.ok(source.indexOf('catch {return recordAnalysis')<source.indexOf('const interpret='));
   assert.match(source,/Conversation context could not be verified/);
   assert.ok(source.indexOf('if(error)return recordAnalysis')<source.indexOf('let timeZone='));
   assert.match(source,/Household planning settings could not be verified/);
-  assert.match(source,/:\{data:\[\],error:null\}/);
+  assert.match(source,/conversation\.filter\(turn=>turn.role==="user"\)/);
+});
+
+test('runtime rechecks calculation dependencies rather than narrower presentation evidence',()=>{
+  const source=readFileSync(new URL('./analysisPlanner.ts',import.meta.url),'utf8').replace(/\s+/g,'');
+  // Debt scenarios consume transactions, income and other projection inputs
+  // even though their result.sources lists only the displayed debt evidence.
+  assert.ok(source.includes('constrequestedSources=[...newSet(plan.requests.flatMap(analysisSourceDependencies))]'));
+  assert.ok(source.includes('verifyAnalysisSnapshot(runtime.client,snapshot,requestedSources.filter(table=>snapshot.sources[table]?.complete))'));
+  assert.ok(!source.includes('results.flatMap(result=>result.sources)'), 'presentation sources must not replace the calculation dependency graph');
 });
 
 test('orphan contribution asks its target without invented financial facts and preserves conversation followups',()=>{

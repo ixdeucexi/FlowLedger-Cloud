@@ -30,6 +30,7 @@ import {
 } from "./contract.ts";
 import { createFloTools, executeFloReadTools, summarizeToolPayload, type FloToolRuntime } from "./tools.ts";
 import { runFinancialAnalysis } from "./analysisPlanner.ts";
+import { loadAnalysisConversation } from "./analysisContext.ts";
 import { isAppNavigationQuestion, safeAnalysisFailureCodes } from "./analysisSemantics.ts";
 
 const cors = {
@@ -202,6 +203,7 @@ async function audit(
 ) {
   if (!server) throw new Error("audit_unavailable");
   const { error } = await server.from("flo_audit_events").insert({ policy_version: FLO_V3_POLICY_VERSION, ...row });
+  if (error?.code === "23503" && /conversation_id|message_id/.test(error.message ?? "")) throw new Error("conversation_deleted");
   if (error) throw new Error("audit_unavailable");
 }
 
@@ -264,7 +266,12 @@ async function finalizeFloResponse(
     p_ephemeral: input.ephemeral,
   });
   if (error) throw new Error(error.message?.includes("ephemeral_cleanup_failed") ? "ephemeral_cleanup_failed" : "terminal_persistence_failed");
-  if (data !== true) throw new Error("terminal_already_finalized");
+  if (data !== true) {
+    const { data: remaining, error: lookupError } = await server.from("flo_conversations").select("id")
+      .eq("id", input.conversationId).eq("household_id", input.householdId).eq("created_by", input.userId).maybeSingle();
+    if (!lookupError && !remaining) throw new Error("conversation_deleted");
+    throw new Error("terminal_already_finalized");
+  }
 }
 
 async function cleanupEphemeral(server: ServerClient, conversationId: string, householdId: string, userId: string, ephemeral: boolean) {
@@ -483,7 +490,7 @@ async function handleV3(
         const appNavigationQuestion = isAppNavigationQuestion(message);
         const analysisApiKey = Deno.env.get("OPENAI_API_KEY");
         const financialAnalysis = !forbiddenRequest.test(message) && !preserveVerifiedShortcut && !appNavigationQuestion && analysisApiKey
-          ? await withinHardDeadline(runFinancialAnalysis({ runtime: toolRuntime, question: message, apiKey: analysisApiKey, modelId, conversationId:conversationId!,historyEnabled, safetyIdentifier: await stableSafetyIdentifier(userId, Deno.env.get("FLO_SAFETY_IDENTIFIER_SECRET")!) }), hardAnswerDeadlineMs)
+          ? await withinHardDeadline(runFinancialAnalysis({ runtime: toolRuntime, question: message, apiKey: analysisApiKey, modelId, conversationId:conversationId!,historyEnabled,userMessageId,transientContext:historyEnabled?undefined:body.conversationContext, safetyIdentifier: await stableSafetyIdentifier(userId, Deno.env.get("FLO_SAFETY_IDENTIFIER_SECRET")!) }), hardAnswerDeadlineMs)
           : null;
         if (forbiddenRequest.test(message)) {
           answer = { answer: securityRefusal, claims: [{ kind: "status", label: "Flo access", field: "status", value: "restricted", evidenceIds: ["policy:account-only"] }], caveat: null, evidenceIds: ["policy:account-only"], followups: ["Ask me about your active household plan."] };
@@ -535,10 +542,8 @@ async function handleV3(
             providerOptions: { openai: { store: false, safetyIdentifier, parallelToolCalls: false, reasoningEffort: "low", textVerbosity: "low" } satisfies OpenAILanguageModelResponsesOptions },
           });
           const { data: memory } = await client.from("flo_household_memory").select("enabled,preferences").eq("household_id", householdId).eq("user_id", userId).maybeSingle();
-          const { data: recentRows } = historyEnabled
-            ? await client.from("flo_messages").select("role,content").eq("conversation_id", conversationId).eq("status", "completed").order("created_at", { ascending: false }).limit(12)
-            : { data: [] };
-          const privateContext = (recentRows ?? []).filter((row: any) => row.role === "user").reverse().map((row: any) => `Prior user question: ${String(row.content).slice(0, 1200)}`).join("\n");
+          const conversationTurns = await loadAnalysisConversation({client,householdId,conversationId,historyEnabled,userMessageId,transientContext:historyEnabled?undefined:body.conversationContext});
+          const privateContext = JSON.stringify(conversationTurns);
           const preferenceNote = memory?.enabled && typeof memory.preferences?.note === "string" ? memory.preferences.note.slice(0, 240) : "";
           failureStage = "generation";
           const result = await withinHardDeadline(agent.generate({
@@ -590,7 +595,9 @@ async function handleV3(
           }
         }
 
-        answer.answer = cleanText(answer.answer, deterministicIntent === "financial_analysis" ? 12000 : 4000);
+        // Financial calculations append essential scope/assumption warnings.
+        // Never slice those off to satisfy a presentation character budget.
+        answer.answer = deterministicIntent === "financial_analysis" ? answer.answer.trim() : cleanText(answer.answer, 4000);
         const answerEnvelope = { ...answer, dataAsOf: aggregate.dataAsOf, coverage: aggregate.coverage, partial: aggregate.partial };
         failureStage = "persistence";
         await finalizeFloResponse(server!, {
@@ -611,6 +618,12 @@ async function handleV3(
         if (ephemeral) emitEvent("ephemeral-cleanup", { status: "completed" });
       } catch (error) {
         let code = publicFailureCode(error);
+        if (error instanceof Error && error.message === "conversation_deleted") {
+          // Deletion is final. Never recreate a user's cleared history or try
+          // to persist an answer against an absent parent conversation.
+          emitEvent("error", {code:"conversation_deleted",message:"This chat was deleted while I was answering. Start a new chat to continue."});
+          return new Response(new ReadableStream({start(controller){bufferedEvents.forEach(event=>controller.enqueue(event));controller.close();}}),{headers:streamHeaders});
+        }
         const failureClass = classifyFloFailure(error);
         const failureReason = safeFloFailureReason(error);
         const semanticFailureCodes = safeAnalysisFailureCodes(error);

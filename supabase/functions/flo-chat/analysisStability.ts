@@ -1,5 +1,5 @@
 import { buildAnalysisForecast, projectionSources } from "./analysisProjection.ts";
-import { aggregateSpending, analyticTransactions } from "./analysisSpending.ts";
+import { aggregateSpending, analyticTransactions, historicalExpenseCoverage } from "./analysisSpending.ts";
 import { scheduleAnalysis } from "./analysisSchedule.ts";
 import { dayAdd, dollars, label, matches, monthEnd, monthStart, numeric, round, shiftMonth, sum, type AnalysisRequest, type AnalysisResult, type AnalysisSnapshot } from "./analysisTypes.ts";
 
@@ -28,6 +28,10 @@ export function stabilityAnalysis(snapshot: AnalysisSnapshot, request: AnalysisR
   const activity=analyticTransactions(snapshot);
   const priorStart=shiftMonth(snapshot.today,-3), priorEnd=dayAdd(monthStart(snapshot.today),-1);
   const prior=aggregateSpending(activity.rows,priorStart,priorEnd);
+  // Historical surplus needs evidence that known paid bills are represented.
+  // Keep this separate from the current forecast, which includes future bills.
+  const expenseCoverage=historicalExpenseCoverage(snapshot,prior.rows,priorStart,priorEnd);
+  missing.push(...expenseCoverage.missing);
   const monthlyIncome=round(prior.income/3), monthlyExpense=round((prior.spending+prior.nonCardRepayments)/3);
   const nextMonth=shiftMonth(snapshot.today,1), nextMonthEnd=monthEnd(nextMonth);
   const nextMonthObligations=-sum(events.filter(e=>e.amount<0&&e.date>=nextMonth&&e.date<=nextMonthEnd).map(e=>e.amount));
@@ -36,6 +40,7 @@ export function stabilityAnalysis(snapshot: AnalysisSnapshot, request: AnalysisR
   const incompleteMonthTarget=request.target==="month_ahead"&&request.amount===null&&!forecast.historyAvailable;
   const remaining=free===null?null:round(Math.max(0,target-free));
   const facts:AnalysisResult["facts"]={currentPlanBuffer:free,cashCushion:floor,nextPayday:nextDate??null,nextPaycheck:nextPay,oneMonthTarget:monthTarget,target,remaining,minimumBalance:low.estimatedBalance,minimumDate:low.date,...contributionFacts};
+  if(!expenseCoverage.complete){facts.historicalMonthlySurplus=null;facts.daysAhead=null;}
   if(!forecast.historyAvailable)facts.oneMonthTarget=null;
   if(incompleteMonthTarget){facts.target=null;facts.monthScheduledObligations=nextMonthObligations;missing.push("The full month-ahead target is unknown without everyday living costs; scheduled obligations are only one portion");}
   const lines=[free===null?`Your available cash buffer cannot yet be verified. The recorded plan's lowest projected balance is ${dollars(low.estimatedBalance)} on ${low.date}, with a ${dollars(floor)} cushion.`:`Your checked plan has ${dollars(free)} of additional cash buffer above the ${dollars(floor)} cushion. Its lowest projected balance is ${dollars(low.estimatedBalance)} on ${low.date}.`];
@@ -50,13 +55,16 @@ export function stabilityAnalysis(snapshot: AnalysisSnapshot, request: AnalysisR
   }
   if(["buffer","stability","paycheck","health"].includes(request.domain)) {
     lines.push(incompleteMonthTarget?`The scheduled-obligation portion of getting one month ahead is ${dollars(nextMonthObligations)}. The full target is unknown until everyday living costs are included.`:`A ${request.target==="month_ahead"?"month-ahead":"paycheck/buffer"} target is ${dollars(target)}${remaining===null?"; the remaining amount cannot be verified until the available buffer is known":`, needing another ${dollars(remaining)} beyond that available buffer`}.`);
-    const monthsOfHistory=[1,2,3].every(offset=>activity.rows.some(r=>r.date>=shiftMonth(snapshot.today,-offset)&&r.date<=monthEnd(shiftMonth(snapshot.today,-offset))))&&!activity.missing.length&&!prior.unresolved&&!prior.unclassifiedDebt;
+    const monthsOfHistory=[1,2,3].every(offset=>activity.rows.some(r=>r.date>=shiftMonth(snapshot.today,-offset)&&r.date<=monthEnd(shiftMonth(snapshot.today,-offset))))&&!activity.missing.length&&!prior.unresolved&&!prior.unclassifiedDebt&&expenseCoverage.complete;
     if(monthsOfHistory) {
       const surplus=round(monthlyIncome-monthlyExpense);
       facts.historicalMonthlySurplus=surplus;
       if(free!==null&&monthlyExpense>0){facts.daysAhead=round(free/(monthlyExpense/30.4375));lines.push(`Your available buffer covers about ${facts.daysAhead} days at the recorded expense pace. This is an average-spending measure, not a guarantee bills arrive evenly.`);}
       lines.push(`Recorded monthly average: ${dollars(monthlyIncome)} confirmed income versus ${dollars(monthlyExpense)} consumption and debt payments, leaving ${dollars(surplus)} before other unclassified flows.`);
-      if(surplus>0&&remaining!==null&&remaining>0) {
+      // A hypothetical monthly capacity is not an amount the user has chosen
+      // to save from each paycheck. Do not use it to answer a paycheck count,
+      // or compete with an explicitly stated contribution schedule.
+      if(surplus>0&&remaining!==null&&remaining>0&&!proposed&&request.timelineUnit!=="household_paydays") {
         const monthlyCapacity=Math.min(surplus,Math.max(0,low.estimatedBalance-floor));
         if(monthlyCapacity>0) {
           const months=Math.ceil(remaining/monthlyCapacity);
@@ -81,17 +89,23 @@ export function stabilityAnalysis(snapshot: AnalysisSnapshot, request: AnalysisR
     const historicalPaydays=[...new Set(activity.rows.filter(r=>r.kind==="income"&&r.date>=priorStart&&r.date<=priorEnd).map(r=>r.date))];
     const before=historicalPaydays.map(date=>closes.find(c=>c.balance_date===dayAdd(date,-1))).filter(Boolean);
     const tight=before.filter(c=>Number(c!.checking_balance)<floor).length;
-    if(snapshot.sources.household_daily_checking_closes?.complete && before.length>=3 && new Set(before.map(c=>String(c!.balance_date).slice(0,7))).size>=2 && prior.income>0 && !prior.unresolved && !prior.unclassifiedDebt) lines.push(`${tight} of ${before.length} observed pre-payday balances were below your cushion. Combined with income, expenses and the forecast, ${tight>=Math.ceil(before.length/2)&&monthlyIncome<=monthlyExpense ? "this is evidence of paycheck-to-paycheck pressure" : "this does not by itself establish persistent paycheck-to-paycheck dependence"}.`);
+    if(snapshot.sources.household_daily_checking_closes?.complete && before.length>=3 && new Set(before.map(c=>String(c!.balance_date).slice(0,7))).size>=2 && prior.income>0 && !prior.unresolved && !prior.unclassifiedDebt && expenseCoverage.complete) lines.push(`${tight} of ${before.length} observed pre-payday balances were below your cushion. Combined with income, expenses and the forecast, ${tight>=Math.ceil(before.length/2)&&monthlyIncome<=monthlyExpense ? "this is evidence of paycheck-to-paycheck pressure" : "this does not by itself establish persistent paycheck-to-paycheck dependence"}.`);
     else missing.push("Not enough recorded pre-payday balances for a reliable paycheck-to-paycheck diagnosis; a single low balance is not enough");
     assumptions.push("Historical progress uses recorded daily closes only, never today's forecast rewritten as past actuals. Debt principal changes cannot be reconstructed from payments alone.");
   }
   if(timeline) {
     facts.timelineOutcome="not_estimable";
     facts.timelineDuration=null;
+    if(request.timelineUnit)facts.timelineUnit=request.timelineUnit;
     const contribution=request.contribution;
     if(free!==null&&remaining===0) {
       facts.timelineOutcome="already_reached";facts.timelineDuration=0;
       lines.unshift(`You already have the ${dollars(target)} additional cash-buffer target under the checked plan. This means money above the ${dollars(floor)} cushion, not total checking or savings. No waiting time is needed.`);
+    } else if(request.timelineUnit==="household_paydays"&&contribution?.frequency!=="paycheck") {
+      const cadence=contribution?` You specified ${dollars(contribution.amount)} ${contribution.frequency==="monthly"?"per month":"once"}; that does not establish an amount per paycheck.`:"";
+      lines.unshift(`How much would you like to set aside from each paycheck toward the ${dollars(target)} additional cash buffer? I need that amount to calculate how many paychecks it would take.${cadence}`);
+      missing.push("A stated contribution amount per paycheck is needed to calculate the requested paycheck count");
+      if(free===null)missing.push("The current available buffer must also be verified before calculating the remaining paycheck count");
     } else if(free!==null&&remaining!==null&&remaining>0&&contribution) {
       // Explicit contributions are hypothetical, never inferred from the target.
       const periods=Math.ceil(remaining/contribution.amount);
@@ -99,6 +113,9 @@ export function stabilityAnalysis(snapshot: AnalysisSnapshot, request: AnalysisR
       if(contribution.frequency==="once") {
         lines.unshift(`Another ${dollars(remaining)} is needed above the ${dollars(floor)} cushion. One ${dollars(contribution.amount)} contribution ${periods<=1?"would cover that gap, but its date is not specified":"would not reach the target"}. I cannot give a timeline without a recurring contribution schedule.`);
         missing.push("A recurring contribution frequency or one-time date is needed for a timeline");
+      } else if(request.timelineUnit==="months"&&contribution.frequency==="paycheck") {
+        lines.unshift(`Scenario: your remaining additional buffer needs ${periods} contributions at your stated ${dollars(contribution.amount)} per paycheck. I cannot translate those paychecks into calendar months without verified contribution dates. This does not confirm the contributions are affordable.`);
+        missing.push("Verified payday contribution dates are needed to express the buffer timeline in the requested months");
       } else {
         facts.timelineOutcome="duration";facts.timelineDuration=periods;facts.timelineUnit=contribution.frequency==="monthly"?"months":"household_paydays";
         lines.unshift(`Scenario: reaching ${dollars(target)} of additional buffer above your ${dollars(floor)} cushion would take ${periods} ${contribution.frequency==="monthly"?"monthly contributions":"distinct household paydays"} at your stated ${dollars(contribution.amount)} each. That contribution has not been confirmed affordable; recheck the bill reserve before each transfer.`);
@@ -108,7 +125,7 @@ export function stabilityAnalysis(snapshot: AnalysisSnapshot, request: AnalysisR
       facts.timelineOutcome="duration";facts.timelineDuration=facts.monthsToTargetScenario;facts.timelineUnit="months";
       lines.unshift(`The checked scenario needs about ${facts.monthsToTargetScenario} months to build ${dollars(target)} of additional cash buffer above your ${dollars(floor)} cushion, targeting ${facts.targetMonthScenario}. This uses recorded surplus, not an assumed contribution equal to your target.`);
     } else {
-      const reason=free===null?"the available buffer, living-expense baseline or older obligations cannot yet be verified":"the checked plan has no positive sustainable contribution capacity";
+      const reason=free===null?"the available buffer, living-expense baseline or older obligations cannot yet be verified":!expenseCoverage.complete?"recorded bill payments are not fully reconciled with historical expenses":"the checked plan has no positive sustainable contribution capacity";
       lines.unshift(incompleteMonthTarget?"I cannot estimate when you will be one month ahead yet: the full target is unknown without everyday living costs.":`I cannot estimate how long it will take to reach ${dollars(target)} of additional cash buffer yet because ${reason}. The target is above your ${dollars(floor)} cushion, not your savings-account balance.`);
       missing.push(`Buffer timeline unavailable: ${reason}`);
     }

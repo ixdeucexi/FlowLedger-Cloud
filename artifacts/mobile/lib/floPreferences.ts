@@ -33,7 +33,8 @@ export async function readFloPreferences(userId: string, householdId: string): P
       preferenceNote: typeof parsed.preferenceNote === "string" ? parsed.preferenceNote.trim().slice(0, 240) : "",
     };
   } catch {
-    return DEFAULT_FLO_PREFERENCES;
+    // A failed local read must not enable retention for someone who turned it off.
+    return { ...DEFAULT_FLO_PREFERENCES, historyEnabled: false };
   }
 }
 
