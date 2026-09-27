@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { createClient } from "@supabase/supabase-js";
 import { buildBillPaymentHistory, loadBillPaymentHistoryRows, paymentHistoryRowInScope, type PaymentHistoryRow as Row, type PaymentHistoryScope } from "./billPaymentHistory";
 import { createNestedOverlayHistory } from "./nestedOverlayHistory";
 
@@ -110,7 +111,7 @@ function fakeClient(tables: Record<string, Row[]>, options: { error?: string; on
     const query = {
       select(value: string) { call.ops.push(["select", value]); return query; },
       eq(key: string, value: unknown) { call.ops.push(["eq", key, value]); predicates.push(row => row[key] === value); return query; },
-      contains(key: string, value: Row[]) { call.ops.push(["contains", key, value]); predicates.push(row => Array.isArray(row[key]) && value.every(needle => (row[key] as Row[]).some(item => Object.entries(needle).every(([k, v]) => item[k] === v)))); return query; },
+      contains(key: string, value: string) { call.ops.push(["contains", key, value]); const needles: Row[] = JSON.parse(value); predicates.push(row => Array.isArray(row[key]) && needles.every(needle => (row[key] as Row[]).some(item => Object.entries(needle).every(([k, v]) => item[k] === v)))); return query; },
       or(value: string) { call.ops.push(["or", value]); predicates.push(row => paymentHistoryRowInScope(row, scope)); return query; },
       order(key: string, value: unknown) { call.ops.push(["order", key, value]); return query; },
       limit(value: number) { call.ops.push(["limit", value]); limit = value; return query; },
@@ -128,7 +129,47 @@ test("loader pages each scoped exact branch, unions overlapping IDs and never qu
   const loaded = await loadBillPaymentHistoryRows(client, { billId: "bill-a", scope, pageSize: 2 });
   assert.equal(loaded.transactions.length, 5); assert.equal(loaded.overrides.length, 3); assert.ok(client.calls.some(call => call.ops.some(op => op[0] === "gt")));
   assert.ok(client.calls.every(call => ["transactions", "monthly_overrides"].includes(call.table) && call.ops.some(op => op[0] === "or") && call.ops.some(op => op[0] === "order" && op[1] === "id")));
-  assert.ok(client.calls.some(call => call.ops.some(op => op[0] === "contains" && JSON.stringify(op[2]).includes('"type":"extra_principal"'))));
+  assert.ok(client.calls.some(call => call.ops.some(op => op[0] === "contains" && String(op[2]).includes('"type":"extra_principal"'))));
+});
+
+test("installed Supabase client sends valid JSONB containment with escaped bill IDs and unchanged scope", async () => {
+  const billId = 'bill,"quoted"\\path&other=wrong';
+  for (const membership of [scope, { ...scope, role: "viewer" as const }]) {
+    const requests: URL[] = [];
+    const client = createClient("https://payment-history.test", "test-public-key", {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      global: { fetch: async (input, init) => {
+        assert.equal(init?.method, "GET");
+        const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+        requests.push(url);
+        // This is the real installed SDK's wire format, not fakeClient's
+        // semantic contains implementation. No network request is made.
+        const predicate = url.searchParams.get("review_allocations");
+        if (predicate) {
+          assert.ok(predicate.startsWith("cs.["), predicate);
+          const value = JSON.parse(predicate.slice(3));
+          assert.equal(value.length, 1); assert.equal(value[0].targetId, billId);
+          assert.ok(["bill", "extra_principal"].includes(value[0].type));
+        }
+        return new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } });
+      } },
+    });
+    const result = await loadBillPaymentHistoryRows(client, { billId, scope: membership });
+    assert.deepEqual(result, { transactions: [], overrides: [] }); assert.equal(requests.length, 5);
+    const predicates = requests.map(url => url.searchParams.get("review_allocations")).filter((value): value is string => value !== null);
+    assert.deepEqual(predicates.sort(), ["bill", "extra_principal"].map(type => `cs.${JSON.stringify([{ type, targetId: billId }])}`).sort());
+    for (const url of requests) {
+      assert.equal(url.searchParams.get("order"), "id.asc"); assert.equal(url.searchParams.get("limit"), "500");
+      assert.equal(url.searchParams.get("other"), null, "bill ID text must not become a separate filter");
+      if (membership.role === "owner") {
+        assert.equal(url.searchParams.get("or"), `(household_id.eq.${householdId},and(household_id.is.null,user_id.eq.${userId}))`);
+      } else {
+        assert.equal(url.searchParams.get("or"), null); assert.equal(url.searchParams.get("household_id"), `eq.${householdId}`);
+      }
+    }
+    assert.ok(requests.some(url => url.searchParams.get("linked_bill_id") === `eq.${billId}`));
+    assert.ok(requests.some(url => url.searchParams.get("debt_applied_bill_id") === `eq.${billId}`));
+  }
 });
 
 test("loader retrieves exact removed-manual replacement without guessing merchant names", async () => {

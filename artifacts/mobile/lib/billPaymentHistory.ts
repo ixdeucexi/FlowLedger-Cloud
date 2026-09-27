@@ -205,8 +205,10 @@ export async function loadBillPaymentHistoryRows(client: { from(table: string): 
   const [direct, debt, allocated, extraPrincipal, overrides] = await Promise.all([
     read("transactions", query => query.eq("linked_bill_id", billId)),
     read("transactions", query => query.eq("debt_applied_bill_id", billId)),
-    read("transactions", query => query.contains("review_allocations", [{ type: "bill", targetId: billId }])),
-    read("transactions", query => query.contains("review_allocations", [{ type: "extra_principal", targetId: billId }])),
+    // This column is JSONB. A JS array selects the SDK's Postgres-array
+    // serializer (cs.{[object Object]}), so pass a serialized JSON array.
+    read("transactions", query => query.contains("review_allocations", JSON.stringify([{ type: "bill", targetId: billId }]))),
+    read("transactions", query => query.contains("review_allocations", JSON.stringify([{ type: "extra_principal", targetId: billId }]))),
     read("monthly_overrides", query => query.eq("bill_id", billId)),
   ]);
   const unique = new Map<string, PaymentHistoryRow>();
