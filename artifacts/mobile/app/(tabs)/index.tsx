@@ -849,6 +849,11 @@ function MobileDashboardContent({
   const dashboardNextPaydayFull = algorithmSuite.stability.nextPaycheckLabel || "Not scheduled";
   const dashboardNextPayday = compactDateLabel(dashboardNextPaydayFull);
   const dashboardPlanned = Math.max(0, cashFlow.totalBillsDue + cashFlow.goalAllocations);
+  const dashboardPlanRemaining = cashFlow.monthlyIncome - dashboardPlanned;
+  const dashboardPlanIsShort = dashboardPlanRemaining < 0;
+  const dashboardCommitmentPercent = cashFlow.monthlyIncome > 0
+    ? Math.max(0, Math.round((dashboardPlanned / cashFlow.monthlyIncome) * 100))
+    : 0;
   const dashboardProgress = cashFlow.monthlyIncome > 0
     ? Math.max(0, Math.min(1, dashboardPlanned / cashFlow.monthlyIncome))
     : 0;
@@ -1323,31 +1328,68 @@ function MobileDashboardContent({
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Open monthly forecast progress"
+        accessibilityLabel={cashFlow.monthlyIncome > 0
+          ? `Open monthly plan. ${formatDashboardCurrency(cashFlow.monthlyIncome)} income, ${formatDashboardCurrency(dashboardPlanned)} committed, ${formatDashboardCurrency(Math.abs(dashboardPlanRemaining))} ${dashboardPlanIsShort ? "short" : "left after the plan"}.`
+          : `Open monthly plan. No income is planned yet. ${formatDashboardCurrency(dashboardPlanned)} is committed to bills and goals.`}
         onPress={() => router.push("/(tabs)/monthly" as any)}
         style={({ pressed }) => [styles.dashboardProgressCard, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.78 : 1 }]}
       >
         <View style={styles.dashboardProgressHeader}>
           <View style={styles.dashboardProgressHeaderCopy}>
-            <AppText tone="title" style={[styles.dashboardProgressTitle, { color: c.foreground }]}>Monthly progress</AppText>
-            <AppText style={[styles.dashboardProgressCopy, { color: c.mutedForeground }]}>Your planned income and commitments</AppText>
+            <AppText tone="title" style={[styles.dashboardProgressTitle, { color: c.foreground }]}>This month&apos;s plan</AppText>
+            <AppText style={[styles.dashboardProgressCopy, { color: c.mutedForeground }]}>Income minus planned bills and goals</AppText>
           </View>
           <Feather name="arrow-up-right" size={18} color={c.primary} />
         </View>
-        <View style={[styles.dashboardProgressTrack, { backgroundColor: c.muted }]}>
-          <View style={[styles.dashboardProgressFill, { width: `${dashboardProgress * 100}%` as any }]} />
+
+        <View style={styles.dashboardPlanOutcome}>
+          <AppText
+            tone="number"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.72}
+            style={[styles.dashboardPlanOutcomeValue, { color: cashFlow.monthlyIncome <= 0 || dashboardPlanIsShort ? c.warning : c.success }]}
+          >
+            {cashFlow.monthlyIncome <= 0 ? "No income planned" : formatDashboardCurrency(Math.abs(dashboardPlanRemaining))}
+          </AppText>
+          <AppText style={[styles.dashboardPlanOutcomeLabel, { color: c.mutedForeground }]}>
+            {cashFlow.monthlyIncome <= 0
+              ? "Add expected income to complete the plan"
+              : dashboardPlanIsShort
+                ? "more is committed than planned income"
+                : "left after planned bills and goals"}
+          </AppText>
         </View>
-        <View style={styles.dashboardProgressStats}>
-          <View style={styles.dashboardProgressStat}>
-            <View style={[styles.dashboardProgressDot, { backgroundColor: "#4f86ff" }]} />
-            <AppText style={[styles.dashboardProgressLabel, { color: c.mutedForeground }]}>Income</AppText>
-            <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.dashboardProgressValue, { color: c.foreground }]}>{formatDashboardCurrency(cashFlow.monthlyIncome)}</AppText>
+
+        {cashFlow.monthlyIncome > 0 ? (
+          <>
+            <View style={[styles.dashboardProgressTrack, { backgroundColor: c.muted }]}>
+              <View style={[styles.dashboardProgressFill, { width: `${dashboardProgress * 100}%` as any, backgroundColor: dashboardPlanIsShort ? c.warning : "#38bdf8" }]} />
+            </View>
+            <AppText style={[styles.dashboardCommitmentLabel, { color: dashboardPlanIsShort ? c.warning : c.mutedForeground }]}>
+              {dashboardCommitmentPercent}% of planned income is committed
+            </AppText>
+          </>
+        ) : null}
+
+        <View style={[styles.dashboardPlanBreakdown, { borderTopColor: c.border }]}>
+          <View style={styles.dashboardPlanBreakdownRow}>
+            <View style={styles.dashboardPlanBreakdownLabelWrap}>
+              <View style={[styles.dashboardProgressDot, { backgroundColor: "#4f86ff" }]} />
+              <AppText style={[styles.dashboardProgressLabel, { color: c.mutedForeground }]}>Planned income</AppText>
+            </View>
+            <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={[styles.dashboardPlanBreakdownValue, { color: c.foreground }]}>
+              {formatDashboardCurrency(cashFlow.monthlyIncome)}
+            </AppText>
           </View>
-          <View style={[styles.dashboardProgressDivider, { backgroundColor: c.border }]} />
-          <View style={styles.dashboardProgressStat}>
-            <View style={[styles.dashboardProgressDot, { backgroundColor: c.success }]} />
-            <AppText style={[styles.dashboardProgressLabel, { color: c.mutedForeground }]}>Planned</AppText>
-            <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.dashboardProgressValue, { color: c.foreground }]}>{formatDashboardCurrency(dashboardPlanned)}</AppText>
+          <View style={styles.dashboardPlanBreakdownRow}>
+            <View style={styles.dashboardPlanBreakdownLabelWrap}>
+              <View style={[styles.dashboardProgressDot, { backgroundColor: c.primary }]} />
+              <AppText style={[styles.dashboardProgressLabel, { color: c.mutedForeground }]}>Bills and goals</AppText>
+            </View>
+            <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={[styles.dashboardPlanBreakdownValue, { color: c.foreground }]}>
+              {formatDashboardCurrency(dashboardPlanned)}
+            </AppText>
           </View>
         </View>
       </Pressable>
@@ -2160,14 +2202,18 @@ const styles = StyleSheet.create({
   dashboardProgressHeaderCopy: { flex: 1, minWidth: 0 },
   dashboardProgressTitle: { fontSize: 18, letterSpacing: -0.4 },
   dashboardProgressCopy: { fontSize: 12, fontFamily: "Inter_500Medium", marginTop: 3 },
-  dashboardProgressTrack: { height: 11, borderRadius: 999, overflow: "hidden", marginTop: 15 },
+  dashboardPlanOutcome: { marginTop: 17 },
+  dashboardPlanOutcomeValue: { fontSize: 28, lineHeight: 34, letterSpacing: -1.1 },
+  dashboardPlanOutcomeLabel: { fontSize: 12, lineHeight: 17, fontFamily: "Inter_600SemiBold", marginTop: 2 },
+  dashboardProgressTrack: { height: 8, borderRadius: 999, overflow: "hidden", marginTop: 15 },
   dashboardProgressFill: { height: "100%", borderRadius: 999, backgroundColor: "#38bdf8" },
-  dashboardProgressStats: { flexDirection: "row", alignItems: "stretch", marginTop: 16 },
-  dashboardProgressStat: { flex: 1, minWidth: 0 },
-  dashboardProgressDivider: { width: 1, marginHorizontal: 14 },
-  dashboardProgressDot: { width: 8, height: 8, borderRadius: 4, marginBottom: 5 },
-  dashboardProgressLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
-  dashboardProgressValue: { fontSize: 20, lineHeight: 26, letterSpacing: -0.7, marginTop: 2 },
+  dashboardCommitmentLabel: { fontSize: 11, lineHeight: 15, fontFamily: "Inter_600SemiBold", marginTop: 6 },
+  dashboardPlanBreakdown: { borderTopWidth: 1, marginTop: 15, paddingTop: 11, gap: 9 },
+  dashboardPlanBreakdownRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  dashboardPlanBreakdownLabelWrap: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 8 },
+  dashboardProgressDot: { width: 8, height: 8, borderRadius: 4 },
+  dashboardProgressLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  dashboardPlanBreakdownValue: { maxWidth: "48%", fontSize: 15, lineHeight: 20, letterSpacing: -0.3 },
   algoScoreRing: { width: 68, height: 68, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.24)", borderWidth: 1, borderColor: "rgba(34,211,238,0.42)" },
   algoScoreValue: { color: "#f8fafc", fontSize: 24, fontFamily: "Inter_800ExtraBold", lineHeight: 27 },
   algoScoreLabel: { color: "#93c5fd", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 1 },
