@@ -2,13 +2,14 @@ import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Alert, KeyboardAvoidingView, Modal, Platform,
+  Alert, Keyboard, KeyboardAvoidingView, Modal, Platform,
   Pressable, ScrollView, StyleSheet, Switch,
   Text, TextInput, View,
 } from "react-native";
 
 import colors from "@/constants/colors";
 import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
+import { BillPaymentHistoryPanel } from "@/components/BillPaymentHistoryPanel";
 import type { Bill } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { DatePickerField } from "@/components/DatePickerField";
@@ -62,7 +63,6 @@ interface AddBillModalProps {
 export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture, onResume, onDeleteMistake, editBill, forceDebt, initialValues, title, saveLabel }: AddBillModalProps) {
   const c = useColors();
   const isDesktop = useDesktopExperience();
-  useBackDismiss(visible, onClose);
   const { categories, settings } = useBudget();
 
   const [name,          setName]          = useState("");
@@ -86,6 +86,9 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   const [saving,         setSaving]        = useState(false);
   const [confirmation, setConfirmation] = useState<ConfirmActionOptions | null>(null);
   const [actionMenuVisible, setActionMenuVisible] = useState(false);
+  const [historyVisible, setHistoryVisible] = useState(false);
+  const dismissLayer = () => confirmation ? setConfirmation(null) : historyVisible ? setHistoryVisible(false) : onClose();
+  useBackDismiss(visible, dismissLayer, true, historyVisible);
 
   const firstDOWInDayPickerMonth = useMemo(
     () => new Date(pickerYear, pickerMonth, 1).getDay(),
@@ -118,6 +121,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   useEffect(() => {
     setConfirmation(null);
     setActionMenuVisible(false);
+    setHistoryVisible(false);
     if (editBill) {
       setName(editBill.name);
       setAmount(editBill.amount.toString());
@@ -284,18 +288,21 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       visible={visible}
       animationType={isDesktop ? "fade" : "slide"}
       transparent
-      onRequestClose={() => confirmation ? setConfirmation(null) : onClose()}
+      onRequestClose={dismissLayer}
     >
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.overlay, isDesktop && DESKTOP_MODAL_OVERLAY]}>
         <Pressable accessibilityLabel="Close bill editor" onPress={onClose} style={StyleSheet.absoluteFillObject} />
         <View style={[styles.container, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_WIDE]}>
           <View style={[styles.handle, isDesktop && DESKTOP_MODAL_HANDLE]} />
           <View style={styles.header}>
-            <Text style={[styles.title, { color: c.foreground }]}>
+            {historyVisible ? <Pressable accessibilityRole="button" accessibilityLabel="Back to bill editor" onPress={() => setHistoryVisible(false)} style={styles.historyBack}>
+              <Feather name="arrow-left" size={22} color={c.foreground} />
+              <Text style={[styles.title, { color: c.foreground }]}>Payment history</Text>
+            </Pressable> : <Text style={[styles.title, { color: c.foreground }]}>
               {title ?? (editBill ? `Edit ${noun}` : `Add ${noun}`)}
-            </Text>
+            </Text>}
             <View style={styles.headerActions}>
-              {editBill ? (
+              {editBill && !historyVisible ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="More bill actions"
@@ -313,7 +320,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
             </View>
           </View>
 
-          {editBill && actionMenuVisible ? (
+          {editBill && actionMenuVisible && !historyVisible ? (
             <View style={[styles.actionMenu, { backgroundColor: c.card, borderColor: c.border }]}>
               {editBill.end_date && onResume ? (
                 <Pressable
@@ -360,7 +367,18 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
             </View>
           ) : null}
 
-          <ScrollView showsVerticalScrollIndicator={isDesktop} keyboardShouldPersistTaps="handled">
+          {historyVisible && editBill ? <BillPaymentHistoryPanel billId={editBill.id} billName={editBill.name} /> : <ScrollView showsVerticalScrollIndicator={isDesktop} keyboardShouldPersistTaps="handled">
+
+            {editBill ? <Pressable accessibilityRole="button" accessibilityLabel={`Payment history for ${editBill.name}`}
+              onPress={() => { Keyboard.dismiss(); setActionMenuVisible(false); setHistoryVisible(true); }}
+              style={({ pressed }) => [styles.historyLink, { backgroundColor: c.primary + "12", borderColor: c.primary + "35", opacity: pressed ? 0.75 : 1 }]}>
+              <Feather name="clock" size={21} color={c.primary} />
+              <View style={styles.actionMenuCopy}>
+                <Text style={[styles.actionMenuLabel, { color: c.foreground }]}>Payment history</Text>
+                <Text style={[styles.actionMenuHelp, { color: c.mutedForeground }]}>See recorded payments for this {noun.toLowerCase()}</Text>
+              </View>
+              <Feather name="chevron-right" size={19} color={c.primary} />
+            </Pressable> : null}
 
             {/* Name */}
             <Text style={lbl}>{noun} Name</Text>
@@ -667,7 +685,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
               </Text>
             </Pressable>
 
-          </ScrollView>
+          </ScrollView>}
         </View>
       </KeyboardAvoidingView>
       <ConfirmActionOverlay request={confirmation} onClose={() => setConfirmation(null)} />
@@ -681,6 +699,8 @@ const styles = StyleSheet.create({
   handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#444", alignSelf: "center", marginBottom: 16 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 12 },
+  historyBack: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 44 },
+  historyLink: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 4 },
   headerActionButton: { width: 34, height: 34, alignItems: "center", justifyContent: "center", borderRadius: 10 },
   actionMenu: { borderWidth: 1, borderRadius: 14, paddingVertical: 4, marginBottom: 10 },
   actionMenuItem: { minHeight: 54, flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, borderRadius: 10 },
