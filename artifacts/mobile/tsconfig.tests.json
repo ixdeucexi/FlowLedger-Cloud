@@ -12,6 +12,7 @@
   },
   "include": [
     "lib/financialProjection.test.ts",
+    "lib/forecastBillNotifications.test.ts",
     "lib/billPaymentHistory.test.ts",
     "lib/settingsNavigation.test.ts",
     "lib/stabilityActions.test.ts",

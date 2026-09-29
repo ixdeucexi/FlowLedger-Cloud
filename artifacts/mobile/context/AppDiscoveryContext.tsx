@@ -5,12 +5,12 @@ import { useRouter } from "expo-router";
 import { useAuth } from "@/context/AuthContext";
 import { useBudget, type Transaction } from "@/context/BudgetContext";
 import { useMembership } from "@/context/MembershipContext";
-import { localDateString } from "@/lib/dateLabels";
+import { localDateInTimeZone } from "@/lib/dailyCheckingClose";
+import { buildForecastBillNotifications } from "@/lib/forecastBillNotifications";
 import { readInterfacePreferences, updateInterfacePreferences } from "@/lib/interfacePreferences";
 import {
   dismissNotification,
   EMPTY_NOTIFICATION_STATE,
-  isBillEligibleForDueNotification,
   markAllNotificationsRead,
   markNotificationRead,
   normalizeNotificationState,
@@ -21,7 +21,6 @@ import {
 } from "@/lib/notificationCenter";
 import { pendingOccurrenceKeySet } from "@/lib/pendingPlanMatches";
 import { buildReviewQueue } from "@/lib/reviewCenter";
-import { lenderMinimumRequiredAmount } from "@/lib/debtPlanDomain";
 import { SETTINGS_SECTIONS } from "@/lib/settingsHub";
 import { supabase } from "@/lib/supabase";
 import {
@@ -97,6 +96,7 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
   const { isAdmin } = useMembership();
   const {
     activeHousehold,
+    householdTimeZone,
     bills,
     categories,
     goals,
@@ -105,11 +105,7 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
     settings,
     transactions,
     getDailyBalances,
-    getMonthlyBills,
-    getBillOccurrencesInMonth,
-    getBillMonthlyTotal,
     getDebtMonthSettlements,
-    getPaidAmount,
     setDashboardFilter,
   } = useBudget();
 
@@ -283,14 +279,13 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
 
   const generatedNotifications = useMemo<InAppNotification[]>(() => {
     const now = new Date();
-    const month = now.getMonth();
-    const year = now.getFullYear();
-    const today = now.getDate();
+    const todayDate = localDateInTimeZone(now, householdTimeZone);
+    const [year, monthNumber, today] = todayDate.split("-").map(Number);
+    const month = monthNumber - 1;
     const result: InAppNotification[] = [];
     const protectedOccurrences = pendingOccurrenceKeySet(pendingPlanMatches, pendingBankTransactions);
-    const debtSettlements = getDebtMonthSettlements(month, year);
 
-    buildReviewQueue(transactions, localDateString()).forEach(transaction => {
+    buildReviewQueue(transactions, todayDate).forEach(transaction => {
       result.push({
         id: `review:${transaction.id}`,
         type: "review",
@@ -303,38 +298,7 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
       });
     });
 
-    getMonthlyBills(month, year).filter(isBillEligibleForDueNotification).forEach(bill => {
-      const days = getBillOccurrencesInMonth(bill, month, year).sort((left, right) => left - right);
-      if (!days.length) return;
-      const debtSettlement = bill.is_debt ? debtSettlements.get(bill.id) : undefined;
-      const amount = bill.is_debt
-        ? lenderMinimumRequiredAmount(undefined, Math.max(0, Number(bill.amount) || 0))
-        : getBillMonthlyTotal(bill, month, year) / days.length;
-      let paid = debtSettlement?.paidAmount ?? getPaidAmount(bill.id, month, year);
-      const exactByDay = new Map(debtSettlement?.occurrences?.map(occurrence => [
-        Number(occurrence.occurrenceDate.slice(8, 10)),
-        occurrence,
-      ]) ?? []);
-      days.forEach(day => {
-        const exact = exactByDay.get(day);
-        const required = bill.is_debt
-          ? lenderMinimumRequiredAmount(exact?.configuredObligation, amount)
-          : exact?.configuredObligation ?? amount;
-        const settled = exact
-          ? Math.min(required, exact.paidAmount)
-          : Math.min(required, Math.max(0, paid));
-        if (!exact) paid = Math.max(0, paid - settled);
-        const remaining = Math.max(0, required - settled);
-        const occurrenceDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-        if (remaining <= 0.005 || protectedOccurrences.has(`${bill.id}:${occurrenceDate}`)) return;
-        const daysAway = day - today;
-        if (daysAway < 0) {
-          result.push({ id: `bill-overdue:${bill.id}:${occurrenceDate}`, type: "bill", title: `${bill.name} is overdue`, body: `${currency(remaining)} remains from the ${new Date(year, month, day).toLocaleDateString(undefined, { month: "short", day: "numeric" })} payment.`, timestamp: localNoonIso(year, month, day), route: "/(tabs)/bills", params: { view: bill.is_debt ? "debt" : "bills" }, tone: "risk" });
-        } else if (daysAway <= 7) {
-          result.push({ id: `bill-due:${bill.id}:${occurrenceDate}`, type: "bill", title: `${bill.name} is due ${daysAway === 0 ? "today" : daysAway === 1 ? "tomorrow" : "soon"}`, body: `${currency(remaining)} is planned for ${new Date(year, month, day).toLocaleDateString(undefined, { month: "short", day: "numeric" })}.`, timestamp: localNoonIso(year, month, day), route: "/(tabs)/bills", params: { view: bill.is_debt ? "debt" : "bills" }, tone: daysAway <= 1 ? "watch" : "info" });
-        }
-      });
-    });
+    result.push(...buildForecastBillNotifications({ today: todayDate, bills, getDailyBalances, getDebtMonthSettlements, protectedOccurrences }));
 
     const lowest = getDailyBalances(month, year)
       .filter(day => day.day >= today)
@@ -350,7 +314,7 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
     });
 
     return result.filter(item => !Number.isNaN(new Date(item.timestamp).getTime()));
-  }, [bills, getBillOccurrencesInMonth, getBillMonthlyTotal, getDailyBalances, getDebtMonthSettlements, getMonthlyBills, getPaidAmount, goals, pendingBankTransactions, pendingPlanMatches, settings.safety_floor, transactions]);
+  }, [bills, getDailyBalances, getDebtMonthSettlements, goals, householdTimeZone, notificationsVisible, pendingBankTransactions, pendingPlanMatches, settings.safety_floor, transactions]);
 
   const notifications = useMemo(
     () => visibleNotifications(generatedNotifications, notificationState),
