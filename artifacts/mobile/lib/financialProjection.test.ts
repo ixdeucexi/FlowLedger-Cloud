@@ -15,6 +15,41 @@ import {
   normalizeTransactionRow,
 } from "./financialProjectionInput";
 
+test("edited John payday anchor counts September deposits once, not planned plus actual", () => {
+  const snapshot = structuredClone(golden.cases[0].snapshot) as unknown as FinancialProjectionSnapshot;
+  snapshot.bills = [];
+  snapshot.goals = [];
+  snapshot.decisions = [];
+  snapshot.settings.starting_balance = 0;
+  snapshot.incomes = [{
+    id: "john", name: "John", amount: 2425.36, frequency: "biweekly",
+    start_date: "2026-09-02", next_payment_date: "2026-09-02",
+  }];
+  snapshot.transactions = [
+    ["2026-09-02", "2026-09-04"],
+    ["2026-09-16", "2026-09-18"],
+    ["2026-09-30", "2026-10-02"],
+  ].map(([date, occurrenceDate], index) => ({
+    id: `john-${index}`, date, amount: 2425.36, category: "Income", note: "John paycheck",
+    source: "statement", review_status: "matched", review_resolution: "income",
+    review_allocations: [{ type: "income", targetId: "john", occurrenceDate, amount: 2425.36, settlement: "exact" }],
+  }));
+  const before = JSON.stringify(snapshot.transactions);
+  const projection = createFinancialProjection(snapshot, {
+    now: new Date("2026-10-01T12:00:00Z"), timeZone: "America/Chicago",
+  });
+  const cashFlow = projection.getCashFlow(8, 2026);
+  assert.equal(cashFlow.monthlyIncome, 0);
+  assert.equal(cashFlow.netTransactions, 7276.08);
+  assert.equal(cashFlow.remaining, 7276.08);
+  const days = projection.getDailyBalances(8, 2026);
+  const events = days.flatMap(day => day.events ?? []);
+  assert.equal(days.at(-1)?.balance, 7276.08);
+  assert.equal(events.filter(event => event.kind === "scheduled_income" && event.sourceId === "john").length, 0);
+  assert.equal(events.filter(event => event.kind === "transaction_income" && event.sourceId.startsWith("john-")).length, 3);
+  assert.equal(JSON.stringify(snapshot.transactions), before, "stored occurrence dates remain untouched");
+});
+
 test("malformed saved bill amounts cannot poison the forecast", () => {
   const bill = normalizeBillRow({
     id: "utility",

@@ -36,7 +36,7 @@ import { configuredDebtAmountForRemainingPayment, lenderMinimumRequiredAmount, p
 import { calendarBalanceIsVisible } from "@/lib/dailyCheckingClose";
 import { confirmedBillMatchId, isConfirmedBillMatch } from "@/lib/billMatching";
 import { nextPlannedDebtPayment, snowballTargetDebtId } from "@/lib/billSurplusRouting";
-import { allocationLabel, groupPlannedExpenseAllocations, matchedOccurrenceAllocations, occurrenceKey, reviewSettlementSummary, transactionDisplayName } from "@/lib/reviewCenter";
+import { allocationLabel, groupPlannedExpenseAllocations, matchedIncomeOccurrenceAllocations, matchedOccurrenceAllocations, occurrenceKey, reviewSettlementSummary, transactionDisplayName } from "@/lib/reviewCenter";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
 import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, formatForecastDateLabel, forecastItemBadgeLabel, forecastItemTypeLabel, groupForecastEvents, lowestForecastDate, plannedDebtEditorParams } from "@/lib/forecastDisplay";
 import type { FinancialEvent } from "@/lib/forecast";
@@ -404,7 +404,7 @@ export default function MonthlyScreen() {
   const routeParams = useLocalSearchParams<{ openDate?: string | string[]; openDateAt?: string | string[] }>();
   const { user } = useAuth();
   const {
-    bills, overrides, billDateMoves, transactions, pendingBankTransactions, pendingPlanMatches, extraPayments, goals, decisions, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
+    bills, incomes, overrides, billDateMoves, transactions, pendingBankTransactions, pendingPlanMatches, extraPayments, goals, decisions, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
     getCustomDueDay, setCustomDueDay,
     moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, settings,
@@ -742,7 +742,7 @@ export default function MonthlyScreen() {
     [calendarTransactions],
   );
   const billOccurrenceMatches = useMemo(() => matchedOccurrenceAllocations(txList, "bill"), [txList]);
-  const incomeOccurrenceMatches = useMemo(() => matchedOccurrenceAllocations(txList, "income"), [txList]);
+  const incomeOccurrenceMatches = useMemo(() => matchedIncomeOccurrenceAllocations(txList, incomes), [txList, incomes]);
   const pendingBillOccurrenceKeys = useMemo(
     () => pendingOccurrenceKeySet(pendingPlanMatches, pendingBankTransactions),
     [pendingPlanMatches, pendingBankTransactions],

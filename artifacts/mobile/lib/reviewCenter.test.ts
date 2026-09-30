@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { allocationLabel, allocationTotal, applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, countReviewQueue, forgottenBillSettlement, groupPlannedExpenseAllocations, groupReviewTargets, incomeReviewTargets, matchedOccurrenceAllocations, occurrenceKey, prioritizeReviewTransaction, prioritizeSavedBillTarget, rankReviewTargets, reviewAllocationsAreBalanced, reviewedBillMonthSettlement, reviewedBillOccurrenceSettlements, reviewQueueAfterSkips, reviewSettlementSummary, scheduledSnowballReviewTargets, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
+import { allocationLabel, allocationTotal, applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, countReviewQueue, forgottenBillSettlement, groupPlannedExpenseAllocations, groupReviewTargets, incomeReviewTargets, matchedIncomeOccurrenceAllocations, matchedOccurrenceAllocations, occurrenceKey, prioritizeReviewTransaction, prioritizeSavedBillTarget, rankReviewTargets, reviewAllocationsAreBalanced, reviewedBillMonthSettlement, reviewedBillOccurrenceSettlements, reviewQueueAfterSkips, reviewSettlementSummary, scheduledSnowballReviewTargets, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
 
 test("reviewed occurrence totals retain cent rounding after matched-index reuse", () => {
   const shared = {
@@ -265,6 +265,40 @@ test("Snowball plans appear with bills and debt in Review Center", () => {
 
   assert.deepEqual(grouped.bills.map(target => target.id), ["camera", "streaming"]);
   assert.equal(grouped.bills[0]?.type, "snowball");
+});
+
+test("income matches follow the current schedule without rewriting saved audit dates", () => {
+  const incomes = [
+    { id: "john", name: "John", amount: 100, frequency: "biweekly" as const, start_date: "2026-09-02", next_payment_date: "2026-09-02" },
+    { id: "other", name: "Other", amount: 80, frequency: "biweekly" as const, start_date: "2026-09-04", next_payment_date: "2026-09-04" },
+  ];
+  const transactions = [
+    { id: "first", date: "2026-09-02", amount: 60, note: "Pay", category: "Income", review_status: "matched", review_allocations: [{ type: "income" as const, targetId: "john", occurrenceDate: "2026-09-04", amount: 60, plannedAmount: 100, settlement: "partial" as const }] },
+    { id: "second", date: "2026-09-02", amount: 40, note: "Pay", category: "Income", review_status: "matched", review_allocations: [{ type: "income" as const, targetId: "john", occurrenceDate: "2026-09-04", amount: 40, plannedAmount: 100, settlement: "exact" as const }] },
+    { id: "other", date: "2026-09-04", amount: 80, note: "Other", category: "Income", review_status: "matched", review_allocations: [{ type: "income" as const, targetId: "other", occurrenceDate: "2026-09-04", amount: 80, settlement: "full" as const }] },
+  ];
+  const before = JSON.stringify(transactions);
+  const matches = matchedIncomeOccurrenceAllocations(transactions, incomes);
+  assert.equal(matches.get(occurrenceKey("john", "2026-09-02"))?.amount, 100);
+  assert.equal(matches.get(occurrenceKey("john", "2026-09-02"))?.settlement, "exact");
+  assert.equal(matches.get(occurrenceKey("other", "2026-09-04"))?.amount, 80);
+  assert.equal(matches.has(occurrenceKey("john", "2026-09-04")), false);
+  assert.equal(JSON.stringify(transactions), before);
+  assert.deepEqual(incomeReviewTargets(incomes, "2026-09-02", matches).filter(target => target.id === "john" && target.occurrenceDate === "2026-09-02"), []);
+});
+
+test("income matching retains valid explicit occurrences and partial remainder across months", () => {
+  const incomes = [{ id: "pay", name: "Pay", amount: 100, frequency: "biweekly" as const, start_date: "2026-09-02", next_payment_date: "2026-09-02" }];
+  const transactions = [
+    { id: "explicit", date: "2026-09-16", amount: 30, note: "Pay", category: "Income", review_status: "matched", review_allocations: [{ type: "income" as const, targetId: "pay", occurrenceDate: "2026-09-02", amount: 30, plannedAmount: 100, settlement: "partial" as const }] },
+    { id: "cross-month", date: "2026-10-01", amount: 100, note: "Pay", category: "Income", review_status: "matched", review_allocations: [{ type: "income" as const, targetId: "pay", occurrenceDate: "2026-10-02", amount: 100, settlement: "full" as const }] },
+  ];
+  const matches = matchedIncomeOccurrenceAllocations(transactions, incomes);
+  assert.equal(matches.get(occurrenceKey("pay", "2026-09-02"))?.settlement, "partial");
+  assert.equal(incomeReviewTargets(incomes, "2026-09-02", matches).find(target => target.occurrenceDate === "2026-09-02")?.plannedAmount, 70);
+  assert.equal(matches.get(occurrenceKey("pay", "2026-09-30"))?.settlement, "full");
+  assert.equal(matches.has(occurrenceKey("pay", "2026-10-02")), false);
+  assert.equal(incomeReviewTargets(incomes, "2026-10-01", matches).some(target => target.occurrenceDate === "2026-09-30"), false);
 });
 
 test("count-only review selector has exact queue membership without sorting", () => {

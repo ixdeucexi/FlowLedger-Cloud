@@ -98,6 +98,7 @@ import {
   buildForgottenBillDefaults,
   buildReviewQueue,
   forgottenBillSettlement,
+  matchedIncomeOccurrenceAllocations,
   matchedOccurrenceAllocations,
   occurrenceKey,
   transactionDisplayName,
@@ -789,10 +790,7 @@ export function ActivityScreen() {
 
     // 3. Income occurrences — past 24 months plus every occurrence in the current month.
     // Matched deposits replace their planned occurrence instead of being added twice.
-    const incomeOccurrenceMatches = matchedOccurrenceAllocations(
-      activityTransactions,
-      "income",
-    );
+    const incomeOccurrenceMatches = matchedIncomeOccurrenceAllocations(activityTransactions, incomes);
     for (let i = 24; i >= 0; i--) {
       const totalMonths = currentYear * 12 + currentMonth - i;
       const m = totalMonths % 12;

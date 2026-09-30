@@ -1,5 +1,5 @@
 import { isScheduledSnowballPlanTransaction, snowballPaymentName } from "./debtPaymentPlan";
-import { getEffectiveIncomeAmount, getIncomeMatchOccurrenceDates, getIncomeOccurrenceDays, type ScheduledIncome } from "./schedule";
+import { getEffectiveIncomeAmount, getIncomeMatchOccurrenceDates, getIncomeOccurrenceDays, resolveIncomeMatchOccurrenceDate, type ScheduledIncome } from "./schedule";
 
 export interface ReviewAllocationLike {
   type: "bill" | "income" | "planned_expense" | "category" | "transfer" | "extra_principal";
@@ -359,6 +359,21 @@ export function occurrenceKey(targetId: string, occurrenceDate: string): string 
   return `${targetId}:${occurrenceDate.slice(0, 10)}`;
 }
 
+/** Resolve only the lookup copy; saved allocation dates remain an audit of the original review. */
+export function resolvedMatchedIncomeAllocation(
+  allocation: ReviewAllocationLike,
+  transactionDate: string,
+  incomesById: ReadonlyMap<string, ReviewIncomeLike>,
+): ReviewAllocationLike {
+  if (allocation.type !== "income" || !allocation.targetId || !allocation.occurrenceDate) return allocation;
+  const income = incomesById.get(allocation.targetId);
+  if (!income) return allocation;
+  const occurrenceDate = resolveIncomeMatchOccurrenceDate(income, transactionDate, allocation.occurrenceDate);
+  return occurrenceDate && occurrenceDate !== allocation.occurrenceDate
+    ? { ...allocation, occurrenceDate }
+    : allocation;
+}
+
 export function groupPlannedExpenseAllocations(
   transactions: ReviewTransactionLike[],
 ): PlannedExpenseAllocationGroup[] {
@@ -423,12 +438,17 @@ export function matchedOccurrenceAllocations(
   transactions: ReviewTransactionLike[],
   type: "bill" | "income" | "extra_principal",
   resolution?: string,
+  incomes?: ReviewIncomeLike[],
 ): Map<string, ReviewAllocationLike> {
   const matches = new Map<string, ReviewAllocationLike>();
+  const incomesById = new Map(incomes?.map(income => [income.id, income]));
   transactions.forEach(transaction => {
     if (transaction.review_status !== "matched") return;
     if (resolution && transaction.review_resolution !== resolution) return;
-    (transaction.review_allocations ?? []).forEach(allocation => {
+    (transaction.review_allocations ?? []).forEach(storedAllocation => {
+      const allocation = type === "income"
+        ? resolvedMatchedIncomeAllocation(storedAllocation, transaction.date, incomesById)
+        : storedAllocation;
       if (allocation.type !== type || !allocation.targetId || !allocation.occurrenceDate) return;
       const key = occurrenceKey(allocation.targetId, allocation.occurrenceDate);
       const existing = matches.get(key);
@@ -470,6 +490,13 @@ export function matchedOccurrenceAllocations(
     });
   });
   return matches;
+}
+
+export function matchedIncomeOccurrenceAllocations(
+  transactions: ReviewTransactionLike[],
+  incomes: ReviewIncomeLike[],
+): Map<string, ReviewAllocationLike> {
+  return matchedOccurrenceAllocations(transactions, "income", undefined, incomes);
 }
 
 export function groupReviewTargets(targets: RankedReviewTarget[]) {

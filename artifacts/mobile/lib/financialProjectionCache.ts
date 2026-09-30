@@ -1,7 +1,9 @@
 import {
   occurrenceKey,
+  resolvedMatchedIncomeAllocation,
   reviewedBillMonthSettlementsFromOccurrences,
   type ReviewAllocationLike,
+  type ReviewIncomeLike,
   type ReviewTransactionLike,
   type ReviewedBillMonthSettlement,
   type ReviewedBillOccurrenceSettlement,
@@ -85,10 +87,12 @@ export interface MatchedFinancialAllocationIndexes {
  */
 export function buildMatchedFinancialAllocationIndexes(
   transactions: ReviewTransactionLike[],
+  incomes: ReviewIncomeLike[] = [],
 ): MatchedFinancialAllocationIndexes {
   const bill = new Map<string, ReviewAllocationLike>();
   const income = new Map<string, ReviewAllocationLike>();
   const snowball = new Map<string, ReviewAllocationLike>();
+  const incomesById = new Map(incomes.map(income => [income.id, income]));
   const reviewedBillIdsByMonth = new Map<string, Set<string>>();
   const paidBillAmountByMonth = new Map<string, number>();
   const reviewedOccurrenceAggregates = new Map<string, {
@@ -174,7 +178,9 @@ export function buildMatchedFinancialAllocationIndexes(
           });
         }
       }
-      else if (allocation.type === "income") merge(income, allocation);
+      else if (allocation.type === "income") {
+        merge(income, resolvedMatchedIncomeAllocation(allocation, transaction.date, incomesById));
+      }
       else if (
         allocation.type === "extra_principal"
         && transaction.review_resolution === "snowball"

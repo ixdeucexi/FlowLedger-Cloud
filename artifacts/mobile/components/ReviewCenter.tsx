@@ -17,7 +17,7 @@ import { adjacentBillMatchCandidates } from "@/lib/billMatchCandidates";
 import { nextPlannedDebtPayment, snowballTargetDebtId } from "@/lib/billSurplusRouting";
 import { confirmAction } from "@/lib/confirmAction";
 import { FOUNDING_FREE_LAUNCH } from "@/lib/launchMode";
-import { applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupReviewTargets, incomeReviewTargets, matchedOccurrenceAllocations, occurrenceKey, prioritizeReviewTransaction, prioritizeSavedBillTarget, rankReviewTargets, reviewQueueAfterSkips, scheduledSnowballReviewTargets, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
+import { applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupReviewTargets, incomeReviewTargets, matchedIncomeOccurrenceAllocations, matchedOccurrenceAllocations, occurrenceKey, prioritizeReviewTransaction, prioritizeSavedBillTarget, rankReviewTargets, reviewQueueAfterSkips, scheduledSnowballReviewTargets, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
 import { subscriptionLinkKeys } from "@/lib/competitiveGrowth";
 import { createForgottenBillAndReconcile } from "@/lib/atomicFinancialMutations";
 import { assertFinancialMutationOnline } from "@/lib/networkStatus";
@@ -158,7 +158,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all", onMana
     const month = monthNumber - 1;
     const candidates: ReviewTarget[] = [];
     const billMatches = matchedOccurrenceAllocations(transactions, "bill");
-    const incomeMatches = matchedOccurrenceAllocations(transactions, "income");
+    const incomeMatches = matchedIncomeOccurrenceAllocations(transactions, incomes);
     const snowballMatches = matchedOccurrenceAllocations(transactions, "extra_principal", "snowball");
     if (current.amount < 0) {
       const snowballTargets = new Map<string, ReviewTarget>();

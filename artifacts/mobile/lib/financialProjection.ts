@@ -204,7 +204,7 @@ export function createFinancialProjection(
     overridesByBillMonth.get(`${billId}:${year}-${month}`);
 
   const matchedAllocationIndexes = (() =>
-    buildMatchedFinancialAllocationIndexes(transactions))();
+    buildMatchedFinancialAllocationIndexes(transactions, incomes))();
 
   const reviewedBillSettlements =
     matchedAllocationIndexes.reviewedBillSettlements;

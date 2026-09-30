@@ -22,6 +22,7 @@ import {
 } from "./financialProjectionCache";
 import {
   countReviewQueue,
+  matchedIncomeOccurrenceAllocations,
   matchedOccurrenceAllocations,
   reviewedBillMonthSettlements,
   reviewedBillOccurrenceSettlements,
@@ -374,6 +375,18 @@ test("the one-pass allocation indexes preserve canonical merge semantics", () =>
     indexes.reviewedBillSettlements,
     reviewedBillMonthSettlements(ledger),
   );
+});
+
+test("projection income index uses the same schedule-aware match keys as review", () => {
+  const incomes = [{ id: "pay", name: "Pay", amount: 100, frequency: "biweekly" as const, start_date: "2026-09-02", next_payment_date: "2026-09-02" }];
+  const ledger = [{
+    id: "deposit", date: "2026-09-30", amount: 100, note: "Pay", category: "Income",
+    review_status: "matched", review_allocations: [{ type: "income" as const, targetId: "pay", occurrenceDate: "2026-10-02", amount: 100, settlement: "exact" as const }],
+  }];
+  const indexed = buildMatchedFinancialAllocationIndexes(ledger, incomes);
+  assert.deepEqual(indexed.income, matchedIncomeOccurrenceAllocations(ledger, incomes));
+  assert.equal(indexed.income.has("pay:2026-09-30"), true);
+  assert.equal(indexed.income.has("pay:2026-10-02"), false);
 });
 
 test("combined reviewed settlements preserve per-allocation cent rounding", () => {
