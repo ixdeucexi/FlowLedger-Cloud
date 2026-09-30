@@ -266,9 +266,15 @@ export function resolveIncomeMatchOccurrenceDate(
     : undefined;
   if (!reference) return requested;
 
-  const candidates = getIncomeMatchOccurrenceDates(income, reference);
+  // A reviewer may intentionally assign a deposit to a more distant payday.
+  // Validate that date against its own month before applying the nearby-date
+  // search, whose distance limit is only meant for stale occurrence dates.
+  const requestedParts = parseCalendarDate(requested);
+  if (requestedParts && getIncomeOccurrenceDays(income, requestedParts.month - 1, requestedParts.year).includes(requestedParts.day)) {
+    return requested;
+  }
 
-  if (requested && candidates.includes(requested)) return requested;
+  const candidates = getIncomeMatchOccurrenceDates(income, reference);
   return candidates[0] ?? requested ?? reference;
 }
 

@@ -389,6 +389,17 @@ test("projection income index uses the same schedule-aware match keys as review"
   assert.equal(indexed.income.has("pay:2026-10-02"), false);
 });
 
+test("projection income index preserves a distant explicit current occurrence", () => {
+  const incomes = [{ id: "monthly", name: "Monthly", amount: 100, frequency: "monthly" as const, start_date: "2026-09-01", next_payment_date: "2026-09-01" }];
+  const ledger = [{
+    id: "deposit", date: "2026-09-20", amount: 100, note: "Monthly", category: "Income",
+    review_status: "matched", review_allocations: [{ type: "income" as const, targetId: "monthly", occurrenceDate: "2026-09-01", amount: 100, settlement: "exact" as const }],
+  }];
+  const indexed = buildMatchedFinancialAllocationIndexes(ledger, incomes);
+  assert.equal(indexed.income.has("monthly:2026-09-01"), true);
+  assert.equal(indexed.income.has("monthly:2026-10-01"), false);
+});
+
 test("combined reviewed settlements preserve per-allocation cent rounding", () => {
   const rows = [1.001, 1.004].map((amount, index) => ({
     id: `fractional-${index}`,

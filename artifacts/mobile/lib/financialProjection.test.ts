@@ -50,6 +50,27 @@ test("edited John payday anchor counts September deposits once, not planned plus
   assert.equal(JSON.stringify(snapshot.transactions), before, "stored occurrence dates remain untouched");
 });
 
+test("explicit distant payday match stays in its selected month", () => {
+  const snapshot = structuredClone(golden.cases[0].snapshot) as unknown as FinancialProjectionSnapshot;
+  snapshot.bills = [];
+  snapshot.goals = [];
+  snapshot.decisions = [];
+  snapshot.settings.starting_balance = 0;
+  snapshot.incomes = [{ id: "pay", name: "Pay", amount: 100, frequency: "monthly", start_date: "2026-09-01", next_payment_date: "2026-09-01" }];
+  snapshot.transactions = [{
+    id: "deposit", date: "2026-09-20", amount: 100, category: "Income", note: "Pay",
+    source: "statement", review_status: "matched", review_resolution: "income",
+    review_allocations: [{ type: "income", targetId: "pay", occurrenceDate: "2026-09-01", amount: 100, settlement: "exact" }],
+  }];
+  const projection = createFinancialProjection(snapshot, {
+    now: new Date("2026-09-21T12:00:00Z"), timeZone: "America/Chicago",
+  });
+  assert.equal(projection.getCashFlow(8, 2026).monthlyIncome, 0);
+  assert.equal(projection.getCashFlow(9, 2026).monthlyIncome, 100);
+  assert.equal(projection.getDailyBalances(8, 2026).flatMap(day => day.events ?? []).filter(event => event.kind === "scheduled_income" && event.sourceId === "pay").length, 0);
+  assert.equal(projection.getDailyBalances(9, 2026).flatMap(day => day.events ?? []).filter(event => event.kind === "scheduled_income" && event.sourceId === "pay").length, 1);
+});
+
 test("malformed saved bill amounts cannot poison the forecast", () => {
   const bill = normalizeBillRow({
     id: "utility",

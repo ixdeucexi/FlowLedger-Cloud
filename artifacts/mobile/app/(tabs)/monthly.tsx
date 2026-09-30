@@ -36,7 +36,7 @@ import { configuredDebtAmountForRemainingPayment, lenderMinimumRequiredAmount, p
 import { calendarBalanceIsVisible } from "@/lib/dailyCheckingClose";
 import { confirmedBillMatchId, isConfirmedBillMatch } from "@/lib/billMatching";
 import { nextPlannedDebtPayment, snowballTargetDebtId } from "@/lib/billSurplusRouting";
-import { allocationLabel, groupPlannedExpenseAllocations, matchedIncomeOccurrenceAllocations, matchedOccurrenceAllocations, occurrenceKey, reviewSettlementSummary, transactionDisplayName } from "@/lib/reviewCenter";
+import { allocationLabel, groupPlannedExpenseAllocations, matchedIncomeOccurrenceAllocations, matchedOccurrenceAllocations, occurrenceKey, reviewSettlementSummary, reviewTransactionRemaining, transactionDisplayName } from "@/lib/reviewCenter";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
 import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, formatForecastDateLabel, forecastItemBadgeLabel, forecastItemTypeLabel, groupForecastEvents, lowestForecastDate, plannedDebtEditorParams } from "@/lib/forecastDisplay";
 import type { FinancialEvent } from "@/lib/forecast";
@@ -743,6 +743,7 @@ export default function MonthlyScreen() {
   );
   const billOccurrenceMatches = useMemo(() => matchedOccurrenceAllocations(txList, "bill"), [txList]);
   const incomeOccurrenceMatches = useMemo(() => matchedIncomeOccurrenceAllocations(txList, incomes), [txList, incomes]);
+  const incomesById = useMemo(() => new Map(incomes.map(income => [income.id, income])), [incomes]);
   const pendingBillOccurrenceKeys = useMemo(
     () => pendingOccurrenceKeySet(pendingPlanMatches, pendingBankTransactions),
     [pendingPlanMatches, pendingBankTransactions],
@@ -2818,20 +2819,7 @@ export default function MonthlyScreen() {
                           const matchedBillName = matchedBillId ? bills.find(bill => bill.id === matchedBillId)?.name : undefined;
                           const displayName = transactionDisplayName(tx, matchedBillName);
                           const settlement = reviewSettlementSummary(tx);
-                          const partialAllocations = (tx.review_allocations ?? []).filter(allocation => allocation.settlement === "partial");
-                          const aggregatedRemaining = partialAllocations.reduce((sum, allocation) => {
-                            if (!allocation.targetId || !allocation.occurrenceDate) {
-                              return sum + Math.max(0, Number(allocation.plannedAmount ?? allocation.amount) - Number(allocation.amount));
-                            }
-                            const aggregate = allocation.type === "bill"
-                              ? billOccurrenceMatches.get(occurrenceKey(allocation.targetId, allocation.occurrenceDate))
-                              : allocation.type === "income"
-                                ? incomeOccurrenceMatches.get(occurrenceKey(allocation.targetId, allocation.occurrenceDate))
-                                : undefined;
-                            if (!aggregate) return sum + Math.max(0, Number(allocation.plannedAmount ?? allocation.amount) - Number(allocation.amount));
-                            return sum + Math.max(0, Number(aggregate.plannedAmount ?? allocation.plannedAmount ?? aggregate.amount) - Number(aggregate.amount));
-                          }, 0);
-                          const remaining = Math.round((partialAllocations.length > 0 ? aggregatedRemaining : settlement.remaining) * 100) / 100;
+                          const remaining = reviewTransactionRemaining(tx, billOccurrenceMatches, incomeOccurrenceMatches, incomesById);
                           const statusColor = isTransfer ? c.primary : remaining > 0.005 ? c.warning : c.success;
                           const statusLabel = isTransfer ? "TRANSFER" : remaining > 0.005 ? "PARTIAL" : isMoneyIn ? "RECEIVED" : "PAID";
                           return (

@@ -228,6 +228,16 @@ describe("income scheduling", () => {
     assert.equal(resolveIncomeMatchOccurrenceDate(income, "2026-07-01", "2026-07-03"), "2026-07-03");
   });
 
+  it("preserves an explicitly matched current payday even when the bank posts much later", () => {
+    const income = {
+      amount: 1_000,
+      frequency: "monthly" as const,
+      start_date: "2026-09-01",
+      next_payment_date: "2026-09-01",
+    };
+    assert.equal(resolveIncomeMatchOccurrenceDate(income, "2026-09-20", "2026-09-01"), "2026-09-01");
+  });
+
   it("can settle an early deposit against the next month's payday", () => {
     const income = {
       amount: 2_000,

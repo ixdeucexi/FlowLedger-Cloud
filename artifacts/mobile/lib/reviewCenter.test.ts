@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { allocationLabel, allocationTotal, applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, countReviewQueue, forgottenBillSettlement, groupPlannedExpenseAllocations, groupReviewTargets, incomeReviewTargets, matchedIncomeOccurrenceAllocations, matchedOccurrenceAllocations, occurrenceKey, prioritizeReviewTransaction, prioritizeSavedBillTarget, rankReviewTargets, reviewAllocationsAreBalanced, reviewedBillMonthSettlement, reviewedBillOccurrenceSettlements, reviewQueueAfterSkips, reviewSettlementSummary, scheduledSnowballReviewTargets, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
+import { allocationLabel, allocationTotal, applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, countReviewQueue, forgottenBillSettlement, groupPlannedExpenseAllocations, groupReviewTargets, incomeReviewTargets, matchedIncomeOccurrenceAllocations, matchedOccurrenceAllocations, occurrenceKey, prioritizeReviewTransaction, prioritizeSavedBillTarget, rankReviewTargets, reviewAllocationsAreBalanced, reviewedBillMonthSettlement, reviewedBillOccurrenceSettlements, reviewQueueAfterSkips, reviewSettlementSummary, reviewTransactionRemaining, scheduledSnowballReviewTargets, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
 
 test("reviewed occurrence totals retain cent rounding after matched-index reuse", () => {
   const shared = {
@@ -285,6 +285,20 @@ test("income matches follow the current schedule without rewriting saved audit d
   assert.equal(matches.has(occurrenceKey("john", "2026-09-04")), false);
   assert.equal(JSON.stringify(transactions), before);
   assert.deepEqual(incomeReviewTargets(incomes, "2026-09-02", matches).filter(target => target.id === "john" && target.occurrenceDate === "2026-09-02"), []);
+  assert.equal(reviewTransactionRemaining(transactions[0], new Map(), matches, new Map(incomes.map(income => [income.id, income]))), 0);
+});
+
+test("review card counts each remapped partial income occurrence only once", () => {
+  const incomes = [{ id: "john", name: "John", amount: 100, frequency: "biweekly" as const, start_date: "2026-09-02", next_payment_date: "2026-09-02" }];
+  const transaction = {
+    id: "split", date: "2026-09-02", amount: 60, note: "Pay", category: "Income", review_status: "matched",
+    review_allocations: [
+      { type: "income" as const, targetId: "john", occurrenceDate: "2026-09-04", amount: 30, plannedAmount: 100, settlement: "partial" as const },
+      { type: "income" as const, targetId: "john", occurrenceDate: "2026-09-04", amount: 30, plannedAmount: 100, settlement: "partial" as const },
+    ],
+  };
+  const matches = matchedIncomeOccurrenceAllocations([transaction], incomes);
+  assert.equal(reviewTransactionRemaining(transaction, new Map(), matches, new Map(incomes.map(income => [income.id, income]))), 40);
 });
 
 test("income matching retains valid explicit occurrences and partial remainder across months", () => {

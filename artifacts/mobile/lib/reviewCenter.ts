@@ -374,6 +374,40 @@ export function resolvedMatchedIncomeAllocation(
     : allocation;
 }
 
+/** Remaining amount for a reviewed card, counted once per current occurrence. */
+export function reviewTransactionRemaining(
+  transaction: Pick<ReviewTransactionLike, "amount" | "date" | "review_allocations">,
+  billMatches: ReadonlyMap<string, ReviewAllocationLike>,
+  incomeMatches: ReadonlyMap<string, ReviewAllocationLike>,
+  incomesById: ReadonlyMap<string, ReviewIncomeLike>,
+): number {
+  const partialAllocations = (transaction.review_allocations ?? [])
+    .filter(allocation => allocation.settlement === "partial");
+  if (partialAllocations.length === 0) return reviewSettlementSummary(transaction).remaining;
+
+  const counted = new Set<string>();
+  const remaining = partialAllocations.reduce((sum, storedAllocation) => {
+    const allocation = resolvedMatchedIncomeAllocation(storedAllocation, transaction.date, incomesById);
+    if (!allocation.targetId || !allocation.occurrenceDate) {
+      return sum + Math.max(0, Number(allocation.plannedAmount ?? allocation.amount) - Number(allocation.amount));
+    }
+    const key = occurrenceKey(allocation.targetId, allocation.occurrenceDate);
+    const aggregate = allocation.type === "bill"
+      ? billMatches.get(key)
+      : allocation.type === "income"
+        ? incomeMatches.get(key)
+        : undefined;
+    if (!aggregate) {
+      return sum + Math.max(0, Number(allocation.plannedAmount ?? allocation.amount) - Number(allocation.amount));
+    }
+    const countedKey = `${allocation.type}:${key}`;
+    if (counted.has(countedKey)) return sum;
+    counted.add(countedKey);
+    return sum + Math.max(0, Number(aggregate.plannedAmount ?? allocation.plannedAmount ?? aggregate.amount) - Number(aggregate.amount));
+  }, 0);
+  return Math.round(remaining * 100) / 100;
+}
+
 export function groupPlannedExpenseAllocations(
   transactions: ReviewTransactionLike[],
 ): PlannedExpenseAllocationGroup[] {
