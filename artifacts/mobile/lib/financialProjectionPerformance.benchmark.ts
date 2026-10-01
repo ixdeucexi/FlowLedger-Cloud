@@ -223,7 +223,7 @@ const snapshotIdentity: DashboardFinancialSnapshotIdentity = {
   planInputRevision: "2026-07-10",
 };
 
-test("isolated 20k provider preparation stays below one input task", context => {
+test("isolated 20k provider preparation components stay below one input task", context => {
   const ledger = productionShapedLedger();
   const connectedAccounts = [{
     plaid_account_id: "checking-1",
@@ -231,25 +231,28 @@ test("isolated 20k provider preparation stays below one input task", context => 
     account_subtype: "checking",
   }];
   let visibleTransactionIds = new Set<string>();
-  const prepare = () => {
-    const transactionLedger = buildTransactionLedger(
-      ledger,
+  let transactionLedger: ReturnType<typeof buildTransactionLedger<DashboardTransaction>>;
+  const contextMonthIndex = measureColdAndRepeated(() => {
+    indexRecordsByMonth(ledger);
+  });
+  const transactionLedgerStage = measureColdAndRepeated(() => {
+    // Full createFinancialProjection is gated above; these component timings
+    // identify regressions without inventing another combined input task.
+    transactionLedger = buildTransactionLedger(
+      [...ledger],
       ledger,
       connectedAccounts,
     );
-    indexRecordsByMonth(ledger);
-    indexRecordsByMonth(ledger);
+  });
+  const matchIndexesStage = measureColdAndRepeated(() => {
     visibleTransactionIds = new Set(
       transactionLedger.visibleTransactions.map(transaction => transaction.id),
     );
-    assert.ok(transactionLedger.cashTransactionsByMonth.size > 0);
-    assert.ok(transactionLedger.visibleCheckingTransactionsByDate.size > 0);
     buildMatchedFinancialAllocationIndexes(ledger);
+  });
+  const dashboardReviewStage = measureColdAndRepeated(() => {
     countReviewQueue(ledger, "2026-12-15");
-  };
-
-  const coldMs = measure(prepare);
-  const repeatedMaxMs = measureMax(prepare);
+  });
   const projectionMaxMs = measureMax(() => {
     buildFinancialProjectionIndexes({
       transactions: ledger,
@@ -260,21 +263,25 @@ test("isolated 20k provider preparation stays below one input task", context => 
   });
 
   assert.equal(visibleTransactionIds.size, ledger.length);
-
-  assert.ok(
-    coldMs < PERFORMANCE_BUDGET_MS,
-    `cold combined 20k preparation took ${coldMs.toFixed(1)}ms`,
-  );
-  assert.ok(
-    repeatedMaxMs < PERFORMANCE_BUDGET_MS,
-    `combined 20k preparation max-of-${REPETITIONS} took ${repeatedMaxMs.toFixed(1)}ms`,
-  );
+  assert.ok(transactionLedger!.cashTransactionsByMonth.size > 0);
+  assert.ok(transactionLedger!.visibleCheckingTransactionsByDate.size > 0);
+  for (const [name, timing] of [
+    ["context month index", contextMonthIndex],
+    ["transaction ledger", transactionLedgerStage],
+    ["match and visibility indexes", matchIndexesStage],
+    ["Dashboard review stage", dashboardReviewStage],
+  ] as const) {
+    assert.ok(timing.max < PERFORMANCE_BUDGET_MS,
+      `${name} took ${timing.cold.toFixed(1)}ms cold/${timing.repeatedMax.toFixed(1)}ms repeated`);
+  }
   assert.ok(
     projectionMaxMs < PERFORMANCE_BUDGET_MS,
     `20k projection indexes max-of-${REPETITIONS} took ${projectionMaxMs.toFixed(1)}ms`,
   );
+  const combinedColdMs = contextMonthIndex.cold + transactionLedgerStage.cold
+    + matchIndexesStage.cold + dashboardReviewStage.cold;
   context.diagnostic(
-    `isolated 20k provider prep: cold=${coldMs.toFixed(1)}ms, repeated-max=${repeatedMaxMs.toFixed(1)}ms, projection-max=${projectionMaxMs.toFixed(1)}ms`,
+    `isolated 20k staged prep: context-index=${contextMonthIndex.cold.toFixed(1)}/${contextMonthIndex.repeatedMax.toFixed(1)}ms, ledger=${transactionLedgerStage.cold.toFixed(1)}/${transactionLedgerStage.repeatedMax.toFixed(1)}ms, matches=${matchIndexesStage.cold.toFixed(1)}/${matchIndexesStage.repeatedMax.toFixed(1)}ms, review=${dashboardReviewStage.cold.toFixed(1)}/${dashboardReviewStage.repeatedMax.toFixed(1)}ms, combined-cold=${combinedColdMs.toFixed(1)}ms (diagnostic), projection-index-max=${projectionMaxMs.toFixed(1)}ms`,
   );
 });
 

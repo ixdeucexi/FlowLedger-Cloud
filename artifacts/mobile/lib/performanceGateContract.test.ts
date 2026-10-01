@@ -34,3 +34,15 @@ test("the canonical mobile test command keeps functional concurrency and runs th
   assert.match(benchmark, /const REPETITIONS = 5;/);
   assert.match(benchmark, /performance\.now\(\)/);
 });
+
+test("the provider benchmark reflects one month index and yielded Dashboard stages", () => {
+  const provider = readFileSync("context/BudgetContext.tsx", "utf8");
+  const monthIndexReads = provider.match(/indexRecordsByMonth\(transactions\)/g) ?? [];
+  assert.equal(monthIndexReads.length, 1);
+  assert.match(provider, /preparedReviewCenterCount = countReviewQueue\(transactions, asOfDate\)/);
+  assert.match(provider, /startCancellableStageQueue\(\{\s*stages,/);
+
+  const benchmark = readFileSync("lib/financialProjectionPerformance.benchmark.ts", "utf8");
+  assert.match(benchmark, /combined-cold=.*\(diagnostic\)/);
+  assert.equal((benchmark.match(/indexRecordsByMonth\(ledger\)/g) ?? []).length, 1);
+});
