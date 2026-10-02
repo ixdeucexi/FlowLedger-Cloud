@@ -10,16 +10,37 @@ export type DesktopExperienceEnvironment = {
   standalone?: boolean;
 };
 
+const PHONE_USER_AGENT =
+  /iPhone|iPod|Android[^;)]*Mobile|Windows Phone|IEMobile|Opera Mini|BlackBerry|webOS/i;
+const TABLET_USER_AGENT = /iPad|Android/i;
+const MAC_USER_AGENT = /Macintosh/i;
+
+function isPhoneEnvironment({
+  userAgent = "",
+  userAgentMobile = false,
+}: DesktopExperienceEnvironment) {
+  return userAgentMobile || PHONE_USER_AGENT.test(userAgent);
+}
+
+function isTabletEnvironment({
+  userAgent = "",
+  maxTouchPoints = 0,
+}: DesktopExperienceEnvironment) {
+  const ipadUsingDesktopUserAgent =
+    MAC_USER_AGENT.test(userAgent) && maxTouchPoints > 1;
+  return TABLET_USER_AGENT.test(userAgent) || ipadUsingDesktopUserAgent;
+}
+
 /**
- * FlowLedger intentionally uses one responsive product experience everywhere.
- *
- * The former desktop workspace rendered separate page components, so website
- * users could miss controls that already existed in the PWA. Keeping this
- * decision in one helper prevents browser width or install state from silently
- * switching users onto a second, incomplete implementation.
+ * Keeps the existing phone and installed tablet PWA experience intact while
+ * enabling the responsive desktop workspace for browser-sized web sessions.
  */
 export function shouldUseDesktopExperience(
-  _environment: DesktopExperienceEnvironment,
+  environment: DesktopExperienceEnvironment,
 ) {
-  return false;
+  if (environment.platform !== "web") return false;
+  if (environment.viewportWidth < DESKTOP_BREAKPOINT) return false;
+  if (isPhoneEnvironment(environment)) return false;
+  if (environment.standalone && isTabletEnvironment(environment)) return false;
+  return true;
 }

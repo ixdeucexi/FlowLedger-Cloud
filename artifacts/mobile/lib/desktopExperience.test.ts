@@ -3,14 +3,14 @@ import test from "node:test";
 
 import { shouldUseDesktopExperience } from "./desktopExperience";
 
-test("keeps wide desktop browsers on the same responsive experience as the PWA", () => {
+test("enables the desktop workspace for wide desktop browsers", () => {
   assert.equal(
     shouldUseDesktopExperience({
       platform: "web",
       viewportWidth: 1440,
       userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
     }),
-    false,
+    true,
   );
 });
 
@@ -45,7 +45,7 @@ test("never replaces the phone experience, even at an unusual wide viewport", ()
   );
 });
 
-test("does not change the experience when a tablet app is installed", () => {
+test("uses two-column desktop mode for tablet browsers but not installed tablet PWAs", () => {
   const ipadBrowser = {
     platform: "web",
     viewportWidth: 1024,
@@ -54,14 +54,14 @@ test("does not change the experience when a tablet app is installed", () => {
     maxTouchPoints: 5,
   };
 
-  assert.equal(shouldUseDesktopExperience(ipadBrowser), false);
+  assert.equal(shouldUseDesktopExperience(ipadBrowser), true);
   assert.equal(
     shouldUseDesktopExperience({ ...ipadBrowser, standalone: true }),
     false,
   );
 });
 
-test("does not change the experience when a desktop app is installed", () => {
+test("allows an installed desktop PWA to use the desktop workspace", () => {
   assert.equal(
     shouldUseDesktopExperience({
       platform: "web",
@@ -69,6 +69,6 @@ test("does not change the experience when a desktop app is installed", () => {
       userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)",
       standalone: true,
     }),
-    false,
+    true,
   );
 });
