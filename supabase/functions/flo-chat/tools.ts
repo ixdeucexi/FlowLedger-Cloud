@@ -196,7 +196,7 @@ export function createFloTools(runtime: FloToolRuntime) {
           const endDate = new Date(Date.UTC(month.year, month.month + 1, 0)).toISOString().slice(0, 10);
           const [debts, moves, overrides] = await Promise.all([
             runtime.client.from("bills").select("id,name,is_debt,balance,interest_rate,include_in_snowball,frequency,due_day,start_date,end_date,last_reviewed_at", { count: "exact" }).eq("household_id", runtime.householdId).eq("is_debt", true).order("id").limit(limit),
-            runtime.client.from("bill_date_moves").select("id,bill_id,from_date,to_date,created_at,updated_at", { count: "exact" }).eq("household_id", runtime.householdId).or(`and(from_date.gte.${startDate},from_date.lte.${endDate}),and(to_date.gte.${startDate},to_date.lte.${endDate})`).limit(limit),
+            runtime.client.from("bill_date_moves").select("id,bill_id,from_date,to_date,custom_amount,is_skipped,created_at,updated_at", { count: "exact" }).eq("household_id", runtime.householdId).or(`and(from_date.gte.${startDate},from_date.lte.${endDate}),and(to_date.gte.${startDate},to_date.lte.${endDate})`).limit(limit),
             runtime.client.from("monthly_overrides").select("id,bill_id,custom_due_day", { count: "exact" }).eq("household_id", runtime.householdId).eq("year", month.year).eq("month", month.month).limit(limit),
           ]);
           debtRows = debts.data ?? [];
@@ -364,7 +364,7 @@ export function createFloTools(runtime: FloToolRuntime) {
           .select("id,bill_id,month,year,custom_amount,planned_debt_amount,custom_due_day,paid_amount,actual_amount,paid_date", { count: "exact" })
           .eq("household_id", runtime.householdId).eq("year", input.year).eq("month", input.month).limit(FLO_V3_MAX_ROWS);
         let movesQuery = runtime.client.from("bill_date_moves")
-          .select("id,bill_id,from_date,to_date,move_reason,created_at,updated_at", { count: "exact" })
+          .select("id,bill_id,from_date,to_date,custom_amount,is_skipped,move_reason,created_at,updated_at", { count: "exact" })
           .eq("household_id", runtime.householdId).or(`and(from_date.gte.${startDate},from_date.lte.${endDate}),and(to_date.gte.${startDate},to_date.lte.${endDate})`).limit(FLO_V3_MAX_ROWS);
         if (input.billId) {
           overridesQuery = overridesQuery.eq("bill_id", input.billId);

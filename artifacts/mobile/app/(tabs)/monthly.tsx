@@ -405,11 +405,12 @@ export default function MonthlyScreen() {
   const { user } = useAuth();
   const {
     bills, incomes, overrides, billDateMoves, transactions, pendingBankTransactions, pendingPlanMatches, extraPayments, goals, decisions, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
+    setBillOccurrenceAmount, skipBillOccurrence, endBillSeriesBeforeOccurrence,
     getCustomDueDay, setCustomDueDay,
     moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence,
-    getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, settings,
+    getMonthlyBills, getBillOccurrencesInMonth, getBillOccurrenceAmount, getBillMonthlyTotal, settings,
     selectedYear, setSelectedYear, dashboardFilter, setDashboardFilter,
-    getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill, deleteBill, updateIncome,
+    getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill, updateIncome,
     getCashFlow, getMonthlyIncome, getDailyBalances, getCalendarDailyBalances, getIncomeOccurrencesInMonth,
     previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, finalizeBillPayment, getExtraPayment, getDebtMonthSettlements, getDebtPlanForMonth, getRemainingDebtPlanForMonth, setPlannedDebtAmount, canEditHousehold,
     updateDecision, deleteDecision, updateGoal, deleteGoal, activeHousehold,
@@ -889,7 +890,7 @@ export default function MonthlyScreen() {
     if (!selectedDate) return new Map<string, BillDateMove>();
     return new Map(
       billDateMoves
-        .filter(move => move.to_date === selectedDate)
+        .filter(move => !move.is_skipped && move.from_date !== move.to_date && move.to_date === selectedDate)
         .map(move => [move.bill_id, move] as const),
     );
   }, [billDateMoves, selectedDate]);
@@ -1269,13 +1270,17 @@ export default function MonthlyScreen() {
     setSurplusPrompt(null);
   };
 
-  const handleAmtBlur = useCallback((bill: { id: string; amount: number }, key: string) => {
+  const handleAmtBlur = useCallback((bill: { id: string; amount: number }, key: string, occurrenceDate?: string) => {
     const val = editingAmounts[key];
     if (val === undefined) return;
     const parsed = parseFloat(val);
-    setCustomAmount(bill.id, month, selectedYear, isNaN(parsed) || parsed === bill.amount ? undefined : parsed);
+    if (occurrenceDate) {
+      void setBillOccurrenceAmount(bill.id, occurrenceDate, isNaN(parsed) || parsed === bill.amount ? undefined : parsed);
+    } else {
+      void setCustomAmount(bill.id, month, selectedYear, isNaN(parsed) || parsed === bill.amount ? undefined : parsed);
+    }
     setEditingAmounts(p => { const n = { ...p }; delete n[key]; return n; });
-  }, [editingAmounts, setCustomAmount, month, selectedYear]);
+  }, [editingAmounts, setBillOccurrenceAmount, setCustomAmount, month, selectedYear]);
 
   const saveDueDayChange = useCallback(async (picker: DueDayPickerState, targetDate: string | undefined) => {
     if (savingDueDay) return;
@@ -1432,23 +1437,27 @@ export default function MonthlyScreen() {
     });
   };
 
-  const handleDeleteBillFromDay = useCallback((bill: Bill) => {
-    const itemLabel = bill.is_debt ? "debt" : "bill";
-    setDayConfirmation({
-      title: `Delete ${bill.is_debt ? "Debt" : "Bill"}`,
-      message: `Delete "${bill.name}" completely? This removes it from Bills and Forecast. Existing Activity entries stay for history.`,
-      confirmText: "Delete",
-      destructive: true,
-      onConfirm: async () => {
-        try {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          await deleteBill(bill.id);
-        } catch (error) {
-          Alert.alert(`Couldn't delete ${itemLabel}`, error instanceof Error ? error.message : "Try again in a moment.");
-        }
-      },
-    });
-  }, [deleteBill]);
+  const handleDeleteBillFromDay = useCallback((bill: Bill, occurrenceDate: string) => {
+    const run = async (scope: "one" | "future") => {
+      try {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        if (scope === "one") await skipBillOccurrence(bill.id, occurrenceDate);
+        else await endBillSeriesBeforeOccurrence(bill.id, occurrenceDate);
+        setSelectedDate(null);
+      } catch (error) {
+        Alert.alert("Couldn't remove payment", error instanceof Error ? error.message : "Try again in a moment.");
+      }
+    };
+    Alert.alert(
+      `Remove ${bill.name}?`,
+      "Choose whether to remove only this payment or this payment and all future payments. Past payments and Activity history will stay.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "This payment", onPress: () => void run("one") },
+        { text: "This & future", style: "destructive", onPress: () => void run("future") },
+      ],
+    );
+  }, [endBillSeriesBeforeOccurrence, skipBillOccurrence]);
 
   const handleDeleteIncomeFromDay = useCallback((income: IncomeItem, day: number) => {
     const occurrenceDate = isoDateForMonthDay(selectedYear, month, day);
@@ -2333,7 +2342,7 @@ export default function MonthlyScreen() {
                             occurrenceDate,
                           );
                           const overdueOccurrence = overdueBillOccurrenceMap.get(occurrenceKey(bill.id, occurrenceDate));
-                          const amount = getAmount(bill, month, selectedYear);
+                          const amount = getBillOccurrenceAmount(bill, occurrenceDate);
                           const debtOccurrence = bill.is_debt
                             ? debtMonthSettlements.get(bill.id)?.occurrences?.find(
                                 occurrence => occurrence.occurrenceDate === occurrenceDate,
@@ -2369,7 +2378,7 @@ export default function MonthlyScreen() {
                             ? debtPaymentProgress(requiredAmount, amount, paid).optionalExtraRemaining
                             : 0;
                           const movedIn = movedInByBillId.get(bill.id);
-                          const canReschedule = bill.frequency === "monthly" || bill.frequency === "quarterly";
+                          const canReschedule = bill.is_recurring || bill.is_debt;
                           const amtKey = `${bill.id}-${occurrenceDate}-overlay-amount`;
                           const showAmt = editingAmounts[amtKey] !== undefined ? editingAmounts[amtKey] : amount.toFixed(2);
                           const amountEditing = editingAmounts[amtKey] !== undefined;
@@ -2413,7 +2422,7 @@ export default function MonthlyScreen() {
                                       value={showAmt}
                                       onChangeText={text => setEditingAmounts(current => ({ ...current, [amtKey]: text }))}
                                       onFocus={() => setEditingAmounts(current => ({ ...current, [amtKey]: showAmt || amount.toFixed(2) }))}
-                                      onBlur={() => handleAmtBlur({ id: bill.id, amount: bill.amount }, amtKey)}
+                                      onBlur={() => handleAmtBlur({ id: bill.id, amount: bill.amount }, amtKey, occurrenceDate)}
                                       keyboardType="decimal-pad"
                                       returnKeyType="done"
                                       blurOnSubmit
@@ -2424,7 +2433,7 @@ export default function MonthlyScreen() {
                                     />
                                     {amountEditing ? (
                                       <Pressable
-                                        onPress={() => handleAmtBlur({ id: bill.id, amount: bill.amount }, amtKey)}
+                                        onPress={() => handleAmtBlur({ id: bill.id, amount: bill.amount }, amtKey, occurrenceDate)}
                                         hitSlop={8}
                                         style={[styles.dayBillPaidSave, { backgroundColor: c.primary + "22" }]}
                                       >
@@ -2513,7 +2522,7 @@ export default function MonthlyScreen() {
                                   </Pressable>
                                 ) : null}
                                 <Pressable
-                                  onPress={() => handleDeleteBillFromDay(bill)}
+                                  onPress={() => handleDeleteBillFromDay(bill, occurrenceDate)}
                                   style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.destructive + "12", borderColor: c.destructive + "35", opacity: pressed ? 0.74 : 1 }]}
                                 >
                                   <Feather name="trash-2" size={13} color={c.destructive} />

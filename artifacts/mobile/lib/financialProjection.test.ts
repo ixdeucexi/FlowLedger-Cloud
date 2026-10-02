@@ -101,6 +101,38 @@ test("malformed saved bill amounts cannot poison the forecast", () => {
   assert.equal(override.paid_amount, 0);
 });
 
+test("weekly occurrence exceptions change one amount and skip one date without changing siblings", () => {
+  const snapshot = structuredClone(golden.cases[0].snapshot) as unknown as FinancialProjectionSnapshot;
+  snapshot.settings.starting_balance = 1000;
+  snapshot.incomes = [];
+  snapshot.transactions = [];
+  snapshot.deletedTransactions = [];
+  snapshot.goals = [];
+  snapshot.decisions = [];
+  snapshot.extraPayments = [];
+  snapshot.overrides = [];
+  snapshot.bills = [{
+    id: "weekly", name: "Weekly bill", amount: 25, category: "Other", priority: 1,
+    is_debt: false, balance: 0, interest_rate: 0, due_day: 2, day_of_week: 3,
+    next_payment_date: "2026-09-02", start_date: "2026-09-02", is_recurring: true,
+    frequency: "weekly", created_at: "2026-09-01T00:00:00Z",
+  }];
+  snapshot.billDateMoves = [
+    { id: "amount", bill_id: "weekly", from_date: "2026-09-09", to_date: "2026-09-09", custom_amount: 40, created_at: "2026-09-01T00:00:00Z" },
+    { id: "skip", bill_id: "weekly", from_date: "2026-09-16", to_date: "2026-09-16", is_skipped: true, created_at: "2026-09-01T00:00:00Z" },
+  ];
+  const projection = createFinancialProjection(snapshot, { now: new Date("2026-09-01T12:00:00Z"), timeZone: "America/Chicago" });
+
+  assert.deepEqual(projection.getBillOccurrencesInMonth(snapshot.bills[0], 8, 2026), [2, 9, 23, 30]);
+  assert.equal(projection.getBillOccurrenceAmount(snapshot.bills[0], "2026-09-09"), 40);
+  assert.equal(projection.getBillOccurrenceAmount(snapshot.bills[0], "2026-09-23"), 25);
+  assert.equal(projection.getBillMonthlyTotal(snapshot.bills[0], 8, 2026), 115);
+  const billEvents = projection.getDailyBalances(8, 2026).flatMap(day => day.events ?? []).filter(event => event.sourceId === "weekly");
+  assert.deepEqual(billEvents.map(event => [event.date, event.amount]), [
+    ["2026-09-02", -25], ["2026-09-09", -40], ["2026-09-23", -25], ["2026-09-30", -25],
+  ]);
+});
+
 for (const fixture of golden.cases) {
   test(`legacy BudgetContext parity: ${fixture.name}`, () => {
     const snapshot = structuredClone(

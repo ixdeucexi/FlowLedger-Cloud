@@ -101,7 +101,7 @@ import { assertFinancialMutationOnline, knownNetworkStatus, subscribeNetworkStat
 import { decisionDbPayload } from "@/lib/decisionPersistence";
 import { recordDiagnostic } from "@/lib/diagnostics";
 import { isDevDemoMode } from "@/lib/demoMode";
-import { isBillActiveForMonth, moveSettledBillOverrideDate, resolveIncomeMatchOccurrenceDate } from "@/lib/schedule";
+import { billSeriesEndDateBefore, isBillActiveForMonth, moveSettledBillOverrideDate, resolveIncomeMatchOccurrenceDate } from "@/lib/schedule";
 import { accountUpdatesOperatingAnchor, connectedCheckingObservedAnchor, evaluateForecastConfidence, operatingAccountAnchor, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
 import { loadAllDailyCheckingCloses, localDateInTimeZone, overlayCompletedDailyCheckingCloses, reuseDailyCheckingCloseLoadState, reuseDailyCheckingCloseSnapshots, shouldApplyDailyCheckingCloseLoad, type DailyCheckingCloseLoadState, type DailyCheckingCloseSnapshot } from "@/lib/dailyCheckingClose";
 import { type DecisionResult, type DecisionScenario } from "@/lib/decisions";
@@ -339,12 +339,16 @@ interface BudgetContextType {
   setPlannedDebtAmount: (billId: string, month: number, year: number, amount: number | undefined) => Promise<void>;
   getCustomDueDay: (billId: string, month: number, year: number) => number | undefined;
   setCustomDueDay: (billId: string, month: number, year: number, day: number | undefined) => Promise<void>;
+  setBillOccurrenceAmount: (billId: string, occurrenceDate: string, amount: number | undefined) => Promise<void>;
+  skipBillOccurrence: (billId: string, occurrenceDate: string) => Promise<void>;
+  endBillSeriesBeforeOccurrence: (billId: string, occurrenceDate: string) => Promise<void>;
   moveBillOccurrence: (billId: string, fromDate: string, toDate: string) => Promise<void>;
   removeBillOccurrenceMove: (id: string) => Promise<void>;
   getBillDateMoveForOccurrence: (billId: string, fromDate: string) => BillDateMove | undefined;
   getBillDateMovesForMonth: (month: number, year: number) => BillDateMove[];
   getMonthlyBills: (month: number, year: number) => Bill[];
   getBillOccurrencesInMonth: (bill: Bill, month: number, year: number) => number[];
+  getBillOccurrenceAmount: (bill: Bill, occurrenceDate: string) => number;
   getBillMonthlyTotal: (bill: Bill, month: number, year: number) => number;
   getBillEffectiveMonthlyTotal: (bill: Bill, month: number, year: number) => number;
   getDebtMonthSettlements: (month: number, year: number) => Map<string, DebtMonthSettlement>;
@@ -584,12 +588,14 @@ function writeStoredBillDateMoves(userId: string | undefined, moves: BillDateMov
   globalThis.localStorage?.setItem(billDateMoveStorageKey(userId, householdId), JSON.stringify(moves));
 }
 
-function billDateMoveDbPayload(move: Pick<BillDateMove, "bill_id" | "from_date" | "to_date">, userId: string, scope?: HouseholdMembership | null) {
+function billDateMoveDbPayload(move: Pick<BillDateMove, "bill_id" | "from_date" | "to_date" | "custom_amount" | "is_skipped">, userId: string, scope?: HouseholdMembership | null) {
   return {
     user_id: userId,
     bill_id: move.bill_id,
     from_date: move.from_date.slice(0, 10),
     to_date: move.to_date.slice(0, 10),
+    custom_amount: move.custom_amount ?? null,
+    is_skipped: move.is_skipped === true,
     move_reason: "manual",
     updated_at: new Date().toISOString(),
     ...(scope ? { household_id: scope.householdId, budget_id: scope.budgetId } : {}),
@@ -604,7 +610,7 @@ function isUuidLike(id: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
 }
 
-async function upsertBillDateMoveRow(move: Pick<BillDateMove, "bill_id" | "from_date" | "to_date">, userId: string, scope?: HouseholdMembership | null) {
+async function upsertBillDateMoveRow(move: Pick<BillDateMove, "bill_id" | "from_date" | "to_date" | "custom_amount" | "is_skipped">, userId: string, scope?: HouseholdMembership | null) {
   const payload = billDateMoveDbPayload(move, userId, scope);
   const preferredConflict = billDateMoveConflictTarget(scope);
   const saved = await supabase
@@ -3280,6 +3286,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     getPaidAmount,
     getCustomDueDay,
     getBillOccurrencesInMonth,
+    getBillOccurrenceAmount,
     getBillMonthlyTotal,
     getBillEffectiveMonthlyTotal,
     getMonthlyBills,
@@ -3435,29 +3442,35 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     [billDateMoves]
   );
 
-  const moveBillOccurrence = useCallback(async (billId: string, fromDate: string, toDate: string) => {
+  const saveBillOccurrenceException = useCallback(async (
+    billId: string,
+    fromDate: string,
+    patch: Pick<BillDateMove, "to_date" | "custom_amount" | "is_skipped">,
+  ) => {
     if (!user) return;
-    assertCanEditHousehold("move a bill date");
+    assertCanEditHousehold("change a bill occurrence");
     const cleanFrom = fromDate.slice(0, 10);
-    const cleanTo = toDate.slice(0, 10);
+    const cleanTo = patch.to_date.slice(0, 10);
     const previous = billDateMovesRef.current;
     const previousOverrides = overridesRef.current;
     const existing = billDateMovesRef.current.find(move => move.bill_id === billId && move.from_date === cleanFrom);
     const nextMove: BillDateMove = existing
-      ? { ...existing, to_date: cleanTo, move_reason: "manual" }
-      : { id: genId(), bill_id: billId, from_date: cleanFrom, to_date: cleanTo, move_reason: "manual", created_at: new Date().toISOString() };
+      ? { ...existing, ...patch, to_date: cleanTo, move_reason: "manual" }
+      : { id: genId(), bill_id: billId, from_date: cleanFrom, ...patch, to_date: cleanTo, move_reason: "manual", created_at: new Date().toISOString() };
     const next = existing
       ? billDateMovesRef.current.map(move => move.id === existing.id ? nextMove : move)
       : [...billDateMovesRef.current, nextMove];
     billDateMovesRef.current = next;
     setBillDateMoves(next);
-    const nextOverrides = moveSettledBillOverrideDate(
-      overridesRef.current,
-      billId,
-      cleanFrom,
-      existing?.to_date ?? cleanFrom,
-      cleanTo,
-    );
+    const nextOverrides = existing?.to_date === cleanTo
+      ? overridesRef.current
+      : moveSettledBillOverrideDate(
+        overridesRef.current,
+        billId,
+        cleanFrom,
+        existing?.to_date ?? cleanFrom,
+        cleanTo,
+      );
     overridesRef.current = nextOverrides;
     setOverrides(nextOverrides);
     writeStoredBillDateMoves(user.id, next, householdScopeRef.current?.householdId);
@@ -3467,29 +3480,95 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     const saveOperationId = markSaveStarted();
     try {
-      const saved = await upsertBillDateMoveRow(nextMove, user.id, householdScopeRef.current);
-      if (saved.error) throw new Error(`Move bill date: ${saved.error.message}`);
-      const savedMove = normalizeBillDateMoveRow(saved.data);
-      const finalMoves = billDateMovesRef.current.map(move =>
-        move.bill_id === savedMove.bill_id && move.from_date === savedMove.from_date ? savedMove : move
+      const saved = await enqueueMutationByKey(
+        billWriteQueuesRef.current,
+        `occurrence:${billId}:${cleanFrom}`,
+        () => upsertBillDateMoveRow(nextMove, user.id, householdScopeRef.current),
       );
+      if (saved.error) throw new Error(`Change bill occurrence: ${saved.error.message}`);
+      const savedMove = normalizeBillDateMoveRow(saved.data);
+      const finalMoves = billDateMovesRef.current.map(move => {
+        if (move.bill_id !== savedMove.bill_id || move.from_date !== savedMove.from_date) return move;
+        const stillCurrent = move.to_date === nextMove.to_date
+          && Object.is(move.custom_amount, nextMove.custom_amount)
+          && move.is_skipped === nextMove.is_skipped;
+        return stillCurrent ? savedMove : move;
+      });
       billDateMovesRef.current = finalMoves;
       setBillDateMoves(finalMoves);
       writeStoredBillDateMoves(user.id, finalMoves, householdScopeRef.current?.householdId);
       markSaveCompleted(saveOperationId);
     } catch (error) {
       const current = billDateMovesRef.current.find(move => move.bill_id === billId && move.from_date === cleanFrom);
-      if (current?.to_date === cleanTo) {
+      if (current?.to_date === cleanTo
+          && Object.is(current.custom_amount, nextMove.custom_amount)
+          && current.is_skipped === nextMove.is_skipped) {
         billDateMovesRef.current = previous;
         setBillDateMoves(previous);
         overridesRef.current = previousOverrides;
         setOverrides(previousOverrides);
         writeStoredBillDateMoves(user.id, previous, householdScopeRef.current?.householdId);
       }
-      markSaveFailed(error, () => moveBillOccurrence(billId, fromDate, toDate), saveOperationId);
+      markSaveFailed(error, () => saveBillOccurrenceException(billId, fromDate, patch), saveOperationId);
       throw error;
     }
   }, [user, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, assertCanEditHousehold]);
+
+  const moveBillOccurrence = useCallback(
+    async (billId: string, fromDate: string, toDate: string) => {
+      const existing = billDateMovesRef.current.find(move => move.bill_id === billId && move.from_date === fromDate.slice(0, 10));
+      await saveBillOccurrenceException(billId, fromDate, {
+        to_date: toDate,
+        custom_amount: existing?.custom_amount,
+        is_skipped: false,
+      });
+    },
+    [saveBillOccurrenceException],
+  );
+
+  const setBillOccurrenceAmount = useCallback(
+    async (billId: string, occurrenceDate: string, amount: number | undefined) => {
+      const cleanDate = occurrenceDate.slice(0, 10);
+      const existing = billDateMovesRef.current.find(move =>
+        move.bill_id === billId && (move.from_date === cleanDate || move.to_date === cleanDate)
+      );
+      const originalDate = existing?.from_date ?? cleanDate;
+      await saveBillOccurrenceException(billId, originalDate, {
+        to_date: existing?.to_date ?? cleanDate,
+        custom_amount: amount === undefined ? undefined : Math.max(0, amount),
+        is_skipped: false,
+      });
+    },
+    [saveBillOccurrenceException],
+  );
+
+  const skipBillOccurrence = useCallback(
+    async (billId: string, occurrenceDate: string) => {
+      const cleanDate = occurrenceDate.slice(0, 10);
+      const existing = billDateMovesRef.current.find(move =>
+        move.bill_id === billId && (move.from_date === cleanDate || move.to_date === cleanDate)
+      );
+      await saveBillOccurrenceException(billId, existing?.from_date ?? cleanDate, {
+        to_date: existing?.to_date ?? cleanDate,
+        custom_amount: existing?.custom_amount,
+        is_skipped: true,
+      });
+    },
+    [saveBillOccurrenceException],
+  );
+
+  const endBillSeriesBeforeOccurrence = useCallback(async (billId: string, occurrenceDate: string) => {
+    const bill = bills.find(item => item.id === billId);
+    if (!bill) throw new Error("Bill not found.");
+    const selectedDate = occurrenceDate.slice(0, 10);
+    const existingException = billDateMovesRef.current.find(move =>
+      move.bill_id === billId && (move.from_date === selectedDate || move.to_date === selectedDate)
+    );
+    const cleanDate = existingException?.from_date ?? selectedDate;
+    const endDate = billSeriesEndDateBefore(cleanDate);
+    if (!endDate) throw new Error("Choose a valid occurrence date.");
+    await updateBill({ ...bill, end_date: endDate }, ["end_date"], { end_date: bill.end_date });
+  }, [bills, updateBill]);
 
   const removeBillOccurrenceMove = useCallback(async (id: string) => {
     if (!user) return;
@@ -6069,8 +6148,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       dashboardFilter, setDashboardFilter,
       addBill, updateBill, stopFutureBill, deleteBill, deleteBillMistake, getBillById,
       getOverride, getAmount, getPaidAmount, setPaidAmount, setCustomAmount, setPlannedDebtAmount, getCustomDueDay, setCustomDueDay,
+      setBillOccurrenceAmount, skipBillOccurrence, endBillSeriesBeforeOccurrence,
       moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence, getBillDateMovesForMonth,
-      getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal, getDebtMonthSettlements, getDebtSourceCommitment, getDebtPlanForMonth, getRemainingDebtPlanForMonth,
+      getMonthlyBills, getBillOccurrencesInMonth, getBillOccurrenceAmount, getBillMonthlyTotal, getBillEffectiveMonthlyTotal, getDebtMonthSettlements, getDebtSourceCommitment, getDebtPlanForMonth, getRemainingDebtPlanForMonth,
       runSnowball, previewDebtSnowball, applyDebtSnowballPayment, saveExtraPayment, getExtraPayment, deleteExtraPayment, removeDebtSnowballPayment, finalizeBillPayment,
       addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, matchPendingTransactionToBill, matchPendingTransactionToManual, createTransactionForPendingCharge, removePendingPlanMatch, reconcileTransaction, createSpendingBucketForTransaction, undoTransactionReconciliation, removeReviewSurplusFunding, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome, getIncomeOccurrencesInMonth,

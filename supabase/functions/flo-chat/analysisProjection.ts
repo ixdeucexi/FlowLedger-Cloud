@@ -42,6 +42,7 @@ export function projectionInput(snapshot: AnalysisSnapshot): { input: FinancialP
   for (const table of ["bills", "transactions", "incomes", "extra_payments", "plaid_transactions"]) numberFields(table, ["amount"]);
   numberFields("monthly_overrides", ["paid_amount", "month", "year"]);
   numberFields("monthly_overrides", ["custom_amount", "actual_amount", "planned_debt_amount", "required_debt_amount", "custom_due_day"], true);
+  numberFields("bill_date_moves", ["custom_amount"], true);
   numberFields("goals", ["target_amount", "current_amount"]);
   numberFields("transactions", ["debt_applied_amount"], true);
   numberFields("bills", ["snowball_minimum_boost"], true);

@@ -208,6 +208,7 @@
     ,"lib/householdActivity.test.ts"
     ,"lib/billOccurrencePayment.ts"
     ,"lib/billOccurrencePayment.test.ts"
+    ,"lib/billOccurrencePersistence.test.ts"
     ,"lib/apiOrigin.ts"
     ,"lib/apiOrigin.test.ts"
     ,"lib/networkStatus.ts"

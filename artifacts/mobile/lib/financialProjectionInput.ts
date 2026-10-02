@@ -90,11 +90,18 @@ export function normalizeBillRow(bill: any): Bill {
 }
 
 export function normalizeBillDateMoveRow(row: any): BillDateMove {
+  const customAmount = row.custom_amount === null || row.custom_amount === undefined
+    ? undefined
+    : Number(row.custom_amount);
   return {
     id: String(row.id ?? genId()),
     bill_id: String(row.bill_id),
     from_date: String(row.from_date).slice(0, 10),
     to_date: String(row.to_date).slice(0, 10),
+    custom_amount: customAmount !== undefined && Number.isFinite(customAmount)
+      ? Math.max(0, customAmount)
+      : undefined,
+    is_skipped: row.is_skipped === true,
     move_reason: row.move_reason === "automatic" ? "automatic" : "manual",
     created_at: String(row.created_at ?? new Date().toISOString()),
     updated_at: row.updated_at ? String(row.updated_at) : undefined,

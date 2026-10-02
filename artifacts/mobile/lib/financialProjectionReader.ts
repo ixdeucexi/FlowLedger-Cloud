@@ -36,6 +36,7 @@ export function createFinancialProjectionReader(
     "getPaidAmount",
     "getCustomDueDay",
     "getBillOccurrencesInMonth",
+    "getBillOccurrenceAmount",
     "getBillMonthlyTotal",
     "getBillEffectiveMonthlyTotal",
     "getMonthlyBills",

@@ -6,7 +6,7 @@ export const analysisColumns: Record<string, string> = {
   household_settings: "household_id,starting_balance,starting_balance_date,calendar_start_date,safety_floor,forecast_horizon_months,payment_method,time_zone,planning_mode,zero_based_budget_enabled,debt_payoff_enabled,onboarding_completed",
   bills: "id,household_id,name,amount,category,priority,is_debt,balance,interest_rate,due_day,day_of_week,next_payment_date,start_date,end_date,is_recurring,frequency,created_at,smart_priority,include_in_snowball,snowball_minimum_boost,last_reviewed_at",
   monthly_overrides: "id,household_id,bill_id,month,year,custom_amount,planned_debt_amount,required_debt_amount,custom_due_day,paid_amount,actual_amount,paid_date",
-  bill_date_moves: "id,household_id,bill_id,from_date,to_date,move_reason,created_at,updated_at",
+  bill_date_moves: "id,household_id,bill_id,from_date,to_date,custom_amount,is_skipped,move_reason,created_at,updated_at",
   transactions: "id,household_id,date,amount,category,note,linked_bill_id,account_id,import_hash,transfer_group_id,debt_applied_amount,debt_applied_bill_id,source,plaid_transaction_id,plaid_account_id,merchant_name,pending,removed_at,deleted_at,match_confidence,match_reason,review_status,review_resolution,review_allocations,reviewed_at,user_edited_at,linked_income_id,linked_plan_id,linked_plan_type,matched_occurrence_date",
   accounts: "id,household_id,name,account_type,current_balance,balance_as_of,last_reconciled_at,is_active,created_at",
   // Optional historical source: calculators that do not use account history

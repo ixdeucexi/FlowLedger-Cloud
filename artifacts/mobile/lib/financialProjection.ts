@@ -299,6 +299,17 @@ export function createFinancialProjection(
     return applyBillDateMovesToOccurrences(bill, month, year, occ);
   };
 
+  const getBillOccurrenceAmount = (bill: Bill, occurrenceDate: string): number => {
+    const cleanDate = occurrenceDate.slice(0, 10);
+    const exception = billDateMoves
+      .filter(move => move.bill_id === bill.id && !move.is_skipped
+        && (move.from_date === cleanDate || move.to_date === cleanDate))
+      .sort((left, right) => String(right.updated_at ?? right.created_at).localeCompare(String(left.updated_at ?? left.created_at)))[0];
+    return exception?.custom_amount !== undefined
+      ? Math.max(0, exception.custom_amount)
+      : getAmount(bill, Number(cleanDate.slice(5, 7)) - 1, Number(cleanDate.slice(0, 4)));
+  };
+
   const getBillMonthlyTotal = (
     bill: Bill,
     month: number,
@@ -306,7 +317,10 @@ export function createFinancialProjection(
   ): number => {
     const occurrences = getBillOccurrencesInMonth(bill, month, year);
     if (occurrences.length === 0) return 0;
-    return getAmount(bill, month, year) * occurrences.length;
+    return occurrences.reduce((total, day) => total + getBillOccurrenceAmount(
+      bill,
+      `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+    ), 0);
   };
 
   const getBillEffectiveMonthlyTotal = (
@@ -893,16 +907,12 @@ export function createFinancialProjection(
     const totalBillsDue = activeBills.reduce((sum, bill) => {
       if (bill.is_debt && debtPlan) return sum;
       const occurrences = getBillOccurrencesInMonth(bill, month, year);
-      const amount =
-        occurrences.length > 0
-          ? getBillMonthlyTotal(bill, month, year) / occurrences.length
-          : 0;
       return (
         sum +
         occurrences.reduce((occurrenceSum, day) => {
           const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
           const match = billMatches.get(occurrenceKey(bill.id, date));
-          const remaining = remainingPlannedAmount(amount, match);
+          const remaining = remainingPlannedAmount(getBillOccurrenceAmount(bill, date), match);
           return occurrenceSum + remaining;
         }, 0)
       );
@@ -1044,6 +1054,7 @@ export function createFinancialProjection(
             matchedAllocationIndexes.reviewedBillIdsByMonth
               .get(monthPrefix)
               ?.has(b.id) ?? false;
+          const override = overridesByBillMonth.get(`${b.id}:${y}-${m}`);
           if (b.is_debt && debtPlan) return s;
           const total = hasReviewedOccurrence
             ? getBillMonthlyTotal(b, m, y)
@@ -1052,14 +1063,18 @@ export function createFinancialProjection(
           const dates = occ.map(
             (day) => `${monthPrefix}-${String(day).padStart(2, "0")}`,
           );
-          const amountPerOccurrence = total / dates.length;
           return (
             s +
             dates.filter(includeDate).reduce((occurrenceSum, date) => {
               const match = billMatches.get(occurrenceKey(b.id, date));
               return (
                 occurrenceSum +
-                remainingPlannedAmount(amountPerOccurrence, match)
+                remainingPlannedAmount(
+                  hasReviewedOccurrence || override?.actual_amount === undefined
+                    ? getBillOccurrenceAmount(b, date)
+                    : total / dates.length,
+                  match,
+                )
               );
             }, 0)
           );
@@ -1349,11 +1364,15 @@ export function createFinancialProjection(
           });
           return;
         }
-        const amt = occ.length > 0 ? total / occ.length : 0;
         occ.forEach((d) => {
           const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
           const match = billMatches.get(occurrenceKey(b.id, date));
-          const remaining = remainingPlannedAmount(amt, match);
+          const remaining = remainingPlannedAmount(
+            hasReviewedOccurrence || o?.actual_amount === undefined
+              ? getBillOccurrenceAmount(b, date)
+              : total / occ.length,
+            match,
+          );
           if (remaining <= 0.005) return;
           billsByDay[d] = (billsByDay[d] ?? 0) + remaining;
           financialEvents.push({
@@ -1365,7 +1384,7 @@ export function createFinancialProjection(
             amount: -remaining,
             status: "planned",
             name: b.name,
-            configuredOccurrenceAmount: amt,
+            configuredOccurrenceAmount: getBillOccurrenceAmount(b, date),
             settledOccurrenceAmount: Math.abs(Number(match?.amount) || 0),
             ...(b.is_debt ? { debtTargetBillId: b.id } : {}),
           });
@@ -1654,6 +1673,7 @@ export function createFinancialProjection(
     getPaidAmount,
     getCustomDueDay,
     getBillOccurrencesInMonth,
+    getBillOccurrenceAmount,
     getBillMonthlyTotal,
     getBillEffectiveMonthlyTotal,
     getMonthlyBills,

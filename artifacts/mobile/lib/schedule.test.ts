@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { applyBillDateMovesToOccurrenceDays, getBillMatchOccurrenceDates, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeMatchOccurrenceDates, getIncomeOccurrenceDays, getLatestIncomeChange, getLatestRecordedIncomeAmount, getUpcomingIncomeOccurrenceDates, incomeAmountToMonthly, isBillActiveForMonth, isValidDateInMonth, moveSettledBillOverrideDate, normalizeIncomeExcludedDates, resolveFinalizedBillOccurrenceDays, resolveIncomeMatchOccurrenceDate } from "./schedule";
+import { applyBillDateMovesToOccurrenceDays, billSeriesEndDateBefore, getBillMatchOccurrenceDates, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeMatchOccurrenceDates, getIncomeOccurrenceDays, getLatestIncomeChange, getLatestRecordedIncomeAmount, getUpcomingIncomeOccurrenceDates, incomeAmountToMonthly, isBillActiveForMonth, isValidDateInMonth, moveSettledBillOverrideDate, normalizeIncomeExcludedDates, resolveFinalizedBillOccurrenceDays, resolveIncomeMatchOccurrenceDate } from "./schedule";
 
 describe("bill scheduling", () => {
   it("validates a selected calendar date inside the intended month", () => {
@@ -110,6 +110,20 @@ describe("bill scheduling", () => {
 
     assert.deepEqual(applyBillDateMovesToOccurrenceDays("utilities", 6, 2026, [4], moves), []);
     assert.deepEqual(applyBillDateMovesToOccurrenceDays("utilities", 7, 2026, [4], moves), [3, 4]);
+  });
+
+  it("skips only the selected recurring occurrence", () => {
+    const skipped = applyBillDateMovesToOccurrenceDays("utilities", 6, 2026, [4, 11, 18, 25], [
+      { bill_id: "utilities", from_date: "2026-07-11", to_date: "2026-07-11", is_skipped: true },
+    ]);
+
+    assert.deepEqual(skipped, [4, 18, 25]);
+  });
+
+  it("ends a future series the day before the selected occurrence across month and year boundaries", () => {
+    assert.equal(billSeriesEndDateBefore("2026-10-01"), "2026-09-30");
+    assert.equal(billSeriesEndDateBefore("2026-01-01"), "2025-12-31");
+    assert.equal(billSeriesEndDateBefore("not-a-date"), undefined);
   });
 
   it("uses the newest move when the same occurrence was moved more than once", () => {

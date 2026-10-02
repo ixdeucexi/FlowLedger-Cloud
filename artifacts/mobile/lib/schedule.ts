@@ -20,6 +20,8 @@ export interface ScheduledBillDateMove {
   bill_id: string;
   from_date: string;
   to_date: string;
+  custom_amount?: number;
+  is_skipped?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -57,6 +59,13 @@ function calendarDayNumber(parts: CalendarDateParts) {
 function calendarDateFromDayNumber(dayNumber: number) {
   const date = new Date(dayNumber * DAY_MS);
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+}
+
+export function billSeriesEndDateBefore(occurrenceDate: string): string | undefined {
+  const occurrence = parseCalendarDate(occurrenceDate.slice(0, 10));
+  return occurrence
+    ? calendarDateFromDayNumber(calendarDayNumber(occurrence) - 1)
+    : undefined;
 }
 
 function firstOccurrenceOnOrAfter(anchorDay: number, targetDay: number, intervalDays: number) {
@@ -175,7 +184,7 @@ export function applyBillDateMovesToOccurrenceDays(
     move.bill_id === billId && move.from_date === dateFromDay(day)
   ));
   const movedIn = activeMoves
-    .filter(move => move.to_date.startsWith(monthPrefix))
+    .filter(move => !move.is_skipped && move.to_date.startsWith(monthPrefix))
     .map(move => Number(move.to_date.slice(8, 10)))
     .filter(day => Number.isFinite(day));
   return Array.from(new Set([...kept, ...movedIn])).sort((a, b) => a - b);

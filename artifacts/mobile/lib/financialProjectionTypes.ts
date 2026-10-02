@@ -51,6 +51,8 @@ export interface BillDateMove {
   bill_id: string;
   from_date: string;
   to_date: string;
+  custom_amount?: number;
+  is_skipped?: boolean;
   move_reason?: "manual" | "automatic";
   created_at: string;
   updated_at?: string;
