@@ -48,6 +48,18 @@ test("forecast offers one-or-future removal and never hard-deletes history", () 
   assert.match(source, /skipBillOccurrence/);
   assert.match(source, /endBillSeriesBeforeOccurrence/);
   assert.doesNotMatch(source, /deleteBill\(/);
+  assert.doesNotMatch(source, /Alert\.alert/);
+  assert.match(source, /setDayConfirmation\(/);
+  assert.match(source, /onSecondary: \(\) => run\("future"\)/);
   assert.match(context, /updateBill\(\{ \.\.\.bill, end_date: endDate \}, \["end_date"\]/);
   assert.match(forecast, /accessibilityLabel=\{`Remove \$\{bill\.name\} payment options`\}/);
+});
+
+test("forecast delete confirmation is a sibling above the open day modal", () => {
+  const dayModalStart = forecast.indexOf("visible={selectedDate !== null}");
+  const dayModalEnd = forecast.indexOf("</Modal>", dayModalStart);
+  const confirmation = forecast.indexOf("<ConfirmActionOverlay request={dayConfirmation}", dayModalStart);
+  assert.ok(dayModalStart >= 0);
+  assert.ok(dayModalEnd > dayModalStart);
+  assert.ok(confirmation > dayModalEnd);
 });

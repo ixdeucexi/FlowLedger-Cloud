@@ -7,6 +7,9 @@ export type ConfirmActionOptions = {
   cancelText?: string;
   destructive?: boolean;
   onConfirm: () => void | Promise<unknown>;
+  secondaryText?: string;
+  secondaryDestructive?: boolean;
+  onSecondary?: () => void | Promise<unknown>;
 };
 
 type ConfirmActionListener = (options: ConfirmActionOptions) => void;

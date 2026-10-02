@@ -1439,24 +1439,21 @@ export default function MonthlyScreen() {
 
   const handleDeleteBillFromDay = useCallback((bill: Bill, occurrenceDate: string) => {
     const run = async (scope: "one" | "future") => {
-      try {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        if (scope === "one") await skipBillOccurrence(bill.id, occurrenceDate);
-        else await endBillSeriesBeforeOccurrence(bill.id, occurrenceDate);
-        setSelectedDate(null);
-      } catch (error) {
-        Alert.alert("Couldn't remove payment", error instanceof Error ? error.message : "Try again in a moment.");
-      }
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      if (scope === "one") await skipBillOccurrence(bill.id, occurrenceDate);
+      else await endBillSeriesBeforeOccurrence(bill.id, occurrenceDate);
+      setSelectedDate(null);
     };
-    Alert.alert(
-      `Remove ${bill.name}?`,
-      "Choose whether to remove only this payment or this payment and all future payments. Past payments and Activity history will stay.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "This payment", onPress: () => void run("one") },
-        { text: "This & future", style: "destructive", onPress: () => void run("future") },
-      ],
-    );
+    setDayConfirmation({
+      title: `Remove ${bill.name}?`,
+      message: `Choose what to remove starting ${formatShortDate(occurrenceDate)}. Past payments and Activity history will stay.`,
+      confirmText: "This payment",
+      destructive: true,
+      onConfirm: () => run("one"),
+      secondaryText: "This & future",
+      secondaryDestructive: true,
+      onSecondary: () => run("future"),
+    });
   }, [endBillSeriesBeforeOccurrence, skipBillOccurrence]);
 
   const handleDeleteIncomeFromDay = useCallback((income: IncomeItem, day: number) => {
@@ -2928,9 +2925,10 @@ export default function MonthlyScreen() {
                     />
                   </View>
                 </Pressable>
-                <ConfirmActionOverlay request={dayConfirmation} onClose={() => setDayConfirmation(null)} />
               </Pressable>
             </Modal>
+
+            <ConfirmActionOverlay request={dayConfirmation} onClose={() => setDayConfirmation(null)} />
 
           </View>
         </ScrollView>

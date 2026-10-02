@@ -15,7 +15,7 @@ interface DialogProps {
 function ConfirmActionDialog({ request, onClose, contained = false }: DialogProps) {
   useOverlayActivity(true);
   const c = useColors();
-  const [running, setRunning] = useState(false);
+  const [runningAction, setRunningAction] = useState<"primary" | "secondary" | null>(null);
   const [error, setError] = useState("");
   const titleRef = useRef<Text>(null);
   const confirmText = request.confirmText ?? "Confirm";
@@ -27,7 +27,7 @@ function ConfirmActionDialog({ request, onClose, contained = false }: DialogProp
 
   useEffect(() => {
     setError("");
-    setRunning(false);
+    setRunningAction(null);
   }, [request]);
 
   useEffect(() => {
@@ -40,22 +40,24 @@ function ConfirmActionDialog({ request, onClose, contained = false }: DialogProp
   }, [request]);
 
   const close = () => {
-    if (running) return;
+    if (runningAction) return;
     setError("");
     onClose();
   };
 
-  const confirm = async () => {
-    if (running) return;
-    setRunning(true);
+  const runAction = async (action: "primary" | "secondary") => {
+    if (runningAction) return;
+    const callback = action === "primary" ? request.onConfirm : request.onSecondary;
+    if (!callback) return;
+    setRunningAction(action);
     setError("");
     try {
-      await request.onConfirm();
+      await callback();
       onClose();
     } catch {
       setError("That could not be completed. Please try again.");
     } finally {
-      setRunning(false);
+      setRunningAction(null);
     }
   };
 
@@ -82,27 +84,46 @@ function ConfirmActionDialog({ request, onClose, contained = false }: DialogProp
         <View style={styles.actions}>
           <Pressable
             accessibilityRole="button"
-            disabled={running}
+            disabled={Boolean(runningAction)}
             onPress={close}
             style={({ pressed }) => [
               styles.action,
-              { backgroundColor: c.muted, opacity: running ? 0.5 : pressed ? 0.75 : 1 },
+              { backgroundColor: c.muted, opacity: runningAction ? 0.5 : pressed ? 0.75 : 1 },
             ]}
           >
             <Text style={[styles.actionText, { color: c.mutedForeground }]}>{request.cancelText ?? "Cancel"}</Text>
           </Pressable>
+          {request.secondaryText && request.onSecondary ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${request.secondaryText} now`}
+              disabled={Boolean(runningAction)}
+              onPress={() => void runAction("secondary")}
+              style={({ pressed }) => [
+                styles.action,
+                {
+                  backgroundColor: request.secondaryDestructive ? c.destructive : c.primary,
+                  opacity: runningAction ? 0.65 : pressed ? 0.8 : 1,
+                },
+              ]}
+            >
+              <Text style={[styles.actionText, { color: request.secondaryDestructive ? "#fff" : c.primaryForeground }]}>
+                {runningAction === "secondary" ? `${request.secondaryText}…` : request.secondaryText}
+              </Text>
+            </Pressable>
+          ) : null}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`${confirmText} now`}
-            disabled={running}
-            onPress={() => void confirm()}
+            disabled={Boolean(runningAction)}
+            onPress={() => void runAction("primary")}
             style={({ pressed }) => [
               styles.action,
-              { backgroundColor: actionColor, opacity: running ? 0.65 : pressed ? 0.8 : 1 },
+              { backgroundColor: actionColor, opacity: runningAction ? 0.65 : pressed ? 0.8 : 1 },
             ]}
           >
             <Text style={[styles.actionText, { color: destructive ? "#fff" : c.primaryForeground }]}>
-              {running ? `${confirmText}…` : confirmText}
+              {runningAction === "primary" ? `${confirmText}…` : confirmText}
             </Text>
           </Pressable>
         </View>
@@ -203,6 +224,7 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "flex-end",
     gap: 10,
     marginTop: 18,
