@@ -138,10 +138,25 @@ describe("bill scheduling", () => {
   });
 
   it("rejects moving a recurring payment onto another native occurrence", () => {
-    const weekly = { frequency: "weekly" as const, due_day: 2, day_of_week: 3, next_payment_date: "2026-09-02", start_date: "2026-09-02" };
+    const weekly = { id: "weekly", frequency: "weekly" as const, due_day: 2, day_of_week: 3, next_payment_date: "2026-09-02", start_date: "2026-09-02" };
     assert.equal(billOccurrenceMoveConflicts(weekly, "2026-09-02", "2026-09-09"), true);
     assert.equal(billOccurrenceMoveConflicts(weekly, "2026-09-02", "2026-09-08"), false);
     assert.equal(billOccurrenceMoveConflicts(weekly, "2026-09-02", "2026-09-02"), false);
+  });
+
+  it("rejects two moved occurrences sharing a non-native date but allows editing the same move", () => {
+    const weekly = { id: "weekly", frequency: "weekly" as const, due_day: 2, day_of_week: 3, next_payment_date: "2026-09-02", start_date: "2026-09-02" };
+    const moves = [
+      { bill_id: "weekly", from_date: "2026-09-02", to_date: "2026-09-05", updated_at: "2026-09-02T10:00:00Z" },
+    ];
+    assert.equal(billOccurrenceMoveConflicts(weekly, "2026-09-09", "2026-09-05", moves), true);
+    assert.equal(billOccurrenceMoveConflicts(weekly, "2026-09-02", "2026-09-05", moves), false);
+    assert.equal(billOccurrenceMoveConflicts(weekly, "2026-09-02", "2026-09-06", moves), false);
+    assert.equal(billOccurrenceMoveConflicts(weekly, "2026-09-02", "2026-09-02", moves), false);
+    assert.equal(billOccurrenceMoveConflicts(weekly, "2026-09-09", "2026-09-05", [
+      ...moves,
+      { bill_id: "weekly", from_date: "2026-09-02", to_date: "2026-09-05", is_skipped: true, updated_at: "2026-09-02T11:00:00Z" },
+    ]), false);
   });
 
   it("uses the newest move when the same occurrence was moved more than once", () => {

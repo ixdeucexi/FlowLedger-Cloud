@@ -239,16 +239,25 @@ export function getIncomeOccurrenceDays(income: ScheduledIncome, month: number, 
 }
 
 export function billOccurrenceMoveConflicts(
-  bill: ScheduledBill,
+  bill: ScheduledBill & { id?: string },
   fromDate: string,
   toDate: string,
+  moves: ScheduledBillDateMove[] = [],
 ): boolean {
   const cleanFrom = fromDate.slice(0, 10);
   const cleanTo = toDate.slice(0, 10);
   if (cleanFrom === cleanTo) return false;
   const target = parseCalendarDate(cleanTo);
   if (!target) return false;
-  return getBillOccurrenceDays(bill, target.month - 1, target.year).includes(target.day);
+  if (getBillOccurrenceDays(bill, target.month - 1, target.year).includes(target.day)) return true;
+  const latestByOriginalDate = new Map<string, ScheduledBillDateMove>();
+  moves.filter(move => move.bill_id === bill.id).forEach(move => {
+    const existing = latestByOriginalDate.get(move.from_date);
+    if (!existing || moveFreshness(move) >= moveFreshness(existing)) latestByOriginalDate.set(move.from_date, move);
+  });
+  return Array.from(latestByOriginalDate.values()).some(move =>
+    move.from_date !== cleanFrom && !move.is_skipped && move.to_date === cleanTo
+  );
 }
 
 export function getUpcomingIncomeOccurrenceDates(

@@ -3521,7 +3521,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     async (billId: string, fromDate: string, toDate: string) => {
       const bill = bills.find(item => item.id === billId);
       if (!bill) throw new Error("Bill not found.");
-      if (billOccurrenceMoveConflicts(bill, fromDate, toDate)) {
+      if (billOccurrenceMoveConflicts(bill, fromDate, toDate, billDateMovesRef.current)) {
         throw new Error("That date already has another payment in this series. Choose a different date.");
       }
       const existing = billDateMovesRef.current.find(move => move.bill_id === billId && move.from_date === fromDate.slice(0, 10));
