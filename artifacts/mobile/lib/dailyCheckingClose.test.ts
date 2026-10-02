@@ -26,8 +26,8 @@ test("completed household-local dates use the latest verified bank close", () =>
 
   assert.deepEqual(result.map(day => [day.day, day.balance, day.balanceSource]), [
     [23, 812.34, "actual_close"],
-    [24, 920, "projected"],
-    [25, 930, "projected"],
+    [24, 822.34, "projected"],
+    [25, 832.34, "projected"],
   ]);
   assert.equal(result[0].balanceObservedAt, "2026-08-24T03:55:00Z");
 });
@@ -86,10 +86,30 @@ test("a valid cached actual close wins even while live close history is loading 
     );
     assert.deepEqual(result.map(day => [day.balance, day.balanceSource]), [
       [812.34, "actual_close"],
-      [920, "projected"],
-      [930, "projected"],
+      [822.34, "projected"],
+      [832.34, "projected"],
     ]);
   }
+});
+
+test("a verified close rebases every later projected day without reapplying an observed bill", () => {
+  const result = overlayCompletedDailyCheckingCloses([
+    { day: 1, balance: 4_084.81 },
+    { day: 2, balance: 4_084.81 },
+    { day: 3, balance: 5_584.81 },
+  ], 9, 2026, [{
+    balance_date: "2026-10-01",
+    checking_balance: 4_154.81,
+    observed_at: "2026-10-02T04:55:00Z",
+    account_count: 1,
+    source: "plaid_sync",
+  }], "2026-10-02");
+
+  assert.deepEqual(result.map(day => [day.day, day.balance, day.balanceSource]), [
+    [1, 4_154.81, "actual_close"],
+    [2, 4_154.81, "projected"],
+    [3, 5_654.81, "projected"],
+  ]);
 });
 
 test("household time zone controls the completed-date boundary", () => {
