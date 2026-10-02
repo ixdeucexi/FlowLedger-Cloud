@@ -112,14 +112,11 @@ export function overlayCompletedDailyCheckingCloses<
     });
   }
 
-  let latestCloseDelta = 0;
-  const rebasedBalance = (balance: number) => Math.round((balance + latestCloseDelta) * 100) / 100;
   return projectedDays.map(projected => {
     const balanceDate = `${monthPrefix}-${String(projected.day).padStart(2, "0")}`;
     if (!ISO_DATE.test(householdLocalToday) || balanceDate >= householdLocalToday) {
       return {
         ...projected,
-        balance: rebasedBalance(projected.balance),
         balanceSource: "projected",
         balanceDate,
       };
@@ -128,16 +125,12 @@ export function overlayCompletedDailyCheckingCloses<
     if (!actual) {
       return {
         ...projected,
-        balance: rebasedBalance(projected.balance),
         balanceSource: "projected",
         balanceDate,
       };
     }
-    // A verified close is the authoritative ending balance for that date. Its
-    // difference from the canonical projection must carry through every later
-    // projected day; otherwise an already-observed bill can reduce tomorrow's
-    // calendar balance a second time.
-    latestCloseDelta = actual.checking_balance - projected.balance;
+    // Close history replaces only this completed date. Today and future dates
+    // are already anchored to the current bank balance by the projection engine.
     return {
       ...projected,
       balance: actual.checking_balance,

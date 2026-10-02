@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import golden from "./financialProjection.golden.json";
+import { createFinancialProjection } from "./financialProjection";
+import type { FinancialProjectionSnapshot } from "./financialProjectionTypes";
 
 import {
   calendarBalanceIsVisible,
@@ -26,8 +29,8 @@ test("completed household-local dates use the latest verified bank close", () =>
 
   assert.deepEqual(result.map(day => [day.day, day.balance, day.balanceSource]), [
     [23, 812.34, "actual_close"],
-    [24, 822.34, "projected"],
-    [25, 832.34, "projected"],
+    [24, 920, "projected"],
+    [25, 930, "projected"],
   ]);
   assert.equal(result[0].balanceObservedAt, "2026-08-24T03:55:00Z");
 });
@@ -86,30 +89,63 @@ test("a valid cached actual close wins even while live close history is loading 
     );
     assert.deepEqual(result.map(day => [day.balance, day.balanceSource]), [
       [812.34, "actual_close"],
-      [822.34, "projected"],
-      [832.34, "projected"],
+      [920, "projected"],
+      [930, "projected"],
     ]);
   }
 });
 
-test("a verified close rebases every later projected day without reapplying an observed bill", () => {
-  const result = overlayCompletedDailyCheckingCloses([
-    { day: 1, balance: 4_084.81 },
-    { day: 2, balance: 4_084.81 },
-    { day: 3, balance: 5_584.81 },
-  ], 9, 2026, [{
+test("historical closes cannot add money to today's bank-anchored forecast after a refresh", () => {
+  const snapshot = structuredClone(golden.cases[0].snapshot) as unknown as FinancialProjectionSnapshot;
+  snapshot.settings.starting_balance = 2_492;
+  snapshot.settings.starting_balance_date = "2026-10-01";
+  snapshot.bills = [];
+  snapshot.goals = [];
+  snapshot.decisions = [];
+  snapshot.incomes = [{
+    id: "pay", name: "Paycheck", amount: 1_500, frequency: "monthly",
+    start_date: "2026-10-03", next_payment_date: "2026-10-03",
+  }];
+  snapshot.connectedBankAccounts = [{
+    id: "checking", name: "Checking", account_type: "depository",
+    account_subtype: "checking", current_balance: 4_154.81,
+    is_active: true, updated_at: "2026-10-02T12:00:00Z",
+  }];
+  const closes: DailyCheckingCloseSnapshot[] = [{
     balance_date: "2026-10-01",
     checking_balance: 4_154.81,
     observed_at: "2026-10-02T04:55:00Z",
     account_count: 1,
     source: "plaid_sync",
-  }], "2026-10-02");
+  }];
+  const options = { now: new Date("2026-10-02T12:00:00Z"), timeZone: "America/Chicago" };
+  const canonical = createFinancialProjection(snapshot, options).getDailyBalances(9, 2026);
+  assert.equal(canonical[0].balance, 2_492);
+  assert.equal(canonical[1].balance, 4_154.81);
+  assert.equal(canonical[2].balance, 5_654.81);
+  const result = overlayCompletedDailyCheckingCloses(canonical, 9, 2026, closes, "2026-10-02");
 
-  assert.deepEqual(result.map(day => [day.day, day.balance, day.balanceSource]), [
+  assert.deepEqual(result.slice(0, 3).map(day => [day.day, day.balance, day.balanceSource]), [
     [1, 4_154.81, "actual_close"],
     [2, 4_154.81, "projected"],
     [3, 5_654.81, "projected"],
   ]);
+  assert.deepEqual(result.slice(1).map(day => day.balance), canonical.slice(1).map(day => day.balance));
+
+  // A later sync changes the live anchor, while the recorded October 1 close
+  // remains fixed and must not offset that newly calculated forecast.
+  snapshot.connectedBankAccounts[0].current_balance = 4_091.81;
+  snapshot.connectedBankAccounts[0].updated_at = "2026-10-02T13:00:00Z";
+  const refreshed = createFinancialProjection(snapshot, options).getDailyBalances(9, 2026);
+  const refreshedCalendar = overlayCompletedDailyCheckingCloses(refreshed, 9, 2026, closes, "2026-10-02");
+  assert.deepEqual(refreshedCalendar.slice(0, 3).map(day => [day.day, Math.round(day.balance * 100) / 100, day.balanceSource]), [
+    [1, 4_154.81, "actual_close"],
+    [2, 4_091.81, "projected"],
+    [3, 5_591.81, "projected"],
+  ]);
+  assert.deepEqual(refreshedCalendar.slice(1).map(day => day.balance), refreshed.slice(1).map(day => day.balance));
+  assert.equal(canonical[0].balance, 2_492);
+  assert.equal(closes[0].checking_balance, 4_154.81);
 });
 
 test("household time zone controls the completed-date boundary", () => {
