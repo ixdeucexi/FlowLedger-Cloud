@@ -39,6 +39,9 @@ auditConfig:
     # No patched image-size release exists; see SECURITY.md for reachability review.
     - GHSA-5p2g-fcmc-qvqq
     - GHSA-w3rx-r6r6-pgpr
+    # No patched node-forge release exists yet. The affected verifier is reached
+    # only through Expo/EAS build tooling and is not bundled into the PWA runtime.
+    - GHSA-86w9-cpqp-85rv
 
 packages:
   - artifacts/*

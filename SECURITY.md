@@ -13,6 +13,13 @@ an upstream release is available. Remove both exceptions and upgrade
 `image-size` as soon as a patched npm version ships. Review this exception with
 each dependency update and at least monthly.
 
+As rechecked on 2026-10-01, `GHSA-86w9-cpqp-85rv` lists `node-forge` 1.4.1 as
+patched, but npm publishes only through 1.4.0. The affected RSA verifier is
+present through Expo and EAS build tooling; it is not included in FlowLedger's
+exported PWA JavaScript and does not process user or financial data at runtime.
+This advisory is temporarily ignored until a patched npm release exists. Remove
+the exception and update the lockfile as soon as that release is published.
+
 ## September 9 maintenance
 
 Updated compatible transitive versions and the lockfile: `fast-uri` 3.1.6,
