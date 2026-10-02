@@ -167,12 +167,15 @@ export function applyBillDateMovesToOccurrenceDays(
   year: number,
   occurrences: number[],
   moves: ScheduledBillDateMove[] = [],
+  activeRange?: Pick<ScheduledBill, "start_date" | "end_date">,
 ): number[] {
   const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
   const dateFromDay = (day: number) => `${monthPrefix}-${String(day).padStart(2, "0")}`;
   const activeMovesByOriginalDate = new Map<string, ScheduledBillDateMove>();
   moves
     .filter(move => move.bill_id === billId)
+    .filter(move => !activeRange?.start_date || move.from_date >= activeRange.start_date.slice(0, 10))
+    .filter(move => !activeRange?.end_date || move.from_date <= activeRange.end_date.slice(0, 10))
     .forEach(move => {
       const existing = activeMovesByOriginalDate.get(move.from_date);
       if (!existing || moveFreshness(move) >= moveFreshness(existing)) {
@@ -233,6 +236,19 @@ export function getIncomeOccurrenceDays(income: ScheduledIncome, month: number, 
     cursor += intervalDays;
   }
   return days.filter(day => onOrAfterStart(day) && isIncluded(day));
+}
+
+export function billOccurrenceMoveConflicts(
+  bill: ScheduledBill,
+  fromDate: string,
+  toDate: string,
+): boolean {
+  const cleanFrom = fromDate.slice(0, 10);
+  const cleanTo = toDate.slice(0, 10);
+  if (cleanFrom === cleanTo) return false;
+  const target = parseCalendarDate(cleanTo);
+  if (!target) return false;
+  return getBillOccurrenceDays(bill, target.month - 1, target.year).includes(target.day);
 }
 
 export function getUpcomingIncomeOccurrenceDates(
@@ -335,7 +351,7 @@ export function getBillMatchOccurrenceDates(
     const month = monthCursor.getUTCMonth();
     const originalDays = getBillOccurrenceDays(bill, month, year);
     const days = bill.id
-      ? applyBillDateMovesToOccurrenceDays(bill.id, month, year, originalDays, moves)
+      ? applyBillDateMovesToOccurrenceDays(bill.id, month, year, originalDays, moves, bill)
       : originalDays;
     days.forEach((day) => {
       candidates.push(`${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`);

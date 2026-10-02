@@ -81,7 +81,7 @@ const facts: FloFacts = {
     status: "safe",
   },
   billDateMoves: [
-    { id: "move-1", billId: "power", billName: "Power", fromDate: "2026-06-28", toDate: "2026-07-03" },
+    { id: "move-1", billId: "power", billName: "Power", fromDate: "2026-06-28", toDate: "2026-07-03", customAmount: 118.5, isSkipped: false },
   ],
   debts: [
     { id: "camera", name: "Camera", balance: 143.64, minimumPayment: 38.27, dueDay: 11 },
@@ -621,4 +621,6 @@ test("Flo fact payload is allowlisted before AI", () => {
   assert.equal(clean.paycheckPlan?.nextPaycheck?.name, "Main Paycheck");
   assert.equal(clean.paycheckPlan?.billsDue.length, 2);
   assert.equal(clean.billDateMoves?.[0]?.billName, "Power");
+  assert.equal(clean.billDateMoves?.[0]?.customAmount, 118.5);
+  assert.equal(clean.billDateMoves?.[0]?.isSkipped, false);
 });

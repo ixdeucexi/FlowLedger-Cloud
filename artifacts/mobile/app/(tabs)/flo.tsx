@@ -593,6 +593,8 @@ export default function FloScreen() {
         billName: bills.find(bill => bill.id === move.bill_id)?.name ?? "Bill",
         fromDate: move.from_date,
         toDate: move.to_date,
+        customAmount: move.custom_amount,
+        isSkipped: move.is_skipped,
       })),
       debts: bills
         .filter(bill => bill.is_debt && bill.balance > 0)

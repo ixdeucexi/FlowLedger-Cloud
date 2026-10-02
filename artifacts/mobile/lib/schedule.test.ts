@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { applyBillDateMovesToOccurrenceDays, billSeriesEndDateBefore, getBillMatchOccurrenceDates, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeMatchOccurrenceDates, getIncomeOccurrenceDays, getLatestIncomeChange, getLatestRecordedIncomeAmount, getUpcomingIncomeOccurrenceDates, incomeAmountToMonthly, isBillActiveForMonth, isValidDateInMonth, moveSettledBillOverrideDate, normalizeIncomeExcludedDates, resolveFinalizedBillOccurrenceDays, resolveIncomeMatchOccurrenceDate } from "./schedule";
+import { applyBillDateMovesToOccurrenceDays, billOccurrenceMoveConflicts, billSeriesEndDateBefore, getBillMatchOccurrenceDates, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeMatchOccurrenceDates, getIncomeOccurrenceDays, getLatestIncomeChange, getLatestRecordedIncomeAmount, getUpcomingIncomeOccurrenceDates, incomeAmountToMonthly, isBillActiveForMonth, isValidDateInMonth, moveSettledBillOverrideDate, normalizeIncomeExcludedDates, resolveFinalizedBillOccurrenceDays, resolveIncomeMatchOccurrenceDate } from "./schedule";
 
 describe("bill scheduling", () => {
   it("validates a selected calendar date inside the intended month", () => {
@@ -124,6 +124,24 @@ describe("bill scheduling", () => {
     assert.equal(billSeriesEndDateBefore("2026-10-01"), "2026-09-30");
     assert.equal(billSeriesEndDateBefore("2026-01-01"), "2025-12-31");
     assert.equal(billSeriesEndDateBefore("not-a-date"), undefined);
+  });
+
+  it("does not let selected or later exceptions resurrect an ended series", () => {
+    const exceptions = [
+      { bill_id: "weekly", from_date: "2026-09-09", to_date: "2026-09-20", custom_amount: 40 },
+      { bill_id: "weekly", from_date: "2026-09-16", to_date: "2026-09-16", custom_amount: 55 },
+    ];
+    assert.deepEqual(
+      applyBillDateMovesToOccurrenceDays("weekly", 8, 2026, [2], exceptions, { end_date: "2026-09-08" }),
+      [2],
+    );
+  });
+
+  it("rejects moving a recurring payment onto another native occurrence", () => {
+    const weekly = { frequency: "weekly" as const, due_day: 2, day_of_week: 3, next_payment_date: "2026-09-02", start_date: "2026-09-02" };
+    assert.equal(billOccurrenceMoveConflicts(weekly, "2026-09-02", "2026-09-09"), true);
+    assert.equal(billOccurrenceMoveConflicts(weekly, "2026-09-02", "2026-09-08"), false);
+    assert.equal(billOccurrenceMoveConflicts(weekly, "2026-09-02", "2026-09-02"), false);
   });
 
   it("uses the newest move when the same occurrence was moved more than once", () => {

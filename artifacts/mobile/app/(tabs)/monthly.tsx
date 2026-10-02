@@ -2522,6 +2522,8 @@ export default function MonthlyScreen() {
                                   </Pressable>
                                 ) : null}
                                 <Pressable
+                                  accessibilityRole="button"
+                                  accessibilityLabel={`Remove ${bill.name} payment options`}
                                   onPress={() => handleDeleteBillFromDay(bill, occurrenceDate)}
                                   style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.destructive + "12", borderColor: c.destructive + "35", opacity: pressed ? 0.74 : 1 }]}
                                 >

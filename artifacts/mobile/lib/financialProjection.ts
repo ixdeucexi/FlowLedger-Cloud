@@ -280,6 +280,7 @@ export function createFinancialProjection(
       year,
       occurrences,
       billDateMoves,
+      bill,
     );
 
   const getBillOccurrencesInMonth = (

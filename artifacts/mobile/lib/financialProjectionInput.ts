@@ -108,6 +108,13 @@ export function normalizeBillDateMoveRow(row: any): BillDateMove {
   };
 }
 
+export function normalizeStoredBillDateMoves(value: unknown): BillDateMove[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(row => row && typeof row === "object" && row.bill_id && row.from_date && row.to_date)
+    .map(normalizeBillDateMoveRow);
+}
+
 export function normalizeGoalRow(goal: any): Goal {
   return {
     ...goal,

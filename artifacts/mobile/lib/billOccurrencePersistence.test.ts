@@ -28,6 +28,17 @@ test("failed occurrence saves restore the previous calendar and overrides", () =
   assert.match(source, /markSaveFailed/);
 });
 
+test("queued occurrence saves stay bound to the invoking user and household", () => {
+  const start = context.indexOf("const saveBillOccurrenceException");
+  const end = context.indexOf("const moveBillOccurrence", start);
+  const source = context.slice(start, end);
+  assert.match(source, /const invokingUserId = user\.id/);
+  assert.match(source, /const invokingScope = householdScopeRef\.current \? \{ \.\.\.householdScopeRef\.current \} : null/);
+  assert.match(source, /upsertBillDateMoveRow\(nextMove, invokingUserId, invokingScope\)/);
+  assert.match(source, /if \(!invocationIsCurrent\(\)\) return/);
+  assert.doesNotMatch(source, /upsertBillDateMoveRow\(nextMove, user\.id, householdScopeRef\.current\)/);
+});
+
 test("forecast offers one-or-future removal and never hard-deletes history", () => {
   const start = forecast.indexOf("const handleDeleteBillFromDay");
   const end = forecast.indexOf("const handleDeleteIncomeFromDay", start);
@@ -38,4 +49,5 @@ test("forecast offers one-or-future removal and never hard-deletes history", () 
   assert.match(source, /endBillSeriesBeforeOccurrence/);
   assert.doesNotMatch(source, /deleteBill\(/);
   assert.match(context, /updateBill\(\{ \.\.\.bill, end_date: endDate \}, \["end_date"\]/);
+  assert.match(forecast, /accessibilityLabel=\{`Remove \$\{bill\.name\} payment options`\}/);
 });

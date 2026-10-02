@@ -43,6 +43,7 @@ import {
   normalizeSettingsRow,
   normalizeBillRow,
   normalizeBillDateMoveRow,
+  normalizeStoredBillDateMoves,
   normalizeGoalRow,
   normalizeExtraPaymentRow,
   normalizeTransactionRow,
@@ -101,7 +102,7 @@ import { assertFinancialMutationOnline, knownNetworkStatus, subscribeNetworkStat
 import { decisionDbPayload } from "@/lib/decisionPersistence";
 import { recordDiagnostic } from "@/lib/diagnostics";
 import { isDevDemoMode } from "@/lib/demoMode";
-import { billSeriesEndDateBefore, isBillActiveForMonth, moveSettledBillOverrideDate, resolveIncomeMatchOccurrenceDate } from "@/lib/schedule";
+import { billOccurrenceMoveConflicts, billSeriesEndDateBefore, isBillActiveForMonth, moveSettledBillOverrideDate, resolveIncomeMatchOccurrenceDate } from "@/lib/schedule";
 import { accountUpdatesOperatingAnchor, connectedCheckingObservedAnchor, evaluateForecastConfidence, operatingAccountAnchor, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
 import { loadAllDailyCheckingCloses, localDateInTimeZone, overlayCompletedDailyCheckingCloses, reuseDailyCheckingCloseLoadState, reuseDailyCheckingCloseSnapshots, shouldApplyDailyCheckingCloseLoad, type DailyCheckingCloseLoadState, type DailyCheckingCloseSnapshot } from "@/lib/dailyCheckingClose";
 import { type DecisionResult, type DecisionScenario } from "@/lib/decisions";
@@ -567,17 +568,7 @@ function readStoredBillDateMoves(userId?: string, householdId?: string | null): 
   if (Platform.OS !== "web") return [];
   try {
     const raw = globalThis.localStorage?.getItem(billDateMoveStorageKey(userId, householdId));
-    const parsed = raw ? JSON.parse(raw) as Partial<BillDateMove>[] : [];
-    return parsed
-      .filter(item => item.bill_id && item.from_date && item.to_date)
-      .map(item => ({
-        id: String(item.id ?? genId()),
-        bill_id: String(item.bill_id),
-        from_date: String(item.from_date).slice(0, 10),
-        to_date: String(item.to_date).slice(0, 10),
-        move_reason: item.move_reason === "automatic" ? "automatic" : "manual",
-        created_at: String(item.created_at ?? new Date().toISOString()),
-      }));
+    return normalizeStoredBillDateMoves(raw ? JSON.parse(raw) : []);
   } catch {
     return [];
   }
@@ -3449,6 +3440,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   ) => {
     if (!user) return;
     assertCanEditHousehold("change a bill occurrence");
+    const invokingUserId = user.id;
+    const invokingScope = householdScopeRef.current ? { ...householdScopeRef.current } : null;
+    const invokingHouseholdId = invokingScope?.householdId ?? null;
+    const invokingScopeKey = `${invokingUserId}:${invokingHouseholdId ?? "personal"}`;
+    const invokingLoadRequestId = loadRequestRef.current;
+    const invocationIsCurrent = () => (
+      financialDataUserIdRef.current === invokingUserId
+      && loadRequestRef.current === invokingLoadRequestId
+      && `${financialDataUserIdRef.current}:${householdScopeRef.current?.householdId ?? "personal"}` === invokingScopeKey
+    );
     const cleanFrom = fromDate.slice(0, 10);
     const cleanTo = patch.to_date.slice(0, 10);
     const previous = billDateMovesRef.current;
@@ -3473,7 +3474,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       );
     overridesRef.current = nextOverrides;
     setOverrides(nextOverrides);
-    writeStoredBillDateMoves(user.id, next, householdScopeRef.current?.householdId);
+    writeStoredBillDateMoves(invokingUserId, next, invokingHouseholdId);
     if (demoMode) {
       markSaveCompleted();
       return;
@@ -3483,9 +3484,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const saved = await enqueueMutationByKey(
         billWriteQueuesRef.current,
         `occurrence:${billId}:${cleanFrom}`,
-        () => upsertBillDateMoveRow(nextMove, user.id, householdScopeRef.current),
+        () => upsertBillDateMoveRow(nextMove, invokingUserId, invokingScope),
       );
       if (saved.error) throw new Error(`Change bill occurrence: ${saved.error.message}`);
+      if (!invocationIsCurrent()) return;
       const savedMove = normalizeBillDateMoveRow(saved.data);
       const finalMoves = billDateMovesRef.current.map(move => {
         if (move.bill_id !== savedMove.bill_id || move.from_date !== savedMove.from_date) return move;
@@ -3496,9 +3498,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       });
       billDateMovesRef.current = finalMoves;
       setBillDateMoves(finalMoves);
-      writeStoredBillDateMoves(user.id, finalMoves, householdScopeRef.current?.householdId);
+      writeStoredBillDateMoves(invokingUserId, finalMoves, invokingHouseholdId);
       markSaveCompleted(saveOperationId);
     } catch (error) {
+      if (!invocationIsCurrent()) return;
       const current = billDateMovesRef.current.find(move => move.bill_id === billId && move.from_date === cleanFrom);
       if (current?.to_date === cleanTo
           && Object.is(current.custom_amount, nextMove.custom_amount)
@@ -3507,7 +3510,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         setBillDateMoves(previous);
         overridesRef.current = previousOverrides;
         setOverrides(previousOverrides);
-        writeStoredBillDateMoves(user.id, previous, householdScopeRef.current?.householdId);
+        writeStoredBillDateMoves(invokingUserId, previous, invokingHouseholdId);
       }
       markSaveFailed(error, () => saveBillOccurrenceException(billId, fromDate, patch), saveOperationId);
       throw error;
@@ -3516,6 +3519,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const moveBillOccurrence = useCallback(
     async (billId: string, fromDate: string, toDate: string) => {
+      const bill = bills.find(item => item.id === billId);
+      if (!bill) throw new Error("Bill not found.");
+      if (billOccurrenceMoveConflicts(bill, fromDate, toDate)) {
+        throw new Error("That date already has another payment in this series. Choose a different date.");
+      }
       const existing = billDateMovesRef.current.find(move => move.bill_id === billId && move.from_date === fromDate.slice(0, 10));
       await saveBillOccurrenceException(billId, fromDate, {
         to_date: toDate,
@@ -3523,7 +3531,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         is_skipped: false,
       });
     },
-    [saveBillOccurrenceException],
+    [bills, saveBillOccurrenceException],
   );
 
   const setBillOccurrenceAmount = useCallback(

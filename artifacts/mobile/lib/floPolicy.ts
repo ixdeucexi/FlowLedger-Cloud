@@ -8,6 +8,8 @@ export interface FloBillMoveFact {
   billName: string;
   fromDate: string;
   toDate: string;
+  customAmount?: number;
+  isSkipped?: boolean;
 }
 
 export interface FloTodayForecastFact {
@@ -853,13 +855,16 @@ function sanitizeBillMoveFacts(moves?: FloBillMoveFact[]): FloBillMoveFact[] {
     billName: String(move.billName ?? "Bill").slice(0, 80),
     fromDate: String(move.fromDate ?? "").slice(0, 10),
     toDate: String(move.toDate ?? "").slice(0, 10),
+    customAmount: move.customAmount === undefined ? undefined : Math.max(0, num(move.customAmount)),
+    isSkipped: move.isSkipped === true,
   })).filter(move => move.id && move.billId && move.fromDate && move.toDate);
 }
 
 export function evaluateFloBillMoveUndo(message: string, facts: FloFacts): FloBillMoveFact | null {
   const lower = message.toLowerCase();
   if (!/\b(undo|restore|move back|put back|reverse)\b/.test(lower) || !/\b(bill|move|moved|due)\b/.test(lower)) return null;
-  const moves = sanitizeBillMoveFacts(facts.billDateMoves);
+  const moves = sanitizeBillMoveFacts(facts.billDateMoves)
+    .filter(move => !move.isSkipped && move.fromDate !== move.toDate);
   if (!moves.length) return null;
   const named = [...moves].sort((a, b) => b.billName.length - a.billName.length).find(move => lower.includes(move.billName.toLowerCase()));
   return named ?? moves[0];
@@ -871,7 +876,8 @@ function localMovedBillAnswer(message: string, facts: FloFacts): string | null {
   const undo = evaluateFloBillMoveUndo(message, facts);
   if (undo) return `I can restore ${undo.billName} back to ${undo.fromDate}. Tap Undo to remove the one-time move from ${undo.fromDate} to ${undo.toDate}.`;
   if (!asksMovedBills) return null;
-  const moves = sanitizeBillMoveFacts(facts.billDateMoves);
+  const moves = sanitizeBillMoveFacts(facts.billDateMoves)
+    .filter(move => !move.isSkipped && move.fromDate !== move.toDate);
   return moves.length
     ? `Moved bills: ${moves.slice(0, 5).map(move => `${move.billName} from ${move.fromDate} to ${move.toDate}`).join("; ")}.`
     : "I don't see any one-time moved bills right now.";
