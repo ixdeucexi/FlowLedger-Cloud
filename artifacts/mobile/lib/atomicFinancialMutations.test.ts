@@ -8,7 +8,7 @@ const migration = readFileSync(
   "utf8",
 ).toLowerCase();
 const pendingTransactionMigration = readFileSync(
-  resolve(process.cwd(), "../../supabase/migrations/20260921035906_create_pending_activity_transaction.sql"),
+  resolve(process.cwd(), "../../supabase/migrations/20260921041536_create_pending_activity_transaction.sql"),
   "utf8",
 ).toLowerCase();
 
