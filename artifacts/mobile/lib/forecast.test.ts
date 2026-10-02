@@ -127,6 +127,26 @@ describe("forecastBalances", () => {
 });
 
 describe("anchorForecastToBankBalance", () => {
+  it("reserves overdue bills and required debt at the anchor without rewriting source dates", () => {
+    const overdue = event({ id: "unpaid", date: "2026-10-01", amount: -70 });
+    const required = event({ id: "minimum", date: "2026-10-01", amount: -35, kind: "debt_payment", sourceType: "extra_payment", debtPlanAllocationKind: "required" });
+    const optional = event({ id: "optional", date: "2026-10-01", amount: -100, kind: "debt_payment", sourceType: "extra_payment", debtPlanAllocationKind: "extra" });
+    const finalized = event({ id: "paid", date: "2026-10-02", amount: -20, status: "finalized" });
+    const anchored = anchorForecastToBankBalance([overdue, required, optional, finalized], 1000, "2026-10-02", new Set());
+    assert.deepEqual(anchored.events.map(item => [item.id, item.date]), [["unpaid", "2026-10-02"], ["minimum", "2026-10-02"]]);
+    assert.equal(forecastBalances({ ...anchored, startDate: "2026-10-01", endDate: "2026-10-31" }).endingBalance, 895);
+    assert.equal(overdue.date, "2026-10-01");
+  });
+
+  it("does not settle an unpaid bill from an unrelated same-dollar bank change or transaction", () => {
+    const bill = event({ id: "unpaid", date: "2026-10-02", amount: -100 });
+    const posted = event({ id: "unrelated", date: "2026-10-02", amount: -100, sourceType: "transaction", kind: "transaction_expense", status: "actual" });
+    for (const postedEvents of [[], [posted]]) {
+      const anchored = anchorForecastToBankBalance([bill, ...postedEvents], 900, "2026-10-02", new Set(postedEvents.map(item => item.id)), 1000);
+      assert.equal(forecastBalances({ ...anchored, startDate: "2026-10-01", endDate: "2026-10-31" }).endingBalance, 800);
+    }
+  });
+
   it("rebuilds the July statement chain and keeps the connected balance exact", () => {
     const amountsByDay: Record<string, number> = {
       "2026-07-01": 1_432.66,

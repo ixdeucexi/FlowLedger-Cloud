@@ -16,6 +16,103 @@ import {
   normalizeTransactionRow,
 } from "./financialProjectionInput";
 
+function bankObligationFixture(anchorDate = "2026-10-02"): FinancialProjectionSnapshot {
+  const snapshot = structuredClone(golden.cases[0].snapshot) as unknown as FinancialProjectionSnapshot;
+  snapshot.bills = [{ ...snapshot.bills[0], id: "bill", name: "Bill", amount: 100, due_day: 2, start_date: "2026-01-01" }];
+  snapshot.incomes = [];
+  snapshot.goals = [];
+  snapshot.decisions = [];
+  snapshot.transactions = [];
+  snapshot.overrides = [];
+  snapshot.billDateMoves = [];
+  snapshot.extraPayments = [];
+  snapshot.accounts = [];
+  snapshot.connectedBankAccounts = [{ id: "bank", name: "Checking", current_balance: 1000, is_active: true, account_type: "depository", account_subtype: "checking", updated_at: `${anchorDate}T12:00:00Z` }];
+  snapshot.settings.starting_balance = 1000;
+  snapshot.settings.starting_balance_date = "2026-01-01";
+  snapshot.settings.debtPayoffEnabled = false;
+  return snapshot;
+}
+
+test("bank-month closing seeds following months including anchor-day obligations and year boundaries", () => {
+  for (const [anchor, month, year, nextMonth, nextYear] of [["2026-10-02", 9, 2026, 10, 2026], ["2026-12-02", 11, 2026, 0, 2027]] as const) {
+    const snapshot = bankObligationFixture(anchor);
+    snapshot.incomes = [{ id: "pay", name: "Pay", amount: 200, frequency: "monthly", start_date: anchor, next_payment_date: anchor }];
+    const projection = createFinancialProjection(snapshot, { now: new Date(`${anchor}T12:00:00Z`), timeZone: "America/Chicago" });
+    const days = projection.getDailyBalances(month, year);
+    assert.equal(days[1].balance, 1100);
+    assert.equal(days.at(-1)?.balance, 1100);
+    assert.equal(projection.getDailyBalances(nextMonth, nextYear)[0].balance, 1100);
+    assert.equal(projection.getDailyBalances(nextMonth, nextYear).at(-1)?.balance, 1200);
+  }
+});
+
+test("bank refresh keeps only unpaid occurrence remainder and preserves the original calendar day", () => {
+  for (const [settlement, paid, expected] of [["partial", 40, 940], ["full", 40, 1000], ["exact", 100, 1000]] as const) {
+    const snapshot = bankObligationFixture();
+    snapshot.bills[0].due_day = 1;
+    snapshot.transactions = [{ id: "paid", date: "2026-10-01", amount: -paid, category: "Bills", note: "Bill", source: "statement", review_status: "matched", review_resolution: "bill", review_allocations: [{ type: "bill", targetId: "bill", occurrenceDate: "2026-10-01", amount: paid, plannedAmount: 100, settlement }] }];
+    const projection = createFinancialProjection(snapshot, { now: new Date("2026-10-02T12:00:00Z"), timeZone: "America/Chicago" });
+    const days = projection.getDailyBalances(9, 2026);
+    assert.equal(days[1].balance, expected);
+    assert.equal(projection.getDailyBalances(10, 2026)[0].balance, expected - 100);
+    if (settlement === "partial") assert.ok(days[0].events?.some(item => item.kind === "bill" && item.amount === -60));
+  }
+});
+
+test("legacy dated payment only closes its weekly occurrence and leaves later dates reserved", () => {
+  const snapshot = bankObligationFixture("2026-10-09");
+  snapshot.bills[0] = { ...snapshot.bills[0], frequency: "weekly", day_of_week: 5, start_date: "2026-10-02", next_payment_date: "2026-10-02" };
+  snapshot.overrides = [{ id: "paid", bill_id: "bill", month: 9, year: 2026, paid_amount: 500, paid_date: "2026-10-02" }];
+  const projection = createFinancialProjection(snapshot, { now: new Date("2026-10-09T12:00:00Z"), timeZone: "America/Chicago" });
+  const days = projection.getDailyBalances(9, 2026);
+  assert.equal(days[8].balance, 900);
+  assert.equal(days.at(-1)?.balance, 600);
+  assert.equal(projection.getDailyBalances(10, 2026)[0].balance, 600);
+});
+
+test("finalized legacy paid bill is not reserved a second time after refresh", () => {
+  const snapshot = bankObligationFixture();
+  snapshot.bills[0].due_day = 1;
+  snapshot.overrides = [{ id: "paid", bill_id: "bill", month: 9, year: 2026, paid_amount: 80, paid_date: "2026-10-01", actual_amount: 80 }];
+  const projection = createFinancialProjection(snapshot, { now: new Date("2026-10-02T12:00:00Z"), timeZone: "America/Chicago" });
+  assert.equal(projection.getDailyBalances(9, 2026)[1].balance, 1000);
+  assert.equal(projection.getDailyBalances(10, 2026)[0].balance, 900);
+});
+
+test("manual account observations preserve unpaid bills instead of silently paying them", () => {
+  for (const [paid, expected] of [[0, 900], [40, 940], [100, 1000]] as const) {
+    const snapshot = bankObligationFixture();
+    snapshot.bills[0].due_day = 1;
+    snapshot.connectedBankAccounts = [];
+    snapshot.accounts = [{ id: "cash", name: "Checking", account_type: "checking", current_balance: 1000, balance_as_of: "2026-10-02", is_active: true, created_at: "2026-01-01T12:00:00Z" }];
+    snapshot.overrides = [{ id: "legacy", bill_id: "bill", month: 9, year: 2026, paid_amount: paid, paid_date: "2026-10-01" }];
+    const projection = createFinancialProjection(snapshot, { now: new Date("2026-10-02T12:00:00Z"), timeZone: "America/Chicago" });
+    assert.equal(projection.getDailyBalances(9, 2026)[1].balance, expected);
+    assert.equal(projection.getDailyBalances(10, 2026)[0].balance, expected - 100);
+  }
+});
+
+test("overdue canonical debt minimum remains reserved and rolls forward once", () => {
+  const snapshot = bankObligationFixture();
+  snapshot.settings.debtPayoffEnabled = true;
+  snapshot.bills[0] = { ...snapshot.bills[0], is_debt: true, balance: 500, interest_rate: 0, due_day: 1 };
+  const projection = createFinancialProjection(snapshot, { now: new Date("2026-10-02T12:00:00Z"), timeZone: "America/Chicago" });
+  const days = projection.getDailyBalances(9, 2026);
+  assert.equal(days[1].balance, 900);
+  assert.equal(days.at(-1)?.balance, 900);
+  assert.equal(projection.getDailyBalances(10, 2026)[0].balance, 800);
+  assert.ok(days[0].events?.some(item => item.debtPlanAllocationKind === "required" && item.amount === -100));
+});
+
+test("legacy partial payment in a future month agrees with subsequent carryover", () => {
+  const snapshot = bankObligationFixture();
+  snapshot.overrides = [{ id: "future-partial", bill_id: "bill", month: 10, year: 2026, paid_amount: 40, paid_date: "2026-11-02" }];
+  const projection = createFinancialProjection(snapshot, { now: new Date("2026-10-02T12:00:00Z"), timeZone: "America/Chicago" });
+  assert.equal(projection.getDailyBalances(10, 2026).at(-1)?.balance, 840);
+  assert.equal(projection.getDailyBalances(11, 2026)[0].balance, 840);
+});
+
 test("edited John payday anchor counts September deposits once, not planned plus actual", () => {
   const snapshot = structuredClone(golden.cases[0].snapshot) as unknown as FinancialProjectionSnapshot;
   snapshot.bills = [];
@@ -171,6 +268,14 @@ test("ending a series ignores moved and custom exceptions on the selected and la
   );
 });
 
+// The original capture dropped unpaid Rent ($900) at bank refresh. Keep that
+// provenance intact while auditing the corrected bank-anchored expectations.
+const obligationReserveCorrections: Record<string, { hash: string; endings: number[] }> = {
+  "connected-anchor-deleted-posted-reviewed-income": { hash: "178e8b438a8efca4a50326c2354ab546d82a1490cadc6927a8dfeb62848a49ee", endings: [1140, 3355, 5570] },
+  "pending-matched-debt-no-double-charge": { hash: "a1a02d96a745b888f2ff189bf0247355fe480bd01a463ff3a273b5dd964fcb02", endings: [1140, 3355, 5570] },
+  "manual-anchor-transfer-preservation": { hash: "0dd6daa375ecf9b924ffd72b76cb49218c023aa375f06e64f1ffe88adc3f9414", endings: [1348, 3563, 5778] },
+};
+
 for (const fixture of golden.cases) {
   test(`legacy BudgetContext parity: ${fixture.name}`, () => {
     const snapshot = structuredClone(
@@ -194,8 +299,10 @@ for (const fixture of golden.cases) {
     }));
     assert.equal(
       createHash("sha256").update(JSON.stringify(result)).digest("hex"),
-      fixture.expectedHash,
+      obligationReserveCorrections[fixture.name]?.hash ?? fixture.expectedHash,
     );
+    const correction = obligationReserveCorrections[fixture.name];
+    if (correction) assert.deepEqual(result.map(month => month.daily.at(-1)?.balance), correction.endings);
     assert.equal(
       JSON.stringify(snapshot),
       before,

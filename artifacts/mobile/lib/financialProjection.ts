@@ -42,7 +42,6 @@ import {
   resolveFinalizedBillOccurrenceDays,
 } from "./schedule";
 import {
-  bankBalanceAdjustment,
   connectedCheckingObservedAnchor,
   historicalMonthOpeningBalance,
   operatingAccountAnchor,
@@ -51,6 +50,7 @@ import {
 import { localDateInTimeZone } from "./dailyCheckingClose";
 import { scenarioDates } from "./decisions";
 import { occurrenceKey } from "./reviewCenter";
+import { resolveBillOccurrencePayment } from "./billOccurrencePayment";
 import { spendingBucketSummary } from "./spendingBuckets";
 import { isBillEligibleForUpcomingPlan } from "./billEligibility";
 import { buildTransactionLedger, remainingPlannedAmount } from "./ledgerEngine";
@@ -1070,12 +1070,16 @@ export function createFinancialProjection(
               const match = billMatches.get(occurrenceKey(b.id, date));
               return (
                 occurrenceSum +
-                remainingPlannedAmount(
-                  hasReviewedOccurrence || override?.actual_amount === undefined
-                    ? getBillOccurrenceAmount(b, date)
-                    : total / dates.length,
-                  match,
-                )
+                (override?.actual_amount !== undefined && !hasReviewedOccurrence
+                  ? remainingPlannedAmount(total / dates.length, match)
+                  : resolveBillOccurrencePayment({
+                    occurrenceDate: date,
+                    scheduledAmount: getBillOccurrenceAmount(b, date),
+                    frequency: b.frequency,
+                    match,
+                    monthlyPaidAmount: override?.paid_amount,
+                    monthlyPaidDate: override?.paid_date,
+                  }).remainingAmount)
               );
             }, 0)
           );
@@ -1173,9 +1177,9 @@ export function createFinancialProjection(
             balanceComputationCache.bankAnchoredCarryover.add(key);
             return running;
           }
-          let running =
-            bankAnchor.balance +
-            computeMonthNet(bankMonthIndex, bankYear, bankAnchor.date);
+          // The observed month owns anchoring and unpaid reserves. Seed from
+          // its exact closing balance, not a date-exclusive approximation.
+          let running = buildDailyBalances(bankMonthIndex, bankYear).at(-1)?.balance ?? bankAnchor.balance;
           let m = bankMonthIndex + 1;
           let y = bankYear;
           if (m > 11) {
@@ -1368,12 +1372,15 @@ export function createFinancialProjection(
         occ.forEach((d) => {
           const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
           const match = billMatches.get(occurrenceKey(b.id, date));
-          const remaining = remainingPlannedAmount(
-            hasReviewedOccurrence || o?.actual_amount === undefined
-              ? getBillOccurrenceAmount(b, date)
-              : total / occ.length,
+          const payment = resolveBillOccurrencePayment({
+            occurrenceDate: date,
+            scheduledAmount: getBillOccurrenceAmount(b, date),
+            frequency: b.frequency,
             match,
-          );
+            monthlyPaidAmount: o?.paid_amount,
+            monthlyPaidDate: o?.paid_date,
+          });
+          const remaining = payment.remainingAmount;
           if (remaining <= 0.005) return;
           billsByDay[d] = (billsByDay[d] ?? 0) + remaining;
           financialEvents.push({
@@ -1386,7 +1393,7 @@ export function createFinancialProjection(
             status: "planned",
             name: b.name,
             configuredOccurrenceAmount: getBillOccurrenceAmount(b, date),
-            settledOccurrenceAmount: Math.abs(Number(match?.amount) || 0),
+            settledOccurrenceAmount: payment.paidAmount,
             ...(b.is_debt ? { debtTargetBillId: b.id } : {}),
           });
         });
@@ -1541,11 +1548,8 @@ export function createFinancialProjection(
       });
     const currentMonthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
     let openingBalance = carryover;
-    // Bank anchoring may remove an unresolved plan dated before the bank's
-    // latest balance so it does not reduce cash twice. Keep the canonical,
-    // de-duplicated plan separately for calendar visibility: an overdue debt
-    // remainder still belongs on its original date even when its cash impact
-    // is excluded from the anchored projection.
+    // Keep original dates for calendar/history while unresolved obligations
+    // reserve cash on the bank observation date in the balance projection.
     const displayEvents = suppressDebtBillPlanDuplicates(financialEvents);
     let balanceEvents = [...displayEvents];
     if (connectedBankAnchor?.date.startsWith(currentMonthPrefix)) {
@@ -1573,24 +1577,15 @@ export function createFinancialProjection(
       openingBalance = anchored.openingBalance;
       balanceEvents = anchored.events;
     } else if (bankAnchor?.date.startsWith(currentMonthPrefix)) {
-      const adjustment = bankBalanceAdjustment(
-        openingBalance,
+      const anchored = anchorForecastToBankBalance(
+        balanceEvents,
         bankAnchor.balance,
         bankAnchor.date,
-        balanceEvents,
+        new Set(balanceEvents.filter(event => event.status === "actual" || event.status === "finalized" || event.status === "applied").map(event => event.id)),
+        historicalMonthOpeningBalance(openingBalance, settings.starting_balance_date, `${currentMonthPrefix}-01`),
       );
-      if (Math.abs(adjustment) >= 0.005) {
-        balanceEvents.push({
-          id: `bank-adjustment:${bankAnchor.date}`,
-          sourceType: "reconciliation",
-          sourceId: bankAnchor.date,
-          date: bankAnchor.date,
-          kind: "bank_adjustment",
-          amount: adjustment,
-          status: "actual",
-          name: "Bank balance update",
-        });
-      }
+      openingBalance = anchored.openingBalance;
+      balanceEvents = anchored.events;
     }
     const forecast = forecastBalances({
       openingBalance,

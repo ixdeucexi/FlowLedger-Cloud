@@ -121,7 +121,8 @@ test("progressive carryover preserves bank-anchor reconciliation precedence", ()
 
   assert.ok(bankFutureBranch >= 0);
   assert.ok(previousOpeningShortcut > bankFutureBranch);
-  assert.match(carryover, /bankAnchor\.balance \+ computeMonthNet\(bankMonthIndex, bankYear, bankAnchor\.date\)/);
+  assert.match(carryover, /buildDailyBalances\(bankMonthIndex, bankYear\)\.at\(-1\)\?\.balance/);
+  assert.doesNotMatch(carryover, /bankAnchor\.balance \+ computeMonthNet\(bankMonthIndex, bankYear, bankAnchor\.date\)/);
 });
 
 test("a bfcache pageshow refreshes the household date without a visibility event", () => {
