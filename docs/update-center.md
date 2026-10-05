@@ -22,3 +22,5 @@ order by f.created_at asc;
 6. Report which requests were completed and any remaining blockers to the human owner. No recurring polling or scheduled work is configured.
 
 No database schema changes are required. Existing feedback remains available and unchanged.
+
+Owners can edit or delete their own pending (`new` / `reviewing`) requests. Delete archives the request, removing it from the pending queue; Restore makes it pending again without changing its status or review note. Completed (`fixed` / `wont_fix`) requests remain read-only history. The dedicated `edit_request`, `delete_request`, and `restore_request` API actions verify current admin membership, persisted authorship, and the Update Center marker. They do not physically delete records, notify anyone, or start work.

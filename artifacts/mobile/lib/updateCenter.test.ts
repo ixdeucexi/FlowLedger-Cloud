@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { type AppFeedbackRow } from "./feedback";
-import { UPDATE_CENTER_SCREEN, updateRequestHistory } from "./updateCenter";
+import { UPDATE_CENTER_SCREEN, updateRequestHistory, canManageUpdateRequest } from "./updateCenter";
 import { settingsGroupForSection, visibleSettingsGroups } from "./settingsHub";
 
 test("request history excludes other authors and ordinary feedback while retaining statuses", () => {
@@ -31,4 +31,17 @@ test("request editor only clears after successful save and protects identity cha
   assert.match(component, /sending.current\) return/);
   assert.match(component, /\.eq\("user_id", user.id\)\.eq\("screen", UPDATE_CENTER_SCREEN\)/);
   assert.match(component, /Nothing runs automatically/);
+});
+test("only pending requests can be managed, including recoverable deleted requests", () => {
+  for (const status of ["new", "reviewing"]) assert.equal(canManageUpdateRequest({ status, archived_at: "2026-10-05" } as AppFeedbackRow), true);
+  for (const status of ["fixed", "wont_fix"]) assert.equal(canManageUpdateRequest({ status } as AppFeedbackRow), false);
+});
+test("mutations share submission lock, invalidate old history, and require delete confirmation", () => {
+  const component = readFileSync("components/settings/UpdateCenter.tsx", "utf8");
+  assert.match(component, /sending.current \|\| !canManageUpdateRequest/);
+  assert.match(component, /sending.current = true; historyGeneration.current \+= 1/);
+  assert.match(component, /deletingId === row.id/);
+  assert.match(component, /Confirm delete update request/);
+  assert.match(component, /setEditingId\(null\); setEditMessage\(""\); setDeletingId\(null\)/);
+  assert.match(component, /action: \{ minHeight: 44/);
 });

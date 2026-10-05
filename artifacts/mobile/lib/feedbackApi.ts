@@ -1,6 +1,19 @@
 import { supabase } from "@/lib/supabase";
 import type { AppFeedbackRow, FeedbackManagementAction, FeedbackType } from "@/lib/feedback";
 import { apiFetch } from "@/lib/api";
+import type { UpdateRequestAction } from "./updateCenter";
+
+export async function manageUpdateRequest(feedbackId: string, action: UpdateRequestAction, message?: string) {
+  const { data } = await supabase.auth.getSession();
+  const accessToken = data.session?.access_token;
+  if (!accessToken) throw new Error("Sign in before changing update requests.");
+  const response = await apiFetch("/api/feedback", {
+    method: "POST", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ feedback_id: feedbackId, action, message }),
+  });
+  if (!response.ok) throw new Error(await responseMessage(response));
+  return await response.json() as { ok: true; feedback: AppFeedbackRow };
+}
 
 export interface FeedbackSubmission {
   feedback_type: FeedbackType;

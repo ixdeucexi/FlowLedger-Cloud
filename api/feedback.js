@@ -10,6 +10,7 @@ const { sendPushToUser } = require("./_utils/push");
 const { authenticatedUser, publicError, safeError, serviceSupabase } = require("./_utils/supabase");
 
 const accountDeletion = createAccountDeletionHandler();
+const { UPDATE_REQUEST_ACTIONS, manageUpdateRequest } = require("./_utils/updateCenter");
 const healthz = require("./_utils/healthz");
 
 async function submitFeedback(db, auth, body, res) {
@@ -151,6 +152,7 @@ module.exports = async function feedback(req, res) {
 
   try {
     const db = serviceSupabase();
+    if (UPDATE_REQUEST_ACTIONS.has(req.body?.action)) return await manageUpdateRequest(db, auth, req.body, res);
     return req.body?.action
       ? await manageFeedback(db, auth, req.body, res)
       : await submitFeedback(db, auth, req.body, res);

@@ -3,9 +3,9 @@ import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-na
 import { useAuth } from "@/context/AuthContext";
 import { useMembership } from "@/context/MembershipContext";
 import { supabase } from "@/lib/supabase";
-import { submitFeedback } from "@/lib/feedbackApi";
+import { submitFeedback, manageUpdateRequest } from "@/lib/feedbackApi";
 import { type AppFeedbackRow, feedbackStatusLabel, sanitizeFeedbackMessage, canSubmitFeedback } from "@/lib/feedback";
-import { UPDATE_CENTER_SCREEN, updateRequestHistory } from "@/lib/updateCenter";
+import { UPDATE_CENTER_SCREEN, updateRequestHistory, canManageUpdateRequest, type UpdateRequestAction } from "@/lib/updateCenter";
 
 export function UpdateCenter({ light = false }: { light?: boolean }) {
   const { user } = useAuth();
@@ -16,6 +16,9 @@ export function UpdateCenter({ light = false }: { light?: boolean }) {
   const [rows, setRows] = useState<AppFeedbackRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editMessage, setEditMessage] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const sending = useRef(false);
   const historyGeneration = useRef(0);
   const identity = `${user?.id ?? ""}:${isAdmin}`;
@@ -43,6 +46,8 @@ export function UpdateCenter({ light = false }: { light?: boolean }) {
   useEffect(() => {
     historyGeneration.current += 1;
     setRows([]); setMessage(""); setNotice(null); setHistoryError(null);
+    setEditingId(null); setEditMessage(""); setDeletingId(null);
+    setLoading(false);
     void loadHistory();
   }, [loadHistory]);
 
@@ -51,7 +56,7 @@ export function UpdateCenter({ light = false }: { light?: boolean }) {
     const cleaned = sanitizeFeedbackMessage(message);
     if (!canSubmitFeedback(cleaned)) { setNotice("Tell me a little more about the update you want."); return; }
     const requestedIdentity = identity;
-    sending.current = true; setBusy(true); setNotice(null);
+    sending.current = true; historyGeneration.current += 1; setLoading(false); setBusy(true); setNotice(null);
     try {
       await submitFeedback({ feedback_type: "idea", screen: UPDATE_CENTER_SCREEN, message: cleaned,
         rating: null, can_contact: false, app_version: process.env.EXPO_PUBLIC_APP_VERSION ?? null, platform: Platform.OS });
@@ -62,6 +67,27 @@ export function UpdateCenter({ light = false }: { light?: boolean }) {
       }
     } catch (error) {
       if (currentIdentity.current === requestedIdentity) setNotice(error instanceof Error ? error.message : "Could not save. Your request is still here—try again.");
+    } finally { sending.current = false; setBusy(false); }
+  };
+  const mutate = async (row: AppFeedbackRow, action: UpdateRequestAction) => {
+    if (!isAdmin || !user?.id || sending.current || !canManageUpdateRequest(row)) return;
+    const cleaned = sanitizeFeedbackMessage(editMessage);
+    if (action === "edit_request" && !canSubmitFeedback(cleaned)) {
+      setNotice("Use at least 3 characters for your request."); return;
+    }
+    const requestedIdentity = identity;
+    sending.current = true; historyGeneration.current += 1; setLoading(false); setBusy(true); setNotice(null);
+    try {
+      const result = await manageUpdateRequest(row.id, action, action === "edit_request" ? cleaned : undefined);
+      if (currentIdentity.current === requestedIdentity) {
+        setRows(previous => previous.map(item => item.id === row.id ? result.feedback : item));
+        setEditingId(null); setEditMessage(""); setDeletingId(null);
+        setNotice(action === "edit_request" ? "Request updated. Nothing starts automatically." : action === "delete_request"
+          ? "Request deleted from pending work. You can restore it below." : "Request restored. Nothing starts automatically.");
+        void loadHistory();
+      }
+    } catch (error) {
+      if (currentIdentity.current === requestedIdentity) setNotice(error instanceof Error ? error.message : "Could not change this request. Try again.");
     } finally { sending.current = false; setBusy(false); }
   };
   if (!isAdmin || !user) return null;
@@ -82,14 +108,33 @@ export function UpdateCenter({ light = false }: { light?: boolean }) {
       {notice ? <Text accessibilityLiveRegion="polite" style={[styles.body, { color: ink }]}>{notice}</Text> : null}
     </View>
     <Text style={[styles.title, { color: ink }]}>Your requests</Text>
-    <Text style={[styles.body, { color: muted }]}>Your most recent 100 requests. Status changes after review—not just because you submitted.</Text>
-    <Pressable accessibilityRole="button" accessibilityLabel="Refresh update requests" style={styles.refresh} disabled={loading} onPress={() => void loadHistory()}><Text style={styles.link}>{loading ? "Loading…" : "Refresh requests"}</Text></Pressable>
+    <Text style={[styles.body, { color: muted }]}>Your most recent 100 requests. Edit or delete pending requests; completed requests stay as history. Deleted requests can be restored.</Text>
+    <Pressable accessibilityRole="button" accessibilityLabel="Refresh update requests" style={styles.refresh} disabled={loading || busy} onPress={() => void loadHistory()}><Text style={styles.link}>{loading ? "Loading…" : "Refresh requests"}</Text></Pressable>
     {historyError ? <Text accessibilityLiveRegion="polite" style={[styles.body, { color: ink }]}>{historyError}</Text> : null}
     {!loading && !historyError && rows.length === 0 ? <Text style={[styles.body, { color: muted }]}>No requests yet. Your first update starts above.</Text> : null}
     {rows.map(row => <View key={row.id} style={[styles.card, { backgroundColor: surface }]}>
-      <View style={styles.row}><Text style={styles.link}>{feedbackStatusLabel(row.status)}</Text><Text style={[styles.date, { color: muted }]}>{new Date(row.created_at).toLocaleDateString()}</Text></View>
-      <Text selectable style={[styles.body, { color: ink }]}>{row.message}</Text>
+      <View style={styles.row}><Text style={styles.link}>{row.archived_at && canManageUpdateRequest(row) ? "Deleted" : feedbackStatusLabel(row.status)}</Text><Text style={[styles.date, { color: muted }]}>{new Date(row.created_at).toLocaleDateString()}</Text></View>
+      {editingId === row.id ? <>
+        <TextInput accessibilityLabel="Edit update request" multiline maxLength={4000} editable={!busy}
+          value={editMessage} onChangeText={setEditMessage} style={[styles.input, { color: ink, borderColor: light ? "#dce1ea" : "#33405b" }]} />
+        <View style={styles.actions}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Save edited update request" disabled={busy || !canSubmitFeedback(editMessage)} style={styles.action} onPress={() => void mutate(row, "edit_request")}><Text style={styles.link}>Save</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Cancel editing update request" disabled={busy} style={styles.action} onPress={() => { setEditingId(null); setEditMessage(""); }}><Text style={[styles.body, { color: muted }]}>Cancel</Text></Pressable>
+        </View>
+      </> : <Text selectable style={[styles.body, { color: ink }]}>{row.message}</Text>}
       {row.admin_note ? <Text selectable style={[styles.body, { color: muted }]}>{row.admin_note}</Text> : null}
+      {canManageUpdateRequest(row) && editingId !== row.id ? row.archived_at ?
+        <Pressable accessibilityRole="button" accessibilityLabel="Restore deleted update request" disabled={busy} style={styles.action} onPress={() => void mutate(row, "restore_request")}><Text style={styles.link}>Restore</Text></Pressable>
+        : deletingId === row.id ? <>
+          <Text style={[styles.body, { color: ink }]}>Delete this request from pending work? You can restore it later.</Text>
+          <View style={styles.actions}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Confirm delete update request" disabled={busy} style={styles.action} onPress={() => void mutate(row, "delete_request")}><Text style={styles.danger}>Delete request</Text></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Cancel deleting update request" disabled={busy} style={styles.action} onPress={() => setDeletingId(null)}><Text style={[styles.body, { color: muted }]}>Cancel</Text></Pressable>
+          </View>
+        </> : <View style={styles.actions}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Edit submitted update request" disabled={busy} style={styles.action} onPress={() => { setEditingId(row.id); setEditMessage(row.message); setDeletingId(null); setNotice(null); }}><Text style={styles.link}>Edit</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Delete submitted update request" disabled={busy} style={styles.action} onPress={() => { setDeletingId(row.id); setEditingId(null); setEditMessage(""); setNotice(null); }}><Text style={styles.danger}>Delete</Text></Pressable>
+        </View> : null}
     </View>)}
   </View>;
 }
@@ -101,4 +146,7 @@ const styles = StyleSheet.create({
   buttonText: { color: "white", fontSize: 16, fontFamily: "Inter_700Bold" }, link: { color: "#a263ed", fontFamily: "Inter_600SemiBold", fontSize: 14 },
   row: { flexDirection: "row", justifyContent: "space-between", gap: 12 }, date: { fontSize: 12, fontFamily: "Inter_400Regular" },
   refresh: { minHeight: 44, justifyContent: "center", alignSelf: "flex-start", paddingHorizontal: 8 },
+  actions: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  action: { minHeight: 44, minWidth: 64, justifyContent: "center", alignItems: "center", paddingHorizontal: 12, borderRadius: 10 },
+  danger: { color: "#ed6487", fontFamily: "Inter_600SemiBold", fontSize: 14 },
 });
