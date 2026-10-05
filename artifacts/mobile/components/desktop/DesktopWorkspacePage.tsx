@@ -7,6 +7,7 @@ import { useBudget } from "@/context/BudgetContext";
 import { isActiveTransaction } from "@/lib/billMatching";
 import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
 import { desktopPlannerDestination } from "@/lib/desktopActions";
+import { spendingBucketSummary } from "@/lib/spendingBuckets";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 
@@ -380,31 +381,36 @@ function IncomePage({ onOpenPlanner }: { onOpenPlanner: () => void }) {
 function GoalsPage({ onOpenPlanner }: { onOpenPlanner: () => void }) {
   const { goals } = useBudget();
   const active = goals.filter((goal) => !goal.closed_at && !goal.archived_at);
-  const current = active.reduce((sum, goal) => sum + Math.max(0, goal.current_amount), 0);
-  const target = active.reduce((sum, goal) => sum + Math.max(0, goal.target_amount), 0);
+  const savings = active.filter((goal) => goal.goal_type === "savings");
+  const current = savings.reduce((sum, goal) => sum + Math.max(0, goal.current_amount), 0);
+  const target = savings.reduce((sum, goal) => sum + Math.max(0, goal.target_amount), 0);
+  const bucketRemaining = active.filter((goal) => goal.goal_type === "planned_expense").reduce((sum, goal) => sum + spendingBucketSummary(goal).remaining, 0);
+  const visible = goals.filter((goal) => !goal.archived_at && (goal.goal_type === "planned_expense" || !goal.closed_at));
   const progress = target > 0 ? Math.min(100, (current / target) * 100) : 0;
   return (
     <>
       <PageHeader eyebrow="Build wealth" title="Goals" description="See savings and planned spending goals as a portfolio, not a stack of app cards." action="Manage goals" onAction={onOpenPlanner} />
       <View style={styles.statGrid}>
-        <Stat label="Overall progress" value={`${Math.round(progress)}%`} detail={`${currency(current)} funded`} icon="target" tone="green" />
-        <Stat label="Target total" value={currency(target)} detail={`${active.length} active goals`} icon="flag" tone="purple" />
-        <Stat label="Remaining" value={currency(Math.max(0, target - current))} detail="Across active goals" icon="clock" tone="amber" />
+        <Stat label="Savings progress" value={`${Math.round(progress)}%`} detail={`${currency(current)} funded`} icon="target" tone="green" />
+        <Stat label="Savings target" value={currency(target)} detail={`${savings.length} active savings goals`} icon="flag" tone="purple" />
+        <Stat label="Bucket money left" value={currency(bucketRemaining)} detail="Planned spending minus recorded spending" icon="clock" tone="amber" />
         <Stat label="Portfolio" value={active.length ? "Active" : "Setup"} detail="Shared with the PWA" icon="shield" tone="blue" />
       </View>
       <View style={styles.goalGrid}>
-        {active.length ? active.map((goal) => {
+        {visible.length ? visible.map((goal) => {
+          const bucket = goal.goal_type === "planned_expense" ? spendingBucketSummary(goal) : null;
           const percent = goal.target_amount > 0 ? Math.min(100, (goal.current_amount / goal.target_amount) * 100) : 0;
           return (
             <View key={goal.id} style={styles.goalCard}>
               <View style={styles.goalCardTop}>
                 <View style={styles.goalIcon}><Feather name={goal.goal_type === "savings" ? "shield" : "shopping-bag"} size={17} color="#c4b5fd" /></View>
-                <StatusPill label={goal.goal_type === "savings" ? "Savings" : "Planned"} tone="blue" />
+                <StatusPill label={bucket ? bucket.closed ? "Closed bucket" : "Spending bucket" : "Savings"} tone="blue" />
               </View>
               <Text style={styles.goalName}>{goal.name}</Text>
-              <Text style={styles.goalAmount}>{currency(goal.current_amount)} <Text style={styles.goalTarget}>of {currency(goal.target_amount)}</Text></Text>
+              <Text style={styles.goalAmount}>{bucket ? `${currency(bucket.closed ? bucket.released : bucket.remaining)} ${bucket.closed ? "released" : "remaining"}` : currency(goal.current_amount)} {!bucket ? <Text style={styles.goalTarget}>of {currency(goal.target_amount)}</Text> : null}</Text>
+              {bucket ? <Text style={styles.goalTarget}>{currency(bucket.planned)} planned · {currency(bucket.spent)} spent</Text> : null}
               <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${percent}%` }]} /></View>
-              <View style={styles.goalFooter}><Text style={styles.goalPercent}>{Math.round(percent)}% funded</Text><Text style={styles.goalDate}>{shortDate(goal.target_date)}</Text></View>
+              <View style={styles.goalFooter}><Text style={styles.goalPercent}>{Math.round(percent)}% {bucket ? "spent" : "funded"}</Text><Text style={styles.goalDate}>{shortDate(goal.target_date)}</Text></View>
             </View>
           );
         }) : <Panel title="No active goals"><EmptyRow text="Add a goal to start building your portfolio." /></Panel>}

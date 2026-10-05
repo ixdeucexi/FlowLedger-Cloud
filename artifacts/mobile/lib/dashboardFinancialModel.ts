@@ -495,7 +495,7 @@ export function buildDashboardFinancialModel(input: DashboardFinancialModelInput
     settings: DEFAULT_DECISION_HUB_SETTINGS,
   });
 
-  const goalTotals = currentGoals.reduce(
+  const goalTotals = currentGoals.filter((goal) => goal.goal_type === "savings").reduce(
     (total, goal) => ({
       current: total.current + Math.max(0, goal.current_amount),
       target: total.target + Math.max(0, goal.target_amount),

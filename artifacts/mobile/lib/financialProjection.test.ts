@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import golden from "./financialProjection.golden.json";
 import { createFinancialProjection } from "./financialProjection";
+import { previewCanonicalDebtSnowball } from "./debtSnowballPreview";
 import { createFinancialProjectionReader } from "./financialProjectionReader";
 import type { FinancialProjectionSnapshot } from "./financialProjectionTypes";
 import {
@@ -33,6 +34,124 @@ function bankObligationFixture(anchorDate = "2026-10-02"): FinancialProjectionSn
   snapshot.settings.debtPayoffEnabled = false;
   return snapshot;
 }
+
+function debtPreviewFixture(): FinancialProjectionSnapshot {
+  const snapshot = bankObligationFixture("2026-10-01");
+  snapshot.settings.debtPayoffEnabled = true;
+  snapshot.settings.safety_floor = 200;
+  snapshot.settings.forecast_horizon_months = 1;
+  snapshot.bills[0] = { ...snapshot.bills[0], is_debt: true, balance: 1000, interest_rate: 0, due_day: 15, include_in_snowball: true };
+  snapshot.connectedBankAccounts[0].current_balance = 100000;
+  return snapshot;
+}
+const previewClock = { now: new Date("2026-10-01T12:00:00Z"), timeZone: "America/Chicago" };
+
+test("dated debt preview applies intervening minimums and agrees with Forecast including year transition", () => {
+  const snapshot = debtPreviewFixture();
+  const before = JSON.stringify(snapshot);
+  const preview = previewCanonicalDebtSnowball(snapshot, previewClock, 11, 2026, 100, 0, "2026-12-20");
+  assert.equal(preview.months[0].endingDebt, 600);
+  assert.equal(preview.months[0].minimumPayments, 100);
+  assert.equal(preview.allocations[0].balanceBefore, 700);
+  assert.equal(preview.debtFreeDate, "2027-06");
+  const canonical = createFinancialProjection({ ...snapshot, extraPayments: [{ id: "candidate", month: 11, year: 2026, amount: 100, payment_date: "2026-12-20", allocations: [{ billId: "bill", billName: "Bill", payment: 100, balanceBefore: 1000, balanceAfter: 900, paidOff: false }] }] }, previewClock);
+  assert.equal(preview.months[0].endingDebt, canonical.getDebtPlanForMonth(11, 2026)?.endingDebt);
+  assert.equal(preview.months[0].interest, canonical.getDebtPlanForMonth(11, 2026)?.interest);
+  assert.equal(JSON.stringify(snapshot), before);
+});
+
+test("dated preview preserves interest and already paid settlements exactly once", () => {
+  const snapshot = debtPreviewFixture();
+  snapshot.bills[0].interest_rate = 12;
+  const preview = previewCanonicalDebtSnowball(snapshot, previewClock, 11, 2026, 0, 0, "2026-12-20");
+  const canonical = createFinancialProjection(snapshot, previewClock).getDebtPlanForMonth(11, 2026)!;
+  assert.equal(preview.months[0].endingDebt, canonical.endingDebt);
+  assert.ok(preview.months[0].interest > 0);
+  snapshot.bills[0].interest_rate = 0;
+  snapshot.bills[0].balance = 900;
+  snapshot.overrides = [{ id: "paid", bill_id: "bill", month: 9, year: 2026, paid_amount: 100, paid_date: "2026-10-01" }];
+  const settled = previewCanonicalDebtSnowball(snapshot, previewClock, 9, 2026, 0, 0, "2026-10-20");
+  assert.equal(settled.months[0].endingDebt, 900);
+});
+
+test("moving a preview removes original identity and destination conflict is unavailable", () => {
+  const snapshot = debtPreviewFixture();
+  snapshot.extraPayments = [{ id: "original", month: 9, year: 2026, amount: 100, payment_date: "2026-10-20", allocations: [{ billId: "bill", billName: "Bill", payment: 100, balanceBefore: 1000, balanceAfter: 900, paidOff: false }], sources: [{ type: "manual", amount: 100, pendingBalanceApply: true }] }];
+  const moved = previewCanonicalDebtSnowball(snapshot, previewClock, 11, 2026, 100, 0, "2026-12-20", "original");
+  assert.equal(moved.months[0].endingDebt, 600);
+  snapshot.extraPayments.push({ id: "conflict", month: 11, year: 2026, amount: 50, payment_date: "2026-12-20", allocations: [{ billId: "bill", billName: "Bill", payment: 50, balanceBefore: 1000, balanceAfter: 900, paidOff: false }] });
+  assert.equal(previewCanonicalDebtSnowball(snapshot, previewClock, 11, 2026, 100, 0, "2026-12-20", "original").selectedExtra, 0);
+});
+
+test("safe dated preview protects same-day and earlier forecast floor and excludes paid-off/excluded targets", () => {
+  const snapshot = debtPreviewFixture();
+  snapshot.connectedBankAccounts[0].current_balance = 400;
+  const bounded = previewCanonicalDebtSnowball(snapshot, previewClock, 9, 2026, 500, 0, "2026-10-20");
+  assert.equal(bounded.selectedExtra, 100);
+  assert.equal(bounded.months[0].lowestAccountBalance, 200);
+  snapshot.connectedBankAccounts[0].current_balance = 150;
+  assert.equal(previewCanonicalDebtSnowball(structuredClone(snapshot), previewClock, 9, 2026, 50, 0, "2026-10-20").safeMaximum, 0);
+  snapshot.connectedBankAccounts[0].current_balance = 100000;
+  snapshot.bills[0].balance = 100;
+  assert.equal(previewCanonicalDebtSnowball(structuredClone(snapshot), previewClock, 9, 2026, 500, 0, "2026-10-20").safeMaximum, 0);
+  snapshot.bills[0].include_in_snowball = false;
+  assert.equal(previewCanonicalDebtSnowball(snapshot, previewClock, 9, 2026, 500).debtFreeDate, null);
+});
+
+test("canonical preview performance with eleven debts and six-month safety horizon", () => {
+  const snapshot = debtPreviewFixture();
+  snapshot.settings.forecast_horizon_months = 6;
+  snapshot.bills = Array.from({ length: 11 }, (_, index) => ({ ...snapshot.bills[0], id: `debt-${index}`, name: `Debt ${index}`, balance: 1000 + index * 100, amount: 100, due_day: index + 10 }));
+  const started = performance.now();
+  const result = previewCanonicalDebtSnowball(snapshot, previewClock, 11, 2026, 100, 0, "2026-12-20");
+  assert.ok(result.months.length > 0);
+  console.info(`canonical-preview-11-debts-ms=${Math.round(performance.now() - started)}`);
+  const repeatStarted = performance.now();
+  const repeat = previewCanonicalDebtSnowball(snapshot, previewClock, 11, 2026, 101, 0, "2026-12-20");
+  assert.equal(repeat.safeMaximum, result.safeMaximum);
+  console.info(`canonical-preview-cached-room-ms=${Math.round(performance.now() - repeatStarted)}`);
+});
+
+test("preview restores an applied original before moving it and preserves canonical payoff rollover", () => {
+  const snapshot = debtPreviewFixture();
+  snapshot.bills[0].balance = 900;
+  snapshot.extraPayments = [{ id: "applied", month: 9, year: 2026, amount: 100, payment_date: "2026-10-01", allocations: [{ billId: "bill", billName: "Bill", payment: 100, balanceBefore: 1000, balanceAfter: 900, paidOff: false }] }];
+  const moved = previewCanonicalDebtSnowball(snapshot, previewClock, 11, 2026, 100, 0, "2026-12-20", "applied");
+  assert.equal(moved.months[0].endingDebt, 600);
+  const rollover = debtPreviewFixture();
+  rollover.bills.push({ ...rollover.bills[0], id: "small", name: "Small", balance: 50, amount: 100 });
+  const result = previewCanonicalDebtSnowball(rollover, previewClock, 9, 2026, 100, 0, "2026-10-20");
+  const canonical = createFinancialProjection({ ...rollover, extraPayments: [{ id: "candidate", month: 9, year: 2026, amount: 100, payment_date: "2026-10-20", allocations: result.allocations }] }, previewClock);
+  assert.equal(result.months[0].endingDebt, canonical.getDebtPlanForMonth(9, 2026)?.endingDebt);
+  assert.equal(result.months[0].endingDebt, 750);
+  assert.equal(result.allocations[0].billId, "bill");
+});
+
+test("same-day income can fund an extra only when earlier dates also stay safe", () => {
+  const snapshot = debtPreviewFixture();
+  snapshot.connectedBankAccounts[0].current_balance = 400;
+  snapshot.incomes = [{ id: "pay", name: "Pay", amount: 500, frequency: "monthly", start_date: "2026-10-20", next_payment_date: "2026-10-20" }];
+  const result = previewCanonicalDebtSnowball(snapshot, previewClock, 9, 2026, 600, 0, "2026-10-20");
+  assert.equal(result.selectedExtra, 600);
+  assert.equal(result.months[0].lowestAccountBalance, 200);
+  const unsafe = structuredClone(snapshot);
+  unsafe.connectedBankAccounts[0].current_balance = 250;
+  assert.equal(previewCanonicalDebtSnowball(unsafe, previewClock, 9, 2026, 100, 0, "2026-10-20").selectedExtra, 0);
+});
+
+test("no active debts or dates beyond the canonical horizon do not invent a payoff date", () => {
+  const snapshot = debtPreviewFixture();
+  snapshot.bills = [];
+  assert.equal(previewCanonicalDebtSnowball(snapshot, previewClock, 9, 2026, 100).debtFreeDate, null);
+  const far = previewCanonicalDebtSnowball(debtPreviewFixture(), previewClock, 9, 2046, 100);
+  assert.equal(far.debtFreeDate, null);
+  assert.equal(far.months.length, 0);
+  const stopped = debtPreviewFixture();
+  stopped.bills[0].end_date = "2026-09-30";
+  const stoppedResult = previewCanonicalDebtSnowball(stopped, previewClock, 9, 2026, 100);
+  assert.equal(stoppedResult.debtFreeDate, null);
+  assert.equal(stoppedResult.allocations.length, 0);
+});
 
 test("bank-month closing seeds following months including anchor-day obligations and year boundaries", () => {
   for (const [anchor, month, year, nextMonth, nextYear] of [["2026-10-02", 9, 2026, 10, 2026], ["2026-12-02", 11, 2026, 0, 2027]] as const) {

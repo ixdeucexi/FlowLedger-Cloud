@@ -12,8 +12,11 @@ test("an unknown payday opens existing Income settings", () => {
     label: "Confirm next paycheck", pathname: "/(tabs)/more", params: { section: "money" },
   });
 });
-test("both a shortfall and a covered payday open the dated forecast for review", () => {
+test("both a shortfall and a covered payday open Flo with a grounded review", () => {
   for (const safeUntilPayday of [true, false]) {
-    assert.equal(stabilityPlanAction({ reserveTarget: 900, safeUntilPayday }).pathname, "/(tabs)/monthly");
+    const action = stabilityPlanAction({ reserveTarget: 900, safeUntilPayday });
+    assert.equal(action.pathname, "/(tabs)/flo");
+    assert.match(action.params?.prompt ?? "", /bills and debt minimums/);
+    assert.notEqual(action.params?.promptId, stabilityPlanAction({ reserveTarget: 900, safeUntilPayday }).params?.promptId);
   }
 });

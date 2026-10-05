@@ -1,7 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildStabilityProgress } from "./stability";
+import { buildStabilityProgress, stabilityBasisExplanation } from "./stability";
+
+test("zero full backup days can coexist with a safe payday and later-month risk is separate", () => {
+  const base = { todayDay: 1, safetyFloor: 200, monthlyRequiredOutflow: 3000, overdueBills: 0, forecastConfidence: "high" as const };
+  const progress = buildStabilityProgress({ ...base, balances: [{ day: 1, balance: 250 }, { day: 3, balance: 300, income: 1000 }, { day: 30, balance: 210 }] });
+  assert.equal(progress.protectedDays, 0);
+  assert.equal(progress.safeUntilPayday, true);
+  assert.match(stabilityBasisExplanation(progress), /0 full backup days/);
+  assert.match(stabilityBasisExplanation(progress), /includes expected income/);
+  const risk = buildStabilityProgress({ ...base, balances: [{ day: 1, balance: 250 }, { day: 3, balance: 300, income: 1000 }, { day: 30, balance: 100 }] });
+  assert.equal(risk.safeUntilPayday, true);
+  assert.equal(risk.status, "risk");
+  const negative = buildStabilityProgress({ ...base, balances: [{ day: 1, balance: -25 }, { day: 3, balance: 300, income: 1000 }] });
+  assert.match(stabilityBasisExplanation(negative), /-\$25\.00/);
+});
 
 test("prioritizes stabilization when a future day crosses the safety floor", () => {
   const result = buildStabilityProgress({
@@ -113,5 +127,7 @@ test("requires a complete essential-expense plan before claiming reserve progres
 
   assert.equal(result.stage, "next_paycheck");
   assert.equal(result.protectedDays, 0);
-  assert.match(result.nextAction, /required bills/i);
+  assert.match(result.nextAction, /Must Pay/i);
+  assert.match(stabilityBasisExplanation(result), /cannot be calculated/);
+  assert.doesNotMatch(stabilityBasisExplanation(result), /÷/);
 });

@@ -33,3 +33,17 @@ test("command palette exposes only supported application actions", () => {
   assert.equal(APP_COMMANDS.some(command => command.id === "open-snowball" && command.route === "/snowball-plan"), true);
   assert.equal(APP_COMMANDS.every(command => command.route.startsWith("/")), true);
 });
+
+test("spending buckets describe spent and remaining money, never funded savings", () => {
+  const results = buildUniversalSearchIndex({
+    bills: [], transactions: [], categories: [], settings: [],
+    goals: [
+      { id: "bucket", name: "Weekend", goal_type: "planned_expense", target_amount: 200, current_amount: 50 },
+      { id: "closed", name: "Closed weekend", goal_type: "planned_expense", target_amount: 200, current_amount: 50, closed_at: "2026-10-05" },
+      { id: "saving", name: "Emergency", goal_type: "savings", target_amount: 200, current_amount: 50 },
+    ],
+  });
+  assert.equal(results.find((row) => row.id === "bucket")?.subtitle, "$200.00 planned · $50.00 spent · $150.00 remaining");
+  assert.equal(results.find((row) => row.id === "closed")?.subtitle, "$200.00 planned · $50.00 spent · $150.00 released · Closed");
+  assert.equal(results.find((row) => row.id === "saving")?.subtitle, "25% funded");
+});

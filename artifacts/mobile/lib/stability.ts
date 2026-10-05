@@ -49,6 +49,8 @@ export interface StabilityProgress {
   stageLabel: string;
   status: "safe" | "watch" | "risk";
   protectedAmount: number;
+  safetyFloor: number;
+  monthlyLowestBalance: number;
   reserveTarget: number;
   reserveProgress: number;
   backupTarget: number;
@@ -101,6 +103,8 @@ export function buildStabilityProgress(input: StabilityProgressInput): Stability
     : input.nextPaycheckLabel ?? `day ${nextPaycheckDay}`;
   const base = {
     protectedAmount,
+    safetyFloor: floor,
+    monthlyLowestBalance: lowestBalance,
     reserveTarget,
     reserveProgress,
     backupTarget,
@@ -219,6 +223,17 @@ export function buildStabilityProgress(input: StabilityProgressInput): Stability
   }
 }
 
+/** The reserve is a forecast-based equivalent, not a promise of days without income. */
+export function stabilityBasisExplanation(progress: StabilityProgress): string {
+  const backup = progress.reserveTarget > 0
+    ? `Backup days use your lowest remaining-month forecast (${formatCurrency(progress.monthlyLowestBalance)}), less your ${formatCurrency(progress.safetyFloor)} safety floor: ${formatCurrency(progress.protectedAmount)} ÷ ${formatCurrency(progress.reserveTarget)} of monthly Must Pay expenses × 30, rounded down. This forecast includes expected income.`
+    : "Backup days cannot be calculated until Must Pay expenses are configured.";
+  const payday = progress.paydayLowestBalance === null
+    ? "Your next-payday check is unavailable until the paycheck date is confirmed."
+    : `The separate payday check uses the lowest forecast through ${progress.nextPaycheckLabel ?? "payday"}: ${formatCurrency(progress.paydayLowestBalance)} versus your ${formatCurrency(progress.safetyFloor)} floor. ${progress.safeUntilPayday ? progress.protectedDays === 0 ? "Bills can be covered through payday even with 0 full backup days." : "Coverage through payday is separate from your backup days." : "The plan falls below your floor before payday."}`;
+  return `${payday} ${backup}`;
+}
+
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.max(minimum, Math.min(maximum, value));
 }
@@ -228,7 +243,7 @@ function roundCurrency(value: number) {
 }
 
 function formatCurrency(value: number) {
-  return roundCurrency(Math.max(0, value)).toLocaleString("en-US", {
+  return roundCurrency(value).toLocaleString("en-US", {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 2,

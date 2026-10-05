@@ -571,6 +571,7 @@ function recommendationConfidenceGuard(message: string, facts: FloFacts): string
 function buildLocalFloAnswer(message: string, facts: FloFacts, days: DecisionBaselineDay[]): string | null {
   if (isUnsafeFloRequest(message)) return FLO_SECURITY_REFUSAL_MESSAGE;
   const lower = message.toLowerCase();
+  if (/review.*(?:payday|paycheck|pay day).*plan/i.test(lower)) return localPaycheckAnswer(message, facts);
   const asksStability = /stability path|stability reserve|protected days|days protected|breathing room|further ahead/.test(lower);
   if (asksStability && facts.stability) {
     const calculation = facts.safeCushion
@@ -783,6 +784,7 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
 
 export function fallbackFloAnswer(message: string, facts: FloFacts): string {
   const lower = message.toLowerCase();
+  if (/review.*(?:payday|paycheck|pay day).*plan/i.test(lower)) return localPaycheckAnswer(message, facts)!;
   if (/\b(bill|due|payment)\b/.test(lower)) {
     return facts.billsLeftCount > 0
       ? `You have ${facts.billsLeftCount} bill${facts.billsLeftCount === 1 ? "" : "s"} left this month, totaling $${facts.billsLeftAmount.toFixed(2)}.`
@@ -1016,6 +1018,16 @@ function localPaycheckAnswer(message: string, facts: FloFacts): string | null {
   }
   const nextPayDate = plan.nextPaycheck.date;
   const billList = plan.billsDue.slice(0, 3).map(bill => `${bill.name} ($${bill.amount.toFixed(0)} on ${bill.dueDate})`).join(", ");
+  if (/review.*(?:payday|paycheck|pay day).*plan/i.test(lower)) {
+    const obligations = plan.billsDue.length
+      ? `I see $${plan.billsTotal.toFixed(2)} in recorded bills and debt payments in the payday window: ${plan.billsDue.map(bill => `${bill.name} ($${bill.amount.toFixed(2)} on ${bill.dueDate})`).join(", ")}.`
+      : "I don't see recorded bills or debt payments in this payday window.";
+    const nextStep = plan.status === "risk" || facts.forecastConfidence !== "high"
+      ? "I'd keep extra debt payments on hold and review the tightest date first."
+      : "I'd keep the planned bill money and your cushion untouched, then review any new spending against this limit.";
+    const confidenceNote = facts.forecastConfidence === "high" ? "" : " These amounts are unverified estimates, not approval to spend; reconcile checking and confirm income and bills first.";
+    return `Here's my review of your payday plan: your next expected ${plan.nextPaycheck.name} is $${plan.nextPaycheck.amount.toFixed(2)} on ${nextPayDate}.\n\n${obligations}\n\nYour lowest projected balance is $${plan.lowestBalance.toFixed(2)} on ${plan.lowestBalanceDate}, against your $${facts.safetyFloor.toFixed(2)} safety floor. Your calculated safe-to-spend amount for this window is $${plan.safeToSpend.toFixed(2)}. ${nextStep}\n\nThis is a projection from your recorded plan, including expected income. Missing or changed payments can change these amounts.${confidenceNote}`;
+  }
   if (/bill|due|eating up|taking|why|what.*before/i.test(lower)) {
     return plan.billsDue.length
       ? `Before your next paycheck on ${nextPayDate}, I see ${plan.billsDue.length} bill${plan.billsDue.length === 1 ? "" : "s"} totaling $${plan.billsTotal.toFixed(2)}: ${billList}. Your safe-to-spend before payday is about $${plan.safeToSpend.toFixed(2)}.`

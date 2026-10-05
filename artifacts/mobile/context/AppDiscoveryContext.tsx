@@ -308,7 +308,7 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
       result.push({ id: `forecast-room:${date}`, type: "forecast", title: "Build more breathing room", body: `Adding ${currency(settings.safety_floor - lowest.balance)} of room by ${new Date(year, month, lowest.day).toLocaleDateString(undefined, { month: "short", day: "numeric" })} would protect your safety floor. Open Forecast to see your options.`, timestamp: localNoonIso(year, month, lowest.day), route: "/(tabs)/monthly", params: { openDate: date }, tone: "watch" });
     }
 
-    goals.filter(goal => !goal.archived_at && goal.target_amount > 0 && goal.current_amount >= goal.target_amount).forEach(goal => {
+    goals.filter(goal => goal.goal_type === "savings" && !goal.archived_at && goal.target_amount > 0 && goal.current_amount >= goal.target_amount).forEach(goal => {
       const timestamp = validRecentTimestamp(goal.closed_at || goal.target_date || goal.created_at, now);
       if (timestamp) result.push({ id: `goal-complete:${goal.id}`, type: "goal", title: `${goal.name} is funded`, body: `You reached the ${currency(goal.target_amount)} target.`, timestamp, route: "/(tabs)/more", params: { section: "goals" }, tone: "safe" });
     });

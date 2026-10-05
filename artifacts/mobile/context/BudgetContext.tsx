@@ -72,8 +72,9 @@ import { supabase } from "@/lib/supabase";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { DashboardFinancialSnapshotContextProvider } from "@/context/DashboardFinancialSnapshotContext";
-import { allocateSnowballExtra, orderDebts, simulateSnowballPayoff, type DatedSnowballMonthPlanResult, type SnowballDebtInput, type SnowballProjectionResult } from "@/lib/snowball";
-import { requiredDebtPlanTotal, snowballRolloverPlanTotal, upsertSnowballPlanById } from "@/lib/debtPaymentPlan";
+import { allocateSnowballExtra, orderDebts, type DatedSnowballMonthPlanResult, type SnowballProjectionResult } from "@/lib/snowball";
+import { previewCanonicalDebtSnowball } from "@/lib/debtSnowballPreview";
+import { requiredDebtPlanTotal, upsertSnowballPlanById } from "@/lib/debtPaymentPlan";
 import { isValidExtraPaymentPlan, plannedDebtAmountError, type DebtSourceCommitment, type DebtMonthSettlement } from "@/lib/debtPlanDomain";
 
 import { diagnosticErrorCode } from "@/lib/diagnosticPolicy";
@@ -5326,127 +5327,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     getDailyBalances,
   }), [getDailyBalances]);
 
-  const previewDebtSnowball = useCallback((month: number, year: number, requestedExtra?: number, additionalSafeCredit = 0, paymentDateOverride?: string, editingPaymentId?: string): SnowballProjectionResult => {
-    const existing = extraPayments.find(ep => ep.month === month && ep.year === year && isValidExtraPaymentPlan(ep));
-    const editingAppliedPayment = Boolean(
-      existing
-      && existing.id === editingPaymentId
-      && !hasPendingSnowballBalanceApply(existing)
-      && (existing.payment_date ?? "") <= localDateString(),
-    );
-    const restoredByDebtId = new Map<string, number>();
-    if (editingAppliedPayment) {
-      existing?.allocations.forEach(allocation => {
-        restoredByDebtId.set(
-          allocation.billId,
-          (restoredByDebtId.get(allocation.billId) ?? 0) + Math.max(0, Number(allocation.payment) || 0),
-        );
-      });
-    }
-    const debtInputs: SnowballDebtInput[] = bills
-      .filter(b => b.is_debt && Number(b.balance) + (restoredByDebtId.get(b.id) ?? 0) > 0 && isBillActiveForMonth(b, month, year))
-      .map(b => ({
-        id: b.id,
-        name: b.name,
-        balance: Number(b.balance) + (restoredByDebtId.get(b.id) ?? 0),
-        minimum: requiredDebtPlanTotal(
-          b,
-          Math.max(1, getBillOccurrencesInMonth(b, month, year).length),
-        ),
-        apr: Number(b.interest_rate),
-        dueDay: b.due_day,
-        included: b.include_in_snowball !== false,
-      }));
-    const included = debtInputs.filter(d => d.included);
-    const target = orderDebts(included, settings.paymentMethod)[0];
-    const today = new Date();
-    const requestedDay = target?.dueDay ?? 1;
-    const dueDay = today.getFullYear() === year && today.getMonth() === month && requestedDay < today.getDate()
-      ? today.getDate()
-      : requestedDay;
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const defaultPaymentDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(Math.min(daysInMonth, dueDay)).padStart(2, "0")}`;
-    const validOverride = paymentDateOverride?.startsWith(`${year}-${String(month + 1).padStart(2, "0")}-`);
-    const paymentDate = validOverride ? paymentDateOverride! : defaultPaymentDate;
-
-    if (!settings.debtPayoffEnabled) {
-      return {
-        safeMaximum: 0,
-        selectedExtra: 0,
-        paymentDate,
-        allocations: [],
-        months: [],
-        payoffOrder: [],
-        debtFreeDate: null,
-        lowestSixMonthBalance: 0,
-      };
-    }
-
-    const getWindowMinimum = (startMonth: number, startYear: number) => {
-      let minimum = Infinity;
-      for (let offset = 0; offset < settings.forecast_horizon_months; offset++) {
-        const absolute = startYear * 12 + startMonth + offset;
-        const m = absolute % 12;
-        const y = Math.floor(absolute / 12);
-        getDailyBalances(m, y).forEach(day => { minimum = Math.min(minimum, day.balance); });
-      }
-      return Number.isFinite(minimum) ? minimum : 0;
-    };
-
-    const baselineMinimum = getWindowMinimum(month, year);
-    const existingAmount = existing?.amount ?? 0;
-    const totalIncluded = included.reduce((sum, debt) => sum + debt.balance, 0);
-    const safeMaximum = Math.max(0, Math.min(totalIncluded, baselineMinimum + existingAmount + Math.max(0, additionalSafeCredit) - settings.safety_floor));
-    const selectedExtra = Math.max(0, Math.min(requestedExtra ?? safeMaximum, safeMaximum));
-    const current = allocateSnowballExtra(debtInputs, selectedExtra, settings.paymentMethod, paymentDate);
-    const existingRolledPayment = snowballRolloverPlanTotal(
-      bills.filter(bill => bill.is_debt),
-    );
-    const initialRolledPayment = current.payoffOrder.reduce((sum, name) => {
-      const debt = debtInputs.find(item => item.name === name);
-      return sum + Math.max(0, debt?.minimum ?? 0);
-    }, existingRolledPayment);
-    let cumulativeProjectedDelta = selectedExtra - existingAmount;
-    const simulated = simulateSnowballPayoff({
-      debts: debtInputs,
-      method: settings.paymentMethod,
-      startMonth: month,
-      startYear: year,
-      firstMonthBalances: current.balances,
-      firstPayoffOrder: current.payoffOrder,
-      initialRolledPayment,
-      getExtraForMonth: (_offset, futureMonth, futureYear, remainingDebt) => {
-        const futureBaseline = getWindowMinimum(futureMonth, futureYear);
-        const extra = Math.max(0, Math.min(remainingDebt, futureBaseline - cumulativeProjectedDelta - settings.safety_floor));
-        cumulativeProjectedDelta += extra;
-        return { extra, lowestBalance: futureBaseline - cumulativeProjectedDelta };
-      },
-    });
-    const currentLowest = baselineMinimum - (selectedExtra - existingAmount);
-    const endingDebt = Array.from(current.balances.values()).reduce((sum, balance) => sum + balance, 0);
-    const currentMonthProjection = {
-      month,
-      year,
-      targetName: target?.name ?? null,
-      minimumPayments: debtInputs.reduce((sum, debt) => sum + debt.minimum, 0),
-      extraPayment: selectedExtra,
-      rolledPayment: initialRolledPayment,
-      interest: 0,
-      endingDebt,
-      lowestAccountBalance: currentLowest,
-      paidOffNames: current.payoffOrder,
-    };
-    return {
-      safeMaximum,
-      selectedExtra,
-      paymentDate,
-      allocations: current.allocations,
-      months: [currentMonthProjection, ...simulated.months],
-      payoffOrder: simulated.payoffOrder,
-      debtFreeDate: endingDebt <= 0.009 ? `${year}-${String(month + 1).padStart(2, "0")}` : simulated.debtFreeDate,
-      lowestSixMonthBalance: Math.min(currentLowest, ...simulated.months.slice(0, 5).map(item => item.lowestAccountBalance)),
-    };
-  }, [bills, settings.paymentMethod, settings.debtPayoffEnabled, settings.safety_floor, settings.forecast_horizon_months, extraPayments, getBillOccurrencesInMonth, getDailyBalances]);
+  const debtPreviewSnapshot = useMemo(() => ({ settings, bills, overrides, billDateMoves, transactions, deletedTransactions, incomes, goals, extraPayments, decisions, accounts, connectedBankAccounts, transactionAccountIdentities, pendingBankTransactions, pendingPlanMatches }), [settings, bills, overrides, billDateMoves, transactions, deletedTransactions, incomes, goals, extraPayments, decisions, accounts, connectedBankAccounts, transactionAccountIdentities, pendingBankTransactions, pendingPlanMatches]);
+  const previewDebtSnowball = useCallback((month: number, year: number, requestedExtra?: number, additionalSafeCredit = 0, paymentDateOverride?: string, editingPaymentId?: string): SnowballProjectionResult => previewCanonicalDebtSnowball(
+    debtPreviewSnapshot,
+    { now: new Date(), timeZone: householdTimeZone },
+    month, year, requestedExtra, additionalSafeCredit, paymentDateOverride, editingPaymentId,
+  ), [debtPreviewSnapshot, householdTimeZone]);
 
   const removeReviewSurplusFunding = useCallback(async (transactionId: string) => {
     const affectedPayments = extraPayments.filter(payment =>

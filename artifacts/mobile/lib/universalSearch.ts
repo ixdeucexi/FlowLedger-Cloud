@@ -1,3 +1,5 @@
+import { spendingBucketSummary } from "./spendingBuckets";
+
 export type SearchResultKind =
   | "Bill"
   | "Debt"
@@ -22,7 +24,7 @@ export type UniversalSearchResult = {
 
 export type UniversalSearchInput = {
   bills: Array<{ id: string; name: string; category: string; is_debt: boolean; balance: number; amount: number }>;
-  goals: Array<{ id: string; name: string; current_amount: number; target_amount: number; archived_at?: string }>;
+  goals: Array<{ id: string; name: string; current_amount: number; target_amount: number; goal_type?: "savings" | "planned_expense"; closed_at?: string; archived_at?: string }>;
   transactions: Array<{ id: string; date: string; note: string; category: string; merchant_name?: string; amount: number; removed_at?: string; pending?: boolean }>;
   categories: string[];
   settings: Array<{ id: string; label: string; description: string; icon: string }>;
@@ -95,11 +97,14 @@ export function buildUniversalSearchIndex(input: UniversalSearchInput): Universa
 
   input.goals.filter(goal => !goal.archived_at).forEach(goal => {
     const progress = goal.target_amount > 0 ? Math.min(100, Math.round((goal.current_amount / goal.target_amount) * 100)) : 0;
+    const bucket = goal.goal_type === "planned_expense" ? spendingBucketSummary(goal) : null;
     results.push({
       id: goal.id,
       kind: "Goal",
       title: goal.name,
-      subtitle: `${progress}% funded`,
+      subtitle: bucket
+        ? `${currency(bucket.planned)} planned · ${currency(bucket.spent)} spent · ${bucket.closed ? `${currency(bucket.released)} released · Closed` : `${currency(bucket.remaining)} remaining`}`
+        : `${progress}% funded`,
       icon: "target",
       route: "/(tabs)/more",
       params: { section: "goals" },

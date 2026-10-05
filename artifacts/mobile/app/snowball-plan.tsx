@@ -463,9 +463,6 @@ function SnowballPlanScreen() {
                       {row.plannedToDebt <= 0.005 ? (
                         <Text style={[styles.sourceOutflow, { color: c.mutedForeground }]}>{row.settlement.status === "settled" ? `Required payment settled for ${monthLabel}.` : row.settlement.status === "partial" ? "Payment activity is recorded; no additional scheduled allocation is available." : "No required allocation is scheduled for this debt this month."}</Text>
                       ) : null}
-                      {row.forecastPayment > 0.009 ? (
-                        <Text style={[styles.sourceOutflow, { color: c.mutedForeground }]}>Forecast source outflow: {money(row.forecastPayment)}</Text>
-                      ) : null}
                       {row.payoffExtraRemaining > 0.009 ? (
                         <Text style={[styles.sourceOutflow, { color: c.primary }]}>Optional payoff extra remaining: {money(row.payoffExtraRemaining)}</Text>
                       ) : null}
@@ -632,6 +629,7 @@ function SnowballPlanScreen() {
                   <Text style={[styles.payoffDateLabel, { color: c.mutedForeground }]}>PROJECTED PAYOFF</Text>
                   <Text style={[styles.payoffDateValue, { color: c.primary }]}>{readableMonth(preview.debtFreeDate)}</Text>
                 </View>
+                <Text style={[styles.smallCopy, { color: c.mutedForeground }]}>Projected from your saved dated plan, required payments, interest, rollover and this selected extra. Future unscheduled extra money is not assumed. If payoff exceeds the supported projection window, no date is shown.</Text>
 
                 {displayedAllocations.length > 0 ? (
                   <View style={styles.allocations}>

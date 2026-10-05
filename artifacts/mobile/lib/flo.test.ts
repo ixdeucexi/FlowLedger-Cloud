@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { PAYDAY_REVIEW_PROMPT } from "./stabilityActions";
 import {
   AI_USAGE_UNAVAILABLE_MESSAGE,
   FLO_SECURITY_REFUSAL_MESSAGE,
@@ -190,6 +191,34 @@ const facts: FloFacts = {
   },
 };
 const days = [{ date: "2026-06-24", balance: 1000 }, { date: "2026-07-01", balance: 800 }];
+
+test("dashboard payday review explains verified amounts, dates, floor and next step", () => {
+  const answer = localFloAnswer(PAYDAY_REVIEW_PROMPT, facts, days) ?? "";
+  assert.match(answer, /Here's my review/);
+  assert.match(answer, /\$1200\.00 on 2026-06-28/);
+  assert.match(answer, /Power \(\$120\.00 on 2026-06-28\)/);
+  assert.match(answer, /\$800\.00 on 2026-07-01/);
+  assert.match(answer, /\$200\.00 safety floor/);
+  assert.match(answer, /safe-to-spend.*\$600\.00/);
+  assert.match(answer, /projection.*recorded plan/);
+});
+
+test("payday review preserves negative projected balances and cautions against extra debt", () => {
+  const answer = localFloAnswer(PAYDAY_REVIEW_PROMPT, { ...facts, paycheckPlan: { ...facts.paycheckPlan!, lowestBalance: -25.37, safeToSpend: 0, status: "risk" } }, days) ?? "";
+  assert.match(answer, /\$-25\.37/);
+  assert.match(answer, /extra debt payments on hold/);
+});
+
+test("payday review does not invent a missing next paycheck", () => {
+  assert.match(localFloAnswer(PAYDAY_REVIEW_PROMPT, { ...facts, paycheckPlan: undefined }, days) ?? "", /don't see an upcoming paycheck/);
+});
+
+test("payday review fallback is a review and low-confidence amounts remain estimates", () => {
+  const answer = fallbackFloAnswer(PAYDAY_REVIEW_PROMPT, { ...facts, forecastConfidence: "low" });
+  assert.match(answer, /Here's my review/);
+  assert.match(answer, /unverified estimates, not approval to spend/);
+  assert.match(answer, /extra debt payments on hold/);
+});
 
 test("Flo affordability uses deterministic result", () => {
   assert.match(localFloAnswer("Can I afford $700 on 2026-06-24?", facts, days) ?? "", /^This plan needs more breathing room first\./);

@@ -43,7 +43,10 @@ import {
 import { desktopActivityDestination, isDesktopAddAction, type DesktopAddAction } from "@/lib/desktopActions";
 import { WIDE_DESKTOP_BREAKPOINT } from "@/lib/desktopExperience";
 import { transactionDebt } from "@/lib/transactionDebt";
+import { spendingBucketSummary } from "@/lib/spendingBuckets";
 import { buildFlowGuideRouteParams } from "@/lib/flowledgerGuide";
+import { stabilityBasisExplanation } from "@/lib/stability";
+import { stabilityPlanAction } from "@/lib/stabilityActions";
 import type { BillEditableBaseline, BillEditableField } from "@/lib/billEditPersistence";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
@@ -784,7 +787,7 @@ function DesktopDashboardContent({
           onPress={() => go("/(tabs)/more", { section: "money" })}
         />
         <MetricCard
-          label="Goal Progress"
+          label="Savings Progress"
           value={`${Math.round(goalPercent)}%`}
           detail={`${currency(goalTotals.current)} of ${currency(goalTotals.target)} funded`}
           accent="cyan"
@@ -1052,8 +1055,8 @@ function DesktopDashboardContent({
                 <View style={styles.calloutIcon}>
                   <Feather name="check" size={13} color="#5ee6b5" />
                 </View>
-                <Text style={styles.stabilityCalloutText} numberOfLines={2}>
-                  {progress.explanation}
+                <Text style={styles.stabilityCalloutText}>
+                  {stabilityBasisExplanation(progress)}
                 </Text>
               </View>
 
@@ -1078,6 +1081,15 @@ function DesktopDashboardContent({
                 </View>
               </View>
 
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={stabilityPlanAction(progress).label}
+                onPress={() => { const action = stabilityPlanAction(progress); go(action.pathname, action.params); }}
+                style={({ pressed }) => [styles.howItWorks, { opacity: pressed ? 0.7 : 1 }]}
+              >
+                <Feather name="message-circle" size={16} color="#bfd2f2" />
+                <AppText tone="button" style={styles.howItWorksText}>{stabilityPlanAction(progress).label}</AppText>
+              </Pressable>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="See how your Stability Path works"
@@ -1283,7 +1295,7 @@ function DesktopDashboardContent({
             <View style={styles.goalSummary}>
               <View>
                 <Text style={styles.goalSummaryValue}>{Math.round(goalPercent)}%</Text>
-                <Text style={styles.goalSummaryLabel}>overall funded</Text>
+                <Text style={styles.goalSummaryLabel}>savings funded</Text>
               </View>
               <View style={styles.goalSummaryMoney}>
                 <Text style={styles.goalFunded}>{currency(goalTotals.current)}</Text>
@@ -1294,6 +1306,7 @@ function DesktopDashboardContent({
             <View style={styles.goalList}>
               {activeGoals.length ? (
                 activeGoals.slice(0, 3).map((goal, index) => {
+                  const bucket = goal.goal_type === "planned_expense" ? spendingBucketSummary(goal) : null;
                   const percent =
                     goal.target_amount > 0
                       ? Math.min(100, (goal.current_amount / goal.target_amount) * 100)
@@ -1315,9 +1328,9 @@ function DesktopDashboardContent({
                       </View>
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text style={styles.goalName} numberOfLines={1}>{goal.name}</Text>
-                        <Text style={styles.goalMeta}>{Math.round(percent)}% funded</Text>
+                        <Text style={styles.goalMeta}>{bucket ? `${currency(bucket.planned)} planned · ${currency(bucket.spent)} spent` : `${Math.round(percent)}% funded`}</Text>
                       </View>
-                      <Text style={styles.goalAmount}>{currency(goal.current_amount)}</Text>
+                      <Text style={styles.goalAmount}>{bucket ? `${currency(bucket.remaining)} left` : currency(goal.current_amount)}</Text>
                     </Pressable>
                   );
                 })

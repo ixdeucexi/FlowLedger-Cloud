@@ -298,6 +298,19 @@ test("builds the one financial model consumed by desktop and mobile dashboards",
   assert.deepEqual(model.currentGoals.map((goal) => goal.id), ["emergency"]);
   assert.deepEqual(model.goalTotals, { current: 500, target: 2_000 });
   assert.equal(model.goalPercent, 25);
+  const withSpendingBucket = buildDashboardFinancialModel({
+    ...modelInput,
+    goals: [...modelInput.goals, {
+      ...modelInput.goals[0],
+      id: "spending-bucket",
+      name: "Weekend spending",
+      goal_type: "planned_expense",
+      current_amount: 50,
+      target_amount: 200,
+    }],
+  });
+  assert.deepEqual(withSpendingBucket.goalTotals, { current: 500, target: 2_000 });
+  assert.equal(withSpendingBucket.goalPercent, 25);
   assert.equal(model.categoryPlan.find((row) => row.category === "Food")?.budgeted, 500);
   assert.equal(model.categoryPlan.find((row) => row.category === "Food")?.spent, 125);
   assert.ok(Number.isFinite(model.algorithmSuite.flowScore.score));

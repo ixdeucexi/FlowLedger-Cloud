@@ -53,6 +53,7 @@ import {
   shouldShowFlowmentumHandoff,
 } from "@/lib/flowmentumHandoff";
 import { transactionCategoryParts } from "@/lib/reviewCenter";
+import { spendingBucketSummary } from "@/lib/spendingBuckets";
 import type { AlgorithmInsight } from "@/lib/algorithmSuite";
 import { unplannedPendingExpenses } from "@/lib/plaidActivity";
 import { buildFlowGuideRouteParams } from "@/lib/flowledgerGuide";
@@ -650,7 +651,7 @@ function MobileDashboardContent({
   const goalsScrollViewportHeight = isCommandWide ? 220 : 156;
   const goalRowsHeight = currentGoals.length === 0
     ? 80
-    : Math.min(goalsScrollViewportHeight, currentGoals.length * 38 + 14);
+    : Math.min(goalsScrollViewportHeight, currentGoals.length * 56 + 14);
   const compactSavingsFaceHeight = 92
     + savingsAccountRowsHeight
     + goalRowsHeight;
@@ -1248,21 +1249,23 @@ function MobileDashboardContent({
                 style={[styles.referenceGoalsScroll, { maxHeight: goalsScrollViewportHeight }]}
                 contentContainerStyle={styles.referenceGoalsScrollContent}
                 nestedScrollEnabled
-                showsVerticalScrollIndicator={currentGoals.length > 3}
+                showsVerticalScrollIndicator={currentGoals.length * 56 + 14 > goalsScrollViewportHeight}
               >
                 {currentGoals.map(goal => {
+                  const bucket = goal.goal_type === "planned_expense" ? spendingBucketSummary(goal) : null;
                   const percent = goal.target_amount > 0 ? Math.min(100, Math.max(0, (goal.current_amount / goal.target_amount) * 100)) : 0;
                   return (
                     <Pressable
                       key={goal.id}
                       onPress={() => { setEditGoal(goal); setGoalModalVisible(true); }}
-                      accessibilityLabel={`Edit ${goal.name} goal`}
+                      accessibilityLabel={`Edit ${goal.name} ${bucket ? "spending bucket" : "savings goal"}`}
                       style={({ pressed }) => [styles.referenceGoalItem, { backgroundColor: dashboardTheme.goalSurface, borderColor: dashboardTheme.goalBorder, opacity: pressed ? 0.72 : 1 }]}
                     >
                       <View style={styles.referenceGoalTopRow}>
                         <AppText style={[styles.referenceGoalName, { color: dashboardTheme.mutedText }]} numberOfLines={1}>{goal.name}</AppText>
-                        <AppText numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.referenceGoalAmounts, { color: dashboardTheme.subtleText }]}>{formatDashboardCurrency(goal.current_amount)} / {formatDashboardCurrency(goal.target_amount)}</AppText>
+                        <AppText numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.referenceGoalAmounts, { color: dashboardTheme.subtleText }]}>{bucket ? `${formatDashboardCurrency(bucket.remaining)} left` : `${formatDashboardCurrency(goal.current_amount)} / ${formatDashboardCurrency(goal.target_amount)}`}</AppText>
                       </View>
+                      <AppText style={{ color: dashboardTheme.subtleText, fontSize: 11 }}>{bucket ? `${formatDashboardCurrency(bucket.planned)} planned · ${formatDashboardCurrency(bucket.spent)} spent` : `${Math.round(percent)}% funded`}</AppText>
                       <View style={styles.referenceGoalTrack}>
                         <View style={[styles.referenceGoalFill, { width: `${percent}%` as any }]} />
                       </View>
@@ -2170,7 +2173,7 @@ const styles = StyleSheet.create({
   referenceGoalAddButton: { width: 28, height: 28, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.42)", borderWidth: 1, borderColor: "rgba(196,181,253,0.28)" },
   referenceGoalsScroll: { flexGrow: 0, marginBottom: 2 },
   referenceGoalsScrollContent: { paddingBottom: 2 },
-  referenceGoalItem: { borderRadius: 10, backgroundColor: "rgba(15,23,42,0.56)", borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", paddingHorizontal: 9, paddingVertical: 6, marginTop: 4 },
+  referenceGoalItem: { minHeight: 44, borderRadius: 10, backgroundColor: "rgba(15,23,42,0.56)", borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", paddingHorizontal: 9, paddingVertical: 6, marginTop: 4 },
   referenceGoalTopRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   referenceGoalName: { flex: 1, color: "#e2e8f0", fontSize: 11, fontFamily: "Inter_700Bold" },
   referenceGoalAmounts: { maxWidth: "52%", flexShrink: 1, color: "#94a3b8", fontSize: 9, fontFamily: "Inter_700Bold", textAlign: "right" },

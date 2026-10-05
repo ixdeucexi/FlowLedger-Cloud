@@ -7,6 +7,7 @@ import { AppText } from "@/components/AppText";
 import { surfaceTokens } from "@/constants/surfaces";
 import { useColors } from "@/hooks/useColors";
 import type { StabilityProgress } from "@/lib/stability";
+import { stabilityBasisExplanation } from "@/lib/stability";
 import { stabilityPlanAction } from "@/lib/stabilityActions";
 
 interface StabilityPathCardProps {
@@ -105,7 +106,7 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
         <Feather name={progress.safeUntilPayday === true ? "check-circle" : progress.safeUntilPayday === false ? "alert-circle" : "calendar"} size={16} color={paydayColor} />
         <AppText tone="title" style={[styles.paydayTitle, { color: paydayColor }]}>{paydayTitle}</AppText>
       </View>
-      <AppText style={[styles.planNote, { color: theme.mutedText }]}>Based on your recorded plan. Cover bills and minimum payments, protect your chosen cushion, then review any extra debt payment.</AppText>
+      <AppText style={[styles.planNote, { color: theme.mutedText }]}>{stabilityBasisExplanation(progress)}</AppText>
 
       <View style={styles.progressHeader}>
         <AppText style={[styles.progressLabel, { color: theme.labelText }]}>180-day path</AppText>
@@ -134,7 +135,7 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={planAction.label}
-          onPress={() => router.push({ pathname: planAction.pathname, params: planAction.params } as any)}
+          onPress={() => router.push(stabilityPlanAction(progress) as any)}
           style={({ pressed }) => [styles.primaryButton, { backgroundColor: c.primary, opacity: pressed ? 0.72 : 1 }]}
         >
           <Feather name="calendar" size={16} color={c.primaryForeground} />

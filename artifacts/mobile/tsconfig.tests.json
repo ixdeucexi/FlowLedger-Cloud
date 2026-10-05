@@ -17,6 +17,7 @@
     "lib/billPaymentHistory.test.ts",
     "lib/settingsNavigation.test.ts",
     "lib/stabilityActions.test.ts",
+    "lib/stability.test.ts",
     "lib/moneyFormInput.test.ts",
     "lib/categorySaveReliability.test.ts",
     "lib/goalFundingReview.test.ts",
