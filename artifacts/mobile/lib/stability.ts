@@ -230,7 +230,7 @@ export function stabilityBasisExplanation(progress: StabilityProgress): string {
     : "Backup days cannot be calculated until Must Pay expenses are configured.";
   const payday = progress.paydayLowestBalance === null
     ? "Your next-payday check is unavailable until the paycheck date is confirmed."
-    : `The separate payday check uses the lowest forecast through ${progress.nextPaycheckLabel ?? "payday"}: ${formatCurrency(progress.paydayLowestBalance)} versus your ${formatCurrency(progress.safetyFloor)} floor. ${progress.safeUntilPayday ? progress.protectedDays === 0 ? "Bills can be covered through payday even with 0 full backup days." : "Coverage through payday is separate from your backup days." : "The plan falls below your floor before payday."}`;
+    : `The separate payday check uses the tightest forecast point through ${progress.nextPaycheckLabel ?? "payday"}: ${formatCurrency(progress.paydayLowestBalance)} versus your ${formatCurrency(progress.safetyFloor)} floor. ${progress.safeUntilPayday ? progress.protectedDays === 0 ? "Bills can be covered through payday even with 0 full backup days." : "Coverage through payday is separate from your backup days." : "The plan falls below your floor before payday."}`;
   return `${payday} ${backup}`;
 }
 
