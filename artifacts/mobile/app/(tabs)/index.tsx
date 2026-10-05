@@ -1265,7 +1265,7 @@ function MobileDashboardContent({
                         <AppText style={[styles.referenceGoalName, { color: dashboardTheme.mutedText }]} numberOfLines={1}>{goal.name}</AppText>
                         <AppText numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.referenceGoalAmounts, { color: dashboardTheme.subtleText }]}>{bucket ? `${formatDashboardCurrency(bucket.remaining)} left` : `${formatDashboardCurrency(goal.current_amount)} / ${formatDashboardCurrency(goal.target_amount)}`}</AppText>
                       </View>
-                      <AppText style={{ color: dashboardTheme.subtleText, fontSize: 11 }}>{bucket ? `${formatDashboardCurrency(bucket.planned)} planned · ${formatDashboardCurrency(bucket.spent)} spent` : `${Math.round(percent)}% funded`}</AppText>
+                      <AppText style={{ color: dashboardTheme.subtleText, fontSize: 11 }}>{bucket ? `${formatDashboardCurrency(bucket.planned)} planned · ${formatDashboardCurrency(bucket.spent)} spent` : goal.target_amount > 0 ? `${Math.round(percent)}% funded` : "No savings target set"}</AppText>
                       <View style={styles.referenceGoalTrack}>
                         <View style={[styles.referenceGoalFill, { width: `${percent}%` as any }]} />
                       </View>
@@ -1399,6 +1399,7 @@ function MobileDashboardContent({
 
       <StabilityPathCard
         progress={algorithmSuite.stability}
+        balanceAvailable={dashboardModel.bankCurrentCheckingBalance !== null}
         onViewGuide={() => openStabilityGuide()}
       />
 

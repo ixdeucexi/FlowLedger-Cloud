@@ -1,18 +1,17 @@
 import Feather from "@expo/vector-icons/Feather";
-import React, { memo } from "react";
-import { useRouter } from "expo-router";
+import React, { memo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { AppText } from "@/components/AppText";
 import { surfaceTokens } from "@/constants/surfaces";
 import { useColors } from "@/hooks/useColors";
 import type { StabilityProgress } from "@/lib/stability";
-import { stabilityBasisExplanation } from "@/lib/stability";
-import { stabilityPlanAction } from "@/lib/stabilityActions";
+import { FloPlanReviewOverlay } from "@/components/FloPlanReviewOverlay";
 
 interface StabilityPathCardProps {
   progress: StabilityProgress;
   onViewGuide: () => void;
+  balanceAvailable: boolean;
 }
 
 const STABILITY_THEMES = {
@@ -48,10 +47,9 @@ function statusColor(status: StabilityProgress["status"], isDark: boolean) {
   return isDark ? "#34d399" : "#15803d";
 }
 
-function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps) {
+function StabilityPathCardView({ progress, onViewGuide, balanceAvailable }: StabilityPathCardProps) {
   const c = useColors();
-  const router = useRouter();
-  const planAction = stabilityPlanAction(progress);
+  const [reviewMode, setReviewMode] = useState<"info" | "payday" | null>(null);
   const color = statusColor(progress.status, c.isDark);
   const theme = STABILITY_THEMES[c.mode];
   const progressWidth = `${Math.round(progress.backupProgress * 100)}%` as const;
@@ -81,6 +79,9 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
           <AppText tone="label" style={[styles.eyebrow, { color: theme.eyebrow }]}>Stability path</AppText>
           <AppText tone="title" style={[styles.stage, { color: theme.text }]}>{progress.stageLabel}</AppText>
         </View>
+        <Pressable accessibilityRole="button" accessibilityLabel="More information about your Stability Path" onPress={() => setReviewMode("info")} style={styles.infoButton}>
+          <Feather name="info" size={20} color={theme.mutedText} />
+        </Pressable>
         <View style={[styles.statusPill, { backgroundColor: `${color}18`, borderColor: `${color}38` }]}>
           <View style={[styles.statusDot, { backgroundColor: color }]} />
           <AppText style={[styles.statusText, { color }]}>{progress.status === "risk" ? "Act now" : progress.status === "watch" ? "Building" : "On track"}</AppText>
@@ -106,7 +107,6 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
         <Feather name={progress.safeUntilPayday === true ? "check-circle" : progress.safeUntilPayday === false ? "alert-circle" : "calendar"} size={16} color={paydayColor} />
         <AppText tone="title" style={[styles.paydayTitle, { color: paydayColor }]}>{paydayTitle}</AppText>
       </View>
-      <AppText style={[styles.planNote, { color: theme.mutedText }]}>{stabilityBasisExplanation(progress)}</AppText>
 
       <View style={styles.progressHeader}>
         <AppText style={[styles.progressLabel, { color: theme.labelText }]}>180-day path</AppText>
@@ -134,12 +134,12 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
       <View style={styles.actions}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={planAction.label}
-          onPress={() => router.push(stabilityPlanAction(progress) as any)}
+          accessibilityLabel="Review my payday plan"
+          onPress={() => setReviewMode("payday")}
           style={({ pressed }) => [styles.primaryButton, { backgroundColor: c.primary, opacity: pressed ? 0.72 : 1 }]}
         >
           <Feather name="calendar" size={16} color={c.primaryForeground} />
-          <AppText tone="button" style={[styles.secondaryButtonText, { color: c.primaryForeground }]}>{planAction.label}</AppText>
+          <AppText tone="button" style={[styles.secondaryButtonText, { color: c.primaryForeground }]}>Review my payday plan</AppText>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -151,6 +151,7 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
           <AppText tone="button" style={[styles.secondaryButtonText, { color: theme.buttonText }]}>See how your Stability Path works</AppText>
         </Pressable>
       </View>
+      {reviewMode ? <FloPlanReviewOverlay mode={reviewMode} progress={progress} balanceAvailable={balanceAvailable} onClose={() => setReviewMode(null)} /> : null}
     </View>
   );
 }
@@ -201,7 +202,7 @@ const styles = StyleSheet.create({
   nextMoveLabel: { color: "#c4b5fd", fontSize: 10, fontFamily: "Inter_800ExtraBold" },
   nextMoveText: { color: "#ede9fe", fontSize: 12, lineHeight: 16, fontFamily: "Inter_700Bold", marginTop: 2 },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
-  planNote: { fontSize: 12, lineHeight: 18, marginTop: 8 },
+  infoButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   primaryButton: { width: "100%", minHeight: 48, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   secondaryButton: { flex: 1, minWidth: 140, minHeight: 44, borderRadius: 14, borderWidth: 1, borderColor: "rgba(96,165,250,0.22)", backgroundColor: "rgba(37,99,235,0.12)", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, paddingHorizontal: 10 },
   secondaryButtonText: { color: "#bfdbfe", fontSize: 13, fontFamily: "Inter_800ExtraBold" },

@@ -8,6 +8,7 @@ import { isActiveTransaction } from "@/lib/billMatching";
 import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
 import { desktopPlannerDestination } from "@/lib/desktopActions";
 import { spendingBucketSummary } from "@/lib/spendingBuckets";
+import { debtOccurrenceProgress } from "@/lib/debtPlanDomain";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 
@@ -175,15 +176,17 @@ function BillsPage({ debtOnly, onOpenPlanner, onOpenSnowball }: { debtOnly: bool
     connectedBankAccounts,
     getBillMonthlyTotal,
     getPaidAmount,
+    getDebtMonthSettlements,
     selectedYear,
   } = useBudget();
   const month = new Date().getMonth();
   const rows = bills
     .filter((bill) => debtOnly ? bill.is_debt : !bill.is_debt)
     .sort((left, right) => left.due_day - right.due_day);
-  const planned = rows.reduce((sum, bill) => sum + getBillMonthlyTotal(bill, month, selectedYear), 0);
-  const paid = rows.reduce((sum, bill) => sum + getPaidAmount(bill.id, month, selectedYear), 0);
-  const remaining = Math.max(0, planned - paid);
+  const settlements = getDebtMonthSettlements(month, selectedYear);
+  const planned = rows.reduce((sum, bill) => sum + (bill.is_debt ? settlements.get(bill.id)?.configuredObligation ?? getBillMonthlyTotal(bill, month, selectedYear) : getBillMonthlyTotal(bill, month, selectedYear)), 0);
+  const paid = rows.reduce((sum, bill) => sum + (bill.is_debt ? settlements.get(bill.id)?.paidAmount ?? getPaidAmount(bill.id, month, selectedYear) : getPaidAmount(bill.id, month, selectedYear)), 0);
+  const remaining = rows.reduce((sum, bill) => sum + (bill.is_debt ? settlements.get(bill.id)?.remainingRequired ?? Math.max(0, getBillMonthlyTotal(bill, month, selectedYear) - getPaidAmount(bill.id, month, selectedYear)) : Math.max(0, getBillMonthlyTotal(bill, month, selectedYear) - getPaidAmount(bill.id, month, selectedYear))), 0);
   const debtBalance = rows.reduce((sum, bill) => sum + Math.max(0, bill.balance), 0);
   const linkedCards = connectedBankAccounts.filter((account) =>
     account.account_type === "credit" || account.account_subtype === "credit card",
@@ -221,7 +224,9 @@ function BillsPage({ debtOnly, onOpenPlanner, onOpenSnowball }: { debtOnly: bool
         {rows.length ? rows.map((bill, index) => {
           const total = getBillMonthlyTotal(bill, month, selectedYear);
           const billPaid = getPaidAmount(bill.id, month, selectedYear);
-          const isPaid = billPaid + 0.005 >= total;
+          const settlement = bill.is_debt ? settlements.get(bill.id) : undefined;
+          const progress = settlement ? debtOccurrenceProgress(settlement) : undefined;
+          const isPaid = settlement ? settlement.status === "settled" : total > 0.005 && billPaid + 0.005 >= total;
           return (
             <View key={bill.id} style={[styles.tableRow, index > 0 && styles.tableDivider]}>
               <View style={styles.nameColumn}>
@@ -235,10 +240,10 @@ function BillsPage({ debtOnly, onOpenPlanner, onOpenSnowball }: { debtOnly: bool
                   </View>
                 </View>
               </View>
-              <View style={styles.statusColumn}><StatusPill label={isPaid ? "Paid" : "Scheduled"} tone={isPaid ? "green" : "amber"} /></View>
-              <Text style={[styles.rowText, styles.dateColumn]}>{bill.due_day ? `${MONTHS[month].slice(0, 3)} ${bill.due_day}` : "—"}</Text>
-              <Text style={[styles.rowMoney, styles.moneyColumn]}>{currency(total)}</Text>
-              <Text style={[styles.rowMoney, styles.moneyColumn]}>{currency(debtOnly ? bill.balance : Math.max(0, total - billPaid))}</Text>
+              <View style={styles.statusColumn}><StatusPill label={progress?.label ?? (isPaid ? "Paid" : "Scheduled")} tone={isPaid || progress?.completedCount ? "green" : "amber"} /></View>
+              <Text style={[styles.rowText, styles.dateColumn]}>{progress?.nextDate ? shortDate(progress.nextDate) : bill.due_day ? `${MONTHS[month].slice(0, 3)} ${bill.due_day}` : "—"}</Text>
+              <Text style={[styles.rowMoney, styles.moneyColumn]}>{currency(settlement?.configuredObligation ?? total)}</Text>
+              <Text style={[styles.rowMoney, styles.moneyColumn]}>{currency(debtOnly ? bill.balance : settlement?.remainingRequired ?? Math.max(0, total - billPaid))}</Text>
             </View>
           );
         }) : <EmptyRow text={debtOnly ? "No debts are in your plan yet." : "No bills are scheduled yet."} />}
@@ -391,8 +396,8 @@ function GoalsPage({ onOpenPlanner }: { onOpenPlanner: () => void }) {
     <>
       <PageHeader eyebrow="Build wealth" title="Goals" description="See savings and planned spending goals as a portfolio, not a stack of app cards." action="Manage goals" onAction={onOpenPlanner} />
       <View style={styles.statGrid}>
-        <Stat label="Savings progress" value={`${Math.round(progress)}%`} detail={`${currency(current)} funded`} icon="target" tone="green" />
-        <Stat label="Savings target" value={currency(target)} detail={`${savings.length} active savings goals`} icon="flag" tone="purple" />
+        {target > 0 ? <Stat label="Savings progress" value={`${Math.round(progress)}%`} detail={`${currency(current)} funded`} icon="target" tone="green" /> : null}
+        {target > 0 ? <Stat label="Savings target" value={currency(target)} detail={`${savings.length} active savings goals`} icon="flag" tone="purple" /> : null}
         <Stat label="Bucket money left" value={currency(bucketRemaining)} detail="Planned spending minus recorded spending" icon="clock" tone="amber" />
         <Stat label="Portfolio" value={active.length ? "Active" : "Setup"} detail="Shared with the PWA" icon="shield" tone="blue" />
       </View>
@@ -409,8 +414,8 @@ function GoalsPage({ onOpenPlanner }: { onOpenPlanner: () => void }) {
               <Text style={styles.goalName}>{goal.name}</Text>
               <Text style={styles.goalAmount}>{bucket ? `${currency(bucket.closed ? bucket.released : bucket.remaining)} ${bucket.closed ? "released" : "remaining"}` : currency(goal.current_amount)} {!bucket ? <Text style={styles.goalTarget}>of {currency(goal.target_amount)}</Text> : null}</Text>
               {bucket ? <Text style={styles.goalTarget}>{currency(bucket.planned)} planned · {currency(bucket.spent)} spent</Text> : null}
-              <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${percent}%` }]} /></View>
-              <View style={styles.goalFooter}><Text style={styles.goalPercent}>{Math.round(percent)}% {bucket ? "spent" : "funded"}</Text><Text style={styles.goalDate}>{shortDate(goal.target_date)}</Text></View>
+              {bucket || goal.target_amount > 0 ? <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${percent}%` }]} /></View> : null}
+              <View style={styles.goalFooter}><Text style={styles.goalPercent}>{!bucket && goal.target_amount <= 0 ? "No savings target set" : `${Math.round(percent)}% ${bucket ? "spent" : "funded"}`}</Text><Text style={styles.goalDate}>{shortDate(goal.target_date)}</Text></View>
             </View>
           );
         }) : <Panel title="No active goals"><EmptyRow text="Add a goal to start building your portfolio." /></Panel>}

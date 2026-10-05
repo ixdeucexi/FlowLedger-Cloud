@@ -20,7 +20,7 @@ import {
   requiredDebtPlanTotal,
   snowballTransactionEditDraft,
 } from "@/lib/debtPaymentPlan";
-import { isValidExtraPaymentPlan } from "@/lib/debtPlanDomain";
+import { debtOccurrenceProgress, isValidExtraPaymentPlan } from "@/lib/debtPlanDomain";
 import { localDateString, MONTH_NAMES } from "@/lib/dateLabels";
 import { matchedOccurrenceAllocations } from "@/lib/reviewCenter";
 import { hasBucketRemainderFunding, latestBucketRemainderAvailableDate, resizeSnowballFundingSources } from "@/lib/snowballFunding";
@@ -436,8 +436,7 @@ function SnowballPlanScreen() {
                         <View style={styles.flexOne}>
                           <View style={styles.inlineBadges}>
                             {row.id === target?.id ? <Text style={[styles.targetBadge, { color: c.primary }]}>TARGET NOW</Text> : null}
-                            {row.settlement.status === "settled" ? <Text style={[styles.paidBadge, { color: c.success }]}>PAID THIS MONTH</Text> : null}
-                            {row.settlement.status === "partial" ? <Text style={[styles.paidBadge, { color: c.warning }]}>PARTIALLY PAID</Text> : null}
+                            {row.settlement.status !== "scheduled" ? <Text style={[styles.paidBadge, { color: debtOccurrenceProgress(row.settlement).hasPartial ? c.warning : c.success }]}>{debtOccurrenceProgress(row.settlement).label}</Text> : null}
                             {row.settlement.plannedDebtAmount === 0 ? <Text style={[styles.paidBadge, { color: c.warning }]}>SKIPPED IN FORECAST</Text> : null}
                             {(row.settlement.plannedDebtAmount ?? 0) > 0 ? <Text style={[styles.paidBadge, { color: c.primary }]}>CUSTOM FORECAST</Text> : null}
                             {row.paidOffThisMonth ? <Text style={[styles.paidBadge, { color: c.success }]}>PAYS OFF THIS MONTH</Text> : null}

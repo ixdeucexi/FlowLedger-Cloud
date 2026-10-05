@@ -98,6 +98,23 @@ export function summarizeDebtOccurrenceSettlements(
   };
 }
 
+/** Month aggregates may include a completed moved payment and the next cycle. */
+export function debtOccurrenceProgress(settlement: DebtMonthSettlement): {
+  label: string; completedCount: number; nextDate?: string; hasPartial: boolean;
+} {
+  const occurrences = settlement.occurrences ?? [];
+  const completedCount = occurrences.filter(item => item.status === "settled").length;
+  const nextDate = occurrences.filter(item => item.remainingRequired > 0.005)
+    .map(item => item.occurrenceDate).sort()[0];
+  const hasPartial = occurrences.some(item => item.status === "partial");
+  const label = completedCount > 0 && nextDate
+    ? `${completedCount} payment${completedCount === 1 ? "" : "s"} complete · next due ${new Date(`${nextDate}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+    : settlement.status === "settled" ? "Paid this month"
+      : hasPartial || (occurrences.length === 0 && settlement.status === "partial")
+        ? "Partially paid" : "Scheduled";
+  return { label, completedCount, nextDate, hasPartial };
+}
+
 export function effectiveDebtOccurrenceAmount(
   baseMinimum: number,
   snowballMinimumBoost: number,

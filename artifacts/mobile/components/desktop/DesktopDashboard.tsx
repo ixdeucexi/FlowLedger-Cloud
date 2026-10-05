@@ -45,8 +45,7 @@ import { WIDE_DESKTOP_BREAKPOINT } from "@/lib/desktopExperience";
 import { transactionDebt } from "@/lib/transactionDebt";
 import { spendingBucketSummary } from "@/lib/spendingBuckets";
 import { buildFlowGuideRouteParams } from "@/lib/flowledgerGuide";
-import { stabilityBasisExplanation } from "@/lib/stability";
-import { stabilityPlanAction } from "@/lib/stabilityActions";
+import { FloPlanReviewOverlay } from "@/components/FloPlanReviewOverlay";
 import type { BillEditableBaseline, BillEditableField } from "@/lib/billEditPersistence";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
@@ -551,6 +550,7 @@ function DesktopDashboardContent({
   const [goalEditor, setGoalEditor] = useState<Goal | null | undefined>(undefined);
   const [incomeEditorOpen, setIncomeEditorOpen] = useState(false);
   const [customizerOpen, setCustomizerOpen] = useState(false);
+  const [reviewMode, setReviewMode] = useState<"info" | "payday" | null>(null);
   const { layout: dashboardLayout, updateLayout: updateDashboardLayout, resetLayout: resetDashboardLayout } = useDashboardLayoutPreferences();
 
   const openAddAction = useCallback((action: DesktopAddAction) => {
@@ -786,7 +786,7 @@ function DesktopDashboardContent({
           variant={2}
           onPress={() => go("/(tabs)/more", { section: "money" })}
         />
-        <MetricCard
+        {goalTotals.target > 0 ? <MetricCard
           label="Savings Progress"
           value={`${Math.round(goalPercent)}%`}
           detail={`${currency(goalTotals.current)} of ${currency(goalTotals.target)} funded`}
@@ -794,7 +794,7 @@ function DesktopDashboardContent({
           width={metricWidth}
           percent={goalPercent}
           onPress={() => go("/(tabs)/more", { section: "goals" })}
-        />
+        /> : null}
       </View>
 
       <SurfaceCard
@@ -1003,6 +1003,9 @@ function DesktopDashboardContent({
                   <Text style={styles.stabilityEyebrow}>STABILITY PATH</Text>
                   <Text style={styles.stabilityTitle}>{progress.stageLabel}</Text>
                 </View>
+                <Pressable accessibilityRole="button" accessibilityLabel="More information about your Stability Path" onPress={() => setReviewMode("info")} style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>
+                  <Feather name="info" size={20} color={BRAND.muted} />
+                </Pressable>
                 <View
                   style={[
                     styles.statusBadge,
@@ -1056,7 +1059,7 @@ function DesktopDashboardContent({
                   <Feather name="check" size={13} color="#5ee6b5" />
                 </View>
                 <Text style={styles.stabilityCalloutText}>
-                  {stabilityBasisExplanation(progress)}
+                  {progress.safeUntilPayday === true ? `Safe until ${progress.nextPaycheckLabel ?? "payday"}` : progress.safeUntilPayday === false ? `${currency(progress.paydayShortfall)} to add before ${progress.nextPaycheckLabel ?? "payday"}` : "Next payday not confirmed"}
                 </Text>
               </View>
 
@@ -1083,12 +1086,12 @@ function DesktopDashboardContent({
 
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={stabilityPlanAction(progress).label}
-                onPress={() => { const action = stabilityPlanAction(progress); go(action.pathname, action.params); }}
+                accessibilityLabel="Review my payday plan"
+                onPress={() => setReviewMode("payday")}
                 style={({ pressed }) => [styles.howItWorks, { opacity: pressed ? 0.7 : 1 }]}
               >
                 <Feather name="message-circle" size={16} color="#bfd2f2" />
-                <AppText tone="button" style={styles.howItWorksText}>{stabilityPlanAction(progress).label}</AppText>
+                <AppText tone="button" style={styles.howItWorksText}>Review my payday plan</AppText>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
@@ -1292,7 +1295,7 @@ function DesktopDashboardContent({
               action="View goals"
               onAction={() => go("/(tabs)/more", { section: "goals" })}
             />
-            <View style={styles.goalSummary}>
+            {goalTotals.target > 0 ? <View style={styles.goalSummary}>
               <View>
                 <Text style={styles.goalSummaryValue}>{Math.round(goalPercent)}%</Text>
                 <Text style={styles.goalSummaryLabel}>savings funded</Text>
@@ -1301,8 +1304,8 @@ function DesktopDashboardContent({
                 <Text style={styles.goalFunded}>{currency(goalTotals.current)}</Text>
                 <Text style={styles.goalTarget}>of {currency(goalTotals.target)}</Text>
               </View>
-            </View>
-            <ProgressBar percent={goalPercent} color={BRAND.green} height={7} />
+            </View> : null}
+            {goalTotals.target > 0 ? <ProgressBar percent={goalPercent} color={BRAND.green} height={7} /> : null}
             <View style={styles.goalList}>
               {activeGoals.length ? (
                 activeGoals.slice(0, 3).map((goal, index) => {
@@ -1328,7 +1331,7 @@ function DesktopDashboardContent({
                       </View>
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text style={styles.goalName} numberOfLines={1}>{goal.name}</Text>
-                        <Text style={styles.goalMeta}>{bucket ? `${currency(bucket.planned)} planned · ${currency(bucket.spent)} spent` : `${Math.round(percent)}% funded`}</Text>
+                        <Text style={styles.goalMeta}>{bucket ? `${currency(bucket.planned)} planned · ${currency(bucket.spent)} spent` : goal.target_amount > 0 ? `${Math.round(percent)}% funded` : "No savings target set"}</Text>
                       </View>
                       <Text style={styles.goalAmount}>{bucket ? `${currency(bucket.remaining)} left` : currency(goal.current_amount)}</Text>
                     </Pressable>
@@ -1351,6 +1354,7 @@ function DesktopDashboardContent({
         </View>
       </View>
 
+      {reviewMode ? <FloPlanReviewOverlay mode={reviewMode} progress={progress} balanceAvailable={checkingBalance !== null} onClose={() => setReviewMode(null)} /> : null}
       {billEditor !== null ? <AddBillModal
         visible={billEditor !== null}
         onClose={() => setBillEditor(null)}

@@ -161,28 +161,91 @@ export function getBillOccurrenceDays(bill: ScheduledBill, month: number, year: 
   return day > 0 && withinActiveDates(day) ? [day] : [];
 }
 
+/** Resolve repeat edits as one occurrence, never as additional payments. */
+export function resolveBillDateMoves<T extends ScheduledBillDateMove = ScheduledBillDateMove>(
+  billId: string,
+  moves: T[] = [],
+  activeRange?: Pick<ScheduledBill, "start_date" | "end_date"> & Partial<ScheduledBill>,
+): Array<T & ScheduledBillDateMove & { edit_from_date: string; source_dates: string[] }> {
+  const latest = new Map<string, T>();
+  for (const move of moves) {
+    if (move.bill_id !== billId || !parseCalendarDate(move.from_date)
+      || (!move.is_skipped && !parseCalendarDate(move.to_date))) continue;
+    const existing = latest.get(move.from_date);
+    if (!existing || moveFreshness(move) >= moveFreshness(existing)) latest.set(move.from_date, move);
+  }
+  const isNative = (date: string) => {
+    const parts = parseCalendarDate(date);
+    return parts && activeRange?.frequency && activeRange.due_day !== undefined
+      ? getBillOccurrenceDays(activeRange as ScheduledBill, parts.month - 1, parts.year).includes(parts.day)
+      : false;
+  };
+  const incoming = new Set(Array.from(latest.values())
+    .filter(move => !move.is_skipped && move.from_date !== move.to_date)
+    .filter(move => !isNative(move.to_date))
+    .map(move => move.to_date));
+  const roots = Array.from(latest.keys()).filter(date => !incoming.has(date)).sort();
+  // If historical edges are available, an obsolete branch has provenance.
+  // Never guess that an otherwise standalone/custom occurrence is an orphan.
+  const obsoleteBranch = new Set<string>();
+  for (const move of moves) {
+    if (move.bill_id !== billId) continue;
+    const current = latest.get(move.from_date);
+    if (!current || current.to_date === move.to_date || move.is_skipped) continue;
+    let date = move.to_date;
+    const seen = new Set<string>();
+    while (latest.has(date) && !seen.has(date) && !isNative(date)) {
+      seen.add(date);
+      obsoleteBranch.add(date);
+      date = latest.get(date)!.to_date;
+    }
+  }
+  const visited = new Set<string>();
+  const resolved: Array<T & ScheduledBillDateMove & { edit_from_date: string; source_dates: string[] }> = [];
+  const follow = (root: string) => {
+    if (visited.has(root)) return;
+    let date = root;
+    let customAmount: number | undefined;
+    let skipped = false;
+    let editFrom = root;
+    const chain = new Set<string>();
+    while (latest.has(date) && !chain.has(date)) {
+      chain.add(date);
+      visited.add(date);
+      const move = latest.get(date)!;
+      editFrom = date;
+      if (move.custom_amount !== undefined) customAmount = move.custom_amount;
+      if (move.is_skipped) { skipped = true; break; }
+      if (move.to_date === date) break;
+      date = move.to_date;
+      // Another native weekly/biweekly occurrence has its own obligation. It
+      // cannot be consumed as an edit continuation just because dates touch.
+      if (isNative(date) && date !== root) break;
+    }
+    // Corrupt cycles retain one original payment instead of hanging or creating
+    // phantom intermediates. A later valid edit resolves this finite component.
+    if (chain.has(date) && latest.get(date)?.to_date !== date) date = root;
+    if ((activeRange?.start_date && root < activeRange.start_date.slice(0, 10))
+      || (activeRange?.end_date && root > activeRange.end_date.slice(0, 10))) return;
+    resolved.push({ ...latest.get(root)!, ...latest.get(editFrom)!, from_date: root, to_date: date,
+      custom_amount: customAmount, is_skipped: skipped, edit_from_date: editFrom, source_dates: [...chain] });
+  };
+  roots.filter(date => !obsoleteBranch.has(date)).forEach(follow);
+  Array.from(latest.keys()).sort().filter(date => !obsoleteBranch.has(date)).forEach(follow);
+  return resolved;
+}
+
 export function applyBillDateMovesToOccurrenceDays(
   billId: string,
   month: number,
   year: number,
   occurrences: number[],
   moves: ScheduledBillDateMove[] = [],
-  activeRange?: Pick<ScheduledBill, "start_date" | "end_date">,
+  activeRange?: Pick<ScheduledBill, "start_date" | "end_date"> & Partial<ScheduledBill>,
 ): number[] {
   const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
   const dateFromDay = (day: number) => `${monthPrefix}-${String(day).padStart(2, "0")}`;
-  const activeMovesByOriginalDate = new Map<string, ScheduledBillDateMove>();
-  moves
-    .filter(move => move.bill_id === billId)
-    .filter(move => !activeRange?.start_date || move.from_date >= activeRange.start_date.slice(0, 10))
-    .filter(move => !activeRange?.end_date || move.from_date <= activeRange.end_date.slice(0, 10))
-    .forEach(move => {
-      const existing = activeMovesByOriginalDate.get(move.from_date);
-      if (!existing || moveFreshness(move) >= moveFreshness(existing)) {
-        activeMovesByOriginalDate.set(move.from_date, move);
-      }
-    });
-  const activeMoves = Array.from(activeMovesByOriginalDate.values());
+  const activeMoves = resolveBillDateMoves(billId, moves, activeRange);
   const kept = occurrences.filter(day => !activeMoves.some(move =>
     move.bill_id === billId && move.from_date === dateFromDay(day)
   ));

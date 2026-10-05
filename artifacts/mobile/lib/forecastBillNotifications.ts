@@ -64,6 +64,7 @@ export function buildForecastBillNotifications(input: {
     const bill = billById.get(billId);
     if (!bill?.is_debt) return;
     settlement.occurrences?.forEach(occurrence => {
+      if (occurrence.status === "settled") return;
       if (occurrence.occurrenceDate < monthStart || occurrence.occurrenceDate >= input.today) return;
       const required = lenderMinimumRequiredAmount(occurrence.configuredObligation, bill.amount);
       const remaining = Math.round(Math.max(0, required - Math.max(0, occurrence.paidAmount)) * 100) / 100;

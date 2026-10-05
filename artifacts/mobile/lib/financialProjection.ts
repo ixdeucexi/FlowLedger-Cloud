@@ -40,6 +40,7 @@ import {
   isBillActiveForMonth,
   isIncomeActiveForMonth,
   resolveFinalizedBillOccurrenceDays,
+  resolveBillDateMoves,
 } from "./schedule";
 import {
   connectedCheckingObservedAnchor,
@@ -239,7 +240,7 @@ export function createFinancialProjection(
     const base = billBaseAmountForMonth(bill, o);
     if (!bill.is_debt) return base;
     let settledAmount: number | undefined;
-    if (bill.frequency === "monthly") {
+    if (bill.frequency === "monthly" && getBillOccurrencesInMonth(bill, month, year).length === 1) {
       const settlementKey = `${bill.id}:${year}-${String(month + 1).padStart(2, "0")}`;
       const reviewedSettlement = reviewedBillSettlements.get(settlementKey);
       if (reviewedSettlement?.status === "settled")
@@ -302,8 +303,8 @@ export function createFinancialProjection(
 
   const getBillOccurrenceAmount = (bill: Bill, occurrenceDate: string): number => {
     const cleanDate = occurrenceDate.slice(0, 10);
-    const exception = billDateMoves
-      .filter(move => move.bill_id === bill.id && !move.is_skipped
+    const exception = resolveBillDateMoves(bill.id, billDateMoves, bill)
+      .filter(move => !move.is_skipped
         && (move.from_date === cleanDate || move.to_date === cleanDate))
       .sort((left, right) => String(right.updated_at ?? right.created_at).localeCompare(String(left.updated_at ?? left.created_at)))[0];
     return exception?.custom_amount !== undefined
@@ -383,7 +384,11 @@ export function createFinancialProjection(
             ? Math.max(0, rawSnapshotTotal)
             : undefined;
         const snapshotParts = occurrenceDates.map((_, index) => {
-          if (snapshotTotal === undefined || occurrenceDates.length === 0)
+          // A monthly legacy snapshot cannot identify an unreviewed sibling
+          // once a separately reviewed, moved-in cycle is also in this month.
+          // Keep each dated review authoritative and the sibling's own minimum.
+          if (snapshotTotal === undefined || occurrenceDates.length === 0
+            || (bill.frequency === "monthly" && hasReviewedOccurrence && occurrenceDates.length > 1))
             return undefined;
           const allocatedBefore =
             Math.round((snapshotTotal / occurrenceDates.length) * index * 100) /

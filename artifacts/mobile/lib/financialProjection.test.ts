@@ -8,6 +8,10 @@ import { createFinancialProjection } from "./financialProjection";
 import { previewCanonicalDebtSnowball } from "./debtSnowballPreview";
 import { createFinancialProjectionReader } from "./financialProjectionReader";
 import type { FinancialProjectionSnapshot } from "./financialProjectionTypes";
+import { debtOccurrenceProgress } from "./debtPlanDomain";
+import { buildForecastBillNotifications } from "./forecastBillNotifications";
+import { buildBillPaymentHistory } from "./billPaymentHistory";
+import { applyBillDateMovesToOccurrenceDays, resolveBillDateMoves } from "./schedule";
 import {
   accountAwareTransactionCollections,
   normalizeBillRow,
@@ -45,6 +49,107 @@ function debtPreviewFixture(): FinancialProjectionSnapshot {
   return snapshot;
 }
 const previewClock = { now: new Date("2026-10-01T12:00:00Z"), timeZone: "America/Chicago" };
+
+test("full matched moved debt closes only its occurrence across schedule, forecast, notifications and history", () => {
+  const snapshot = debtPreviewFixture();
+  snapshot.bills[0] = { ...snapshot.bills[0], name: "Tesla", amount: 700, due_day: 28, balance: 10000 };
+  snapshot.billDateMoves = [
+    { id: "m1", bill_id: "bill", from_date: "2026-09-28", to_date: "2026-09-30", created_at: "2026-09-01T12:00:00Z" },
+    { id: "m2", bill_id: "bill", from_date: "2026-09-30", to_date: "2026-10-01", created_at: "2026-09-02T12:00:00Z" },
+  ];
+  snapshot.transactions = [{ id: "paid", date: "2026-09-30", amount: -695.60,
+    source: "statement", category: "Debt", note: "Tesla", review_status: "matched",
+    review_resolution: "bill", review_allocations: [{ type: "bill", targetId: "bill",
+      occurrenceDate: "2026-10-01", amount: 695.60, plannedAmount: 700, settlement: "full" }] }];
+  const projection = createFinancialProjection(snapshot, { now: new Date("2026-10-05T12:00:00Z"), timeZone: "America/Chicago" });
+  assert.deepEqual(projection.getBillOccurrencesInMonth(snapshot.bills[0], 8, 2026), []);
+  assert.deepEqual(projection.getBillOccurrencesInMonth(snapshot.bills[0], 9, 2026), [1, 28]);
+  const settlement = projection.getDebtMonthSettlements(9, 2026).get("bill")!;
+  assert.deepEqual(settlement.occurrences?.map(item => [item.occurrenceDate, item.paidAmount, item.remainingRequired, item.status]), [
+    ["2026-10-01", 695.60, 0, "settled"], ["2026-10-28", 0, 700, "scheduled"],
+  ]);
+  assert.equal(settlement.paidAmount, 695.60);
+  assert.equal(settlement.remainingRequired, 700);
+  assert.equal(debtOccurrenceProgress(settlement).label, "1 payment complete · next due Oct 28");
+  const alerts = buildForecastBillNotifications({ today: "2026-10-05", bills: snapshot.bills,
+    getDailyBalances: projection.getDailyBalances, getDebtMonthSettlements: projection.getDebtMonthSettlements });
+  assert.equal(alerts.length, 0);
+  const history = buildBillPaymentHistory({ billId: "bill", today: "2026-10-05", transactions: snapshot.transactions.map(item => ({ ...item })), overrides: [] });
+  assert.equal(history.paymentCount, 1);
+  assert.equal(history.recordedPaidTotal, 695.60);
+  assert.deepEqual(history.entries[0].occurrenceDates, ["2026-10-01"]);
+  const events = projection.getDailyBalances(9, 2026).flatMap(day => day.events ?? []).filter(event => event.sourceId === "bill" && event.amount < 0);
+  assert.ok(events.every(event => event.date !== "2026-09-30"));
+  assert.equal(projection.getBillOccurrenceAmount(snapshot.bills[0], "2026-10-28"), 700);
+  const remainingPlan = projection.getRemainingDebtPlanForMonth(9, 2026)!;
+  assert.equal(remainingPlan.plannedPayment, 700);
+  assert.ok(remainingPlan.allocations.every(item => item.date === "2026-10-28"));
+  assert.equal(projection.getDebtPlanForMonth(10, 2026)?.payments[0].balanceBefore, 9300);
+});
+
+test("reviewed moved-in debt does not split a native cycle's monthly snapshot", () => {
+  const snapshot = debtPreviewFixture();
+  snapshot.bills[0] = { ...snapshot.bills[0], amount: 700, due_day: 28 };
+  snapshot.billDateMoves = [{ id: "move", bill_id: "bill", from_date: "2026-09-28", to_date: "2026-10-01", created_at: "2026-09-20" }];
+  snapshot.overrides = [{ id: "snapshot", bill_id: "bill", month: 9, year: 2026, paid_amount: 0, required_debt_amount: 700 }];
+  snapshot.transactions = [{ id: "full", date: "2026-09-30", amount: -695.6, source: "statement", review_status: "matched", review_resolution: "bill", category: "Debt", note: "Tesla", review_allocations: [{ type: "bill", targetId: "bill", occurrenceDate: "2026-10-01", amount: 695.6, plannedAmount: 700, settlement: "full" }] }];
+  const projection = createFinancialProjection(snapshot, previewClock);
+  const settlement = projection.getDebtMonthSettlements(9, 2026).get("bill")!;
+  assert.equal(settlement.remainingRequired, 700);
+  assert.deepEqual(settlement.occurrences?.map(item => item.remainingRequired), [0, 700]);
+});
+
+test("repeat edits retain the chain root and update its terminal edge without phantom branches", () => {
+  const bill = { frequency: "monthly" as const, due_day: 28 };
+  const moves = [
+    { id: "root", bill_id: "bill", from_date: "2026-09-28", to_date: "2026-09-30", created_at: "2026-09-01" },
+    { id: "tail", bill_id: "bill", from_date: "2026-09-30", to_date: "2026-10-01", created_at: "2026-09-02" },
+  ];
+  const resolved = resolveBillDateMoves("bill", moves, bill)[0];
+  assert.equal(resolved.from_date, "2026-09-28");
+  assert.equal(resolved.to_date, "2026-10-01");
+  assert.equal(resolved.edit_from_date, "2026-09-30");
+  assert.equal(resolved.id, "tail");
+  assert.deepEqual(resolved.source_dates, ["2026-09-28", "2026-09-30"]);
+  const restored = moves.filter(move => !resolved.source_dates.includes(move.from_date));
+  assert.deepEqual(applyBillDateMovesToOccurrenceDays("bill", 8, 2026, [28], restored, bill), [28]);
+  assert.deepEqual(applyBillDateMovesToOccurrenceDays("bill", 9, 2026, [28], restored, bill), [28]);
+  const edited = moves.map(move => move.from_date === resolved.edit_from_date ? { ...move, to_date: "2026-10-02", updated_at: "2026-09-03" } : move);
+  assert.deepEqual(applyBillDateMovesToOccurrenceDays("bill", 9, 2026, [28], edited, bill), [2, 28]);
+  const history = [...moves, { ...moves[0], id: "root-new", to_date: "2026-10-02", updated_at: "2026-09-03" }];
+  assert.deepEqual(applyBillDateMovesToOccurrenceDays("bill", 9, 2026, [28], history, bill), [2, 28]);
+  const amountEdit = moves.map(move => move.from_date === resolved.edit_from_date ? { ...move, to_date: resolved.to_date, custom_amount: 123.45 } : move);
+  assert.equal(resolveBillDateMoves("bill", amountEdit, bill)[0].custom_amount, 123.45);
+  assert.deepEqual(applyBillDateMovesToOccurrenceDays("bill", 9, 2026, [28], amountEdit, bill), [1, 28]);
+});
+
+test("move chains inherit custom amounts, skip terminal payments and keep weekly siblings independent", () => {
+  const moves = [
+    { bill_id: "bill", from_date: "2026-12-25", to_date: "2027-01-02", custom_amount: 90 },
+    { bill_id: "bill", from_date: "2027-01-02", to_date: "2027-01-03" },
+    { bill_id: "bill", from_date: "2027-01-08", to_date: "2027-01-08", custom_amount: 120 },
+  ];
+  assert.deepEqual(applyBillDateMovesToOccurrenceDays("bill", 11, 2026, [25], moves), []);
+  assert.deepEqual(applyBillDateMovesToOccurrenceDays("bill", 0, 2027, [8, 15], moves), [3, 8, 15]);
+  assert.equal(resolveBillDateMoves("bill", moves)[0].custom_amount, 90);
+  assert.deepEqual(applyBillDateMovesToOccurrenceDays("bill", 0, 2027, [8, 15], [...moves,
+    { bill_id: "bill", from_date: "2027-01-03", to_date: "2027-01-03", is_skipped: true }]), [8, 15]);
+  const snapshot = bankObligationFixture("2027-01-01");
+  snapshot.bills[0] = { ...snapshot.bills[0], frequency: "weekly", day_of_week: 5 };
+  snapshot.billDateMoves = moves.map((move, index) => ({ ...move, id: String(index), created_at: "2026-12-01T12:00:00Z" }));
+  const projection = createFinancialProjection(snapshot, { now: new Date("2027-01-01T12:00:00Z"), timeZone: "America/Chicago" });
+  assert.equal(projection.getBillOccurrenceAmount(snapshot.bills[0], "2027-01-03"), 90);
+  assert.equal(projection.getBillOccurrenceAmount(snapshot.bills[0], "2027-01-08"), 120);
+  assert.equal(projection.getBillOccurrenceAmount(snapshot.bills[0], "2027-01-15"), 100);
+  assert.equal(resolveBillDateMoves("bill", [
+    { bill_id: "bill", from_date: "2026-12-30", to_date: "2027-01-01" },
+    { bill_id: "bill", from_date: "2027-01-01", to_date: "2026-12-30" },
+  ]).length, 1);
+  const independent = [{ bill_id: "bill", from_date: "2026-09-01", to_date: "2026-09-08" },
+    { bill_id: "bill", from_date: "2026-09-08", to_date: "2026-09-15" }];
+  assert.deepEqual(applyBillDateMovesToOccurrenceDays("bill", 8, 2026, [1, 8], independent,
+    { frequency: "weekly", due_day: 1, day_of_week: 2 } as import("./schedule").ScheduledBill), [8, 15]);
+});
 
 test("dated debt preview applies intervening minimums and agrees with Forecast including year transition", () => {
   const snapshot = debtPreviewFixture();

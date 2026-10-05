@@ -66,7 +66,7 @@ import { buildCategoryPlan } from "@/lib/categoryPlanning";
 import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
 import { DEFAULT_DECISION_HUB_SETTINGS } from "@/lib/decisionHubSettings";
 import { localDateString } from "@/lib/dateLabels";
-import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
+import { buildPaydayReviewPlan } from "@/lib/paydayReview";
 import { buildAlgorithmSuite } from "@/lib/algorithmSuite";
 import { calendarVisibleForecastEvents, groupForecastEvents } from "@/lib/forecastDisplay";
 import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
@@ -404,63 +404,7 @@ export default function FloScreen() {
     [decisions, baseline, settings.safety_floor, today],
   );
   const paycheckPlan = useMemo(() => {
-    const horizon = Math.max(2, Math.min(settings.forecast_horizon_months, 6));
-    const incomeEvents: { id?: string; name: string; amount: number; date: string }[] = [];
-    const billEvents: { id?: string; name: string; amount: number; dueDate: string }[] = [];
-    const balanceEvents: { date: string; balance: number }[] = [];
-
-    for (let i = 0; i < horizon; i += 1) {
-      const absoluteMonth = now.getMonth() + i;
-      const month = absoluteMonth % 12;
-      const year = now.getFullYear() + Math.floor(absoluteMonth / 12);
-      const debtSettlements = getDebtMonthSettlements(month, year);
-
-      getIncomeOccurrencesInMonth(month, year).forEach(({ income, days, effectiveAmount }) => {
-        days.forEach(day => incomeEvents.push({
-          id: income.id,
-          name: income.name,
-          amount: effectiveAmount,
-          date: makeDateKey(year, month, day),
-        }));
-      });
-
-      getMonthlyBills(month, year).filter(isBillEligibleForUpcomingPlan).forEach(bill => {
-        const occurrences = getBillOccurrencesInMonth(bill, month, year);
-        if (!occurrences.length) return;
-        const debtSettlement = bill.is_debt ? debtSettlements.get(bill.id) : undefined;
-        const monthlyTotal = debtSettlement?.configuredObligation
-          ?? getBillMonthlyTotal(bill, month, year);
-        const perOccurrence = monthlyTotal / occurrences.length;
-        let paidRemaining = debtSettlement?.paidAmount ?? getPaidAmount(bill.id, month, year);
-        const exactByDay = new Map(debtSettlement?.occurrences?.map(occurrence => [
-          Number(occurrence.occurrenceDate.slice(8, 10)),
-          occurrence,
-        ]) ?? []);
-        occurrences.forEach(day => {
-          const exact = exactByDay.get(day);
-          const required = exact?.configuredObligation ?? perOccurrence;
-          const appliedPaid = exact
-            ? Math.min(required, exact.paidAmount)
-            : Math.min(required, Math.max(0, paidRemaining));
-          if (!exact) paidRemaining = Math.max(0, paidRemaining - required);
-          const remaining = Math.max(0, required - appliedPaid);
-          if (remaining > 0.005) {
-            billEvents.push({
-              id: bill.id,
-              name: bill.name,
-              amount: remaining,
-              dueDate: makeDateKey(year, month, day),
-            });
-          }
-        });
-      });
-
-      getDailyBalances(month, year).forEach(day => {
-        balanceEvents.push({ date: makeDateKey(year, month, day.day), balance: day.balance });
-      });
-    }
-
-    return buildPaycheckPlan(incomeEvents, billEvents, balanceEvents, settings.safety_floor, today);
+    return buildPaydayReviewPlan({ getDailyBalances }, now, settings.forecast_horizon_months, settings.safety_floor);
   }, [getBillMonthlyTotal, getBillOccurrencesInMonth, getDailyBalances, getDebtMonthSettlements, getIncomeOccurrencesInMonth, getMonthlyBills, getPaidAmount, now, settings.forecast_horizon_months, settings.safety_floor, today]);
   const facts = useMemo<FloFacts>(() => {
     const lowest = baseline.reduce(
