@@ -42,6 +42,9 @@ auditConfig:
     # No patched node-forge release exists yet. The affected verifier is reached
     # only through Expo/EAS build tooling and is not bundled into the PWA runtime.
     - GHSA-86w9-cpqp-85rv
+    # No patched braces release exists; used only by Metro/Jest build tooling.
+    # Production serves static Expo output. See SECURITY.md reachability review.
+    - GHSA-vfj7-8cjw-p6xm
 
 packages:
   - artifacts/*

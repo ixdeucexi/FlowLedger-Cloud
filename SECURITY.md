@@ -20,6 +20,26 @@ exported PWA JavaScript and does not process user or financial data at runtime.
 This advisory is temporarily ignored until a patched npm release exists. Remove
 the exception and update the lockfile as soon as that release is published.
 
+## October 5 build-tooling review
+
+`GHSA-vfj7-8cjw-p6xm` affects `braces` 3.0.3 through deeply nested patterns.
+On 2026-10-05 the npm audit response names 3.0.4 as patched, but the npm
+registry does not publish that version and the official
+[GitHub advisory](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) lists no
+patched version. `pnpm why braces --prod` resolves it only through
+`micromatch` in Metro and Jest build/test tooling. API and server imports do
+not reference those packages; the exported PWA contains no `micromatch` or
+`braces` package implementation (the word in react-helmet error copy is not
+the dependency). Production serves static Expo output, not a Metro server.
+Builds use repository-controlled patterns, not user requests, uploads, or
+financial data. Independent review confirmed this reachability assessment.
+
+Only this advisory is temporarily excepted in the audit policy. This is not
+a fix or a claim of zero known vulnerabilities. Remove the exception and
+upgrade the lockfile as soon as a patched release is published. Recheck on
+each dependency update and at least monthly; reassess immediately if a
+runtime glob/pattern feature is added.
+
 ## September 9 maintenance
 
 Updated compatible transitive versions and the lockfile: `fast-uri` 3.1.6,
