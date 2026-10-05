@@ -24,6 +24,7 @@ import type { Bill } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { orderActiveDebtsForStrategy } from "@/lib/debtOrder";
 import { requiredDebtPlanTotal } from "@/lib/debtPaymentPlan";
+import { debtOccurrenceProgress } from "@/lib/debtPlanDomain";
 import type { BillEditableBaseline, BillEditableField } from "@/lib/billEditPersistence";
 
 const MONTHS = [
@@ -822,6 +823,8 @@ function DebtsDesktop({
   datedPlan: ReturnType<ReturnType<typeof useBudget>["getDebtPlanForMonth"]>;
   now: Date;
 }) {
+  const { getDebtMonthSettlements } = useBudget();
+  const settlements = getDebtMonthSettlements(now.getMonth(), now.getFullYear());
   const active = bills.filter((bill) => bill.balance > 0.005);
   const ordered = orderActiveDebtsForStrategy(active, "snowball");
   const rank = new Map(ordered.map((bill, index) => [bill.id, index + 1]));
@@ -988,7 +991,9 @@ function DebtsDesktop({
             const next = nextOccurrenceFor(bill, getOccurrences, now);
             const position = rank.get(bill.id);
             const occurrenceCount = getOccurrences(bill, now.getMonth(), now.getFullYear()).length;
-            const requiredMinimum = requiredDebtPlanTotal(bill, occurrenceCount);
+            const settlement = settlements.get(bill.id);
+            const progress = settlement ? debtOccurrenceProgress(settlement) : undefined;
+            const requiredMinimum = settlement?.configuredObligation ?? requiredDebtPlanTotal(bill, occurrenceCount);
             const forecastPayment = forecastPaymentByDebtId.get(bill.id) ?? requiredMinimum;
             const forecastExtra = forecastExtraByDebtId.get(bill.id) ?? 0;
             return (
@@ -1010,6 +1015,7 @@ function DebtsDesktop({
                     <Text style={styles.rowMuted}>
                       {bill.is_recurring ? "Recurring debt" : "Debt"}
                     </Text>
+                    {settlement && settlement.status !== "scheduled" ? <Text style={styles.rowMuted}>{progress?.label}</Text> : null}
                   </View>
                 </View>
                 <View style={styles.debtColCategory}>
@@ -1035,6 +1041,7 @@ function DebtsDesktop({
                 <View style={styles.debtColMinimum}>
                   <Text style={table.cellStrong}>{money(forecastPayment)}</Text>
                   <Text style={styles.rowMuted}>{money(requiredMinimum)} required</Text>
+                  {settlement && settlement.status !== "scheduled" ? <Text style={styles.rowMuted}>{money(settlement.paidAmount)} paid · {money(settlement.remainingRequired)} left</Text> : null}
                   {forecastExtra > 0.005 ? (
                     <Text style={styles.debtExtraText}>{money(forecastExtra)} snowball extra</Text>
                   ) : null}
