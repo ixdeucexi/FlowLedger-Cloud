@@ -1026,7 +1026,7 @@ function localPaycheckAnswer(message: string, facts: FloFacts): string | null {
       ? "I'd keep extra debt payments on hold and review the tightest date first."
       : "I'd keep the planned bill money and your cushion untouched, then review any new spending against this limit.";
     const confidenceNote = facts.forecastConfidence === "high" ? "" : " These amounts are unverified estimates, not approval to spend; reconcile checking and confirm income and bills first.";
-    return `Here's my review of your payday plan: your next expected ${plan.nextPaycheck.name} is $${plan.nextPaycheck.amount.toFixed(2)} on ${nextPayDate}.\n\n${obligations}\n\nYour lowest projected balance is $${plan.lowestBalance.toFixed(2)} on ${plan.lowestBalanceDate}, against your $${facts.safetyFloor.toFixed(2)} safety floor. Your calculated safe-to-spend amount for this window is $${plan.safeToSpend.toFixed(2)}. ${nextStep}\n\nThis is a projection from your recorded plan, including expected income. Missing or changed payments can change these amounts.${confidenceNote}`;
+    return `Here's my review of your payday plan: your next expected ${plan.nextPaycheck.name} is $${plan.nextPaycheck.amount.toFixed(2)} on ${nextPayDate}.\n\n${obligations}\n\nYour tightest forecast point is $${plan.lowestBalance.toFixed(2)} on ${plan.lowestBalanceDate}, against your $${facts.safetyFloor.toFixed(2)} safety floor. Your calculated safe-to-spend amount for this window is $${plan.safeToSpend.toFixed(2)}. ${nextStep}\n\nThis is a projection from your recorded plan, including expected income. Missing or changed payments can change these amounts.${confidenceNote}`;
   }
   if (/bill|due|eating up|taking|why|what.*before/i.test(lower)) {
     return plan.billsDue.length

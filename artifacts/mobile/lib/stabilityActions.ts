@@ -1,6 +1,6 @@
 import type { StabilityProgress } from "./stability";
 
-export const PAYDAY_REVIEW_PROMPT = "Review my next payday plan using my actual account data. Tell me the next expected paycheck date and amount, bills and debt minimums due before it, the lowest projected balance and its date, my protected safety cushion, and how much I can safely spend. Explain any missing data or risk and give me a practical next step.";
+export const PAYDAY_REVIEW_PROMPT = "Review my next payday plan using my actual account data. Tell me the next expected paycheck date and amount, bills and debt minimums due before it, the tightest forecast point and its date, my protected safety cushion, and how much I can safely spend. Explain any missing data or risk and give me a practical next step.";
 let invocation = 0;
 
 /** Routes existing forecast guidance to a next step; never calculates spending capacity. */
