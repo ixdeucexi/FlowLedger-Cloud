@@ -15,6 +15,7 @@ export type SettingsSectionId =
   | "backup"
   | "deleted"
   | "security"
+  | "updates"
   | "admin";
 
 export type SettingsDestinationId = Exclude<SettingsSectionId, "overview">;
@@ -55,6 +56,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
   { id: "security", label: "Security & sign-in", description: "App lock, identity, and sign-out controls", icon: "shield" },
   { id: "help", label: "Help & user guide", description: "Illustrated guidance, support, and feedback", icon: "book-open" },
   { id: "admin", label: "Admin", description: "Testing and tester management", icon: "shield" },
+  { id: "updates", label: "Update Center", description: "Save app changes for your next Codex session", icon: "edit-3" },
 ] as const;
 
 export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
@@ -82,7 +84,7 @@ export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
     description: "Manage your plan and get help",
     sectionIds: ["membership", "help"],
   },
-  { id: "admin", label: "Admin", description: "Testing and app administration", sectionIds: ["admin"] },
+  { id: "admin", label: "Admin", description: "Testing and app administration", sectionIds: ["updates", "admin"] },
 ] as const;
 
 export function visibleSettingsGroups(isAdmin: boolean): readonly SettingsGroup[] {

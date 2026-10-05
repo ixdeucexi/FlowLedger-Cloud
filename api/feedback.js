@@ -20,6 +20,15 @@ async function submitFeedback(db, auth, body, res) {
     return res.status(400).json({ error: error.code || "FEEDBACK_INVALID", message: safeError(error, "Check the feedback and try again.") });
   }
 
+  if (input.screen === "Settings / Update Center") {
+    const { data: admin, error: adminError } = await db.from("feedback_admins")
+      .select("user_id").eq("user_id", auth.user.id).maybeSingle();
+    if (adminError) throw adminError;
+    if (!admin) return res.status(403).json({ error: "FEEDBACK_ADMIN_REQUIRED", message: "Admin access is required to save update requests." });
+    input.feedback_type = "idea";
+    input.can_contact = false;
+  }
+
   const userMeta = auth.user.user_metadata || {};
   const senderName = String(userMeta.full_name || userMeta.name || "").trim() || auth.user.email || "a FlowLedger tester";
   const { data: feedback, error: insertError } = await db
@@ -33,6 +42,9 @@ async function submitFeedback(db, auth, body, res) {
     .select("id,feedback_type")
     .single();
   if (insertError) throw insertError;
+
+  // This is an owner-authored saved request, not a message or an automatic job.
+  if (input.screen === "Settings / Update Center") return res.status(201).json({ ok: true, id: feedback.id });
 
   const { data: admins, error: adminError } = await db.from("feedback_admins").select("user_id");
   if (adminError) {

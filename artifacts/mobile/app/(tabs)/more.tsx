@@ -1,6 +1,7 @@
 "use client";
 
 import Feather from "@expo/vector-icons/Feather";
+import { UpdateCenter } from "@/components/settings/UpdateCenter";
 import { FloLauncherSetting } from "@/components/FloLauncherSetting";
 import { AccountDeletionSetting } from "@/components/AccountDeletionSetting";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -526,7 +527,7 @@ export default function MoreScreen({
   useEffect(() => {
     if (
       !membershipLoading &&
-      activeSettingsSection === "admin" &&
+      (activeSettingsSection === "admin" || activeSettingsSection === "updates") &&
       !feedbackAdmin
     ) {
       openSettingsSection("overview");
@@ -2282,6 +2283,7 @@ export default function MoreScreen({
         {FINANCIAL_DATA_SECTIONS.has(activeSettingsSection) ? <DataFreshnessLabel inset compact /> : null}
 
         {activeSettingsSection === "membership" && <MembershipPanel />}
+        {activeSettingsSection === "updates" && feedbackAdmin ? <UpdateCenter /> : null}
 
         {activeSettingsSection === "setup" && shouldShowFloSetup && (
           <>

@@ -1,4 +1,5 @@
 import Feather from "@expo/vector-icons/Feather";
+import { UpdateCenter } from "@/components/settings/UpdateCenter";
 import { FloLauncherSetting } from "@/components/FloLauncherSetting";
 import { AccountDeletionSetting } from "@/components/AccountDeletionSetting";
 import { useRouter } from "expo-router";
@@ -46,6 +47,7 @@ export type DesktopSettingsSection =
   | "Data & security"
   | "Membership"
   | "Help & support"
+  | "Update Center"
   | "Admin";
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 
@@ -86,6 +88,7 @@ const SECTIONS: Array<{
   },
   { label: "Help & support", description: "Guide, support, and feedback", icon: "help-circle" },
   { label: "Admin", description: "Authorized administration", icon: "shield" },
+  { label: "Update Center", description: "Save app update requests", icon: "edit-3" },
 ];
 
 const desktopColors = {
@@ -205,7 +208,7 @@ export function DesktopSettingsPage({
         />
         <View style={styles.settingsLayout}>
           <DesktopCard style={styles.secondaryNav}>
-            {SECTIONS.filter((item) => item.label !== "Admin" || isAdmin).map(
+            {SECTIONS.filter((item) => (item.label !== "Admin" && item.label !== "Update Center") || isAdmin).map(
               (item) => (
                 <Pressable
                   key={item.label}
@@ -592,6 +595,7 @@ export function DesktopSettingsPage({
               </DesktopCard>
             ) : null}
 
+            {section === "Update Center" && isAdmin ? <UpdateCenter light /> : null}
             {section === "Admin" && isAdmin ? (
               <>
                 <DesktopCard>

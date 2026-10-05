@@ -27,7 +27,7 @@ test("settings hub preserves the intended group order", () => {
     ["appearance", "notifications", "setup"],
     ["backup", "deleted", "security"],
     ["membership", "help"],
-    ["admin"],
+    ["updates", "admin"],
   ]);
   assert.equal(settingsSectionById("setup").label, "Setup & walkthrough");
 });
