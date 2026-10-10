@@ -67,7 +67,6 @@ export function visiblePendingPlaidActivity<
 >(pendingRows: T[], accounts: A[]): T[] {
   const activeAccounts = accounts.filter(account => account.is_active);
   const accountIdentityById = new Map(activeAccounts.map(account => [account.id, plaidAccountIdentity(account)]));
-  if (!activeAccounts.length) return pendingRows;
 
   // Pick one source account per real-account identity. Filtering by source
   // account (rather than amount/merchant) keeps two genuine identical charges

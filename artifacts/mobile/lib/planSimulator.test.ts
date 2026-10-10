@@ -490,6 +490,9 @@ test("Plan Simulator is a direct Pro route launched only from mobile and desktop
   assert.match(route, /type: "debt_payoff"/);
   assert.match(route, /minimum:\s*Math\.max\(0, bill\.amount\)/);
   assert.match(route, /monthlyRolloverExtra:\s*Math\.max\(0, Number\(bill\.snowball_minimum_boost/);
+  assert.match(route, /const scenarioNegativeDay = firstNegativeBalanceDay\(scenario\.days\)/);
+  assert.match(route, /Below-zero warning/);
+  assert.match(route, /This scenario first takes the account below \$0/);
   assert.match(dashboardModel, /monthlyMinimum:\s*bill\.is_debt \? requiredAmount/);
   assert.match(dashboardModel, /requiredDebtPlanTotal\(bill, occurrenceDays\.length\)/);
   assert.doesNotMatch(route, /label=["']Apply["']/);

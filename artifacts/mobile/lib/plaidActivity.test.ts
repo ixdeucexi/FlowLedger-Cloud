@@ -33,6 +33,55 @@ test("one pending charge from duplicate links is shown once", () => {
   assert.equal(visiblePendingPlaidActivity(pending, duplicateAccounts).length, 1);
 });
 
+test("pending activity from a sole inactive account is hidden", () => {
+  const inactiveAccount = { ...duplicateAccounts[0], is_active: false };
+  const pending = [{
+    plaid_transaction_id: "inactive-charge",
+    plaid_account_id: inactiveAccount.id,
+    transaction_date: "2026-07-16",
+    amount: -51.38,
+    name: "CAPITAL ONE - MOBILE PMT.",
+  }, {
+    plaid_transaction_id: "accountless-charge",
+    transaction_date: "2026-07-16",
+    amount: -12,
+    name: "Pending cash adjustment",
+  }];
+
+  assert.deepEqual(
+    visiblePendingPlaidActivity(pending, [inactiveAccount]).map(row => row.plaid_transaction_id),
+    ["accountless-charge"],
+  );
+});
+
+test("mixed active and inactive accounts show only active-account pending activity", () => {
+  const activeAccount = duplicateAccounts[2];
+  const inactiveAccount = { ...duplicateAccounts[0], id: "closed-account", mask: "9876", is_active: false };
+  const pending = [
+    { plaid_transaction_id: "active-charge", plaid_account_id: activeAccount.id, transaction_date: "2026-07-16", amount: -20, name: "Active charge" },
+    { plaid_transaction_id: "inactive-charge", plaid_account_id: inactiveAccount.id, transaction_date: "2026-07-16", amount: -30, name: "Inactive charge" },
+  ];
+
+  assert.deepEqual(
+    visiblePendingPlaidActivity(pending, [activeAccount, inactiveAccount]).map(row => row.plaid_transaction_id),
+    ["active-charge"],
+  );
+});
+
+test("reconnected accounts show pending activity only from the active link", () => {
+  const inactiveOldLink = { ...duplicateAccounts[0], is_active: false };
+  const activeNewLink = duplicateAccounts[2];
+  const pending = [
+    { plaid_transaction_id: "old-link-charge", plaid_account_id: inactiveOldLink.id, transaction_date: "2026-07-16", amount: -51.38, name: "Card payment" },
+    { plaid_transaction_id: "new-link-charge", plaid_account_id: activeNewLink.id, transaction_date: "2026-07-16", amount: -51.38, name: "Card payment" },
+  ];
+
+  assert.deepEqual(
+    visiblePendingPlaidActivity(pending, [inactiveOldLink, activeNewLink]).map(row => row.plaid_transaction_id),
+    ["new-link-charge"],
+  );
+});
+
 test("a pending charge from an older duplicate link follows the canonical checking account", () => {
   const canonicalAccounts = canonicalConnectedAccounts(duplicateAccounts);
   const pending = pendingPlaidActivityWithBalanceHolds([{
