@@ -68,6 +68,8 @@
     ,"lib/floPolicy.ts"
     ,"lib/floStream.ts"
     ,"lib/floStream.test.ts"
+    ,"lib/floV4Preview.ts"
+    ,"lib/floV4Preview.test.ts"
     ,"lib/debtOrder.ts"
     ,"lib/debtOrder.test.ts"
     ,"lib/debtPaymentPlan.ts"

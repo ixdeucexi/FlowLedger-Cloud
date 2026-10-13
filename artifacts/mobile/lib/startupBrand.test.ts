@@ -271,7 +271,7 @@ test("scope and user transitions stay shielded, retryable, and remount route-loc
   assert.match(flo, /const floDataScopeKey = `\$\{user\?\.id/);
   assert.match(flo, /requestGeneration === requestGenerationRef\.current/);
   assert.match(flo, /requestScopeKey === floDataScopeKeyRef\.current/);
-  assert.match(flo, /\[activeConversationId, floDataScopeKey, floProLocked\]/);
+  assert.match(flo, /\[activeConversationId, floDataScopeKey, floAccessLocked, floV4Preview\]/);
   const olderMessagesStart = flo.indexOf("const loadOlderMessages");
   const olderMessagesEnd = flo.indexOf("const stopStreaming", olderMessagesStart);
   const olderMessages = flo.slice(olderMessagesStart, olderMessagesEnd);

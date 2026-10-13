@@ -97,7 +97,9 @@ test("temporary context is only sent with history disabled", () => {
   const source = readFileSync("lib/floChat.ts", "utf8");
   const screen = readFileSync("app/(tabs)/flo.tsx", "utf8");
   assert.match(source, /input.historyEnabled === false \? \{ conversationContext: input.conversationContext \?\? \[\] \} : \{\}/);
-  assert.match(screen, /floConversationForRequest\(floPreferences.historyEnabled, priorRequest\?\.conversationId \?\? activeConversationId\)/);
+  assert.match(screen, /const historyEnabled = !floV4Preview && floPreferences.historyEnabled/);
+  assert.match(screen, /floConversationForRequest\(historyEnabled, priorRequest\?\.conversationId \?\? activeConversationId\)/);
+  assert.match(screen, /conversationContext: historyEnabled \|\| floV4Preview \? undefined/);
   assert.match(screen, /preferences.historyEnabled !== floPreferences.historyEnabled\) retryRequestRef.current = null/);
 });
 

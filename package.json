@@ -6,9 +6,9 @@
   "scripts": {
     "preinstall": "node scripts/enforce-pnpm.cjs",
     "test:api": "node --test api/_utils/*.test.js",
-    "test:flo": "node --import ./scripts/flo-node-loader.mjs --test --experimental-strip-types supabase/functions/flo-chat/*.test.mjs",
-    "test:edge": "node --import ./scripts/flo-node-loader.mjs --test --experimental-strip-types supabase/functions/flo-chat/*.test.mjs supabase/functions/billing-dispatcher/contract.test.mjs",
-    "test:release-fixture": "node --test scripts/seed-reviewer-fixture.test.mjs scripts/startup-shell-contract.test.cjs scripts/startup-icon-imports.test.cjs scripts/production-route-contract.test.cjs scripts/push-sw.test.cjs",
+    "test:flo": "node --import ./scripts/flo-node-loader.mjs --test --experimental-strip-types supabase/functions/flo-chat/*.test.mjs supabase/functions/flo-chat-v4/*.test.mjs",
+    "test:edge": "node --import ./scripts/flo-node-loader.mjs --test --experimental-strip-types supabase/functions/flo-chat/*.test.mjs supabase/functions/flo-chat-v4/*.test.mjs supabase/functions/billing-dispatcher/contract.test.mjs",
+    "test:release-fixture": "node --test scripts/seed-reviewer-fixture.test.mjs scripts/startup-shell-contract.test.cjs scripts/startup-icon-imports.test.cjs scripts/production-route-contract.test.cjs scripts/push-sw.test.cjs scripts/package-flo-edge.test.mjs",
     "test:mobile": "pnpm --filter @workspace/mobile run test",
     "test": "pnpm run test:api && pnpm run test:edge && pnpm run test:release-fixture && pnpm run test:mobile",
     "build": "pnpm run check:mobile-config && pnpm run test && pnpm run typecheck && pnpm -r --if-present run build",

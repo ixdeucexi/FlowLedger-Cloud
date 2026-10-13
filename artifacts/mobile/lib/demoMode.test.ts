@@ -33,7 +33,7 @@ test("fictional capture screens avoid live account requests", () => {
   const installPrompt = readFileSync("components/PwaInstallPrompt.tsx", "utf8");
 
   assert.match(flo, /demoMode \? storeCaptureChat : initialChat/);
-  assert.match(flo, /if \(demoMode \|\| !user\?\.id \|\| !activeHousehold\?\.householdId \|\| floProLocked\)/);
+  assert.match(flo, /if \(demoMode \|\| floV4Preview \|\| !user\?\.id \|\| !activeHousehold\?\.householdId \|\| floAccessLocked\)/);
   assert.doesNotMatch(activity, /supabase\.from\("transactions"\)/);
   assert.match(activity, /selectFlowLedgerTransactions\(\s*transactions,/);
   assert.match(dashboard, /const timeGreeting = demoMode\s+\? "Good morning"/);

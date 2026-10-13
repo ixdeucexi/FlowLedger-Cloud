@@ -2,7 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 const root=process.cwd();
-const entry='supabase/functions/flo-chat/index.ts';
+const functionName=process.argv[2]??'flo-chat';
+const allowedFunctions=new Set(['flo-chat','flo-chat-v4']);
+if(!allowedFunctions.has(functionName))throw new Error(`Unsupported Flo function: ${functionName}`);
+const entry=`supabase/functions/${functionName}/index.ts`;
 const files=new Map();
 function collect(relative) {
  if(files.has(relative))return;

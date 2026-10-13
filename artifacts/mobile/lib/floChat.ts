@@ -8,6 +8,46 @@ import { FLO_CLIENT_RESPONSE_TIMEOUT_MS, floFailureDisplay, isFloTerminalEvent, 
 export { parseFloSseChunk } from "@/lib/floStream";
 export type { FloSource, FloStreamEvent } from "@/lib/floStream";
 
+export type FloEngine = "v3" | "v4";
+
+export function floChatEndpoint(engine: FloEngine): string {
+  return engine === "v4" ? "flo-chat-v4" : "flo-chat";
+}
+
+type FloChatRequestInput = {
+  conversationId?: string;
+  householdId: string;
+  userMessageId: string;
+  assistantMessageId: string;
+  text: string;
+  timezone: string;
+  context?: { route?: string; entityType?: string; entityId?: string; date?: string; label?: string };
+  historyEnabled?: boolean;
+  conversationContext?: FloConversationContext;
+  previewTier?: "free" | "pro" | null;
+};
+
+export function floChatRequestBody(engine: FloEngine, input: FloChatRequestInput): Record<string, unknown> {
+  if (engine === "v4") return {
+    version: 4,
+    householdId: input.householdId,
+    question: input.text,
+    timezone: input.timezone,
+  };
+  return {
+    version: 3,
+    ...(input.conversationId ? { conversationId: input.conversationId } : {}),
+    householdId: input.householdId,
+    userMessage: { id: input.userMessageId, text: input.text },
+    assistantMessageId: input.assistantMessageId,
+    context: input.context,
+    historyEnabled: input.historyEnabled !== false,
+    ...(input.historyEnabled === false ? { conversationContext: input.conversationContext ?? [] } : {}),
+    timezone: input.timezone,
+    previewTier: input.previewTier ?? null,
+  };
+}
+
 export interface FloConversation {
   id: string;
   householdId: string;
@@ -285,17 +325,8 @@ export async function listFloMessages(
   };
 }
 
-export async function streamFloChat(input: {
-  conversationId?: string;
-  householdId: string;
-  userMessageId: string;
-  assistantMessageId: string;
-  text: string;
-  timezone: string;
-  context?: { route?: string; entityType?: string; entityId?: string; date?: string; label?: string };
-  historyEnabled?: boolean;
-  conversationContext?: FloConversationContext;
-  previewTier?: "free" | "pro" | null;
+export async function streamFloChat(input: FloChatRequestInput & {
+  engine?: FloEngine;
   signal?: AbortSignal;
   onEvent: (event: FloStreamEvent) => void;
 }): Promise<void> {
@@ -313,7 +344,8 @@ export async function streamFloChat(input: {
     const { data: sessionData } = await supabase.auth.getSession();
     const accessToken = sessionData.session?.access_token;
     if (!accessToken) throw new Error("session_required");
-    const response = await expoFetch(`${supabaseUrl}/functions/v1/flo-chat`, {
+    const engine = input.engine ?? "v3";
+    const response = await expoFetch(`${supabaseUrl}/functions/v1/${floChatEndpoint(engine)}`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -321,18 +353,7 @@ export async function streamFloChat(input: {
         "Content-Type": "application/json",
         Accept: "text/event-stream",
       },
-      body: JSON.stringify({
-        version: 3,
-        ...(input.conversationId ? { conversationId: input.conversationId } : {}),
-        householdId: input.householdId,
-        userMessage: { id: input.userMessageId, text: input.text },
-        assistantMessageId: input.assistantMessageId,
-        context: input.context,
-        historyEnabled: input.historyEnabled !== false,
-        ...(input.historyEnabled === false ? { conversationContext: input.conversationContext ?? [] } : {}),
-        timezone: input.timezone,
-        previewTier: input.previewTier ?? null,
-      }),
+      body: JSON.stringify(floChatRequestBody(engine, input)),
       signal: requestController.signal,
     });
     if (!response.ok || !response.body) {
@@ -343,7 +364,7 @@ export async function streamFloChat(input: {
     const decoder = new TextDecoder();
     let pending = "";
     let terminal = false;
-    let ephemeralCleaned = input.historyEnabled !== false;
+    let ephemeralCleaned = engine === "v4" || input.historyEnabled !== false;
     const emit = (event: FloStreamEvent) => {
       if (isFloTerminalEvent(event)) terminal = true;
       if (event.type === "ephemeral-cleanup" && event.status === "completed") ephemeralCleaned = true;

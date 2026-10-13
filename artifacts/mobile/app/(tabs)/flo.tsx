@@ -59,6 +59,7 @@ import {
   type FloChatState,
 } from "@/lib/floPolicy";
 import { floFailureDisplay, type FloVerifiedFallback } from "@/lib/floStream";
+import { floV4PreviewEnabled } from "@/lib/floV4Preview";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { buildDecisionHistory } from "@/lib/decisionHistory";
 import { buildDecisionRiskAlerts } from "@/lib/decisionRisk";
@@ -109,7 +110,7 @@ export default function FloScreen() {
   const router = useRouter();
   const isDesktop = useDesktopExperience();
   const { user } = useAuth();
-  const { isFeatureLocked, previewTier } = useMembership();
+  const { isFeatureLocked, previewTier, isAdmin } = useMembership();
   const { activeHousehold, bills, billDateMoves, transactions, decisions, settings, forecastConfidence, retryBudgetLoad, getDailyBalances, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getDebtMonthSettlements, getIncomeOccurrencesInMonth, getPaidAmount, getTransactionsForMonth, categories, incomes, goals, demoMode } = useBudget();
   const categoryBudgetScope = useMemo(() => ({
     userId: user?.id,
@@ -117,6 +118,8 @@ export default function FloScreen() {
     budgetId: activeHousehold?.budgetId,
   }), [activeHousehold?.budgetId, activeHousehold?.householdId, user?.id]);
   const floProLocked = isFeatureLocked("flo_account_chat");
+  const floV4Preview = floV4PreviewEnabled(isAdmin);
+  const floAccessLocked = floProLocked && !floV4Preview;
   const [chat, dispatch] = useReducer(reduceFloChat, demoMode ? storeCaptureChat : initialChat);
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
   const decisionHubSettings = DEFAULT_DECISION_HUB_SETTINGS;
@@ -207,7 +210,7 @@ export default function FloScreen() {
       : {});
     setOlderMessageCursor(null);
     setChatError(null);
-    if (demoMode || !user?.id || !activeHousehold?.householdId || floProLocked) {
+    if (demoMode || floV4Preview || !user?.id || !activeHousehold?.householdId || floAccessLocked) {
       setConversations([]);
       setActiveConversationId(null);
       return () => { cancelled = true; };
@@ -220,7 +223,7 @@ export default function FloScreen() {
       if (!cancelled && loadGeneration === requestGenerationRef.current) setChatError("Private Flo history is unavailable right now.");
     });
     return () => { cancelled = true; };
-  }, [activeHousehold?.householdId, demoMode, floProLocked, user?.id]);
+  }, [activeHousehold?.householdId, demoMode, floAccessLocked, floV4Preview, user?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -261,7 +264,7 @@ export default function FloScreen() {
       && requestGeneration === requestGenerationRef.current
       && requestScopeKey === floDataScopeKeyRef.current
     );
-    if (!activeConversationId || floProLocked) return () => { cancelled = true; };
+    if (floV4Preview || !activeConversationId || floAccessLocked) return () => { cancelled = true; };
     if (skipConversationLoadRef.current === activeConversationId) {
       skipConversationLoadRef.current = null;
       return () => { cancelled = true; };
@@ -281,7 +284,7 @@ export default function FloScreen() {
       if (requestIsCurrent()) setChatError("This private chat could not be loaded.");
     });
     return () => { cancelled = true; };
-  }, [activeConversationId, floDataScopeKey, floProLocked]);
+  }, [activeConversationId, floDataScopeKey, floAccessLocked, floV4Preview]);
 
   useEffect(() => {
     let cancelled = false;
@@ -897,7 +900,7 @@ export default function FloScreen() {
 
   const send = async (text = input, retry = false, consentOverride = false) => {
     const clean = text.trim();
-    if (!clean || chat.sending || activeRequestRef.current !== null || historyMutationRef.current || floProLocked || !user?.id || !activeHousehold?.householdId) return;
+    if (!clean || chat.sending || activeRequestRef.current !== null || historyMutationRef.current || floAccessLocked || !user?.id || !activeHousehold?.householdId) return;
     if (!aiConsentReady || !preferencesReady) return;
     if (!aiConsentAccepted && !consentOverride) {
       setAiConsentPrompt(clean);
@@ -917,13 +920,14 @@ export default function FloScreen() {
     const userMessageId = priorRequest?.userMessageId ?? createFloId();
     const assistantMessageId = priorRequest?.assistantMessageId ?? createFloId();
     dispatch({ type: "submit", id: userMessageId, assistantId: assistantMessageId, text: clean });
-    let conversationId = floConversationForRequest(floPreferences.historyEnabled, priorRequest?.conversationId ?? activeConversationId);
+    const historyEnabled = !floV4Preview && floPreferences.historyEnabled;
+    let conversationId = floConversationForRequest(historyEnabled, priorRequest?.conversationId ?? activeConversationId);
     retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId };
     let reply = "";
     const verifiedFallback: { current: FloVerifiedFallback | null } = { current: null };
     const streamFailure: { current: { code: string; message: string } | null } = { current: null };
     try {
-      if (!conversationId && floPreferences.historyEnabled) {
+      if (!conversationId && historyEnabled) {
         const created = await createFloConversation(requestUserId, requestHouseholdId, clean);
         if (!requestIsCurrent()) return;
         conversationId = created.id;
@@ -935,6 +939,7 @@ export default function FloScreen() {
       const controller = new AbortController();
       streamAbortRef.current = controller;
       await streamFloChat({
+        engine: floV4Preview ? "v4" : "v3",
         conversationId: conversationId ?? undefined,
         householdId: requestHouseholdId,
         userMessageId,
@@ -949,8 +954,8 @@ export default function FloScreen() {
           date: Array.isArray(params.date) ? params.date[0] : params.date,
           label: Array.isArray(params.label) ? params.label[0] : params.label,
         },
-        historyEnabled: floPreferences.historyEnabled,
-        conversationContext: floPreferences.historyEnabled ? undefined : floConversationContext(chat.messages, [userMessageId, assistantMessageId]),
+        historyEnabled,
+        conversationContext: historyEnabled || floV4Preview ? undefined : floConversationContext(chat.messages, [userMessageId, assistantMessageId]),
         signal: controller.signal,
         onEvent: event => {
           if (!requestIsCurrent()) return;
@@ -967,7 +972,7 @@ export default function FloScreen() {
             setSourcesByMessageId(previous => ({ ...previous, [assistantMessageId]: event.sources }));
           } else if (event.type === "followups") {
             setFollowUpsByMessageId(previous => ({ ...previous, [assistantMessageId]: event.items }));
-          } else if (event.type === "proposal" && event.proposal?.kind === "recurring_bill_change") {
+          } else if (!floV4Preview && event.type === "proposal" && event.proposal?.kind === "recurring_bill_change") {
             setProposalByMessageId(previous => ({ ...previous, [assistantMessageId]: event.proposal }));
           } else if (event.type === "error") {
             streamFailure.current = { code: event.code, message: event.message };
@@ -1038,7 +1043,7 @@ export default function FloScreen() {
       if (activeRequestRef.current === requestGeneration) activeRequestRef.current = null;
     }
     if (!requestIsCurrent()) return;
-    if (!floPreferences.historyEnabled) retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: null };
+    if (!historyEnabled) retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: null };
   };
 
   const acceptAiConsent = async () => {
@@ -1059,14 +1064,14 @@ export default function FloScreen() {
     const promptId = Array.isArray(params.promptId) ? params.promptId[0] : params.promptId;
     const cleanPrompt = typeof prompt === "string" ? prompt.trim() : "";
     const promptKey = `${promptId || "manual"}:${cleanPrompt}`;
-    if (!aiConsentReady || !preferencesReady || !user?.id || !activeHousehold?.householdId || floProLocked || historyBusy || !cleanPrompt || handledPromptRef.current === promptKey || chat.sending) return;
+    if (!aiConsentReady || !preferencesReady || !user?.id || !activeHousehold?.householdId || floAccessLocked || historyBusy || !cleanPrompt || handledPromptRef.current === promptKey || chat.sending) return;
     handledPromptRef.current = promptKey;
     void send(cleanPrompt);
-  }, [aiConsentReady, preferencesReady, params.prompt, params.promptId, chat.sending, user?.id, activeHousehold?.householdId, floProLocked, historyBusy]);
+  }, [aiConsentReady, preferencesReady, params.prompt, params.promptId, chat.sending, user?.id, activeHousehold?.householdId, floAccessLocked, historyBusy]);
 
   const composerBottom = Platform.OS === "web" ? 88 : Math.max(insets.bottom, 8) + 54;
 
-  if (floProLocked) {
+  if (floAccessLocked) {
     return <BasicFlo facts={facts} baseline={baseline} />;
   }
 
@@ -1085,29 +1090,29 @@ export default function FloScreen() {
         <FloLogo size={48} />
         <View style={styles.headerText}>
           <Text style={[styles.title, { color: colors.foreground }]}>Ask Flo</Text>
-          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{activeHousehold?.name ?? "Personal household"} · Your account assistant</Text>
+          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{activeHousehold?.name ?? "Personal household"} · {floV4Preview ? "v4 preview · Read only · History off" : "Your account assistant"}</Text>
           <DataFreshnessLabel compact />
         </View>
         <Feather name="message-circle" size={24} color={colors.primaryForeground} />
       </LinearGradient>
 
-      {isDesktop ? <View style={styles.desktopHistoryLayer}><FloConversationBar desktop conversations={conversations} activeId={activeConversationId} disabled={chat.sending || historyBusy} preferencesDisabled={!preferencesControlsReady} householdName={activeHousehold?.name ?? "Personal household"} preferences={floPreferences} onNew={startNewConversation} onSelect={selectConversation} onRename={renameConversation} onDelete={removeConversation} onDeleteAll={removeAllConversations} onExport={exportConversations} onSearchHistory={searchHistory} onPreferencesChange={updatePreferences} /></View> : <FloConversationBar conversations={conversations} activeId={activeConversationId} disabled={chat.sending || historyBusy} preferencesDisabled={!preferencesControlsReady} householdName={activeHousehold?.name ?? "Personal household"} preferences={floPreferences} onNew={startNewConversation} onSelect={selectConversation} onRename={renameConversation} onDelete={removeConversation} onDeleteAll={removeAllConversations} onExport={exportConversations} onSearchHistory={searchHistory} onPreferencesChange={updatePreferences} />}
+      {!floV4Preview ? (isDesktop ? <View style={styles.desktopHistoryLayer}><FloConversationBar desktop conversations={conversations} activeId={activeConversationId} disabled={chat.sending || historyBusy} preferencesDisabled={!preferencesControlsReady} householdName={activeHousehold?.name ?? "Personal household"} preferences={floPreferences} onNew={startNewConversation} onSelect={selectConversation} onRename={renameConversation} onDelete={removeConversation} onDeleteAll={removeAllConversations} onExport={exportConversations} onSearchHistory={searchHistory} onPreferencesChange={updatePreferences} /></View> : <FloConversationBar conversations={conversations} activeId={activeConversationId} disabled={chat.sending || historyBusy} preferencesDisabled={!preferencesControlsReady} householdName={activeHousehold?.name ?? "Personal household"} preferences={floPreferences} onNew={startNewConversation} onSelect={selectConversation} onRename={renameConversation} onDelete={removeConversation} onDeleteAll={removeAllConversations} onExport={exportConversations} onSearchHistory={searchHistory} onPreferencesChange={updatePreferences} />) : null}
 
       <ScrollView
         ref={scrollRef}
-        style={[styles.conversation, isDesktop && styles.conversationDesktop]}
+        style={[styles.conversation, isDesktop && !floV4Preview && styles.conversationDesktop]}
         contentContainerStyle={[styles.conversationContent, isDesktop && styles.conversationContentDesktop]}
         keyboardShouldPersistTaps="handled"
         onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
       >
-        {olderMessageCursor ? (
+        {!floV4Preview && olderMessageCursor ? (
           <Pressable accessibilityRole="button" onPress={() => void loadOlderMessages()} style={[styles.loadOlderButton, { backgroundColor: colors.muted }]}>
             <Text style={[styles.loadOlderText, { color: colors.mutedForeground }]}>Load older messages</Text>
           </Pressable>
         ) : null}
         <View style={[styles.bubble, styles.floBubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.bubbleText, { color: colors.foreground }]}>Hi, I&apos;m Flo. What would you like to know?</Text>
-          <Text style={[styles.trustLine, { color: colors.mutedForeground }]}>AI explanations use verified records from this household. Flo cannot move money, and important plan changes always require your review and confirmation.</Text>
+          <Text style={[styles.trustLine, { color: colors.mutedForeground }]}>{floV4Preview ? "Preview answers use the verified read-only financial analysis pipeline. This chat is not saved and cannot propose or make changes." : "AI explanations use verified records from this household. Flo cannot move money, and important plan changes always require your review and confirmation."}</Text>
         </View>
 
         {chat.messages.map(message => (
@@ -1123,13 +1128,13 @@ export default function FloScreen() {
           >
             <View style={message.thinking ? styles.thinkingRow : undefined}>
               {message.thinking ? <ActivityIndicator size="small" color={colors.primary} /> : null}
-              {message.role === "flo" && !message.thinking ? <FloGroundedAnswer text={humanizeFloText(message.text)} sources={sourcesByMessageId[message.id] ?? []} dataAsOf={groundingByMessageId[message.id]?.dataAsOf} coverage={groundingByMessageId[message.id]?.coverage} partial={groundingByMessageId[message.id]?.partial} caveat={groundingByMessageId[message.id]?.caveat} followUps={followUpsByMessageId[message.id]} proposal={proposalByMessageId[message.id]} proposalConfirmed={Boolean(proposalByMessageId[message.id]?.status === "confirmed" || (proposalByMessageId[message.id] && confirmedProposalIds.has(proposalByMessageId[message.id]!.id)))} onOpenSource={route => router.push(route as never)} onFollowUp={question => void send(question)} onReviewProposal={openProposalReview} /> : <Text style={[styles.bubbleText, { color: message.role === "user" ? colors.primaryForeground : colors.mutedForeground }]}>{message.text}</Text>}
+              {message.role === "flo" && !message.thinking ? <FloGroundedAnswer text={humanizeFloText(message.text)} sources={sourcesByMessageId[message.id] ?? []} dataAsOf={groundingByMessageId[message.id]?.dataAsOf} coverage={groundingByMessageId[message.id]?.coverage} partial={groundingByMessageId[message.id]?.partial} caveat={groundingByMessageId[message.id]?.caveat} followUps={followUpsByMessageId[message.id]} proposal={floV4Preview ? null : proposalByMessageId[message.id]} proposalConfirmed={Boolean(!floV4Preview && (proposalByMessageId[message.id]?.status === "confirmed" || (proposalByMessageId[message.id] && confirmedProposalIds.has(proposalByMessageId[message.id]!.id))))} onOpenSource={route => router.push(route as never)} onFollowUp={question => void send(question)} onReviewProposal={proposal => { if (!floV4Preview) openProposalReview(proposal); }} /> : <Text style={[styles.bubbleText, { color: message.role === "user" ? colors.primaryForeground : colors.mutedForeground }]}>{message.text}</Text>}
             </View>
           </View>
         ))}
       </ScrollView>
 
-      <Modal visible={Boolean(reviewProposal)} transparent animationType={isDesktop ? "fade" : "slide"} onRequestClose={() => proposalConfirmState !== "confirming" && setReviewProposal(null)}>
+      <Modal visible={!floV4Preview && Boolean(reviewProposal)} transparent animationType={isDesktop ? "fade" : "slide"} onRequestClose={() => proposalConfirmState !== "confirming" && setReviewProposal(null)}>
         <Pressable style={[styles.modalOverlay, isDesktop && styles.reviewOverlayDesktop]} onPress={() => proposalConfirmState !== "confirming" && setReviewProposal(null)}>
           <Pressable style={[styles.followSheet, isDesktop && styles.reviewDialogDesktop, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => undefined}>
             <View style={[styles.sheetHandle, { backgroundColor: colors.mutedForeground }]} />
@@ -1180,7 +1185,7 @@ export default function FloScreen() {
         </Pressable>
       </Modal>
 
-      <View style={[styles.composerArea, isDesktop && styles.composerAreaDesktop, { backgroundColor: colors.background, borderColor: colors.border, paddingBottom: isDesktop ? 16 : composerBottom }]}>
+      <View style={[styles.composerArea, isDesktop && !floV4Preview && styles.composerAreaDesktop, { backgroundColor: colors.background, borderColor: colors.border, paddingBottom: isDesktop ? 16 : composerBottom }]}>
         {chatError ? (
           <View style={styles.errorRow}>
             <Text style={[styles.chatError, { color: colors.mutedForeground }]}>{chatError}</Text>
