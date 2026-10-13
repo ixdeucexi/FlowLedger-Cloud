@@ -410,4 +410,5 @@ module.exports = {
   allowlistedNativeRoute,
   hasPushDestination,
   processExpoReceipts,
+  sendExpoNotification,
 };

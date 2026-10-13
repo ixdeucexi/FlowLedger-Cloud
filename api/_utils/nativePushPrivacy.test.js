@@ -4,7 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 
 const source = fs.readFileSync(path.join(__dirname, "push.js"), "utf8");
-const { assertDbResult } = require("./push");
+const { assertDbResult, sendExpoNotification } = require("./push");
 
 test("native lock-screen payloads use generic text and an allowlisted route", () => {
   assert.match(
@@ -17,6 +17,49 @@ test("native lock-screen payloads use generic text and an allowlisted route", ()
     source,
     /payload\.(?:merchant|billName|accountName|amount|balance)/,
   );
+});
+
+test("native group and feedback pushes cannot overwrite the authoritative app badge", async () => {
+  const originalFetch = global.fetch;
+  const requests = [];
+  global.fetch = async (_url, options) => {
+    requests.push(JSON.parse(options.body));
+    return { ok: true, json: async () => ({ data: { status: "ok", id: `ticket-${requests.length}` } }) };
+  };
+  const db = {
+    from(table) {
+      if (table === "native_push_receipts") {
+        return { upsert: async () => ({ error: null }) };
+      }
+      if (table === "native_push_devices") {
+        return { update: () => ({ eq: async () => ({ error: null }) }) };
+      }
+      throw new Error(`Unexpected table: ${table}`);
+    },
+  };
+
+  try {
+    await sendExpoNotification(
+      db,
+      { id: "device-1", expo_push_token: "ExponentPushToken[token]" },
+      { title: "7 transactions ready", body: "Open FlowLedger.", url: "/transactions", badgeCount: 7 },
+      "household-1",
+    );
+    await sendExpoNotification(
+      db,
+      { id: "device-1", expo_push_token: "ExponentPushToken[token]" },
+      { title: "Feedback updated", body: "Open FlowLedger.", url: "/more?section=feedback", badgeCount: 1 },
+      "household-1",
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+
+  assert.equal(requests.length, 2);
+  assert.equal(Object.hasOwn(requests[0], "badge"), false);
+  assert.equal(Object.hasOwn(requests[1], "badge"), false);
+  assert.deepEqual(requests[0].data, { route: "/transactions", householdId: "household-1" });
+  assert.deepEqual(requests[1].data, { route: "/more?section=feedback", householdId: "household-1" });
 });
 
 test("the unified queue considers either web or native destinations", () => {

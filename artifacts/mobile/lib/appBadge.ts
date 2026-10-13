@@ -1,14 +1,11 @@
+import { appNotificationCount } from "./appBadgeCore";
+
+export { appNotificationCount };
+
 type BadgeNavigator = Navigator & {
   clearAppBadge?: () => Promise<void>;
   setAppBadge?: (contents?: number) => Promise<void>;
 };
-
-export function appNotificationCount(...counts: number[]) {
-  return counts.reduce((total, count) => {
-    const safeCount = Number.isFinite(count) ? Math.max(0, Math.trunc(count)) : 0;
-    return total + safeCount;
-  }, 0);
-}
 
 function badgeNavigator() {
   if (typeof navigator === "undefined") return null;
