@@ -2,6 +2,7 @@ import { getIncomeOccurrenceDays, getEffectiveIncomeAmount } from "../../../arti
 import { createFinancialProjection } from "../../../artifacts/mobile/lib/financialProjection.ts";
 import { normalizeSettingsRow, normalizeBillRow, normalizeMonthlyOverrideRow, normalizeBillDateMoveRow, normalizeTransactionRow } from "../../../artifacts/mobile/lib/financialProjectionInput.ts";
 import { resolveDebtOccurrenceSettlement } from "../../../artifacts/mobile/lib/debtPlanDomain.ts";
+import { resolveBillOccurrencePayment } from "../../../artifacts/mobile/lib/billOccurrencePayment.ts";
 import { occurrenceKey } from "../../../artifacts/mobile/lib/reviewCenter.ts";
 import { validIncomeEffectiveFrom, validIncomeExcludedDate } from "./analysisIncomeDates.ts";
 import { dayAdd, dollars, label, monthEnd, monthStart, requireSources, round, shiftMonth, sum, validDate, type AnalysisRequest, type AnalysisResult, type AnalysisSnapshot } from "./analysisTypes.ts";
@@ -92,6 +93,7 @@ export function scheduleAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
   // APR calculation, cash-flow projection, or hidden default money is read.
   const engine=createFinancialProjection(input,{now:new Date(snapshot.capturedAt),timeZone:snapshot.timeZone});
   const events:{date:string;name:string;configured:number;paid:number;remaining:number;status:string}[]=[];
+  const paymentStatusNeedsReview:{date:string;name:string;configured:number}[]=[];
   for(let month=monthStart(start);month<=end;month=shiftMonth(month,1)) {
     const m=Number(month.slice(5,7))-1,y=Number(month.slice(0,4));
     for(const bill of engine.getMonthlyBills(m,y)) {
@@ -104,8 +106,25 @@ export function scheduleAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
         if(bill.is_debt)settled=engine.getDebtMonthSettlements(m,y).get(bill.id)?.occurrences?.find(o=>o.occurrenceDate===date);
         else {
           const reviewed=engine.matchedAllocationIndexes.reviewedBillOccurrences.get(occurrenceKey(bill.id,date));
-          if(!reviewed&&days.length>1&&(override?.paid_amount??0)>0) {missing.push(`The payment allocation across ${label(bill.name)} occurrences needs review`);continue;}
-          settled=resolveDebtOccurrenceSettlement({occurrenceDate:date,configuredObligation:engine.getAmount(bill,m,y),reviewed,paidAmount:override?.actual_amount??override?.paid_amount??0});
+          const monthPrefix=month.slice(0,7);
+          const hasReviewedMonth=engine.matchedAllocationIndexes.reviewedBillIdsByMonth.get(monthPrefix)?.has(bill.id)??false;
+          const legacyPaid=Math.max(0,Number(override?.actual_amount??override?.paid_amount??0));
+          const legacyDate=override?.paid_date?.slice(0,10);
+          const legacyDateMaps=Boolean(legacyDate&&days.some(occurrenceDay=>dateOf(month,occurrenceDay)===legacyDate));
+          const multiOccurrence=["weekly","biweekly"].includes(bill.frequency);
+          if(multiOccurrence&&legacyPaid>0.005&&!hasReviewedMonth&&!legacyDateMaps) {
+            paymentStatusNeedsReview.push({date,name:bill.name,configured:engine.getBillOccurrenceAmount(bill,date)});
+            continue;
+          }
+          const payment=resolveBillOccurrencePayment({
+            occurrenceDate:date,
+            scheduledAmount:engine.getBillOccurrenceAmount(bill,date),
+            frequency:bill.frequency,
+            match:reviewed?{amount:reviewed.actualAmount,plannedAmount:reviewed.requiredAmount,settlement:reviewed.status==="settled"?"exact":"partial"}:undefined,
+            monthlyPaidAmount:legacyPaid,
+            monthlyPaidDate:legacyDate,
+          });
+          settled={occurrenceDate:date,configuredObligation:payment.scheduledAmount,paidAmount:payment.paidAmount,remainingRequired:payment.remainingAmount,status:payment.isPaid?"settled":payment.isPartial?"partial":"unpaid"};
         }
         if(settled)events.push({date,name:bill.name,configured:settled.configuredObligation,paid:settled.paidAmount,remaining:settled.remainingRequired,status:settled.status});
       }
@@ -113,12 +132,16 @@ export function scheduleAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
   }
   if(missing.length)return unavailable(sources,missing);
   events.sort((a,b)=>a.date.localeCompare(b.date)||a.name.localeCompare(b.name));
+  paymentStatusNeedsReview.sort((a,b)=>a.date.localeCompare(b.date)||a.name.localeCompare(b.name));
   const overdue=request.purpose==="bills_overdue";
   const includedEvents=afterPaydayBills?events.filter(e=>e.remaining>0):events;
   const displayEvents=overdue?includedEvents.filter(e=>e.remaining>0):includedEvents;
   const cap=afterPaydayBills?50:12,omitted=afterPaydayBills?Math.max(0,displayEvents.length-cap):0;
+  const reviewCap=50,reviewOmitted=Math.max(0,paymentStatusNeedsReview.length-reviewCap);
+  const hasPaymentReview=paymentStatusNeedsReview.length>0;
   const heading=afterPaydayBills
-    ? `${displayEvents.length} unpaid bill/debt occurrences are due after the ${dayAdd(start,-1)} payday and before the ${dayAdd(end,1)} payday, from ${start} through ${end}; ${dollars(sum(displayEvents.map(e=>e.remaining)))} remains due.`
-    : `${events.length} recorded ${request.domain==="subscriptions"?"subscription-category":"bill/debt"} occurrences from ${start} through ${end}; ${dollars(sum(events.map(e=>e.remaining)))} remains against recorded obligations.`;
-  return {text:[heading,...(overdue?[`${displayEvents.length} occurrences still have a recorded unpaid remainder.`]:[]),...displayEvents.slice(0,cap).map(e=>`${e.date}: ${label(e.name)} — ${e.status}; ${dollars(e.remaining)} remaining (${dollars(e.paid)} recorded paid).`),omitted?`Showing 50 of ${displayEvents.length} unpaid occurrences; ${omitted} are omitted from the details, while totals cover the full payday-bounded window.`:(!afterPaydayBills&&displayEvents.length>cap?`Showing the first 12 ${overdue?"unpaid ":""}occurrences; totals cover all ${displayEvents.length} ${overdue?"unpaid occurrences and the full checked window":"occurrences in the window"}.`:"")].filter(Boolean).join("\n\n"),facts:{startDate:start,endDate:end,...(afterPaydayBills?{nextPayday:dayAdd(start,-1),followingPayday:dayAdd(end,1)}:{}),occurrenceCount:includedEvents.length,displayedOccurrenceCount:Math.min(cap,displayEvents.length),...(overdue||afterPaydayBills?{unpaidOccurrenceCount:displayEvents.length}:{}),configuredObligations:sum(includedEvents.map(e=>e.configured)),recordedPaid:sum(includedEvents.map(e=>e.paid)),remainingObligations:sum(includedEvents.map(e=>e.remaining)),settledCount:includedEvents.filter(e=>e.status==="settled").length},sources,assumptions:["Payment status uses recorded reviewed settlements and overrides. Configured debt payments are not verified lender minimums. Pending payments are not treated as paid; no account balance or affordability is inferred.",...(afterPaydayBills?["The future window excludes both payday dates and includes only bill occurrences with an unpaid remainder."]:[]),...(request.domain==="subscriptions"?["Subscription selection uses recorded categories, not an inference that every recurring bill is a subscription."]:[])],missing:omitted?[`${omitted} additional unpaid bill occurrences were omitted from the details; totals cover all ${displayEvents.length} occurrences in the payday-bounded window`]:[],scenario:false};
+    ? `${displayEvents.length} ${hasPaymentReview?"verified ":""}unpaid bill/debt occurrences are due after the ${dayAdd(start,-1)} payday and before the ${dayAdd(end,1)} payday, from ${start} through ${end}; ${dollars(sum(displayEvents.map(e=>e.remaining)))} ${hasPaymentReview?"verified ":""}remaining obligations are due.`
+    : `${events.length} ${hasPaymentReview?"verified ":""}recorded ${request.domain==="subscriptions"?"subscription-category":"bill/debt"} occurrences from ${start} through ${end}; ${dollars(sum(events.map(e=>e.remaining)))} remains against ${hasPaymentReview?"verified ":""}recorded obligations.`;
+  const reviewSection=hasPaymentReview?["Payment status needs review (excluded from the verified counts and totals):",...paymentStatusNeedsReview.slice(0,reviewCap).map(e=>`${e.date}: ${label(e.name)} — ${dollars(e.configured)} scheduled; the occurrence payment and remainder are not verified.`),reviewOmitted?`${reviewOmitted} additional occurrences needing payment review are omitted from these details.`:""]:[];
+  return {text:[heading,...(overdue?[`${displayEvents.length} occurrences still have a ${hasPaymentReview?"verified ":""}unpaid remainder.`]:[]),...displayEvents.slice(0,cap).map(e=>`${e.date}: ${label(e.name)} — ${e.status}; ${dollars(e.remaining)} remaining (${dollars(e.paid)} recorded paid).`),omitted?`Showing 50 of ${displayEvents.length} unpaid occurrences; ${omitted} are omitted from the details, while totals cover the full payday-bounded window.`:(!afterPaydayBills&&displayEvents.length>cap?`Showing the first 12 ${overdue?"unpaid ":""}occurrences; totals cover all ${displayEvents.length} ${overdue?"unpaid occurrences and the full checked window":"occurrences in the window"}.`:""),...reviewSection].filter(Boolean).join("\n\n"),facts:{startDate:start,endDate:end,...(afterPaydayBills?{nextPayday:dayAdd(start,-1),followingPayday:dayAdd(end,1)}:{}),occurrenceCount:includedEvents.length,displayedOccurrenceCount:Math.min(cap,displayEvents.length),paymentStatusNeedsReviewCount:paymentStatusNeedsReview.length,...(overdue||afterPaydayBills?{unpaidOccurrenceCount:displayEvents.length}:{}),configuredObligations:sum(includedEvents.map(e=>e.configured)),recordedPaid:sum(includedEvents.map(e=>e.paid)),remainingObligations:sum(includedEvents.map(e=>e.remaining)),settledCount:includedEvents.filter(e=>e.status==="settled").length},sources,assumptions:["Payment status uses recorded reviewed settlements and overrides. Configured debt payments are not verified lender minimums. Pending payments are not treated as paid; no account balance or affordability is inferred.",...(afterPaydayBills?[`The future window excludes both payday dates and includes only bill occurrences with a ${hasPaymentReview?"verified ":""}unpaid remainder.`]:[]),...(request.domain==="subscriptions"?["Subscription selection uses recorded categories, not an inference that every recurring bill is a subscription."]:[])],missing:[...(omitted?[`${omitted} additional unpaid bill occurrences were omitted from the details; totals cover all ${displayEvents.length} verified occurrences in the payday-bounded window`]:[]),...(hasPaymentReview?[`${paymentStatusNeedsReview.length} scheduled bill occurrences have ambiguous month-level payment status and are excluded from verified totals until reviewed`]:[]),...(reviewOmitted?[`${reviewOmitted} additional ambiguous payment-status occurrences were omitted from the review details`]:[])],scenario:false};
 }

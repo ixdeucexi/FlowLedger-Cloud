@@ -7,6 +7,8 @@ const snapshot=()=>({householdId:'h',today:'2026-10-14',capturedAt:'2026-10-14T1
 const request=(patch={})=>({purpose:'general',domain:'bills',operation:'summary',incomeTiming:'expected',startDate:null,endDate:null,dateEvent:'after_payday',entity:null,merchant:null,category:null,amount:null,...patch});
 const income=(id,name,day,patch={})=>({id,name,amount:1000,frequency:'monthly',start_date:`2026-10-${day}`,next_payment_date:`2026-10-${day}`,amount_history:[],excluded_dates:[],...patch});
 const bill=(id,name,day,amount=10,patch={})=>({id,name,amount,is_debt:false,is_recurring:true,frequency:'monthly',due_day:day,category:'Household',start_date:'2026-01-01',created_at:'2026-01-01T00:00:00Z',...patch});
+const weekly=(id='ymca',name='YMCA')=>bill(id,name,1,150,{frequency:'weekly',day_of_week:3,next_payment_date:'2026-10-07'});
+const reviewedPayment=(id,billId,occurrenceDate,amount,plannedAmount=150,settlement='exact',patch={})=>({id,date:occurrenceDate,amount:-amount,category:'Household',note:'Payment',review_status:'matched',review_resolution:'bill',linked_bill_id:billId,review_allocations:[{type:'bill',targetId:billId,occurrenceDate,amount,plannedAmount,settlement}],...patch});
 
 test('after-payday bills use the strict next-to-following payday window and reconcile unpaid detail totals',()=>{
   const s=snapshot();
@@ -97,6 +99,81 @@ test('after-payday boundaries require net-positive aggregate household income on
     assert.match(r.text,/Right window/);
     assert.doesNotMatch(r.text,/Wrong window/);
   }
+});
+
+test('reviewed earlier weekly payment cannot spill into the live after-payday window',()=>{
+  const s=snapshot();
+  s.sources.incomes.rows=[income('pay-a','Pay A','16'),income('pay-b','Pay B','30')];
+  s.sources.bills.rows=[weekly()];
+  s.sources.monthly_overrides.rows=[{id:'ymca-o',bill_id:'ymca',month:9,year:2026,paid_amount:150,actual_amount:150,paid_date:'2026-10-07'}];
+  s.sources.transactions.rows=[reviewedPayment('ymca-paid','ymca','2026-10-07',150)];
+  const r=recurringAnalysis(s,request());
+  assert.deepEqual(r.missing,[]);
+  assert.equal(r.facts.occurrenceCount,2);
+  assert.equal(r.facts.paymentStatusNeedsReviewCount,0);
+  assert.equal(r.facts.remainingObligations,300);
+  assert.match(r.text,/2026-10-21: YMCA.*\$150\.00 remaining/);
+  assert.match(r.text,/2026-10-28: YMCA.*\$150\.00 remaining/);
+});
+
+test('reviewed exact and partial weekly allocations are authoritative per occurrence',()=>{
+  for(const [settlement,amount,expected] of [['exact',150,150],['partial',50,250]]) {
+    const s=snapshot();
+    s.sources.incomes.rows=[income('pay-a','Pay A','16'),income('pay-b','Pay B','30')];
+    s.sources.bills.rows=[weekly()];
+    s.sources.monthly_overrides.rows=[{id:'ymca-o',bill_id:'ymca',month:9,year:2026,paid_amount:amount,actual_amount:amount,paid_date:'2026-10-21'}];
+    s.sources.transactions.rows=[reviewedPayment('ymca-paid','ymca','2026-10-21',amount,150,settlement)];
+    const r=recurringAnalysis(s,request());
+    assert.deepEqual(r.missing,[],settlement);
+    assert.equal(r.facts.remainingObligations,expected,settlement);
+    if(settlement==='exact')assert.doesNotMatch(r.text,/2026-10-21: YMCA/);
+    else assert.match(r.text,/2026-10-21: YMCA.*partial.*\$100\.00 remaining/);
+    assert.match(r.text,/2026-10-28: YMCA.*\$150\.00 remaining/);
+  }
+});
+
+test('legacy dated weekly payments apply only to their matching occurrence and are capped',()=>{
+  for(const [paidDate,expected,visible21] of [['2026-10-07',300,true],['2026-10-21',150,false]]) {
+    const s=snapshot();
+    s.sources.incomes.rows=[income('pay-a','Pay A','16'),income('pay-b','Pay B','30')];
+    s.sources.bills.rows=[weekly()];
+    s.sources.monthly_overrides.rows=[{id:'ymca-o',bill_id:'ymca',month:9,year:2026,paid_amount:900,actual_amount:900,paid_date:paidDate}];
+    const r=recurringAnalysis(s,request());
+    assert.deepEqual(r.missing,[],paidDate);
+    assert.equal(r.facts.remainingObligations,expected,paidDate);
+    if(visible21)assert.match(r.text,/2026-10-21: YMCA.*\$150\.00 remaining/);
+    else assert.doesNotMatch(r.text,/2026-10-21: YMCA/);
+    assert.match(r.text,/2026-10-28: YMCA.*\$150\.00 remaining/);
+  }
+});
+
+test('ambiguous weekly month payment keeps review rows separate while unrelated verified bills remain totaled',()=>{
+  for(const paidDate of [null,'2026-10-08']) {
+    const s=snapshot();
+    s.sources.incomes.rows=[income('pay-a','Pay A','16'),income('pay-b','Pay B','30')];
+    s.sources.bills.rows=[weekly(),bill('phone','Phone',22,40)];
+    s.sources.monthly_overrides.rows=[{id:'ymca-o',bill_id:'ymca',month:9,year:2026,paid_amount:150,actual_amount:150,paid_date:paidDate}];
+    const r=recurringAnalysis(s,request());
+    assert.equal(r.facts.occurrenceCount,1,paidDate);
+    assert.equal(r.facts.paymentStatusNeedsReviewCount,2,paidDate);
+    assert.equal(r.facts.remainingObligations,40,paidDate);
+    assert.ok(r.missing.some(value=>/ambiguous month-level payment status/.test(value)),paidDate);
+    assert.match(r.text,/2026-10-22: Phone.*\$40\.00 remaining/);
+    assert.match(r.text,/Payment status needs review/);
+    assert.match(r.text,/2026-10-21: YMCA.*payment and remainder are not verified/);
+    assert.match(r.text,/2026-10-28: YMCA.*payment and remainder are not verified/);
+  }
+});
+
+test('pending weekly payment remains unpaid',()=>{
+  const s=snapshot();
+  s.sources.incomes.rows=[income('pay-a','Pay A','16'),income('pay-b','Pay B','30')];
+  s.sources.bills.rows=[weekly()];
+  s.sources.transactions.rows=[reviewedPayment('pending','ymca','2026-10-21',150,150,'exact',{pending:true})];
+  const r=recurringAnalysis(s,request());
+  assert.deepEqual(r.missing,[]);
+  assert.equal(r.facts.remainingObligations,300);
+  assert.match(r.text,/2026-10-21: YMCA.*\$150\.00 remaining/);
 });
 
 test('more than 50 unpaid occurrences is explicitly partial while totals retain full coverage',()=>{
