@@ -39,7 +39,21 @@ export function recurringAnalysis(snapshot:AnalysisSnapshot,request:AnalysisRequ
   let scheduleRequest={...request};
   let cutoffSources:string[]=[];
   if(request.dateEvent==="after_bill")return {text:"For a balance after a bill, ask how much will remain after that named bill is paid. For a bill list, provide the end date to check.",facts:{},sources:["bills"],assumptions:[],missing:["A bill-list cutoff relative to another bill needs an explicit date"],scenario:false};
-  if(request.dateEvent!=="none") {
+  if(request.domain==="bills"&&request.purpose==="general"&&request.dateEvent==="after_payday") {
+    const horizon=monthStart(shiftMonth(snapshot.today,12));
+    const first=scheduleAnalysis(snapshot,{...request,domain:"income",entity:null,startDate:snapshot.today,endDate:dayAdd(horizon,-1),dateEvent:"after_payday"});
+    const next=first.facts.nextPayday;
+    if(typeof next!=="string"||first.missing.length)return first;
+    const secondStart=dayAdd(next,1);
+    const second=scheduleAnalysis(snapshot,{...request,domain:"income",entity:null,startDate:secondStart,endDate:dayAdd(monthStart(shiftMonth(secondStart,12)),-1),dateEvent:"after_payday"});
+    const following=second.facts.nextPayday;
+    cutoffSources=[...new Set([...first.sources,...second.sources])];
+    if(typeof following!=="string"||second.missing.length)return {text:`The next positive household payday is ${next}, but I cannot determine a distinct following payday. I cannot safely choose an end date for the bills-after-payday window.`,facts:{nextPayday:next,followingPayday:null},sources:cutoffSources,assumptions:["Payday boundaries use positive scheduled household income dates; multiple incomes on one date count as one boundary."],missing:["A distinct following positive household payday is unavailable; clarify the ending payday or date"],scenario:false};
+    const startDate=dayAdd(next,1),endDate=dayAdd(following,-1);
+    if(endDate<startDate)return {text:`There are no calendar days strictly after the ${next} payday and before the ${following} payday.`,facts:{nextPayday:next,followingPayday:following,startDate,endDate,occurrenceCount:0,displayedOccurrenceCount:0,configuredObligations:0,recordedPaid:0,remainingObligations:0,settledCount:0},sources:["bills","monthly_overrides","bill_date_moves","transactions",...cutoffSources],assumptions:["The window excludes both payday dates."],missing:[],scenario:false};
+    scheduleRequest={...request,startDate,endDate,dateEvent:"after_payday"};
+  }
+  if(request.dateEvent!=="none"&&request.dateEvent!=="after_payday") {
     const payday=scheduleAnalysis(snapshot,{...request,domain:"income",entity:null,dateEvent:"next_payday"});
     const next=payday.facts.nextPayday;
     if(typeof next!=="string"||payday.missing.length)return payday;
@@ -49,7 +63,7 @@ export function recurringAnalysis(snapshot:AnalysisSnapshot,request:AnalysisRequ
   const base=scheduleAnalysis(snapshot,scheduleRequest);
   base.sources=[...new Set([...base.sources,...cutoffSources])];
   if(base.missing.length)return base;
-  if(!request.startDate||request.startDate===snapshot.today) {
+  if(request.dateEvent!=="after_payday"&&(!request.startDate||request.startDate===snapshot.today)) {
     const overdueEnd=dayAdd(snapshot.today,-1);
     if(overdueEnd>=monthStart(snapshot.today)) {
       const overdue=scheduleAnalysis(snapshot,{...scheduleRequest,startDate:monthStart(snapshot.today),endDate:overdueEnd,dateEvent:"none"});

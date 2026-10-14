@@ -108,6 +108,21 @@ test('bill due cutoff cannot be consumed by elapsed settlement and next paycheck
   assert.deepEqual(validateAnalysisPlan('When and how much is my next paycheck?',{legacy:false,requests:[{...allocation,purpose:'general',domain:'income',operation:'summary',incomeTiming:'expected',dateEvent:'next_payday'}]}),[]);
 });
 
+test('after-payday bill questions deterministically select the future payday-bounded schedule',()=>{
+  for(const question of ['What bills are due after payday?','Which bills are due after my paycheck?','What bills are due after my next payday?','Which bills are due after our next paycheck?','Show me bills due after the next payday.','Show the bills due after the payday']) {
+    const plan=deterministicAnalysisPlan(question,'2026-10-14');
+    assert.ok(plan,question);
+    const r=plan.requests[0];
+    assert.equal(r.purpose,'general');assert.equal(r.domain,'bills');assert.equal(r.operation,'summary');assert.equal(r.incomeTiming,'expected');assert.equal(r.dateEvent,'after_payday');
+    assert.equal(r.startDate,null);assert.equal(r.endDate,null);assert.equal(r.entity,null);assert.equal(r.scenario,null);
+  }
+  const historical={...allocation,purpose:'bill_settlement',domain:'bills',operation:'summary',incomeTiming:'expected',dateEvent:'none',startDate:'2026-10-01',endDate:'2026-10-13'};
+  assert.ok(validateAnalysisPlan('What bills are due after payday?',{legacy:false,requests:[historical]},'2026-10-14').some(issue=>/future general bills schedule/.test(issue)));
+  const future={...historical,purpose:'general',dateEvent:'after_payday',startDate:null,endDate:null};
+  assert.ok(validateAnalysisPlan('What bills are due after payday?',{legacy:false,requests:[future,historical]},'2026-10-14').length);
+  assert.deepEqual(validateAnalysisPlan('What bills are due after payday?',{legacy:false,requests:[future]},'2026-10-14'),[]);
+});
+
 test('minimum payments and last-month merchant totals preserve their own readers',()=>{
   const last={...allocation,purpose:'transaction_last',domain:'transactions',operation:'detail'};
   assert.ok(validateAnalysisPlan('How much did I spend at Walmart last month?',{legacy:false,requests:[last]}).length);

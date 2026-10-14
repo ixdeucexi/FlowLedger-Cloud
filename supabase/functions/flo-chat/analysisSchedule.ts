@@ -21,7 +21,8 @@ export function scheduleAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
   const end = request.endDate ?? (request.dateEvent !== "none" ? monthEnd(shiftMonth(start,11)) : monthEnd(start));
   if (!validDate(start) || !validDate(end) || end < start || end > monthEnd(shiftMonth(start,23))) return unavailable(sources,["Choose a valid schedule window of at most 24 months"]);
   if (!validDate(snapshot.today) || !Number.isFinite(Date.parse(snapshot.capturedAt))) return unavailable(sources,["The schedule clock is unavailable"]);
-  if (request.dateEvent !== "none" && !incomeQuestion) return unavailable(sources,["Event-relative balance questions require a forecast"]);
+  const afterPaydayBills=request.domain==="bills"&&request.purpose==="general"&&request.dateEvent==="after_payday"&&request.startDate!==null&&request.endDate!==null;
+  if (request.dateEvent !== "none" && !incomeQuestion && !afterPaydayBills) return unavailable(sources,["Event-relative balance questions require a forecast"]);
   const selected = rows(incomeQuestion ? "incomes" : "bills").filter(row=>exact(row.name,request.entity));
   if (request.entity && selected.length !== 1) missing.push("Use the full name of exactly one recorded source");
   for (const row of selected) {
@@ -46,7 +47,14 @@ export function scheduleAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
       getIncomeOccurrenceDays(income,m,y).forEach(day=>{const date=dateOf(month,day);if(date>=start&&date<=end)events.push({date,name:row.name,amount});});
     }
     events.sort((a,b)=>a.date.localeCompare(b.date)||a.name.localeCompare(b.name));
-    const next = events.find(e=>e.date>=snapshot.today && e.amount > 0);
+    // The household after-payday window needs a net-positive date, not merely
+    // one positive source on a date whose other scheduled adjustments offset it.
+    // Keep ordinary named/next-payday readers on their existing source behavior.
+    const householdAfterPayday=request.dateEvent==="after_payday"&&request.entity===null;
+    const netPositiveDate=householdAfterPayday
+      ? [...new Set(events.filter(e=>e.date>=snapshot.today).map(e=>e.date))].find(date=>sum(events.filter(e=>e.date===date).map(e=>e.amount))>0)
+      : null;
+    const next = householdAfterPayday ? events.find(e=>e.date===netPositiveDate) : events.find(e=>e.date>=snapshot.today && e.amount > 0);
     if (request.dateEvent !== "none") {
       if (!next) return unavailable(sources,["No matching upcoming paycheck is scheduled within this window"]);
       if (request.dateEvent === "after_bill") return unavailable(sources,["A bill-relative balance needs a forecast"]);
@@ -106,6 +114,11 @@ export function scheduleAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
   if(missing.length)return unavailable(sources,missing);
   events.sort((a,b)=>a.date.localeCompare(b.date)||a.name.localeCompare(b.name));
   const overdue=request.purpose==="bills_overdue";
-  const displayEvents=overdue?events.filter(e=>e.remaining>0):events;
-  return {text:[`${events.length} recorded ${request.domain==="subscriptions"?"subscription-category":"bill/debt"} occurrences from ${start} through ${end}; ${dollars(sum(events.map(e=>e.remaining)))} remains against recorded obligations.`,...(overdue?[`${displayEvents.length} occurrences still have a recorded unpaid remainder.`]:[]),...displayEvents.slice(0,12).map(e=>`${e.date}: ${label(e.name)} — ${e.status}; ${dollars(e.remaining)} remaining (${dollars(e.paid)} recorded paid).`),displayEvents.length>12?`Showing the first 12 ${overdue?"unpaid ":""}occurrences; totals cover all ${displayEvents.length} ${overdue?"unpaid occurrences and the full checked window":"occurrences in the window"}.`:""].filter(Boolean).join("\n\n"),facts:{startDate:start,endDate:end,occurrenceCount:events.length,displayedOccurrenceCount:Math.min(12,displayEvents.length),...(overdue?{unpaidOccurrenceCount:displayEvents.length}:{}),configuredObligations:sum(events.map(e=>e.configured)),recordedPaid:sum(events.map(e=>e.paid)),remainingObligations:sum(events.map(e=>e.remaining)),settledCount:events.filter(e=>e.status==="settled").length},sources,assumptions:["Payment status uses recorded reviewed settlements and overrides. Configured debt payments are not verified lender minimums. Pending payments are not treated as paid; no account balance or affordability is inferred.",...(request.domain==="subscriptions"?["Subscription selection uses recorded categories, not an inference that every recurring bill is a subscription."]:[])],missing:[],scenario:false};
+  const includedEvents=afterPaydayBills?events.filter(e=>e.remaining>0):events;
+  const displayEvents=overdue?includedEvents.filter(e=>e.remaining>0):includedEvents;
+  const cap=afterPaydayBills?50:12,omitted=afterPaydayBills?Math.max(0,displayEvents.length-cap):0;
+  const heading=afterPaydayBills
+    ? `${displayEvents.length} unpaid bill/debt occurrences are due after the ${dayAdd(start,-1)} payday and before the ${dayAdd(end,1)} payday, from ${start} through ${end}; ${dollars(sum(displayEvents.map(e=>e.remaining)))} remains due.`
+    : `${events.length} recorded ${request.domain==="subscriptions"?"subscription-category":"bill/debt"} occurrences from ${start} through ${end}; ${dollars(sum(events.map(e=>e.remaining)))} remains against recorded obligations.`;
+  return {text:[heading,...(overdue?[`${displayEvents.length} occurrences still have a recorded unpaid remainder.`]:[]),...displayEvents.slice(0,cap).map(e=>`${e.date}: ${label(e.name)} — ${e.status}; ${dollars(e.remaining)} remaining (${dollars(e.paid)} recorded paid).`),omitted?`Showing 50 of ${displayEvents.length} unpaid occurrences; ${omitted} are omitted from the details, while totals cover the full payday-bounded window.`:(!afterPaydayBills&&displayEvents.length>cap?`Showing the first 12 ${overdue?"unpaid ":""}occurrences; totals cover all ${displayEvents.length} ${overdue?"unpaid occurrences and the full checked window":"occurrences in the window"}.`:"")].filter(Boolean).join("\n\n"),facts:{startDate:start,endDate:end,...(afterPaydayBills?{nextPayday:dayAdd(start,-1),followingPayday:dayAdd(end,1)}:{}),occurrenceCount:includedEvents.length,displayedOccurrenceCount:Math.min(cap,displayEvents.length),...(overdue||afterPaydayBills?{unpaidOccurrenceCount:displayEvents.length}:{}),configuredObligations:sum(includedEvents.map(e=>e.configured)),recordedPaid:sum(includedEvents.map(e=>e.paid)),remainingObligations:sum(includedEvents.map(e=>e.remaining)),settledCount:includedEvents.filter(e=>e.status==="settled").length},sources,assumptions:["Payment status uses recorded reviewed settlements and overrides. Configured debt payments are not verified lender minimums. Pending payments are not treated as paid; no account balance or affordability is inferred.",...(afterPaydayBills?["The future window excludes both payday dates and includes only bill occurrences with an unpaid remainder."]:[]),...(request.domain==="subscriptions"?["Subscription selection uses recorded categories, not an inference that every recurring bill is a subscription."]:[])],missing:omitted?[`${omitted} additional unpaid bill occurrences were omitted from the details; totals cover all ${displayEvents.length} occurrences in the payday-bounded window`]:[],scenario:false};
 }
