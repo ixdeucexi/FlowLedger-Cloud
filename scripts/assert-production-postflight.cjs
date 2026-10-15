@@ -28,7 +28,6 @@ const forbidden = [
   /Privacy Policy/i,
   /Monthly Outlook/i,
   /Actual close/i,
-  /Projected close/i,
 ];
 
 function git(...args) {
