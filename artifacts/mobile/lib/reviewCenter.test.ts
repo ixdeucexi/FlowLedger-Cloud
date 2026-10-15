@@ -288,6 +288,28 @@ test("income matches follow the current schedule without rewriting saved audit d
   assert.equal(reviewTransactionRemaining(transactions[0], new Map(), matches, new Map(incomes.map(income => [income.id, income]))), 0);
 });
 
+test("a full nearby income variance leaves no scheduled remainder", () => {
+  const incomes = [
+    { id: "pay", name: "Paycheck", amount: 2425.35, frequency: "biweekly" as const, start_date: "2026-10-16", next_payment_date: "2026-10-16" },
+  ];
+  const transaction = {
+    id: "deposit",
+    date: "2026-10-15",
+    amount: 2425.36,
+    note: "Payroll",
+    category: "Income",
+    review_status: "matched",
+    review_resolution: "income",
+    review_allocations: [
+      { type: "income" as const, targetId: "pay", occurrenceDate: "2026-10-16", amount: 2425.36, plannedAmount: 2425.35, settlement: "full" as const },
+    ],
+  };
+  const matches = matchedIncomeOccurrenceAllocations([transaction], incomes);
+
+  assert.equal(reviewTransactionRemaining(transaction, new Map(), matches, new Map(incomes.map(income => [income.id, income]))), 0);
+  assert.equal(incomeReviewTargets(incomes, "2026-10-16", matches).some(target => target.id === "pay" && target.occurrenceDate === "2026-10-16"), false);
+});
+
 test("review card counts each remapped partial income occurrence only once", () => {
   const incomes = [{ id: "john", name: "John", amount: 100, frequency: "biweekly" as const, start_date: "2026-09-02", next_payment_date: "2026-09-02" }];
   const transaction = {

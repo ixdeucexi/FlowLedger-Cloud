@@ -36,10 +36,12 @@ import { configuredDebtAmountForRemainingPayment, lenderMinimumRequiredAmount, p
 import { calendarBalanceIsVisible } from "@/lib/dailyCheckingClose";
 import { confirmedBillMatchId, isConfirmedBillMatch } from "@/lib/billMatching";
 import { nextPlannedDebtPayment, snowballTargetDebtId } from "@/lib/billSurplusRouting";
+import { isBillVisibleForPlanningMonth } from "@/lib/billEligibility";
 import { allocationLabel, groupPlannedExpenseAllocations, matchedIncomeOccurrenceAllocations, matchedOccurrenceAllocations, occurrenceKey, reviewSettlementSummary, reviewTransactionRemaining, transactionDisplayName } from "@/lib/reviewCenter";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
-import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, formatForecastDateLabel, forecastItemBadgeLabel, forecastItemTypeLabel, groupForecastEvents, lowestForecastDate, plannedDebtEditorParams } from "@/lib/forecastDisplay";
+import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, deriveCarriedForwardReserves, formatForecastDateLabel, forecastItemBadgeLabel, forecastItemTypeLabel, groupForecastEvents, lowestForecastDate, plannedDebtEditorParams } from "@/lib/forecastDisplay";
 import type { FinancialEvent } from "@/lib/forecast";
+import { safeLocalDateInTimeZone } from "@/lib/financialProjection";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { buildOverdueBillOccurrences } from "@/lib/overdueBills";
 import { pendingMatchStatusLabel, pendingOccurrenceKeySet, pendingPlanMatchForOccurrence } from "@/lib/pendingPlanMatches";
@@ -413,8 +415,11 @@ export default function MonthlyScreen() {
     getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill, updateIncome,
     getCashFlow, getMonthlyIncome, getDailyBalances, getCalendarDailyBalances, getIncomeOccurrencesInMonth,
     previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, finalizeBillPayment, getExtraPayment, getDebtMonthSettlements, getDebtPlanForMonth, getRemainingDebtPlanForMonth, setPlannedDebtAmount, canEditHousehold,
-    updateDecision, deleteDecision, updateGoal, deleteGoal, activeHousehold,
+    updateDecision, deleteDecision, updateGoal, deleteGoal, activeHousehold, householdTimeZone,
   } = useBudget();
+  const householdAsOfDate = safeLocalDateInTimeZone(new Date(), householdTimeZone);
+  const [householdCurrentYear, householdCurrentMonthNumber] = householdAsOfDate.split("-").map(Number);
+  const householdCurrentMonth = householdCurrentMonthNumber - 1;
 
   const [month, setMonth] = useState(new Date().getMonth());
   const [activeTab] = useState<TabView>("calendar");
@@ -664,13 +669,23 @@ export default function MonthlyScreen() {
   }, [debtPaymentNotice, dueDayPickerBill, editPlan, fullPaymentPrompt, incomeDatePicker, selectedDate, showSnowballResults, snowballModalVisible, snowballPreview, surplusPrompt, txModalVisible]);
 
   const monthBills = useMemo(() => getMonthlyBills(month, selectedYear), [getMonthlyBills, month, selectedYear]);
+  const planningMonthBills = useMemo(
+    () => monthBills.filter(bill => isBillVisibleForPlanningMonth(
+      bill,
+      month,
+      selectedYear,
+      householdCurrentMonth,
+      householdCurrentYear,
+    )),
+    [householdCurrentMonth, householdCurrentYear, month, monthBills, selectedYear],
+  );
   const debtMonthSettlements = useMemo(
     () => getDebtMonthSettlements(month, selectedYear),
     [getDebtMonthSettlements, month, selectedYear],
   );
 
   const billsWithData = useMemo(() => {
-    return monthBills.map(b => {
+    return planningMonthBills.map(b => {
       // monthlyAmount = per-occurrence × number of occurrences this month
       // (for monthly bills this equals getAmount; for weekly bills it's ×4-5)
       const monthlyAmount = getBillMonthlyTotal(b, month, selectedYear);
@@ -706,10 +721,10 @@ export default function MonthlyScreen() {
       return true;
     })
     .sort((a, b) => a.bill.due_day - b.bill.due_day);
-  }, [billFilter, debtMonthSettlements, getAmount, getEffectivePaidAmount, getBillOccurrencesInMonth, getPaidAmount, month, monthBills, selectedYear]);
+  }, [billFilter, debtMonthSettlements, getAmount, getEffectivePaidAmount, getBillOccurrencesInMonth, getPaidAmount, month, planningMonthBills, selectedYear]);
 
   const billSummary = useMemo(() => summarizeMonthlyBills(
-    monthBills,
+    planningMonthBills,
     bill => bill.is_debt
       ? (debtMonthSettlements.get(bill.id)?.configuredObligation
         ?? getBillMonthlyTotal(bill, month, selectedYear))
@@ -720,7 +735,7 @@ export default function MonthlyScreen() {
           debtMonthSettlements.get(bill.id)?.paidAmount ?? 0,
         )
       : getEffectivePaidAmount(bill, month, selectedYear),
-  ), [debtMonthSettlements, monthBills, getEffectivePaidAmount, getBillMonthlyTotal, month, selectedYear]);
+  ), [debtMonthSettlements, planningMonthBills, getEffectivePaidAmount, getBillMonthlyTotal, month, selectedYear]);
   const totalDue = billSummary.totalDue;
   const totalPaid = billSummary.totalPaid;
 
@@ -759,7 +774,7 @@ export default function MonthlyScreen() {
         ? now.getDate()
         : 0;
     const occurrences = buildOverdueBillOccurrences(
-      monthBills.map(bill => {
+      planningMonthBills.map(bill => {
         const occurrenceDays = getBillOccurrencesInMonth(bill, month, selectedYear);
         return {
           billId: bill.id,
@@ -795,7 +810,7 @@ export default function MonthlyScreen() {
     getEffectivePaidAmount,
     debtMonthSettlements,
     month,
-    monthBills,
+    planningMonthBills,
     pendingBillOccurrenceKeys,
     selectedYear,
   ]);
@@ -833,6 +848,18 @@ export default function MonthlyScreen() {
   const selectedVisibleForecastDay = calendarBalanceIsVisible(selectedForecastDay)
     ? selectedForecastDay
     : undefined;
+  const reserveDisplayForecastEvents = useMemo(() => {
+    const previousMonth = month === 0 ? 11 : month - 1;
+    const previousYear = month === 0 ? selectedYear - 1 : selectedYear;
+    return [
+      ...getCalendarDailyBalances(previousMonth, previousYear).flatMap(day => day.events ?? []),
+      ...dailyBalances.flatMap(day => day.events ?? []),
+    ];
+  }, [dailyBalances, getCalendarDailyBalances, month, selectedYear]);
+  const selectedCarriedForwardReserves = useMemo(
+    () => deriveCarriedForwardReserves(selectedForecastDay?.projectionEvents, reserveDisplayForecastEvents),
+    [reserveDisplayForecastEvents, selectedForecastDay],
+  );
   const selectedForecastGroups = useMemo(
     () => groupForecastEvents(calendarVisibleForecastEvents(selectedForecastDay?.events)),
     [selectedForecastDay]
@@ -876,7 +903,7 @@ export default function MonthlyScreen() {
   const scheduledBillsForDay = useMemo(() => {
     if (selectedDay === null) return [];
     const occurrenceDate = `${selectedYear}-${String(month + 1).padStart(2, "0")}-${String(selectedDay).padStart(2, "0")}`;
-    return monthBills.filter(bill => {
+    return planningMonthBills.filter(bill => {
       if (!getBillOccurrencesInMonth(bill, month, selectedYear).includes(selectedDay)) return false;
       if (bill.is_debt && selectedDebtPayments.some(payment =>
         payment.event.sourceId === bill.id || payment.event.debtTargetBillId === bill.id
@@ -884,7 +911,7 @@ export default function MonthlyScreen() {
       const match = billOccurrenceMatches.get(occurrenceKey(bill.id, occurrenceDate));
       return !match || match.settlement === "partial";
     });
-  }, [monthBills, billOccurrenceMatches, getBillOccurrencesInMonth, selectedDebtPayments, selectedDay, month, selectedYear]);
+  }, [planningMonthBills, billOccurrenceMatches, getBillOccurrencesInMonth, selectedDebtPayments, selectedDay, month, selectedYear]);
 
   const movedInByBillId = useMemo(() => {
     if (!selectedDate) return new Map<string, BillDateMove>();
@@ -1609,7 +1636,7 @@ export default function MonthlyScreen() {
   const groupedBucketEventReduction = plannedExpenseGroupsForSelectedDay.reduce((sum, group) =>
     sum + Math.max(0, group.transactionIds.length - 1) + (group.remainingAmount > 0.005 ? 1 : 0), 0);
   const selectedForecastEventCount = Math.max(0, rawSelectedForecastEventCount - groupedBucketEventReduction);
-  const selectedVisibleItemCount = scheduledBillsForDay.length + selectedDebtPayments.length + selectedSnowballTransactions.length + incomeForSelectedDay.length + displayedTxs.length + plannedExpenseGroupsForSelectedDay.length + displayedGoalsForSelectedDay.length + plansForSelectedDay.length;
+  const selectedVisibleItemCount = scheduledBillsForDay.length + selectedDebtPayments.length + selectedSnowballTransactions.length + incomeForSelectedDay.length + displayedTxs.length + plannedExpenseGroupsForSelectedDay.length + displayedGoalsForSelectedDay.length + plansForSelectedDay.length + selectedCarriedForwardReserves.items.length;
   const selectedDayItemCount = Math.max(selectedForecastEventCount, selectedVisibleItemCount);
 
   const changeMonth = useCallback((delta: number) => {
@@ -1639,11 +1666,10 @@ export default function MonthlyScreen() {
     },
   }), [changeMonth]);
 
-  const todayDate = new Date();
-  const todayMonth = todayDate.getMonth();
-  const todayYear = todayDate.getFullYear();
-  const todayDayNumber = todayDate.getDate();
-  const todayIso = `${todayYear}-${String(todayMonth + 1).padStart(2, "0")}-${String(todayDayNumber).padStart(2, "0")}`;
+  const todayMonth = householdCurrentMonth;
+  const todayYear = householdCurrentYear;
+  const todayDayNumber = Number(householdAsOfDate.slice(8, 10));
+  const todayIso = householdAsOfDate;
   const isCurrentMonth = month === todayMonth && selectedYear === todayYear;
 
   const jumpToToday = useCallback(() => {
@@ -2267,7 +2293,7 @@ export default function MonthlyScreen() {
                         </Text>
                         <Text style={[styles.dayOverlaySub, { color: c.mutedForeground }]}>
                           {selectedDayItemCount} item{selectedDayItemCount === 1 ? "" : "s"}
-                          {selectedVisibleForecastDay ? ` · $${selectedVisibleForecastDay.balance.toFixed(2)}` : ""}
+                          {selectedVisibleForecastDay ? ` · Projected close $${selectedVisibleForecastDay.balance.toFixed(2)}` : ""}
                         </Text>
                       </View>
                     </View>
@@ -2283,6 +2309,29 @@ export default function MonthlyScreen() {
                         <Text style={[styles.dayOverlayRiskText, { color: c.foreground }]}>
                           {`Below your $${settings.safety_floor.toFixed(0)} safety floor.`}
                         </Text>
+                      </View>
+                    ) : null}
+
+                    {selectedCarriedForwardReserves.items.length > 0 ? (
+                      <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
+                        <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Carried forward / reserved</Text>
+                        {selectedCarriedForwardReserves.items.map(item => (
+                          <View key={`reserve-${item.id}-${item.reservedDate}`} style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: c.warning + "40" }]}>
+                            <View style={styles.dayBillTop}>
+                              <View style={{ flex: 1, minWidth: 0 }}>
+                                <Text numberOfLines={1} style={[styles.dayBillName, { color: c.foreground }]}>{item.name}</Text>
+                                <Text style={[styles.dayBillMeta, { color: c.mutedForeground }]}>
+                                  {item.sourceType === "bill" ? "Bill" : "Debt payment"} · originally due {formatShortDate(item.originalDate)}
+                                </Text>
+                              </View>
+                              <Text style={[styles.dayOverlayAmount, { color: c.warning }]}>−${item.amount.toFixed(2)}</Text>
+                            </View>
+                          </View>
+                        ))}
+                        <View style={styles.dayBillTop}>
+                          <Text style={[styles.dayBillName, { color: c.foreground }]}>Reserved total</Text>
+                          <Text style={[styles.dayOverlayAmount, { color: c.warning }]}>${selectedCarriedForwardReserves.total.toFixed(2)}</Text>
+                        </View>
                       </View>
                     ) : null}
 
@@ -2849,7 +2898,7 @@ export default function MonthlyScreen() {
 
                               <View style={styles.dayBillNumbers}>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
-                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Amount</Text>
+                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>{isMoneyIn && tx.review_resolution === "income" ? "Planned" : "Amount"}</Text>
                                   <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: c.foreground }]}>${settlement.amount.toFixed(2)}</Text>
                                 </View>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>

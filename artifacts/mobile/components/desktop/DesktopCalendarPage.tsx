@@ -27,7 +27,7 @@ import {
   type DesktopCalendarEventKind,
 } from "@/lib/desktopCalendar";
 import type { FinancialEvent } from "@/lib/forecast";
-import { calendarVisibleForecastEvents, formatEventStatus } from "@/lib/forecastDisplay";
+import { calendarVisibleForecastEvents, deriveCarriedForwardReserves, formatEventStatus } from "@/lib/forecastDisplay";
 import { calendarBalanceIsVisible } from "@/lib/dailyCheckingClose";
 
 const MONTHS = [
@@ -400,6 +400,7 @@ function BalanceTrend({
 function SelectedDayPanel({
   selectedDate,
   selectedDay,
+  displayEvents,
   weekDates,
   weekDays,
   transferTransactionIds,
@@ -411,6 +412,7 @@ function SelectedDayPanel({
 }: {
   selectedDate: string;
   selectedDay?: DailyBalance;
+  displayEvents: FinancialEvent[];
   weekDates: string[];
   weekDays: DailyBalance[];
   transferTransactionIds: ReadonlySet<string>;
@@ -428,6 +430,7 @@ function SelectedDayPanel({
   );
   const weekLabel = `Week of ${shortDate(weekDates[0] ?? selectedDate)} – ${shortDate(weekDates[6] ?? selectedDate)}`;
   const visibleSelectedDay = calendarBalanceIsVisible(selectedDay) ? selectedDay : undefined;
+  const carriedForwardReserves = deriveCarriedForwardReserves(selectedDay?.projectionEvents, displayEvents);
   const trendValues = weekDays.filter(calendarBalanceIsVisible).map((day) => day.balance);
   const isRiskDay = Boolean(visibleSelectedDay && visibleSelectedDay.balance < safetyFloor);
   return (
@@ -473,6 +476,28 @@ function SelectedDayPanel({
           )}
         </View>
 
+        {carriedForwardReserves.items.length ? (
+          <>
+            <Text style={styles.sectionTitle}>Carried forward / reserved</Text>
+            <View style={styles.scheduledList}>
+              {carriedForwardReserves.items.map(item => (
+                <View key={`reserve-${item.id}-${item.reservedDate}`} style={styles.scheduledRow}>
+                  <View style={[styles.scheduledIcon, { backgroundColor: palette.amberSoft }]}><View style={[styles.scheduledDot, { backgroundColor: palette.amber }]} /></View>
+                  <View style={styles.scheduledCopy}>
+                    <Text numberOfLines={1} style={styles.scheduledName}>{item.name}</Text>
+                    <Text style={styles.scheduledCategory}>{item.sourceType === "bill" ? "Bill" : "Debt payment"} · originally due {displayDate(item.originalDate)}</Text>
+                  </View>
+                  <Text style={[styles.scheduledAmount, { color: palette.amber }]}>−{money(item.amount)}</Text>
+                </View>
+              ))}
+              <View style={styles.scheduledRow}>
+                <View style={styles.scheduledCopy}><Text style={styles.scheduledName}>Reserved total</Text></View>
+                <Text style={[styles.scheduledAmount, { color: palette.amber }]}>{money(carriedForwardReserves.total)}</Text>
+              </View>
+            </View>
+          </>
+        ) : null}
+
         <Pressable accessibilityRole="button" accessibilityLabel={`Add transaction on ${displayDate(selectedDate)}`} onPress={onAddTransaction} style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}>
           <Feather name="plus" size={15} color="#ffffff" /><Text style={styles.primaryActionText}>Add Transaction</Text>
         </Pressable>
@@ -483,7 +508,7 @@ function SelectedDayPanel({
         {visibleSelectedDay ? (
           <View style={[styles.balanceCard, isRiskDay && styles.riskBalanceCard]}>
             <View style={[styles.balanceIcon, isRiskDay && styles.riskBalanceIcon]}><Feather name="shield" size={18} color={isRiskDay ? palette.red : palette.blue} /></View>
-            <View style={styles.balanceCopy}><Text style={[styles.balanceValue, isRiskDay && styles.riskBalanceValue]}>{money(visibleSelectedDay.balance)}</Text>{isRiskDay ? <Text style={styles.balanceDetail}>Below {money(safetyFloor)} safety floor</Text> : null}</View>
+            <View style={styles.balanceCopy}><Text style={styles.balanceDetail}>Projected close</Text><Text style={[styles.balanceValue, isRiskDay && styles.riskBalanceValue]}>{money(visibleSelectedDay.balance)}</Text>{isRiskDay ? <Text style={styles.balanceDetail}>Below {money(safetyFloor)} safety floor</Text> : null}</View>
             {trendValues.length ? <BalanceTrend balances={trendValues} label={`Balance trend for ${weekLabel}`} tone={isRiskDay ? "risk" : "plan"} /> : null}
           </View>
         ) : null}
@@ -509,6 +534,17 @@ export function DesktopCalendarPage(props: DesktopCalendarPageProps) {
     const day = Number(props.selectedDate.slice(8, 10));
     return props.dailyBalances.find((item) => item.day === day);
   }, [props.dailyBalances, props.selectedDate]);
+  const displayEvents = useMemo(
+    () => {
+      const previousMonth = props.month === 0 ? 11 : props.month - 1;
+      const previousYear = props.month === 0 ? props.year - 1 : props.year;
+      return [
+        ...props.getCalendarDailyBalances(previousMonth, previousYear).flatMap(day => day.events ?? []),
+        ...props.dailyBalances.flatMap(day => day.events ?? []),
+      ];
+    },
+    [props.dailyBalances, props.getCalendarDailyBalances, props.month, props.year],
+  );
   const weekDates = useMemo(
     () => props.selectedDate ? desktopCalendarWeekDates(props.selectedDate) : [],
     [props.selectedDate],
@@ -578,6 +614,7 @@ export function DesktopCalendarPage(props: DesktopCalendarPageProps) {
               <SelectedDayPanel
                 selectedDate={props.selectedDate}
                 selectedDay={selectedDay}
+                displayEvents={displayEvents}
                 weekDates={weekDates}
                 weekDays={weekDays}
                 transferTransactionIds={props.transferTransactionIds}

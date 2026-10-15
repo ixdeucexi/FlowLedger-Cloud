@@ -15,6 +15,21 @@ export interface ForecastEventGroup {
   events: ForecastEventDisplay[];
 }
 
+export interface CarriedForwardReserveItem {
+  id: string;
+  sourceId: string;
+  sourceType: FinancialEvent["sourceType"];
+  name: string;
+  originalDate: string;
+  reservedDate: string;
+  amount: number;
+}
+
+export interface CarriedForwardReserveSummary {
+  items: CarriedForwardReserveItem[];
+  total: number;
+}
+
 const GROUP_ORDER: ForecastEventGroupKey[] = ["income", "bills", "transactions", "goals", "debt", "plans"];
 
 const GROUP_TITLES: Record<ForecastEventGroupKey, string> = {
@@ -58,6 +73,56 @@ const cents = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
 
 function normalizedEventName(event: FinancialEvent): string {
   return (event.name ?? "").trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+/** Explains unpaid obligations moved to the bank anchor without changing forecast math. */
+export function deriveCarriedForwardReserves(
+  projectionEvents: FinancialEvent[] = [],
+  displayEvents: FinancialEvent[] = [],
+): CarriedForwardReserveSummary {
+  const originalById = new Map<string, FinancialEvent>();
+  displayEvents.forEach(event => {
+    if (
+      event.kind === "bank_adjustment"
+      || event.sourceType === "reconciliation"
+      || originalById.has(event.id)
+    ) return;
+    // Forecast balance indexing is first-ID-wins; reserve explanations must
+    // resolve the same event when duplicate display rows are present.
+    originalById.set(event.id, event);
+  });
+  const seen = new Set<string>();
+  const items: CarriedForwardReserveItem[] = [];
+
+  projectionEvents.forEach(event => {
+    if (
+      event.kind === "bank_adjustment"
+      || event.sourceType === "reconciliation"
+      || event.amount >= -0.005
+      || !["planned", "scheduled", "pending"].includes(event.status)
+      || !(event.kind === "bill" || (event.kind === "debt_payment" && event.debtPlanAllocationKind === "required"))
+    ) return;
+    const original = originalById.get(event.id);
+    if (!original || original.date >= event.date) return;
+    const key = `${event.id}:${event.date}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    items.push({
+      id: event.id,
+      sourceId: event.sourceId,
+      sourceType: event.sourceType,
+      name: event.name?.trim() || (event.kind === "debt_payment" ? "Debt payment" : "Bill"),
+      originalDate: original.date,
+      reservedDate: event.date,
+      amount: cents(Math.abs(event.amount)),
+    });
+  });
+
+  items.sort((left, right) => left.originalDate.localeCompare(right.originalDate) || left.name.localeCompare(right.name) || left.id.localeCompare(right.id));
+  return {
+    items,
+    total: cents(items.reduce((sum, item) => sum + item.amount, 0)),
+  };
 }
 
 /**

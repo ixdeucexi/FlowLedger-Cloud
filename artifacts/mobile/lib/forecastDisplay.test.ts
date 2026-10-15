@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, combineSameDayDebtPaymentEvents, dedupeSameDayBillEvents, debtPaymentStatusLabel, formatForecastDateLabel, forecastItemBadgeLabel, forecastItemTypeLabel, formatCalendarBalance, groupForecastEvents, lowestForecastDate, plannedDebtEditorParams } from "./forecastDisplay";
+import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, combineSameDayDebtPaymentEvents, dedupeSameDayBillEvents, debtPaymentStatusLabel, deriveCarriedForwardReserves, formatForecastDateLabel, forecastItemBadgeLabel, forecastItemTypeLabel, formatCalendarBalance, groupForecastEvents, lowestForecastDate, plannedDebtEditorParams } from "./forecastDisplay";
 import type { FinancialEvent } from "./forecast";
 
 const event = (overrides: Partial<FinancialEvent> & Pick<FinancialEvent, "id" | "sourceType" | "sourceId" | "kind" | "date" | "amount" | "status">): FinancialEvent => ({
@@ -37,15 +37,28 @@ test("mobile calendar displays and announces the full balance", () => {
   assert.doesNotMatch(calendar, /formatCompactCalendarBalance/);
 });
 
-test("selected-day and desktop details show balance amounts without source labels", () => {
+test("selected-day and desktop details identify the projected close", () => {
   const monthly = readFileSync(path.resolve(process.cwd(), "app/(tabs)/monthly.tsx"), "utf8");
   const desktop = readFileSync(path.resolve(process.cwd(), "components/desktop/DesktopCalendarPage.tsx"), "utf8");
 
   assert.match(monthly, /selectedVisibleForecastDay\.balance\.toFixed\(2\)/);
+  assert.match(monthly, /Projected close/);
   assert.doesNotMatch(monthly, /actual bank close|closing balance/i);
   assert.match(desktop, /money\(visibleSelectedDay\.balance\)/);
+  assert.match(desktop, /Projected close/);
   assert.match(desktop, /visibleBalance\?\.balanceSource === "projected"/);
   assert.doesNotMatch(desktop, /actual close|actual bank close|last verified bank balance/i);
+});
+
+test("Forecast surfaces explain carried reserves and reviewed income plans", () => {
+  const monthly = readFileSync(path.resolve(process.cwd(), "app/(tabs)/monthly.tsx"), "utf8");
+  const desktop = readFileSync(path.resolve(process.cwd(), "components/desktop/DesktopCalendarPage.tsx"), "utf8");
+
+  assert.match(monthly, /Carried forward \/ reserved/);
+  assert.match(monthly, /originally due/);
+  assert.match(monthly, /tx\.review_resolution === "income" \? "Planned" : "Amount"/);
+  assert.match(desktop, /Carried forward \/ reserved/);
+  assert.match(desktop, /deriveCarriedForwardReserves/);
 });
 
 test("Forecast day details use the canonical debt occurrence instead of the current recurring minimum", () => {
@@ -101,6 +114,49 @@ test("keeps bank synchronization out of calendar items without removing real act
   ]);
 
   assert.deepEqual(events.map(item => item.id), ["car-wash"]);
+});
+
+test("explains a partial bill remainder relocated to the bank anchor exactly once", () => {
+  const display = event({ id: "car-wash", sourceType: "bill", sourceId: "car-wash", kind: "bill", date: "2026-10-13", amount: -5.03, status: "planned", name: "Car Wash" });
+  const projection = { ...display, date: "2026-10-14" };
+  const summary = deriveCarriedForwardReserves([projection, projection], [display]);
+
+  assert.deepEqual(summary, {
+    items: [{ id: "car-wash", sourceId: "car-wash", sourceType: "bill", name: "Car Wash", originalDate: "2026-10-13", reservedDate: "2026-10-14", amount: 5.03 }],
+    total: 5.03,
+  });
+});
+
+test("carried reserves omit fully settled and bank adjustment rows", () => {
+  const settled = event({ id: "paid", sourceType: "bill", sourceId: "paid", kind: "bill", date: "2026-10-13", amount: -55, status: "finalized", name: "Paid bill" });
+  const adjustment = event({ id: "bank", sourceType: "reconciliation", sourceId: "2026-10-14", kind: "bank_adjustment", date: "2026-10-14", amount: -20, status: "actual" });
+  assert.deepEqual(deriveCarriedForwardReserves([{ ...settled, date: "2026-10-14" }, adjustment], [settled]), { items: [], total: 0 });
+});
+
+test("carried reserves retain multiple original dates across a month boundary", () => {
+  const phone = event({ id: "phone", sourceType: "bill", sourceId: "phone", kind: "bill", date: "2026-09-30", amount: -20, status: "scheduled", name: "Phone" });
+  const rent = event({ id: "rent", sourceType: "bill", sourceId: "rent", kind: "bill", date: "2026-10-01", amount: -900, status: "pending", name: "Rent" });
+  const summary = deriveCarriedForwardReserves([{ ...phone, date: "2026-10-02" }, { ...rent, date: "2026-10-02" }], [rent, phone]);
+  assert.deepEqual(summary.items.map(item => [item.id, item.originalDate, item.amount]), [["phone", "2026-09-30", 20], ["rent", "2026-10-01", 900]]);
+  assert.equal(summary.total, 920);
+});
+
+test("carried reserve lookup mirrors first-ID forecast semantics for duplicate display rows", () => {
+  const earlier = event({ id: "duplicate", sourceType: "bill", sourceId: "phone", kind: "bill", date: "2026-10-12", amount: -20, status: "planned", name: "Phone" });
+  const later = { ...earlier, date: "2026-10-13" };
+  const projection = { ...earlier, date: "2026-10-14" };
+
+  assert.equal(deriveCarriedForwardReserves([projection], [earlier, later]).items[0]?.originalDate, "2026-10-12");
+  assert.equal(deriveCarriedForwardReserves([projection], [later, earlier]).items[0]?.originalDate, "2026-10-13");
+});
+
+test("a later duplicate cannot invent or suppress a reserve chosen by first-ID semantics", () => {
+  const original = event({ id: "duplicate", sourceType: "bill", sourceId: "phone", kind: "bill", date: "2026-10-13", amount: -20, status: "planned", name: "Phone" });
+  const atAnchor = { ...original, date: "2026-10-14" };
+  const projection = { ...original, date: "2026-10-14" };
+
+  assert.equal(deriveCarriedForwardReserves([projection], [original, atAnchor]).items.length, 1);
+  assert.equal(deriveCarriedForwardReserves([projection], [atAnchor, original]).items.length, 0);
 });
 
 test("desktop Forecast and Flo consume only calendar-visible event sources", () => {
