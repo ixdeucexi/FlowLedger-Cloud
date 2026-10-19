@@ -137,7 +137,7 @@ function AuthObserver({
     switchHousehold,
   } = useBudget();
   const router = useRouter();
-  const segments = useSegments();
+  const segments: readonly string[] = useSegments();
   const pathname = usePathname();
   const searchParams =
     useGlobalSearchParams<Record<string, string | string[]>>();
@@ -389,7 +389,7 @@ function RootNavigator({
   const { ready: themeReady } = useThemeMode();
   const router = useRouter();
   const pathname = usePathname();
-  const rootSegments = useSegments();
+  const rootSegments: readonly string[] = useSegments();
   const isDesktop = useDesktopExperience();
   const [appReady, setAppReady] = useState(false);
   const [privacyShielded, setPrivacyShielded] = useState(
