@@ -1,4 +1,29 @@
 import type { FinancialEvent } from "./forecast";
+import { confirmedBillMatchId } from "./billMatching";
+import { transactionDisplayName, type ReviewTransactionLike } from "./reviewCenter";
+
+/** Presentation only: resolve against the current household's live rows, never forecast snapshots. */
+export function createCalendarEventLabelResolver(
+  transactions: readonly (ReviewTransactionLike & { match_reason?: string | null })[],
+  bills: readonly { id: string; name: string }[],
+): (event: FinancialEvent) => string {
+  const transactionsById = new Map(transactions.map(transaction => [transaction.id, transaction]));
+  const billsById = new Map(bills.map(bill => [bill.id, bill]));
+  return event => {
+    const transaction = event.sourceType === "transaction" ? transactionsById.get(event.sourceId) : undefined;
+    if (transaction) {
+      const matchedBillId = confirmedBillMatchId(transaction);
+      return transactionDisplayName(transaction, matchedBillId ? billsById.get(matchedBillId)?.name : undefined);
+    }
+    if (event.name?.trim()) return event.name.trim();
+    if (event.sourceType === "income") return "Income";
+    if (event.sourceType === "bill") return "Bill";
+    if (event.sourceType === "extra_payment") return "Debt payment";
+    if (event.sourceType === "reconciliation") return "Bank balance update";
+    return "Calendar item";
+  };
+}
+
 
 const EMPTY_CALENDAR_KEYS: ReadonlySet<string> = new Set();
 

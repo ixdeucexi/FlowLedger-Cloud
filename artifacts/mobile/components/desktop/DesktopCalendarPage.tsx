@@ -54,6 +54,7 @@ type DesktopCalendarPageProps = {
   projectedDailyBalances: DailyBalance[];
   transferTransactionIds: ReadonlySet<string>;
   overdueBillOccurrenceKeys: ReadonlySet<string>;
+  resolveEventLabel: (event: FinancialEvent) => string;
   safetyFloor: number;
   getCalendarDailyBalances: (month: number, year: number) => DailyBalance[];
   onToday: () => void;
@@ -106,15 +107,6 @@ function eventTone(kind: DesktopCalendarEventKind) {
     spending: { color: palette.purple, background: palette.purpleSoft },
     risk: { color: palette.red, background: palette.redSoft },
   }[kind];
-}
-
-function eventLabel(event: FinancialEvent) {
-  if (event.name?.trim()) return event.name.trim();
-  if (event.sourceType === "income") return "Income";
-  if (event.sourceType === "bill") return "Bill";
-  if (event.sourceType === "extra_payment") return "Debt payment";
-  if (event.sourceType === "reconciliation") return "Bank balance update";
-  return "Calendar item";
 }
 
 function IconButton({
@@ -221,8 +213,10 @@ function CalendarEventPill({
   event,
   transferTransactionIds,
   overdueBillOccurrenceKeys,
+  resolveEventLabel,
 }: {
   event: FinancialEvent;
+  resolveEventLabel: (event: FinancialEvent) => string;
   transferTransactionIds: ReadonlySet<string>;
   overdueBillOccurrenceKeys: ReadonlySet<string>;
 }) {
@@ -234,11 +228,11 @@ function CalendarEventPill({
   const tone = eventTone(kind);
   return (
     <View
-      accessibilityLabel={`${eventLabel(event)}, ${kind}, ${money(event.amount, true)}`}
+      accessibilityLabel={`${resolveEventLabel(event)}, ${kind}, ${money(event.amount, true)}`}
       style={[styles.eventPill, { backgroundColor: tone.background }]}
     >
       <View style={[styles.eventDot, { backgroundColor: tone.color }]} />
-      <Text numberOfLines={1} style={styles.eventName}>{eventLabel(event)}</Text>
+      <Text numberOfLines={1} style={styles.eventName}>{resolveEventLabel(event)}</Text>
       <Text style={[styles.eventAmount, { color: tone.color }]}>
         {money(event.amount, true)}
       </Text>
@@ -269,6 +263,7 @@ function DesktopMonthGrid({
   dailyBalances,
   transferTransactionIds,
   overdueBillOccurrenceKeys,
+  resolveEventLabel,
   safetyFloor,
   lowestBalanceDate,
   lowestBalance,
@@ -276,7 +271,7 @@ function DesktopMonthGrid({
   onSelectDate,
 }: Pick<
   DesktopCalendarPageProps,
-  "month" | "year" | "selectedDate" | "dailyBalances" | "transferTransactionIds" | "overdueBillOccurrenceKeys" | "safetyFloor" | "onSelectDate"
+  "month" | "year" | "selectedDate" | "dailyBalances" | "transferTransactionIds" | "overdueBillOccurrenceKeys" | "resolveEventLabel" | "safetyFloor" | "onSelectDate"
 > & {
   lowestBalanceDate: string;
   lowestBalance: number;
@@ -337,6 +332,7 @@ function DesktopMonthGrid({
                 <CalendarEventPill
                   key={event.id}
                   event={event}
+                  resolveEventLabel={resolveEventLabel}
                   transferTransactionIds={transferTransactionIds}
                   overdueBillOccurrenceKeys={overdueBillOccurrenceKeys}
                 />
@@ -405,6 +401,7 @@ function SelectedDayPanel({
   weekDays,
   transferTransactionIds,
   overdueBillOccurrenceKeys,
+  resolveEventLabel,
   safetyFloor,
   onClose,
   onAddTransaction,
@@ -417,6 +414,7 @@ function SelectedDayPanel({
   weekDays: DailyBalance[];
   transferTransactionIds: ReadonlySet<string>;
   overdueBillOccurrenceKeys: ReadonlySet<string>;
+  resolveEventLabel: (event: FinancialEvent) => string;
   safetyFloor: number;
   onClose: () => void;
   onAddTransaction: () => void;
@@ -460,13 +458,13 @@ function SelectedDayPanel({
               <Pressable
                 key={event.id}
                 accessibilityRole={canOpen ? "button" : undefined}
-                accessibilityLabel={`${canOpen ? "Open" : "View"} ${eventLabel(event)}`}
+                accessibilityLabel={`${canOpen ? "Open" : "View"} ${resolveEventLabel(event)}`}
                 disabled={!canOpen}
                 onPress={() => onOpenEvent(event)}
                 style={({ pressed }) => [styles.scheduledRow, pressed && styles.pressed]}
               >
                 <View style={[styles.scheduledIcon, { backgroundColor: tone.background }]}><View style={[styles.scheduledDot, { backgroundColor: tone.color }]} /></View>
-                <View style={styles.scheduledCopy}><Text numberOfLines={1} style={styles.scheduledName}>{eventLabel(event)}</Text><Text style={styles.scheduledCategory}>{event.status === "pending" ? formatEventStatus(event.status) : kind.charAt(0).toUpperCase() + kind.slice(1)}</Text></View>
+                <View style={styles.scheduledCopy}><Text numberOfLines={1} style={styles.scheduledName}>{resolveEventLabel(event)}</Text><Text style={styles.scheduledCategory}>{event.status === "pending" ? formatEventStatus(event.status) : kind.charAt(0).toUpperCase() + kind.slice(1)}</Text></View>
                 <Text style={[styles.scheduledAmount, { color: tone.color }]}>{money(event.amount, true)}</Text>
                 {canOpen ? <Feather name="chevron-right" size={16} color={palette.muted} /> : null}
               </Pressable>
@@ -603,6 +601,7 @@ export function DesktopCalendarPage(props: DesktopCalendarPageProps) {
                 dailyBalances={props.dailyBalances}
                 transferTransactionIds={props.transferTransactionIds}
                 overdueBillOccurrenceKeys={props.overdueBillOccurrenceKeys}
+                resolveEventLabel={props.resolveEventLabel}
                 safetyFloor={props.safetyFloor}
                 lowestBalanceDate={summary.lowestBalanceDate}
                 lowestBalance={summary.lowestBalance}
@@ -619,6 +618,7 @@ export function DesktopCalendarPage(props: DesktopCalendarPageProps) {
                 weekDays={weekDays}
                 transferTransactionIds={props.transferTransactionIds}
                 overdueBillOccurrenceKeys={props.overdueBillOccurrenceKeys}
+                resolveEventLabel={props.resolveEventLabel}
                 safetyFloor={props.safetyFloor}
                 onClose={props.onCloseSelectedDay}
                 onAddTransaction={() => props.onAddTransaction(props.selectedDate)}

@@ -34,6 +34,7 @@ import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { DESKTOP_MODAL_HANDLE, DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR, DESKTOP_MODAL_WIDE } from "@/lib/desktopModal";
 import { configuredDebtAmountForRemainingPayment, lenderMinimumRequiredAmount, parsePlannedDebtAmount } from "@/lib/debtPlanDomain";
 import { calendarBalanceIsVisible } from "@/lib/dailyCheckingClose";
+import { createCalendarEventLabelResolver } from "@/lib/desktopCalendar";
 import { confirmedBillMatchId, isConfirmedBillMatch } from "@/lib/billMatching";
 import { nextPlannedDebtPayment, snowballTargetDebtId } from "@/lib/billSurplusRouting";
 import { isBillVisibleForPlanningMonth } from "@/lib/billEligibility";
@@ -739,6 +740,10 @@ export default function MonthlyScreen() {
   const totalDue = billSummary.totalDue;
   const totalPaid = billSummary.totalPaid;
 
+  const resolveDesktopEventLabel = useMemo(
+    () => createCalendarEventLabelResolver(transactions, bills),
+    [transactions, bills],
+  );
   const txList = useMemo(() => getTransactionsForMonth(month, selectedYear), [getTransactionsForMonth, month, selectedYear]);
   const calendarTransactions = useMemo(() => txList.map(transaction => {
     const reviewedLabel = allocationLabel(transaction);
@@ -1782,6 +1787,7 @@ export default function MonthlyScreen() {
         <DesktopCalendarPage
           month={month}
           year={selectedYear}
+          resolveEventLabel={resolveDesktopEventLabel}
           selectedDate={selectedDate}
           dailyBalances={dailyBalances}
           projectedDailyBalances={projectedDailyBalances}
