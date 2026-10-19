@@ -10,6 +10,7 @@ import type { SafetyStopWarning } from "@/lib/safetyStop";
 interface Props {
   visible: boolean;
   warning: SafetyStopWarning | null;
+  manageBackHistory?: boolean;
   onKeepEditing: () => void;
   onScheduleAnyway?: () => void;
 }
@@ -25,9 +26,9 @@ function formatDate(value: string) {
   return new Date(year, month - 1, day).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-export function FloSafetyStopModal({ visible, warning, onKeepEditing, onScheduleAnyway }: Props) {
+export function FloSafetyStopModal({ visible, warning, onKeepEditing, onScheduleAnyway, manageBackHistory = true }: Props) {
   const c = useColors();
-  useBackDismiss(visible, onKeepEditing);
+  useBackDismiss(visible && manageBackHistory, onKeepEditing);
   if (!warning) return null;
   return (
     <Modal visible={visible} transparent animationType="fade" presentationStyle="overFullScreen" statusBarTranslucent onRequestClose={onKeepEditing}>

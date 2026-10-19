@@ -25,7 +25,7 @@ import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR } from "@/lib/desktopModal";
 import { localDateString } from "@/lib/dateLabels";
-import { buildSafetyStop, type SafetyStopWarning } from "@/lib/safetyStop";
+import { buildSafetyStopBaseline, buildSafetyStop, type SafetyStopWarning } from "@/lib/safetyStop";
 import type { ConfirmActionOptions } from "@/lib/confirmAction";
 import { transactionDebtId } from "@/lib/transactionDebt";
 
@@ -107,23 +107,6 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
     }
   }, [editTx, visible, defaultDate, accounts, transferMate, editDebtId, initialValues?.amount, initialValues?.category, initialValues?.note, initialValues?.date, initialValues?.account_id, creationContext]);
 
-  const buildForecastBaseline = (startDate: string) => {
-    const [startYear, startMonth] = startDate.split("-").map(Number);
-    if (!startYear || !startMonth) return [];
-    const monthsToCheck = Math.max(1, settings.forecast_horizon_months || 6);
-    const output: { date: string; balance: number }[] = [];
-    for (let index = 0; index < monthsToCheck; index += 1) {
-      const target = new Date(startYear, startMonth - 1 + index, 1);
-      const month = target.getMonth();
-      const year = target.getFullYear();
-      getDailyBalances(month, year).forEach(day => {
-        const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(day.day).padStart(2, "0")}`;
-        if (key >= startDate) output.push({ date: key, balance: day.balance });
-      });
-    }
-    return output.sort((left, right) => left.date.localeCompare(right.date));
-  };
-
   const previewSafetyStop = (tx: Omit<Transaction, "id"> | Transaction) => {
     const expenseAmount = tx.amount < 0 ? Math.abs(tx.amount) : 0;
     const existingExpense = editTx?.amount && editTx.amount < 0 ? Math.abs(editTx.amount) : 0;
@@ -132,7 +115,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
     const linkedDebtName = tx.linked_bill_id ? bills.find(bill => bill.id === tx.linked_bill_id)?.name : undefined;
     const itemName = tx.note?.trim() || linkedDebtName || tx.category || "this scheduled item";
     return buildSafetyStop({
-      baseline: buildForecastBaseline(tx.date),
+      baseline: buildSafetyStopBaseline(tx.date, settings.forecast_horizon_months, getDailyBalances),
       safetyFloor: settings.safety_floor,
       scenario: {
         type: tx.linked_bill_id ? "extra_debt_payment" : "one_time_purchase",

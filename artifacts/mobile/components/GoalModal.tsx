@@ -1,16 +1,17 @@
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Alert, KeyboardAvoidingView, Modal, Platform,
   Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from "react-native";
 
 import colors from "@/constants/colors";
-import { BucketAffordabilityModal } from "@/components/BucketAffordabilityModal";
+import { FloSafetyStopModal } from "@/components/FloSafetyStopModal";
+import { buildBucketSafetyStop, type SafetyStopWarning } from "@/lib/safetyStop";
 import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
 import { DatePickerField } from "@/components/DatePickerField";
-import { useBudget, type Goal, type GoalAffordability } from "@/context/BudgetContext";
+import { useBudget, type Goal } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
@@ -48,8 +49,7 @@ export function GoalModal({
 }: Props) {
   const c = useColors();
   const isDesktop = useDesktopExperience();
-  const { checkGoalAffordability, settings } = useBudget();
-  useBackDismiss(visible, onClose);
+  const { getDailyBalances, settings } = useBudget();
 
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
@@ -58,18 +58,28 @@ export function GoalModal({
   const [targetDate, setTargetDate] = useState(""); // YYYY-MM-DD
   const [saving, setSaving] = useState(false);
   const [confirmation, setConfirmation] = useState<ConfirmActionOptions | null>(null);
-  const [bucketCheck, setBucketCheck] = useState<{
-    name: string;
-    amount: number;
-    targetDate: string;
-    result: GoalAffordability;
-  } | null>(null);
+  const savingRef = useRef(false);
+  const [pendingGoal, setPendingGoal] = useState<Omit<Goal, "id" | "created_at"> | null>(null);
+  const [safetyStop, setSafetyStop] = useState<SafetyStopWarning | null>(null);
+  const keepEditing = () => {
+    if (savingRef.current) return;
+    setPendingGoal(null);
+    setSafetyStop(null);
+  };
+  const requestClose = () => {
+    if (savingRef.current) return;
+    if (safetyStop) keepEditing();
+    else onClose();
+  };
+  useBackDismiss(visible, requestClose, true, Boolean(safetyStop));
 
   const today = new Date();
   const todayYMD = dateToYMD(today);
 
   useEffect(() => {
     setConfirmation(null);
+    setPendingGoal(null);
+    setSafetyStop(null);
     if (editGoal) {
       setName(editGoal.name);
       setTarget(editGoal.target_amount.toString());
@@ -87,10 +97,27 @@ export function GoalModal({
     }
   }, [editGoal, initialMode, initialName, initialTargetAmount, initialTargetDate, lockedMode, visible]);
 
+  const saveGoal = async (payload: Omit<Goal, "id" | "created_at"> | Goal) => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      await onSave(payload);
+      setPendingGoal(null);
+      setSafetyStop(null);
+      onClose();
+    } catch (error) {
+      Alert.alert("Couldn’t save", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
+
   const handleSave = async () => {
-    if (saving) return;
+    if (savingRef.current || pendingGoal) return;
     const t = parseFloat(target);
-    if (!name.trim() || isNaN(t) || t <= 0 || !targetDate) return;
+    if (!name.trim() || !Number.isFinite(t) || t <= 0 || !targetDate) return;
     if (minimumTargetAmount !== undefined && t + 0.005 < minimumTargetAmount) {
       Alert.alert(
         "Bucket amount is too small",
@@ -110,36 +137,19 @@ export function GoalModal({
       closed_at: goalMode === "budget" ? editGoal?.closed_at : undefined,
       closed_by: goalMode === "budget" ? editGoal?.closed_by : undefined,
     };
-    const targetParts = targetDate.split("-").map(Number);
-    const affordability = !skipAffordabilityCheck && !editGoal && goalMode === "budget" && targetParts.length === 3
-      ? checkGoalAffordability(
-          {
-            ...data,
-            id: "bucket-affordability-preview",
-            created_at: new Date().toISOString(),
-          },
-          targetParts[1] - 1,
-          targetParts[0],
-        )
-      : null;
-    setSaving(true);
-    try {
-      if (editGoal) await onSave({ ...data, id: editGoal.id, created_at: editGoal.created_at });
-      else await onSave(data);
-      onClose();
-      if (affordability) {
-        setTimeout(() => setBucketCheck({
-          name: data.name,
-          amount: data.target_amount,
-          targetDate: data.target_date,
-          result: affordability,
-        }), 360);
+    if (!skipAffordabilityCheck && !editGoal && goalMode === "budget") {
+      const warning = buildBucketSafetyStop({
+        name: data.name, amount: data.target_amount, targetDate: data.target_date,
+        safetyFloor: settings.safety_floor, horizonMonths: settings.forecast_horizon_months,
+        getDailyBalances,
+      });
+      if (warning) {
+        setPendingGoal(data);
+        setSafetyStop(warning);
+        return;
       }
-    } catch (error) {
-      Alert.alert("Couldn’t save", error instanceof Error ? error.message : "Please try again.");
-    } finally {
-      setSaving(false);
     }
+    await saveGoal(editGoal ? { ...data, id: editGoal.id, created_at: editGoal.created_at } : data);
   };
 
   const handleDelete = () => {
@@ -162,9 +172,6 @@ export function GoalModal({
   const input = [styles.input, { backgroundColor: c.muted, color: c.foreground }];
   const lbl   = [styles.label, { color: c.mutedForeground }];
   const itemLabel = goalMode === "budget" ? "Bucket" : "Goal";
-  const requestClose = () => {
-    if (!saving) onClose();
-  };
 
   return (
     <>
@@ -300,14 +307,12 @@ export function GoalModal({
       </KeyboardAvoidingView>
       <ConfirmActionOverlay request={confirmation} onClose={() => setConfirmation(null)} />
       </Modal>
-      <BucketAffordabilityModal
-        visible={Boolean(bucketCheck)}
-        bucketName={bucketCheck?.name ?? ""}
-        amount={bucketCheck?.amount ?? 0}
-        targetDate={bucketCheck?.targetDate ?? ""}
-        safetyFloor={settings.safety_floor}
-        result={bucketCheck?.result ?? null}
-        onClose={() => setBucketCheck(null)}
+      <FloSafetyStopModal
+        visible={visible && Boolean(safetyStop)}
+        warning={safetyStop}
+        manageBackHistory={false}
+        onKeepEditing={keepEditing}
+        onScheduleAnyway={pendingGoal ? () => { void saveGoal(pendingGoal); } : undefined}
       />
     </>
   );

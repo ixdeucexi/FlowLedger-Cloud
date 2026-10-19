@@ -11,6 +11,7 @@
     "outDir": ".test-dist"
   },
   "include": [
+    "lib/safetyStop.test.ts",
     "lib/updateCenter.test.ts",
     "lib/financialProjection.test.ts",
     "lib/forecastBillNotifications.test.ts",
