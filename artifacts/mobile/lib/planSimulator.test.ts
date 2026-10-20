@@ -500,3 +500,32 @@ test("Plan Simulator is a direct Pro route launched only from mobile and desktop
   assert.match(desktopForecast, /Plan Simulator/);
   assert.match(rootLayout, /name="plan-simulator"/);
 });
+
+import { transpileModule, ModuleKind } from "typescript";
+test("payoff composer requires the explicitly chosen eligible debt and never substitutes another", () => {
+  const source = readFileSync("app/plan-simulator.tsx", "utf8");
+  const selection = source.slice(source.indexOf("  const selectedTarget ="), source.indexOf("  const add ="));
+  const js = transpileModule(selection, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
+  const selected = (targetId: string, debtChoices: { id: string }[]) => new Function("needsDebt", "debtChoices", "targetId", "targetChoices", `${js}; return selectedTarget;`)(true, debtChoices, targetId, []);
+  assert.equal(selected("second", [{ id: "first" }, { id: "second" }]), "second");
+  assert.equal(selected("removed", [{ id: "first" }]), "");
+  assert.equal(selected("", [{ id: "first" }]), "");
+  assert.equal(selected("second", []), "");
+  assert.match(source, /if \(needsDebt && !selectedTarget\) \{ setError\("Choose an eligible debt/);
+});
+
+test("visible wrapping payoff buttons stage selection only, preserve dates, and keep other target pickers", () => {
+  const source = readFileSync("app/plan-simulator.tsx", "utf8");
+  const start = source.indexOf("<FieldLabel>Choose a debt to pay off</FieldLabel>");
+  const end = source.indexOf("{targetChoices.length ?", start);
+  const buttons = source.slice(start, end);
+  assert.match(buttons, /const selected = needsDebt && selectedTarget === debt.id/);
+  assert.match(buttons, /setType\("debt_payoff"\); setTargetId\(debt.id\); setError\(""\)/);
+  assert.doesNotMatch(buttons, /setDate|onAdd|savePlan|persist/);
+  assert.match(buttons, /accessibilityRole="radio"/);
+  assert.match(buttons, /aria-checked=\{selected\} accessibilityState=\{\{ checked: selected \}\}/);
+  assert.match(buttons, /No eligible open debts/);
+  assert.match(source, /debtChoices: \{ flexDirection: "row", flexWrap: "wrap"/);
+  assert.match(source, /const targetChoices = needsIncome \? incomeChoices : needsBill \? billChoices : \[\]/);
+  assert.match(source, /debt.balance > 0.005 && \(!debt.endDate \|\| debt.endDate.slice\(0, 10\) >= startDate\)/);
+});
