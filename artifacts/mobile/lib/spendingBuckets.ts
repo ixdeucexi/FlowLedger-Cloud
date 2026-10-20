@@ -122,3 +122,16 @@ export function validateCreateSpendingBucketMatch(
     settlement: Math.abs(targetAmount - transactionAmount) < 0.005 ? "exact" : "partial",
   };
 }
+
+/** A navigation request can open choices only for a live bucket in this exact loaded scope. */
+export function requestedBucketCloseGoal<T extends SpendingBucketCandidate & { id: string }>(input: {
+  bucketId?: string;
+  requestedScope?: string;
+  currentScope: string;
+  ready: boolean;
+  canEdit: boolean;
+  goals: readonly T[];
+}): T | null {
+  if (!input.ready || !input.canEdit || !input.bucketId || input.requestedScope !== input.currentScope) return null;
+  return input.goals.find(goal => goal.id === input.bucketId && goal.goal_type === "planned_expense" && !goal.closed_at && !goal.archived_at) ?? null;
+}

@@ -132,7 +132,7 @@ test("bucket warning lifecycle retains draft, resets on reopen, and owns one nes
   assert.match(source, /if \(safetyStop\) keepEditing\(\)/);
   assert.match(source, /useBackDismiss\(visible, requestClose, true, Boolean\(safetyStop\)\)/);
   assert.match(source, /manageBackHistory=\{false\}/);
-  assert.match(source, /useEffect\(\(\) => \{\s*setConfirmation\(null\);\s*setPendingGoal\(null\);\s*setSafetyStop\(null\);/);
+  assert.match(source, /useEffect\(\(\) => \{\s*closeNavigationRef.current = false;\s*setConfirmation\(null\);\s*setPendingGoal\(null\);\s*setSafetyStop\(null\);/);
   assert.match(source, /!skipAffordabilityCheck && !editGoal && goalMode === "budget"/);
   assert.doesNotMatch(source, /setTimeout|BucketAffordabilityModal/);
 });

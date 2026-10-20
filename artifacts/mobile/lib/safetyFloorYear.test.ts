@@ -69,3 +69,12 @@ test("annual UI is scoped, lazy, readiness gated and opens existing calendar det
   assert.match(desktop, /onPress=\{onOpenSafetyFloorDays\}/);
   assert.match(modal, /useBackDismiss\(true, onClose\)/);
 });
+
+test("yearly view lists all flagged dates chronologically with Date and Balance only", () => {
+  const modal = readFileSync("components/SafetyFloorYearModal.tsx", "utf8");
+  assert.match(modal, /months.flatMap\(month => month.days\)/);
+  assert.match(modal, />Date<\/Text>/);
+  assert.match(modal, />Balance<\/Text>/);
+  assert.match(modal, /days.map\(day =>/);
+  assert.doesNotMatch(modal, /expandedMonth|day.shortfall|day.source|totals.recorded|month.lowestBalance/);
+});

@@ -1,3 +1,4 @@
+import { useAuth } from "@/context/AuthContext";
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -22,7 +23,7 @@ import { subscriptionLinkKeys } from "@/lib/competitiveGrowth";
 import { createForgottenBillAndReconcile } from "@/lib/atomicFinancialMutations";
 import { assertFinancialMutationOnline } from "@/lib/networkStatus";
 import { prioritizePendingPlanTarget } from "@/lib/pendingPlanMatches";
-import { bucketEffectiveRouteDate, isEligibleSpendingBucketMatch, spendingBucketSummary } from "@/lib/spendingBuckets";
+import { bucketEffectiveRouteDate, isEligibleSpendingBucketMatch, requestedBucketCloseGoal, spendingBucketSummary } from "@/lib/spendingBuckets";
 import { removeBucketRemainderFundingSource, replaceBucketRemainderFundingSource } from "@/lib/snowballFunding";
 import { formatForecastDateLabel, lowestForecastDate } from "@/lib/forecastDisplay";
 
@@ -85,6 +86,10 @@ function dateOnlyDistanceDays(left: string, right: string) {
 
 type ReviewCenterProps = {
   focusTransactionId?: string;
+  closeBucketId?: string;
+  closeBucketScope?: string;
+  closeBucketRequest?: string;
+  onCloseBucketRequestHandled?: (bucketId: string, scope: string, request: string) => void;
   initialFilter?: "all" | "expense" | "income";
   onManageBuckets?: () => void;
   subscriptionBillLinks?: Record<string, string>;
@@ -97,16 +102,24 @@ type BucketClosePrompt = {
   fromReview?: boolean;
 };
 
-export function ReviewCenter({ focusTransactionId, initialFilter = "all", onManageBuckets, subscriptionBillLinks = EMPTY_SUBSCRIPTION_BILL_LINKS }: ReviewCenterProps = {}) {
+export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketRequest, onCloseBucketRequestHandled, focusTransactionId, initialFilter = "all", onManageBuckets, subscriptionBillLinks = EMPTY_SUBSCRIPTION_BILL_LINKS }: ReviewCenterProps = {}) {
   const c = useColors();
+  const { user } = useAuth();
+  const handledCloseRequestRef = useRef<string | null>(null);
   const {
-    transactions, incomes, goals, decisions, extraPayments, categories, canEditHousehold, settings, pendingPlanMatches,
+    activeHousehold, startupCoreReady, transactions, incomes, goals, decisions, extraPayments, categories, canEditHousehold, settings, pendingPlanMatches,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getDailyBalances,
     createSpendingBucketForTransaction, updateGoal, deleteGoal, closeSpendingBucket, closeSpendingBucketAndRouteRemainder, reopenSpendingBucket,
     archiveSpendingBucket, restoreArchivedSpendingBucket,
     reconcileTransaction, undoTransactionReconciliation, refreshBankData, retryBudgetLoad,
     getExtraPayment, getRemainingDebtPlanForMonth, previewDebtSnowball, applyDebtSnowballPayment, removeReviewSurplusFunding,
   } = useBudget();
+  const bucketScope = `${user?.id ?? "demo"}:${activeHousehold?.householdId ?? "personal"}`;
+  const mountedBucketScopeRef = useRef<string | null>(bucketScope);
+  useEffect(() => {
+    mountedBucketScopeRef.current = bucketScope;
+    return () => { mountedBucketScopeRef.current = null; };
+  }, [bucketScope]);
   useEffect(() => {
     void refreshBankData();
   }, [refreshBankData]);
@@ -377,7 +390,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all", onMana
   }, [bucketClosePrompt, bucketPaymentDate, bucketRouteMode, getDailyBalances, getExtraPayment, getRemainingDebtPlanForMonth, previewDebtSnowball, settings.debtPayoffEnabled, settings.forecast_horizon_months, settings.safety_floor, localDay]);
 
   const closeBucketKeepAvailable = async (prompt: BucketClosePrompt) => {
-    if (saving || bucketCloseInFlightRef.current) return;
+    if (saving || bucketCloseInFlightRef.current || !canEditHousehold || mountedBucketScopeRef.current !== bucketScope) return;
     bucketCloseInFlightRef.current = true;
     setSaving(true);
     setBucketMessage(null);
@@ -399,7 +412,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all", onMana
   };
 
   const openBucketCloseChoices = (goal: Goal, fromReview = false) => {
-    if (saving) return;
+    if (saving || bucketCloseInFlightRef.current || !canEditHousehold || goal.closed_at || goal.archived_at) return;
     const { spent } = spendingBucketSummary(goal);
     const released = Math.max(0, Number(goal.target_amount) - spent);
     if (released > 0.005) {
@@ -426,8 +439,21 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all", onMana
     });
   };
 
+  const openBucketCloseChoicesRef = useRef(openBucketCloseChoices);
+  openBucketCloseChoicesRef.current = openBucketCloseChoices;
+  useEffect(() => {
+    const scope = `${user?.id ?? "demo"}:${activeHousehold?.householdId ?? "personal"}`;
+    const request = `${scope}:${closeBucketId}:${closeBucketRequest}`;
+    if (saving || bucketCloseInFlightRef.current || !closeBucketRequest || handledCloseRequestRef.current === request) return;
+    const goal = requestedBucketCloseGoal({ bucketId: closeBucketId, requestedScope: closeBucketScope, currentScope: scope, ready: startupCoreReady, canEdit: canEditHousehold, goals });
+    if (!goal) return;
+    handledCloseRequestRef.current = request;
+    openBucketCloseChoicesRef.current(goal);
+    onCloseBucketRequestHandled?.(goal.id, scope, closeBucketRequest);
+  }, [activeHousehold?.householdId, canEditHousehold, closeBucketId, closeBucketRequest, closeBucketScope, goals, onCloseBucketRequestHandled, saving, startupCoreReady, user?.id]);
+
   const routeBucketRemainderToPayoff = async () => {
-    if (!bucketClosePrompt || !bucketSnowballOffer?.safe || !bucketSnowballOffer.preview.allocations.length || saving || bucketCloseInFlightRef.current) return;
+    if (!canEditHousehold || mountedBucketScopeRef.current !== bucketScope || !bucketClosePrompt || !bucketSnowballOffer?.safe || !bucketSnowballOffer.preview.allocations.length || saving || bucketCloseInFlightRef.current) return;
     bucketCloseInFlightRef.current = true;
     setSaving(true);
     setBucketMessage(null);

@@ -1,3 +1,5 @@
+import { useRouter } from "expo-router";
+import { useAuth } from "@/context/AuthContext";
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
 import React, { useEffect, useRef, useState } from "react";
@@ -49,7 +51,22 @@ export function GoalModal({
 }: Props) {
   const c = useColors();
   const isDesktop = useDesktopExperience();
-  const { getDailyBalances, settings } = useBudget();
+  const { getDailyBalances, settings, goals, canEditHousehold, activeHousehold } = useBudget();
+  const router = useRouter();
+  const { user } = useAuth();
+  const closeNavigationRef = useRef(false);
+  const currentBucket = editGoal ? goals.find(goal => goal.id === editGoal.id && goal.goal_type === "planned_expense") : undefined;
+  const canCloseBucket = canEditHousehold && currentBucket && !currentBucket.closed_at && !currentBucket.archived_at;
+  const openCloseBucket = () => {
+    if (!canCloseBucket || savingRef.current || closeNavigationRef.current) return;
+    closeNavigationRef.current = true;
+    onClose();
+    router.push({ pathname: "/(tabs)/more", params: {
+      section: "review", closeBucketId: currentBucket.id,
+      closeBucketScope: `${user?.id ?? "demo"}:${activeHousehold?.householdId ?? "personal"}`,
+      closeBucketAt: String(Date.now()),
+    } });
+  };
 
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
@@ -77,6 +94,7 @@ export function GoalModal({
   const todayYMD = dateToYMD(today);
 
   useEffect(() => {
+    closeNavigationRef.current = false;
     setConfirmation(null);
     setPendingGoal(null);
     setSafetyStop(null);
@@ -292,6 +310,14 @@ export function GoalModal({
                 {saving ? "Saving…" : saveLabel ?? `${editGoal ? "Update" : "Create"} ${itemLabel}`}
               </Text>
             </Pressable>
+
+            {canCloseBucket ? <>
+              <Pressable accessibilityRole="button" accessibilityLabel={`Close ${currentBucket.name} bucket`} disabled={saving} onPress={openCloseBucket} style={[styles.deleteBtn, { borderColor: c.primary, opacity: saving ? 0.5 : 1 }]}>
+                <Feather name="check-circle" size={16} color={c.primary} />
+                <Text style={[styles.deleteBtnText, { color: c.primary }]}>Close bucket</Text>
+              </Pressable>
+              <Text style={[styles.modeHint, { color: c.mutedForeground }]}>Review the saved bucket and choose what happens to any money left. Posted spending stays in your history.</Text>
+            </> : null}
 
             {editGoal && onDelete && (
               <Pressable

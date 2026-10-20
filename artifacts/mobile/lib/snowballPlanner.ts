@@ -170,3 +170,17 @@ export function snowballPlanHistoryStatus(
   if (fallbackDate > today) return "Scheduled";
   return plan.sources?.some(source => source.pendingBalanceApply) ? "Awaiting match" : "Applied";
 }
+
+/** Move the draft one calendar month without rolling a late-month day forward. */
+export function adjacentPlannerMonthDate(date: string, direction: -1 | 1, minimum: string, maximum: string): string | null {
+  if (minimum > maximum) return null;
+  const [year, monthNumber, day] = date.split("-").map(Number);
+  const target = new Date(year, monthNumber - 1 + direction, 1, 12);
+  const prefix = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}`;
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0, 12).getDate();
+  const first = `${prefix}-01`;
+  const last = `${prefix}-${lastDay}`;
+  if (last < minimum || first > maximum) return null;
+  const candidate = `${prefix}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
+  return candidate < minimum ? minimum : candidate > maximum ? maximum : candidate;
+}

@@ -265,3 +265,29 @@ test("the extra payment editor keeps only a compact payoff date below its fields
   assert.doesNotMatch(source, />Safe extra plan</);
   assert.doesNotMatch(source, />Total debt planned</);
 });
+
+import { adjacentPlannerMonthDate } from "./snowballPlanner";
+
+test("planner month arrows clamp month ends and leap days without rolling forward", () => {
+  assert.equal(adjacentPlannerMonthDate("2028-01-31", 1, "2027-01-01", "2029-12-31"), "2028-02-29");
+  assert.equal(adjacentPlannerMonthDate("2027-03-31", -1, "2027-01-01", "2029-12-31"), "2027-02-28");
+  assert.equal(adjacentPlannerMonthDate("2028-12-15", 1, "2028-01-01", "2029-12-31"), "2029-01-15");
+});
+
+test("planner navigation respects funding minimum and forecast horizon, preserving historical draft", () => {
+  assert.equal(adjacentPlannerMonthDate("2028-02-05", -1, "2028-01-20", "2028-06-30"), "2028-01-20");
+  assert.equal(adjacentPlannerMonthDate("2028-02-28", 1, "2028-01-20", "2028-03-12"), "2028-03-12");
+  assert.equal(adjacentPlannerMonthDate("2028-01-25", -1, "2028-01-20", "2028-06-30"), null);
+  assert.equal(adjacentPlannerMonthDate("2028-06-15", 1, "2028-01-20", "2028-06-30"), null);
+  assert.equal(adjacentPlannerMonthDate("2027-12-20", -1, "2028-01-20", "2028-06-30"), null);
+});
+
+test("planner arrows change only the draft date and disable unavailable adjacent months", () => {
+  const source = readFileSync("app/snowball-plan.tsx", "utf8");
+  assert.match(source, /accessibilityLabel="Previous planner month"/);
+  assert.match(source, /accessibilityLabel="Next planner month"/);
+  assert.match(source, /disabled=\{!previousMonthDate \|\| saving\}/);
+  assert.match(source, /onPress=\{\(\) => previousMonthDate && setPaymentDate\(previousMonthDate\)\}/);
+  assert.match(source, /onPress=\{\(\) => nextMonthDate && setPaymentDate\(nextMonthDate\)\}/);
+  assert.equal(adjacentPlannerMonthDate("2028-01-20", 1, "2028-02-20", "2028-02-10"), null);
+});

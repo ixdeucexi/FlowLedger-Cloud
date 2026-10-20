@@ -1,3 +1,4 @@
+import { adjacentPlannerMonthDate } from "@/lib/snowballPlanner";
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -153,6 +154,9 @@ function SnowballPlanScreen() {
   const bucketAvailableDate = latestBucketRemainderAvailableDate(existingPayment?.sources);
   const bucketFundingSource = existingPayment?.sources?.find(source => source.type === "bucket_remainder");
   const paymentDateMinimum = bucketAvailableDate && bucketAvailableDate > today ? bucketAvailableDate : today;
+  const paymentDateMaximum = maximumPlanDate(today, settings.forecast_horizon_months);
+  const previousMonthDate = adjacentPlannerMonthDate(paymentDate, -1, paymentDateMinimum, paymentDateMaximum);
+  const nextMonthDate = adjacentPlannerMonthDate(paymentDate, 1, paymentDateMinimum, paymentDateMaximum);
   const destinationConflict = Boolean(
     editingPayment
     && targetMonthPayment
@@ -580,8 +584,10 @@ function SnowballPlanScreen() {
                     <Text style={[styles.cardLabel, { color: c.mutedForeground }]}>ESTIMATED ROOM FOR EXTRA</Text>
                     <Text style={[styles.safeAmount, { color: c.success }]}>{money(safeMaximum)}</Text>
                   </View>
-                  <View style={[styles.monthBadge, { backgroundColor: c.primary + "18" }]}>
-                    <Text style={[styles.monthBadgeText, { color: c.primary }]}>{monthLabel}</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Previous planner month" accessibilityState={{ disabled: !previousMonthDate || saving }} disabled={!previousMonthDate || saving} onPress={() => previousMonthDate && setPaymentDate(previousMonthDate)} style={{ padding: 10, opacity: previousMonthDate && !saving ? 1 : 0.35 }}><Feather name="chevron-left" size={20} color={c.primary} /></Pressable>
+                    <View style={[styles.monthBadge, { backgroundColor: c.primary + "18" }]}><Text style={[styles.monthBadgeText, { color: c.primary }]}>{monthLabel}</Text></View>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Next planner month" accessibilityState={{ disabled: !nextMonthDate || saving }} disabled={!nextMonthDate || saving} onPress={() => nextMonthDate && setPaymentDate(nextMonthDate)} style={{ padding: 10, opacity: nextMonthDate && !saving ? 1 : 0.35 }}><Feather name="chevron-right" size={20} color={c.primary} /></Pressable>
                   </View>
                 </View>
 
@@ -620,7 +626,7 @@ function SnowballPlanScreen() {
                   value={paymentDate}
                   onChange={setPaymentDate}
                   minDate={paymentDateMinimum}
-                  maxDate={maximumPlanDate(today, settings.forecast_horizon_months)}
+                  maxDate={paymentDateMaximum}
                 />
                 {bucketAvailableDate ? <Text style={[styles.error, { color: c.warning }]}>Includes {bucketFundingSource?.bucketName ?? "spending bucket"} money available {readableDate(bucketAvailableDate)}. Reopen the bucket before removing this source.</Text> : null}
 
@@ -808,7 +814,7 @@ const styles = StyleSheet.create({
   timelineEmpty: { borderRadius: 14, padding: 14, marginTop: 14 },
   plannerCard: { borderWidth: 1, borderRadius: 23, padding: 17 },
   shieldIcon: { width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center" },
-  safeMaximum: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, borderWidth: 1, borderRadius: 16, padding: 13, marginTop: 16 },
+  safeMaximum: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, borderWidth: 1, borderRadius: 16, padding: 13, marginTop: 16 },
   cardLabel: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.8 },
   safeAmount: { fontSize: 26, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
   monthBadge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },

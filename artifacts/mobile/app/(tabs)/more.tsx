@@ -389,6 +389,9 @@ export default function MoreScreen({
     add?: string;
     reviewFilter?: string;
     reviewTransactionId?: string;
+    closeBucketId?: string;
+    closeBucketScope?: string;
+    closeBucketAt?: string;
   }>();
   const { themeMode, setThemeMode } = useThemeMode();
   const {
@@ -492,6 +495,18 @@ export default function MoreScreen({
   const settingsRequestKey = JSON.stringify([user?.id, activeHousehold?.householdId, requestedSection]);
   const settingsRequestKeyRef = useRef(settingsRequestKey);
   settingsRequestKeyRef.current = settingsRequestKey;
+  const bucketCloseNavigationRef = useRef<{ bucketId?: string; scope?: string; request?: string } | null>(null);
+  bucketCloseNavigationRef.current = {
+    bucketId: Array.isArray(routeParams.closeBucketId) ? routeParams.closeBucketId[0] : routeParams.closeBucketId,
+    scope: Array.isArray(routeParams.closeBucketScope) ? routeParams.closeBucketScope[0] : routeParams.closeBucketScope,
+    request: Array.isArray(routeParams.closeBucketAt) ? routeParams.closeBucketAt[0] : routeParams.closeBucketAt,
+  };
+  const consumeBucketCloseRequest = useCallback((bucketId: string, scope: string, request: string) => {
+    const pending = bucketCloseNavigationRef.current;
+    if (!pending || pending.bucketId !== bucketId || pending.scope !== scope || pending.request !== request) return;
+    bucketCloseNavigationRef.current = null;
+    router.setParams({ closeBucketId: undefined, closeBucketScope: undefined, closeBucketAt: undefined });
+  }, [router]);
   const requestedReviewTransactionId = Array.isArray(
     routeParams.reviewTransactionId,
   )
@@ -3973,6 +3988,10 @@ export default function MoreScreen({
             <PlanFeatureGate feature="transaction_matching" compact>
               <ReviewCenter
                 key={`${activeHousehold?.householdId ?? activeHousehold?.budgetId ?? "personal"}:${requestedReviewFilter}:${requestedReviewTransactionId ?? "queue"}`}
+                onCloseBucketRequestHandled={consumeBucketCloseRequest}
+                closeBucketId={Array.isArray(routeParams.closeBucketId) ? routeParams.closeBucketId[0] : routeParams.closeBucketId}
+                closeBucketScope={Array.isArray(routeParams.closeBucketScope) ? routeParams.closeBucketScope[0] : routeParams.closeBucketScope}
+                closeBucketRequest={Array.isArray(routeParams.closeBucketAt) ? routeParams.closeBucketAt[0] : routeParams.closeBucketAt}
                 focusTransactionId={requestedReviewTransactionId}
                 initialFilter={requestedReviewFilter}
                 onManageBuckets={scrollToBucketManager}

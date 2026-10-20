@@ -449,3 +449,91 @@ test("context fallbacks honor server ids for recovered bucket creation and concu
   );
   assert.match(contextSource, /paymentId: serverPaymentId/);
 });
+
+import { requestedBucketCloseGoal } from "./spendingBuckets";
+test("close bucket navigation resolves only a current editable loaded open bucket", () => {
+  const goal = { id: "trip", goal_type: "planned_expense" as const, target_amount: 500, current_amount: 125 };
+  const input = { bucketId: "trip", requestedScope: "owner:home", currentScope: "owner:home", ready: true, canEdit: true, goals: [goal] };
+  assert.equal(requestedBucketCloseGoal(input), goal);
+  assert.equal(requestedBucketCloseGoal({ ...input, ready: false }), null);
+  assert.equal(requestedBucketCloseGoal({ ...input, canEdit: false }), null);
+  assert.equal(requestedBucketCloseGoal({ ...input, currentScope: "owner:other" }), null);
+  assert.equal(requestedBucketCloseGoal({ ...input, goals: [] }), null);
+  assert.equal(requestedBucketCloseGoal({ ...input, goals: [{ ...goal, closed_at: "2028-01-01" }] }), null);
+  assert.equal(requestedBucketCloseGoal({ ...input, goals: [{ ...goal, archived_at: "2028-01-01" }] }), null);
+  assert.equal(requestedBucketCloseGoal({ ...input, goals: [{ ...goal, goal_type: "savings" as const }] }), null);
+});
+
+import { transpileModule, ModuleKind } from "typescript";
+test("editor Close bucket navigates once to reviewed choices without saving a financial change", () => {
+  const source = readFileSync("components/GoalModal.tsx", "utf8");
+  const body = source.slice(source.indexOf("  const openCloseBucket ="), source.indexOf("  const [name,"));
+  const routes: any[] = [];
+  let closed = 0;
+  const bindings = {
+    canCloseBucket: true, savingRef: { current: false }, closeNavigationRef: { current: false },
+    currentBucket: { id: "trip" }, user: { id: "owner" }, activeHousehold: { householdId: "home" },
+    onClose: () => { closed++; }, router: { push: (route: unknown) => routes.push(route) },
+  };
+  const js = transpileModule(body, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
+  const open = new Function(...Object.keys(bindings), `${js}; return openCloseBucket;`)(...Object.values(bindings));
+  open(); open();
+  assert.equal(closed, 1); assert.equal(routes.length, 1);
+  assert.equal(routes[0].params.closeBucketId, "trip");
+  assert.equal(routes[0].params.closeBucketScope, "owner:home");
+  assert.equal(routes[0].params.section, "review");
+  assert.doesNotMatch(body, /updateGoal|onSave|closeSpendingBucket/);
+});
+
+test("close deep link reuses explicit keep/Snowball coordinator with scope, retry and stale-balance guards", () => {
+  const source = readFileSync("components/ReviewCenter.tsx", "utf8");
+  assert.match(source, /handledCloseRequestRef.current === request/);
+  assert.match(source, /requestedBucketCloseGoal\(/);
+  assert.match(source, /openBucketCloseChoicesRef.current\(goal\)/);
+  assert.match(source, /mountedBucketScopeRef.current !== bucketScope/);
+  assert.match(source, /return \(\) => \{ mountedBucketScopeRef.current = null; \}/);
+  assert.match(source, /expectedSpent: summary.spent/);
+  assert.match(source, /expectedRemainder: bucketSnowballOffer.remainder/);
+  assert.match(source, /onConfirm: \(\) => void closeBucketKeepAvailable/);
+  assert.match(source, /finally \{\s*bucketCloseInFlightRef.current = false;\s*setSaving\(false\)/);
+});
+
+test("consumed Close bucket navigation cannot replay after cancel, section remount or refresh", () => {
+  const source = readFileSync("app/(tabs)/more.tsx", "utf8");
+  const body = source.slice(source.indexOf("  const consumeBucketCloseRequest ="), source.indexOf("  const requestedReviewTransactionId ="));
+  const initial = { bucketId: "trip", scope: "owner:home", request: "first" };
+  const pending = { current: initial as typeof initial | null };
+  const route: Record<string, string | undefined> = { section: "review", reviewFilter: "expense", closeBucketId: "trip", closeBucketScope: "owner:home", closeBucketAt: "first" };
+  let writes = 0;
+  const bindings = {
+    useCallback: (fn: unknown) => fn,
+    bucketCloseNavigationRef: pending,
+    router: { setParams: (params: Record<string, string | undefined>) => { writes++; Object.assign(route, params); } },
+  };
+  const js = transpileModule(body, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
+  const consume = new Function(...Object.keys(bindings), `${js}; return consumeBucketCloseRequest;`)(...Object.values(bindings));
+  consume("trip", "owner:home", "first");
+  consume("trip", "owner:home", "first");
+  assert.equal(writes, 1);
+  assert.equal(route.section, "review"); assert.equal(route.reviewFilter, "expense");
+  // Cancel leaves the bucket open; a fresh Review Center or browser load has no request to run.
+  const url = new URL("https://example.test/more");
+  Object.entries(route).forEach(([key, value]) => { if (value !== undefined) url.searchParams.set(key, value); });
+  const refreshed = new URL(url.toString()).searchParams;
+  route.section = "overview"; route.section = "review";
+  assert.equal(route.closeBucketAt, undefined);
+  assert.equal(refreshed.get("closeBucketId"), null);
+  assert.equal(refreshed.get("closeBucketScope"), null);
+  assert.equal(refreshed.get("closeBucketAt"), null);
+  const newer = { bucketId: "trip", scope: "owner:home", request: "second" };
+  pending.current = newer;
+  consume("trip", "owner:home", "first");
+  assert.equal(pending.current, newer); assert.equal(writes, 1);
+  consume("trip", "other:home", "second");
+  assert.equal(writes, 1);
+  consume("trip", "owner:home", "second");
+  assert.equal(writes, 2);
+  const review = readFileSync("components/ReviewCenter.tsx", "utf8");
+  assert.match(review, /handledCloseRequestRef.current = request;\s*openBucketCloseChoicesRef.current\(goal\);\s*onCloseBucketRequestHandled\?\.\(goal.id, scope, closeBucketRequest\)/);
+  assert.match(source, /onCloseBucketRequestHandled=\{consumeBucketCloseRequest\}/);
+});
