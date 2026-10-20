@@ -22,6 +22,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { FullPaymentPromptModal } from "@/components/FullPaymentPromptModal";
 import { GoalModal } from "@/components/GoalModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
+import { SafetyFloorYearModal } from "@/components/SafetyFloorYearModal";
 import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
 import colors from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
@@ -416,11 +417,19 @@ export default function MonthlyScreen() {
     getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill, updateIncome,
     getCashFlow, getMonthlyIncome, getDailyBalances, getCalendarDailyBalances, getIncomeOccurrencesInMonth,
     previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, finalizeBillPayment, getExtraPayment, getDebtMonthSettlements, getDebtPlanForMonth, getRemainingDebtPlanForMonth, setPlannedDebtAmount, canEditHousehold,
-    updateDecision, deleteDecision, updateGoal, deleteGoal, activeHousehold, householdTimeZone,
+    updateDecision, deleteDecision, updateGoal, deleteGoal, activeHousehold, householdTimeZone, startupCoreReady,
   } = useBudget();
   const householdAsOfDate = safeLocalDateInTimeZone(new Date(), householdTimeZone);
   const [householdCurrentYear, householdCurrentMonthNumber] = householdAsOfDate.split("-").map(Number);
   const householdCurrentMonth = householdCurrentMonthNumber - 1;
+  const safetyYearScope = `${user?.id ?? "demo"}:${activeHousehold?.householdId ?? "personal"}`;
+  const [safetyYearOpenScope, setSafetyYearOpenScope] = useState<string | null>(null);
+  useEffect(() => { setSafetyYearOpenScope(null); }, [safetyYearScope]);
+  const openSafetyYear = () => {
+    setSelectedDate(null);
+    setSafetyYearOpenScope(safetyYearScope);
+  };
+
 
   const [month, setMonth] = useState(new Date().getMonth());
   const [activeTab] = useState<TabView>("calendar");
@@ -1783,11 +1792,28 @@ export default function MonthlyScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: c.background }]}>
+      {safetyYearOpenScope === safetyYearScope ? <SafetyFloorYearModal
+        key={safetyYearScope}
+        today={householdAsOfDate}
+        ready={startupCoreReady}
+        safetyFloor={settings.safety_floor}
+        startingBalanceDate={settings.starting_balance_date}
+        getDays={getCalendarDailyBalances}
+        onClose={() => setSafetyYearOpenScope(null)}
+        onSelectDate={date => {
+          const [year, monthNumber] = date.split("-").map(Number);
+          setSafetyYearOpenScope(null);
+          setSelectedYear(year);
+          setMonth(monthNumber - 1);
+          setSelectedDate(date);
+        }}
+      /> : null}
       {isDesktop ? (
         <DesktopCalendarPage
           month={month}
           year={selectedYear}
           resolveEventLabel={resolveDesktopEventLabel}
+          onOpenSafetyFloorDays={openSafetyYear}
           selectedDate={selectedDate}
           dailyBalances={dailyBalances}
           projectedDailyBalances={projectedDailyBalances}
@@ -1873,6 +1899,9 @@ export default function MonthlyScreen() {
           />
         </View>
       </View>
+      <Pressable accessibilityRole="button" accessibilityLabel="Safety floor days for the year" onPress={openSafetyYear} style={{ alignSelf: "flex-start", marginHorizontal: 20, paddingVertical: 10 }}>
+        <Text style={{ color: c.primary, fontFamily: "Inter_600SemiBold" }}>Safety floor days</Text>
+      </Pressable>
       <DataFreshnessLabel inset compact />
 
       <View

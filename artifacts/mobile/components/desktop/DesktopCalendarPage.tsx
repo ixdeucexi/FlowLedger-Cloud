@@ -61,6 +61,7 @@ type DesktopCalendarPageProps = {
   onPreviousMonth: () => void;
   onNextMonth: () => void;
   onOpenMonthSelector: () => void;
+  onOpenSafetyFloorDays: () => void;
   simulatorLocked: boolean;
   onOpenPlanSimulator: () => void;
   onAddTransaction: (date?: string | null) => void;
@@ -138,6 +139,7 @@ function CalendarHeader({
   onPreviousMonth,
   onNextMonth,
   onOpenMonthSelector,
+  onOpenSafetyFloorDays,
   simulatorLocked,
   onOpenPlanSimulator,
   onAdd,
@@ -149,6 +151,7 @@ function CalendarHeader({
   | "onPreviousMonth"
   | "onNextMonth"
   | "onOpenMonthSelector"
+  | "onOpenSafetyFloorDays"
   | "simulatorLocked"
   | "onOpenPlanSimulator"
 > & { compact: boolean; onAdd: () => void }) {
@@ -162,6 +165,9 @@ function CalendarHeader({
         <DataFreshnessLabel compact />
       </View>
       <View style={[styles.monthControls, compact && styles.monthControlsCompact]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Safety floor days for the year" onPress={onOpenSafetyFloorDays} style={styles.secondaryButton}>
+          <Text style={styles.secondaryButtonText}>Safety floor days</Text>
+        </Pressable>
         <Pressable
           nativeID="guided-tour-monthly"
           accessibilityRole="button"
@@ -574,6 +580,7 @@ export function DesktopCalendarPage(props: DesktopCalendarPageProps) {
             onPreviousMonth={props.onPreviousMonth}
             onNextMonth={props.onNextMonth}
             onOpenMonthSelector={props.onOpenMonthSelector}
+            onOpenSafetyFloorDays={props.onOpenSafetyFloorDays}
             simulatorLocked={props.simulatorLocked}
             onOpenPlanSimulator={props.onOpenPlanSimulator}
             onAdd={() => props.onAddTransaction(props.selectedDate)}
@@ -642,7 +649,7 @@ const styles = StyleSheet.create({
   pageHeaderCopy: { flex: 1, minWidth: 280 },
   pageTitle: { color: palette.text, fontSize: 27, lineHeight: 33, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.7 },
   pageSubtitle: { color: palette.muted, fontSize: 14, lineHeight: 20, fontFamily: "Inter_400Regular", marginTop: 2 },
-  monthControls: { flexDirection: "row", alignItems: "center", gap: 8 },
+  monthControls: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap", flexShrink: 1, justifyContent: "flex-end" },
   monthControlsCompact: { flexWrap: "wrap", justifyContent: "flex-end" },
   secondaryButton: { minHeight: 38, borderRadius: 7, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.border, paddingHorizontal: 13, alignItems: "center", justifyContent: "center" },
   secondaryButtonText: { color: palette.textSecondary, fontSize: 13, fontFamily: "Inter_600SemiBold" },
