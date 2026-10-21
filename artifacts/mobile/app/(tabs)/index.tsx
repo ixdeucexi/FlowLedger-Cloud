@@ -850,6 +850,7 @@ function MobileDashboardContent({
   const dashboardNextPaydayFull = algorithmSuite.stability.nextPaycheckLabel || "Not scheduled";
   const dashboardNextPayday = compactDateLabel(dashboardNextPaydayFull);
   const dashboardPlanned = Math.max(0, cashFlow.totalBillsDue + cashFlow.goalAllocations);
+  const dashboardNoMoreIncomeExpected = dashboardModel.monthlyIncome > 0 && cashFlow.monthlyIncome <= 0;
   const dashboardPlanRemaining = cashFlow.monthlyIncome - dashboardPlanned;
   const dashboardPlanIsShort = dashboardPlanRemaining < 0;
   const dashboardCommitmentPercent = cashFlow.monthlyIncome > 0
@@ -1331,16 +1332,14 @@ function MobileDashboardContent({
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={cashFlow.monthlyIncome > 0
-          ? `Open monthly plan. ${formatDashboardCurrency(cashFlow.monthlyIncome)} income, ${formatDashboardCurrency(dashboardPlanned)} committed, ${formatDashboardCurrency(Math.abs(dashboardPlanRemaining))} ${dashboardPlanIsShort ? "short" : "left after the plan"}.`
-          : `Open monthly plan. No income is planned yet. ${formatDashboardCurrency(dashboardPlanned)} is committed to bills and goals.`}
+        accessibilityLabel={`Open monthly plan. ${formatDashboardCurrency(dashboardModel.monthlyIncome)} planned income, ${formatDashboardCurrency(cashFlow.monthlyIncome)} income still expected, ${formatDashboardCurrency(dashboardPlanned)} remaining bills and buckets. ${dashboardModel.monthlyIncome <= 0 ? "No income is planned yet." : dashboardNoMoreIncomeExpected ? "No more income expected." : `${formatDashboardCurrency(Math.abs(dashboardPlanRemaining))} ${dashboardPlanIsShort ? "short against income still expected" : "left after remaining bills and buckets"}.`}`}
         onPress={() => router.push("/(tabs)/monthly" as any)}
         style={({ pressed }) => [styles.dashboardProgressCard, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.78 : 1 }]}
       >
         <View style={styles.dashboardProgressHeader}>
           <View style={styles.dashboardProgressHeaderCopy}>
             <AppText tone="title" style={[styles.dashboardProgressTitle, { color: c.foreground }]}>This month&apos;s plan</AppText>
-            <AppText style={[styles.dashboardProgressCopy, { color: c.mutedForeground }]}>Income minus planned bills and goals</AppText>
+            <AppText style={[styles.dashboardProgressCopy, { color: c.mutedForeground }]}>Income still expected minus remaining bills and buckets</AppText>
           </View>
           <Feather name="arrow-up-right" size={18} color={c.primary} />
         </View>
@@ -1348,19 +1347,21 @@ function MobileDashboardContent({
         <View style={styles.dashboardPlanOutcome}>
           <AppText
             tone="number"
-            numberOfLines={1}
+            numberOfLines={dashboardNoMoreIncomeExpected ? 2 : 1}
             adjustsFontSizeToFit
             minimumFontScale={0.72}
-            style={[styles.dashboardPlanOutcomeValue, { color: cashFlow.monthlyIncome <= 0 || dashboardPlanIsShort ? c.warning : c.success }]}
+            style={[styles.dashboardPlanOutcomeValue, { color: dashboardNoMoreIncomeExpected ? c.foreground : dashboardModel.monthlyIncome <= 0 || dashboardPlanIsShort ? c.warning : c.success }]}
           >
-            {cashFlow.monthlyIncome <= 0 ? "No income planned" : formatDashboardCurrency(Math.abs(dashboardPlanRemaining))}
+            {dashboardModel.monthlyIncome <= 0 ? "No income planned" : dashboardNoMoreIncomeExpected ? "No more income expected" : formatDashboardCurrency(Math.abs(dashboardPlanRemaining))}
           </AppText>
           <AppText style={[styles.dashboardPlanOutcomeLabel, { color: c.mutedForeground }]}>
-            {cashFlow.monthlyIncome <= 0
+            {dashboardModel.monthlyIncome <= 0
               ? "Add expected income to complete the plan"
-              : dashboardPlanIsShort
-                ? "more is committed than planned income"
-                : "left after planned bills and goals"}
+              : dashboardNoMoreIncomeExpected
+                ? `${formatDashboardCurrency(dashboardPlanned)} remains committed to bills and buckets`
+                : dashboardPlanIsShort
+                  ? "more is committed than income still expected"
+                  : "left after remaining bills and buckets"}
           </AppText>
         </View>
 
@@ -1370,7 +1371,7 @@ function MobileDashboardContent({
               <View style={[styles.dashboardProgressFill, { width: `${dashboardProgress * 100}%` as any, backgroundColor: dashboardPlanIsShort ? c.warning : "#38bdf8" }]} />
             </View>
             <AppText style={[styles.dashboardCommitmentLabel, { color: dashboardPlanIsShort ? c.warning : c.mutedForeground }]}>
-              {dashboardCommitmentPercent}% of planned income is committed
+              {dashboardCommitmentPercent}% of income still expected committed
             </AppText>
           </>
         ) : null}
@@ -1382,13 +1383,22 @@ function MobileDashboardContent({
               <AppText style={[styles.dashboardProgressLabel, { color: c.mutedForeground }]}>Planned income</AppText>
             </View>
             <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={[styles.dashboardPlanBreakdownValue, { color: c.foreground }]}>
+              {formatDashboardCurrency(dashboardModel.monthlyIncome)}
+            </AppText>
+          </View>
+          <View style={styles.dashboardPlanBreakdownRow}>
+            <View style={styles.dashboardPlanBreakdownLabelWrap}>
+              <View style={[styles.dashboardProgressDot, { backgroundColor: "#38bdf8" }]} />
+              <AppText style={[styles.dashboardProgressLabel, { color: c.mutedForeground }]}>Income still expected</AppText>
+            </View>
+            <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={[styles.dashboardPlanBreakdownValue, { color: c.foreground }]}>
               {formatDashboardCurrency(cashFlow.monthlyIncome)}
             </AppText>
           </View>
           <View style={styles.dashboardPlanBreakdownRow}>
             <View style={styles.dashboardPlanBreakdownLabelWrap}>
               <View style={[styles.dashboardProgressDot, { backgroundColor: c.primary }]} />
-              <AppText style={[styles.dashboardProgressLabel, { color: c.mutedForeground }]}>Bills and goals</AppText>
+              <AppText style={[styles.dashboardProgressLabel, { color: c.mutedForeground }]}>Remaining bills and buckets</AppText>
             </View>
             <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={[styles.dashboardPlanBreakdownValue, { color: c.foreground }]}>
               {formatDashboardCurrency(dashboardPlanned)}

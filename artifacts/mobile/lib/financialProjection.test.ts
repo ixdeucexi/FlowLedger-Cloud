@@ -362,6 +362,7 @@ test("edited John payday anchor counts September deposits once, not planned plus
   });
   const cashFlow = projection.getCashFlow(8, 2026);
   assert.equal(cashFlow.monthlyIncome, 0);
+  assert.equal(projection.getMonthlyIncome(8, 2026), 7276.08, "full planned income is independent of received matches");
   assert.equal(cashFlow.netTransactions, 7276.08);
   assert.equal(cashFlow.remaining, 7276.08);
   const days = projection.getDailyBalances(8, 2026);

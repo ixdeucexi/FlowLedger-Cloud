@@ -1160,3 +1160,63 @@ test("activity surfaces use Inflows and Outflows wording across layouts", () => 
   assert.match(activitySources[0], /label: "Inflows"/);
   assert.match(activitySources[0], /label: "Outflows"/);
 });
+
+import { createFinancialProjection } from "./financialProjection";
+import type { FinancialProjectionSnapshot } from "./financialProjectionTypes";
+import goldenProjection from "./financialProjection.golden.json";
+
+test("Dashboard planned income stays canonical through unmatched, partial, matched and unmatched-again paychecks", () => {
+  const snapshot = structuredClone(goldenProjection.cases[0].snapshot) as unknown as FinancialProjectionSnapshot;
+  snapshot.bills = []; snapshot.goals = []; snapshot.decisions = [];
+  snapshot.incomes = [{ id: "pay", name: "Pay", amount: 2425.36, frequency: "biweekly", start_date: "2026-09-02", next_payment_date: "2026-09-02" }];
+  const paychecks = ["2026-09-02", "2026-09-16", "2026-09-30"].map((date, index) => ({
+    id: `pay-${index}`, date, amount: 2425.36, category: "Income", note: "Pay", source: "statement", review_status: "matched" as const, review_resolution: "income" as const,
+    review_allocations: [{ type: "income" as const, targetId: "pay", occurrenceDate: date, amount: 2425.36, settlement: "exact" as const }],
+  }));
+  const partial = { ...paychecks[0], amount: 100, review_allocations: [{ ...paychecks[0].review_allocations[0], amount: 100, settlement: "partial" as const }] };
+  const underpaid = paychecks.map(paycheck => ({ ...paycheck, amount: 100, review_allocations: [{ ...paycheck.review_allocations[0], amount: 100, settlement: "partial" as const }] }));
+  for (const [transactions, remaining] of [[[], 7276.08], [[partial], 4850.72], [paychecks, 0], [underpaid, 0], [[], 7276.08]] as const) {
+    snapshot.transactions = [...transactions];
+    const projection = createFinancialProjection(snapshot, { now: new Date("2026-09-15T12:00:00Z"), timeZone: "UTC" });
+    const base = dashboardSnapshotBuildInput();
+    const cashFlow = projection.getCashFlow(8, 2026);
+    const model = buildDashboardFinancialModel({ ...base, now: new Date(2026, 8, 15, 12), selectedYear: 2026, incomes: snapshot.incomes,
+      cashFlow, currentMonthBalances: projection.getDailyBalances(8, 2026), getMonthlyIncome: projection.getMonthlyIncome });
+    assert.equal(model.monthlyIncome, 7276.08);
+    if (transactions === underpaid) assert.equal(cashFlow.netTransactions, 300, "zero income still expected does not mean the planned amount was received");
+    assert.ok(Math.abs(cashFlow.monthlyIncome - remaining) < 0.00001, `remaining ${cashFlow.monthlyIncome}, expected ${remaining}`);
+  }
+});
+
+test("canonical planned income respects effective amounts, active start, excluded payday and month boundaries", () => {
+  const snapshot = structuredClone(goldenProjection.cases[0].snapshot) as unknown as FinancialProjectionSnapshot;
+  snapshot.bills = []; snapshot.goals = []; snapshot.decisions = []; snapshot.transactions = [];
+  snapshot.incomes = [{ id: "pay", name: "Pay", amount: 2000, frequency: "biweekly", start_date: "2026-09-16", next_payment_date: "2026-09-16",
+    amount_history: [{ effective_from: "2026-09-01", amount: 2500 }, { effective_from: "2026-10-01", amount: 2600 }], excluded_dates: ["2026-09-30"] }];
+  const projection = createFinancialProjection(snapshot, { now: new Date("2026-09-15T12:00:00Z"), timeZone: "UTC" });
+  for (const [month, expected] of [[7, 0], [8, 2500], [9, 5200]]) {
+    const model = buildDashboardFinancialModel({ ...dashboardSnapshotBuildInput(), now: new Date(2026, month, 15, 12), selectedYear: 2026,
+      incomes: snapshot.incomes, cashFlow: projection.getCashFlow(month, 2026), currentMonthBalances: projection.getDailyBalances(month, 2026), getMonthlyIncome: projection.getMonthlyIncome });
+    assert.equal(model.monthlyIncome, expected);
+  }
+});
+
+import { transpileModule, ModuleKind } from "typescript";
+test("monthly plan card separates full plan from remaining arithmetic and handles no-more-expected versus zero income", () => {
+  const source = readFileSync("app/(tabs)/index.tsx", "utf8");
+  const calculations = source.slice(source.indexOf("  const dashboardPlanned ="), source.indexOf("  return (", source.indexOf("  const dashboardPlanned =")));
+  const js = transpileModule(calculations, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
+  const evaluate = (planned: number, expected: number, bills: number) => new Function("dashboardModel", "cashFlow", `${js}; return {dashboardNoMoreIncomeExpected, dashboardPlanRemaining, dashboardCommitmentPercent, dashboardProgress};`)({ monthlyIncome: planned }, { monthlyIncome: expected, totalBillsDue: bills, goalAllocations: 0 });
+  assert.deepEqual(evaluate(7276.08, 0, 1000), { dashboardNoMoreIncomeExpected: true, dashboardPlanRemaining: -1000, dashboardCommitmentPercent: 0, dashboardProgress: 0 });
+  assert.equal(evaluate(0, 0, 1000).dashboardNoMoreIncomeExpected, false);
+  assert.equal(evaluate(7276.08, 5000, 1000).dashboardPlanRemaining, 4000);
+  assert.equal(evaluate(7276.08, 5000, 1000).dashboardCommitmentPercent, 20);
+  const card = source.slice(source.indexOf('accessibilityLabel={`Open monthly plan.'), source.indexOf("<StabilityPathCard"));
+  assert.match(card, />Planned income<\/AppText>[\s\S]*?formatDashboardCurrency\(dashboardModel.monthlyIncome\)/);
+  assert.match(card, />Income still expected<\/AppText>[\s\S]*?formatDashboardCurrency\(cashFlow.monthlyIncome\)/);
+  assert.match(card, /Remaining bills and buckets/);
+  assert.match(card, /dashboardModel.monthlyIncome <= 0 \? "No income planned" : dashboardNoMoreIncomeExpected \? "No more income expected"/);
+  assert.match(card, /\{cashFlow.monthlyIncome > 0 \? \(/);
+  assert.match(card, /% of income still expected committed/);
+  assert.doesNotMatch(card, /All planned income received/);
+});
