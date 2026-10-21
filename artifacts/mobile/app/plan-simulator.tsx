@@ -1,3 +1,4 @@
+import { SimulatorChoiceChips as ChoiceChips } from "@/components/SimulatorChoiceChips";
 import Feather from "@expo/vector-icons/Feather";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
@@ -174,36 +175,6 @@ function Input({
   );
 }
 
-function ChoiceChips({
-  values,
-  selected,
-  onSelect,
-}: {
-  values: Array<{ id: string; label: string }>;
-  selected: string;
-  onSelect: (id: string) => void;
-}) {
-  const c = useColors();
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={styles.chipScroll}>
-      {values.map(value => {
-        const active = value.id === selected;
-        return (
-          <Pressable
-            key={value.id}
-            accessibilityRole="radio"
-            accessibilityState={{ checked: active }}
-            onPress={() => onSelect(value.id)}
-            style={({ pressed }) => [styles.chip, { backgroundColor: active ? c.primary : c.background, borderColor: active ? c.primary : c.border, opacity: pressed ? 0.75 : 1 }]}
-          >
-            <AppText style={[styles.chipText, { color: active ? c.primaryForeground : c.foreground }]}>{value.label}</AppText>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
-  );
-}
-
 function ChangeComposer({
   references,
   startDate,
@@ -236,7 +207,7 @@ function ChangeComposer({
   const debtChoices = references.debts
     .filter(debt => debt.balance > 0.005 && (!debt.endDate || debt.endDate.slice(0, 10) >= startDate))
     .map(debt => ({ id: debt.id, label: `${debt.name} · ${money(debt.balance)}` }));
-  const targetChoices = needsIncome ? incomeChoices : needsBill ? billChoices : [];
+  const targetChoices = needsIncome ? incomeChoices : needsBill ? billChoices : needsDebt ? debtChoices : [];
   const selectedTarget = needsDebt
     ? debtChoices.some(debt => debt.id === targetId) ? targetId : ""
     : targetId || targetChoices[0]?.id || "";
@@ -295,20 +266,7 @@ function ChangeComposer({
         })}
       </View>
 
-      <View style={styles.field}>
-        <FieldLabel>Choose a debt to pay off</FieldLabel>
-        {debtChoices.length ? <View accessibilityRole="radiogroup" accessibilityLabel="Choose a debt to pay off" style={styles.debtChoices}>
-          {debtChoices.map(debt => {
-            const selected = needsDebt && selectedTarget === debt.id;
-            return <Pressable key={debt.id} accessibilityRole="radio" accessibilityLabel={`Pay off ${debt.label}`} aria-checked={selected} accessibilityState={{ checked: selected }} onPress={() => { setType("debt_payoff"); setTargetId(debt.id); setError(""); }} style={({ pressed }) => [styles.debtChoice, { backgroundColor: selected ? c.primary + "18" : c.background, borderColor: selected ? c.primary : c.border, opacity: pressed ? 0.72 : 1 }]}>
-              <Feather name={selected ? "check-circle" : "circle"} size={17} color={selected ? c.primary : c.mutedForeground} />
-              <AppText style={[styles.debtChoiceText, { color: c.foreground }]}>{debt.label}</AppText>
-            </Pressable>;
-          })}
-        </View> : <AppText style={[styles.editSemantics, { color: c.mutedForeground }]}>No eligible open debts to pay off. Add an open debt to your live plan first.</AppText>}
-      </View>
-
-      {targetChoices.length ? <View style={styles.field}><FieldLabel>{needsIncome ? "Income" : "Bill"}</FieldLabel><ChoiceChips values={targetChoices} selected={selectedTarget} onSelect={setTargetId} /></View> : null}
+      {targetChoices.length ? <View style={styles.field}><FieldLabel>{needsIncome ? "Income" : needsDebt ? "Debt" : "Bill"}</FieldLabel><ChoiceChips values={targetChoices} selected={selectedTarget} onSelect={id => { setTargetId(id); setError(""); }} desktopDebtNavigation={needsDebt} /></View> : needsDebt ? <AppText style={[styles.editSemantics, { color: c.mutedForeground }]}>No eligible open debts to pay off. Add an open debt to your live plan first.</AppText> : null}
       {needsName ? <View style={styles.field}><FieldLabel>Name</FieldLabel><Input label="Change name" value={name} onChangeText={setName} placeholder={type === "savings_once" ? "Emergency fund" : "Name"} /></View> : null}
       {needsAmount ? <View style={styles.field}><FieldLabel>Amount</FieldLabel><Input label="Change amount" value={amount} onChangeText={setAmount} placeholder="0.00" keyboardType="decimal-pad" /></View> : null}
       {isRecurringAdd ? <View style={styles.field}><FieldLabel>Frequency</FieldLabel><ChoiceChips values={(type === "bill_add" ? ["monthly", "quarterly", "biweekly", "weekly"] : ["monthly", "biweekly", "weekly"]).map(id => ({ id, label: id[0].toUpperCase() + id.slice(1) }))} selected={frequency} onSelect={setFrequency} /></View> : null}
@@ -709,8 +667,6 @@ const styles = StyleSheet.create({
   workspace: { gap: 16 }, workspaceDesktop: { flexDirection: "row", alignItems: "flex-start", gap: 20 }, editorColumn: { flex: 1, minWidth: 0, gap: 16 }, resultsColumn: { minWidth: 0 }, resultsColumnDesktop: { width: "42%", maxWidth: 600, position: Platform.OS === "web" ? "sticky" as any : "relative", top: 16 },
   card: { borderWidth: 1, borderRadius: 22, padding: 16 }, cardTitle: { fontSize: 18, fontFamily: "Inter_800ExtraBold" }, cardDescription: { fontSize: 12, marginTop: 4, marginBottom: 12 }, field: { marginTop: 13 }, fieldLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", marginBottom: 6 }, input: { width: "100%", minHeight: 44, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, fontSize: 14, fontFamily: "Inter_500Medium" }, scopeNote: { fontSize: 11, lineHeight: 16, marginTop: 12 },
   button: { minHeight: 44, borderWidth: 1, borderRadius: 12, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 }, buttonText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" }, actionWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 14 }, savingRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 }, savingText: { fontSize: 11 },
-  chipScroll: { flexGrow: 0, flexShrink: 0 }, chips: { gap: 7, paddingRight: 2 }, chip: { minHeight: 44, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, alignItems: "center", justifyContent: "center" }, chipText: { fontSize: 12, fontFamily: "Inter_700Bold" },
-  debtChoices: { flexDirection: "row", flexWrap: "wrap", gap: 8 }, debtChoice: { minHeight: 48, maxWidth: "100%", borderWidth: 1, borderRadius: 12, padding: 12, flexDirection: "row", alignItems: "center", gap: 8 }, debtChoiceText: { flexShrink: 1, fontSize: 12, fontFamily: "Inter_700Bold" },
   changeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 }, changeOption: { width: "48.5%", minHeight: 62, borderWidth: 1, borderRadius: 14, padding: 10, flexDirection: "row", alignItems: "center", gap: 9 }, changeOptionCopy: { flex: 1 }, changeOptionTitle: { fontSize: 12, fontFamily: "Inter_800ExtraBold" }, changeOptionDetail: { fontSize: 10, marginTop: 2, lineHeight: 14 }, errorText: { fontSize: 12, fontFamily: "Inter_600SemiBold", marginVertical: 10 }, editSemantics: { fontSize: 11, lineHeight: 16, marginVertical: 10 },
   sectionTitle: { fontSize: 17, fontFamily: "Inter_800ExtraBold", marginBottom: 10 }, emptyCard: { borderWidth: 1, borderStyle: "dashed", borderRadius: 18, padding: 22, alignItems: "center" }, emptyTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" }, emptyText: { fontSize: 12, marginTop: 4, textAlign: "center" }, changeList: { gap: 8 }, changeRow: { minHeight: 60, borderWidth: 1, borderRadius: 14, paddingLeft: 12, paddingRight: 4, paddingVertical: 8, flexDirection: "row", alignItems: "center" }, changeRowCopy: { flex: 1 }, changeRowTitle: { fontSize: 12, fontFamily: "Inter_700Bold" }, changeIssue: { fontSize: 10, fontFamily: "Inter_600SemiBold", marginTop: 3 }, changeOkay: { fontSize: 10, fontFamily: "Inter_600SemiBold", marginTop: 3 },
   resultsCard: { borderWidth: 1, borderRadius: 24, padding: 17 }, resultsHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }, resultsTitle: { fontSize: 20, fontFamily: "Inter_800ExtraBold", marginTop: 2 }, statusBadge: { minHeight: 30, borderRadius: 999, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 5 }, statusText: { fontSize: 10, fontFamily: "Inter_800ExtraBold" }, resultsNote: { fontSize: 11, lineHeight: 16, marginTop: 8 }, attention: { borderWidth: 1, borderRadius: 14, padding: 11, marginTop: 12 }, negativeHeader: { flexDirection: "row", alignItems: "center", gap: 7 }, attentionTitle: { fontSize: 12, fontFamily: "Inter_800ExtraBold", marginBottom: 4 }, attentionText: { fontSize: 11, lineHeight: 16 }, metricsGrid: { gap: 9, marginTop: 14 }, metric: { borderWidth: 1, borderRadius: 15, padding: 12 }, metricLabel: { fontSize: 9, fontFamily: "Inter_800ExtraBold" }, metricValues: { flexDirection: "row", justifyContent: "space-between", gap: 12, marginTop: 7 }, metricScenario: { alignItems: "flex-end", flex: 1 }, metricCaption: { fontSize: 9 }, metricValue: { fontSize: 16, fontFamily: "Inter_800ExtraBold", marginTop: 1 },

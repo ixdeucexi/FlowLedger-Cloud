@@ -11,6 +11,7 @@
     "outDir": ".test-dist"
   },
   "include": [
+    "lib/chipScroll.test.ts",
     "lib/safetyFloorYear.test.ts",
     "lib/safetyStop.test.ts",
     "lib/updateCenter.test.ts",

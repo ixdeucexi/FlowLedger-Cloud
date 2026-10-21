@@ -481,8 +481,9 @@ test("Plan Simulator is a direct Pro route launched only from mobile and desktop
   assert.match(route, /canEditHousehold/);
   assert.match(route, /planSimulationStorageKey\(user\.id, householdId\)/);
   assert.match(route, /Nothing changes your real plan/);
-  assert.match(route, /minHeight: 44[\s\S]*chip/);
-  assert.doesNotMatch(route, /chip:\s*\{[^}]*minHeight:\s*40/);
+  const chips = readFileSync("components/SimulatorChoiceChips.tsx", "utf8");
+  assert.match(chips, /chip:\s*\{ minHeight: 44/);
+  assert.doesNotMatch(chips, /chip:\s*\{[^}]*minHeight:\s*40/);
   assert.match(route, /Reset unsupported changes/);
   assert.match(route, /Boolean\(draft\.invalidDefinition\)/);
   assert.match(route, /DatePickerField value=\{date\}/);
@@ -514,18 +515,11 @@ test("payoff composer requires the explicitly chosen eligible debt and never sub
   assert.match(source, /if \(needsDebt && !selectedTarget\) \{ setError\("Choose an eligible debt/);
 });
 
-test("visible wrapping payoff buttons stage selection only, preserve dates, and keep other target pickers", () => {
+test("payoff choices remain conditional with desktop navigation and explicit selection", () => {
   const source = readFileSync("app/plan-simulator.tsx", "utf8");
-  const start = source.indexOf("<FieldLabel>Choose a debt to pay off</FieldLabel>");
-  const end = source.indexOf("{targetChoices.length ?", start);
-  const buttons = source.slice(start, end);
-  assert.match(buttons, /const selected = needsDebt && selectedTarget === debt.id/);
-  assert.match(buttons, /setType\("debt_payoff"\); setTargetId\(debt.id\); setError\(""\)/);
-  assert.doesNotMatch(buttons, /setDate|onAdd|savePlan|persist/);
-  assert.match(buttons, /accessibilityRole="radio"/);
-  assert.match(buttons, /aria-checked=\{selected\} accessibilityState=\{\{ checked: selected \}\}/);
-  assert.match(buttons, /No eligible open debts/);
-  assert.match(source, /debtChoices: \{ flexDirection: "row", flexWrap: "wrap"/);
-  assert.match(source, /const targetChoices = needsIncome \? incomeChoices : needsBill \? billChoices : \[\]/);
+  assert.match(source, /needsDebt \? debtChoices : \[\]/);
+  assert.match(source, /desktopDebtNavigation=\{needsDebt\}/);
+  assert.doesNotMatch(source, /Choose a debt to pay off<\/FieldLabel>|styles.debtChoices/);
+  assert.match(source, /setTargetId\(id\); setError\(""\)/);
   assert.match(source, /debt.balance > 0.005 && \(!debt.endDate \|\| debt.endDate.slice\(0, 10\) >= startDate\)/);
 });
