@@ -1,3 +1,5 @@
+import { previewTransactionSafetyStop as previewCanonicalTransactionSafetyStop } from "@/lib/transactionSafetyStop";
+import type { SafetyStopWarning } from "@/lib/safetyStop";
 import type {
   Bill,
   MonthlyOverride,
@@ -402,6 +404,7 @@ interface BudgetContextType {
 
   getCashFlow: (month: number, year: number) => CashFlow;
   getDailyBalances: (month: number, year: number) => DailyBalance[];
+  previewTransactionSafetyStop: (transaction: Omit<Transaction, "id"> | Transaction, existingId?: string) => SafetyStopWarning | null;
   getCalendarDailyBalances: (month: number, year: number) => DailyBalance[];
   getPlanSimulationBaseline: (horizonMonths: PlanSimulationHorizon, startDate?: string) => PlanSimulationBaseline;
 
@@ -3227,10 +3230,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const getBillById = useCallback((id: string) => bills.find(b => b.id === id), [bills]);
 
   // One shared read-only engine per financial revision; dated reads refresh lazily.
-  const financialProjection = useMemo(
-    () =>
-      createFinancialProjectionReader(
-        {
+  const financialProjectionSnapshot = useMemo(() => ({
           settings,
           bills,
           overrides,
@@ -3246,10 +3246,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           transactionAccountIdentities,
           pendingBankTransactions,
           pendingPlanMatches,
-        },
-        { now: () => new Date(), timeZone: householdTimeZone },
-      ),
-    [
+        }), [
       settings,
       bills,
       overrides,
@@ -3266,7 +3263,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       pendingBankTransactions,
       pendingPlanMatches,
       householdTimeZone,
-    ],
+    ]);
+  const financialProjection = useMemo(
+    () => createFinancialProjectionReader(financialProjectionSnapshot, { now: () => new Date(), timeZone: householdTimeZone }),
+    [financialProjectionSnapshot, householdTimeZone],
+  );
+  const previewTransactionSafetyStop = useCallback((transaction: Omit<Transaction, "id"> | Transaction, existingId?: string) =>
+    previewCanonicalTransactionSafetyStop({ snapshot: financialProjectionSnapshot, transaction, existingId, now: new Date(), timeZone: householdTimeZone }),
+    [financialProjectionSnapshot, householdTimeZone],
   );
   const {
     getOverride,
@@ -6061,7 +6065,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, matchPendingTransactionToBill, matchPendingTransactionToManual, createTransactionForPendingCharge, removePendingPlanMatch, reconcileTransaction, createSpendingBucketForTransaction, undoTransactionReconciliation, removeReviewSurplusFunding, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome, getIncomeOccurrencesInMonth,
       addGoal, updateGoal, closeSpendingBucket, closeSpendingBucketAndRouteRemainder, reopenSpendingBucket, archiveSpendingBucket, restoreArchivedSpendingBucket, deleteGoal, checkGoalAffordability,
-      getCashFlow, getDailyBalances, getCalendarDailyBalances, getPlanSimulationBaseline,
+      getCashFlow, getDailyBalances, previewTransactionSafetyStop, getCalendarDailyBalances, getPlanSimulationBaseline,
       addCategory, updateCategory, deleteCategory,
       updateSettings, importBills,
       addAccount, updateAccount, updateConnectedBankAccountDisplayName, reconcileAccount, archiveAccount, importStatementTransactions,

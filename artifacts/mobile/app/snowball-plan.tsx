@@ -1,3 +1,5 @@
+import { parseMoneyInput } from "@/lib/moneyFormInput";
+import { showFormError } from "@/lib/formInputAlert";
 import { adjacentPlannerMonthDate } from "@/lib/snowballPlanner";
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
@@ -107,7 +109,7 @@ function SnowballPlanScreen() {
     .filter(payment => (payment.payment_date ?? "") >= today)
     .slice()
     .sort((left, right) => (left.payment_date ?? "").localeCompare(right.payment_date ?? ""))[0];
-  const suggestedAmount = Math.max(0, Number.parseFloat(Array.isArray(params.suggested) ? params.suggested[0] : params.suggested ?? "") || 0);
+  const suggestedAmount = (parseMoneyInput(Array.isArray(params.suggested) ? params.suggested[0] : params.suggested ?? "") ?? 0);
   const transactionId = Array.isArray(params.transactionId) ? params.transactionId[0] : params.transactionId;
   const paymentId = Array.isArray(params.paymentId) ? params.paymentId[0] : params.paymentId;
   const editTransaction = useMemo(
@@ -162,7 +164,8 @@ function SnowballPlanScreen() {
     && targetMonthPayment
     && targetMonthPayment.id !== editingPayment.id,
   );
-  const requestedExtra = Math.max(0, Number.parseFloat(extraAmount) || 0);
+  const parsedExtra = parseMoneyInput(extraAmount);
+  const requestedExtra = parsedExtra ?? 0;
   const preview = useMemo(() => previewDebtSnowball(
     planDate.month,
     planDate.year,
@@ -260,6 +263,7 @@ function SnowballPlanScreen() {
   };
 
   const savePlan = async () => {
+    if (parsedExtra === null || parsedExtra <= 0) { showFormError("Check payment amount", "Enter a positive amount with up to two decimal places."); return; }
     if (!valid || saving) return;
     setSaving(true);
     try {

@@ -95,6 +95,8 @@ module.exports = {
     },
     android: {
       package: "com.flowledger.app",
+      allowBackup: false,
+      blockedPermissions: ["android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE", "android.permission.SYSTEM_ALERT_WINDOW"],
       googleServicesFile,
       versionCode: 1,
       intentFilters: [
@@ -118,8 +120,9 @@ module.exports = {
       "expo-font",
       "expo-web-browser",
       "expo-apple-authentication",
-      ["expo-secure-store", { configureAndroidBackup: true }],
+      ["expo-secure-store", { configureAndroidBackup: false }],
       ["expo-local-authentication", { faceIDPermission: "Allow FlowLedger to use Face ID to protect your financial plan." }],
+      "./plugins/withPrivateAndroidBackup",
       ["expo-notifications", { icon: "./assets/images/android-monochrome.png", color: "#9B5CFF", defaultChannel: "flowledger-alerts" }],
     ],
     experiments: {

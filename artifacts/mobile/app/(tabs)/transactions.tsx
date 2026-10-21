@@ -1,3 +1,5 @@
+import { parseMoneyInput } from "@/lib/moneyFormInput";
+import { showFormError } from "@/lib/formInputAlert";
 import Feather from "@expo/vector-icons/Feather";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, {
@@ -2162,9 +2164,9 @@ export function ActivityScreen() {
     (value: string) => {
       setEditExtraAmount(value);
       if (!editExtraPayment) return;
-      const amount = Number.parseFloat(value);
+      const amount = parseMoneyInput(value);
       setEditExtraPreview(
-        Number.isFinite(amount) && amount > 0
+        amount !== null && amount > 0
           ? previewDebtSnowball(
               editExtraPayment.month,
               editExtraPayment.year,
@@ -2183,9 +2185,9 @@ export function ActivityScreen() {
     (value: string) => {
       setEditExtraDate(value);
       if (!editExtraPayment) return;
-      const amount = Number.parseFloat(editExtraAmount);
+      const amount = parseMoneyInput(editExtraAmount);
       setEditExtraPreview(
-        Number.isFinite(amount) && amount > 0
+        amount !== null && amount > 0
           ? previewDebtSnowball(
               editExtraPayment.month,
               editExtraPayment.year,
@@ -2214,13 +2216,13 @@ export function ActivityScreen() {
       );
       return;
     }
-    const amount = Number.parseFloat(editExtraAmount);
+    const amount = parseMoneyInput(editExtraAmount);
     if (
-      !Number.isFinite(amount) ||
+      amount === null ||
       amount <= 0 ||
       Math.abs(editExtraPreview.selectedExtra - amount) > 0.005
     ) {
-      Alert.alert(
+      showFormError(
         "Check the payment amount",
         "Use an amount that stays within the safe maximum shown above.",
       );

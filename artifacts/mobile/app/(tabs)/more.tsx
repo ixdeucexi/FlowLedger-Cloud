@@ -1,5 +1,8 @@
 "use client";
 
+import { parseMoneyInput } from "@/lib/moneyFormInput";
+import { showFormError } from "@/lib/formInputAlert";
+
 import Feather from "@expo/vector-icons/Feather";
 import { UpdateCenter } from "@/components/settings/UpdateCenter";
 import { FloLauncherSetting } from "@/components/FloLauncherSetting";
@@ -872,11 +875,13 @@ export default function MoreScreen({
   ]);
 
   const saveSafetySettings = () => {
-    const floor = Math.max(0, parseFloat(safetyFloorText) || 0);
-    const horizon = Math.min(
-      24,
-      Math.max(1, Math.round(parseFloat(forecastHorizonText) || 6)),
-    );
+    const floor = parseMoneyInput(safetyFloorText);
+    const horizonText = forecastHorizonText.trim();
+    const horizon = /^\d+$/.test(horizonText) ? Number(horizonText) : NaN;
+    if (floor === null || !Number.isSafeInteger(horizon) || horizon < 1 || horizon > 24) {
+      showFormError("Check safety settings", "Enter a nonnegative floor with up to two decimal places and a whole-number forecast horizon from 1 to 24 months.");
+      return;
+    }
     setSafetyFloorText(floor.toString());
     setForecastHorizonText(horizon.toString());
     updateSettings({ safety_floor: floor, forecast_horizon_months: horizon });

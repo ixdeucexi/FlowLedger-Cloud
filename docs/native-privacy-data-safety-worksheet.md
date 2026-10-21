@@ -1,6 +1,8 @@
 # Native privacy and data-safety worksheet
 
-Last code audit: August 21, 2026. This is an implementation worksheet, not a completed Apple or Google console declaration. The release owner must reconcile it against the exact signed binary and current console questions.
+Initial code audit: August 21, 2026; launch-scope and deletion wording reviewed October 21, 2026. This is an implementation worksheet, not a completed Apple or Google console declaration. The release owner must reconcile it against the exact signed binary and current console questions.
+
+The January launch candidate remains **Founding Free**. The table below inventories implementation capabilities; it does not mean every integration is enabled for every user. Public purchase/trial/paywall and new bank-link flows remain disabled. Declare only the collection and sharing actually present in the submitted binary and its reachable services, including any account-scoped private integration access. Do not copy this inventory directly into console answers.
 
 ## Data map
 
@@ -34,7 +36,7 @@ Confirm the generated iOS Privacy Manifest and every SDK privacy manifest in the
 - Account data, financial information, app activity, user-generated content, identifiers, purchase records, and diagnostics are collected for app functionality, account management, security/fraud prevention, and support.
 - Processor transfers to Supabase, Vercel, Plaid, OpenAI, RevenueCat, Expo, Apple, and Google must be declared as applicable under current Play definitions.
 - Data is not used for ads or sold. Verify no new SDK changes this before every release.
-- Users can request deletion in-app and at `https://flowledger-algo.com/delete-account`; shared-household ownership must be transferred or members removed first.
+- Users can request deletion in-app and at `https://flowledger-algo.com/delete-account`; an owner of a multi-member household must remove the other members first. Ownership transfer is not currently implemented. Never delete another member's shared plan as a shortcut.
 - Complete Financial Features as budgeting/cash-flow forecasting/debt-planning software. FlowLedger does not hold funds, make payments, lend, invest, or repair credit.
 
 ## Release evidence still required

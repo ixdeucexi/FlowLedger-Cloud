@@ -1,3 +1,5 @@
+import { showFormError } from "@/lib/formInputAlert";
+import { parseMoneyInput } from "@/lib/moneyFormInput";
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
 import React, { useEffect, useState } from "react";
@@ -108,8 +110,9 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
 
   const handleSave = async () => {
     if (saving) return;
-    const a = parseFloat(amount);
-    if (!name.trim() || isNaN(a) || a <= 0) return;
+    const a = parseMoneyInput(amount);
+    if (a === null || a <= 0) { showFormError("Check income amount", "Enter a positive amount with up to two decimal places, such as 1,200.50."); return; }
+    if (!name.trim()) return;
     const payday = firstPayDate.trim();
     if (!payday) {
       Alert.alert("Payday needed", "Choose the date this income should appear on your calendar.");
@@ -144,13 +147,15 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
   };
 
   const handleAddUpdate = () => {
-    const a = parseFloat(raiseAmount);
-    if (isNaN(a) || a <= 0 || !raiseDate) return;
+    const a = parseMoneyInput(raiseAmount);
+    const originalAmount = parseMoneyInput(amount);
+    if (a === null || a <= 0 || originalAmount === null || originalAmount <= 0) { showFormError("Check income amounts", "Enter positive income amounts with up to two decimal places."); return; }
+    if (!raiseDate) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const ef = raiseDate.slice(0, 7);
     const nextHistory = [...history.filter(h => h.effective_from !== ef), { effective_from: ef, amount: a }]
       .sort((left, right) => left.effective_from.localeCompare(right.effective_from));
-    if (history.length === 0) setBaselineAmount(parseFloat(amount) || baselineAmount);
+    if (history.length === 0) setBaselineAmount(originalAmount);
     setHistory(nextHistory);
     setAmount(getLatestRecordedIncomeAmount({ amount: baselineAmount, frequency, amount_history: nextHistory }).toString());
     setRaiseAmount("");

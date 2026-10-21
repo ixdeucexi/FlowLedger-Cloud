@@ -1,3 +1,5 @@
+import { showFormError } from "@/lib/formInputAlert";
+import { parseMoneyInput } from "@/lib/moneyFormInput";
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
 import React, { useEffect, useRef, useState } from "react";
@@ -25,7 +27,7 @@ import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR } from "@/lib/desktopModal";
 import { localDateString } from "@/lib/dateLabels";
-import { buildSafetyStopBaseline, buildSafetyStop, type SafetyStopWarning } from "@/lib/safetyStop";
+import { type SafetyStopWarning } from "@/lib/safetyStop";
 import type { ConfirmActionOptions } from "@/lib/confirmAction";
 import { transactionDebtId } from "@/lib/transactionDebt";
 
@@ -45,7 +47,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
   const c = useColors();
   const isDesktop = useDesktopExperience();
   useBackDismiss(visible, onClose);
-  const { categories, accounts, bills, transactions, settings, getDailyBalances } = useBudget();
+  const { categories, accounts, bills, transactions, previewTransactionSafetyStop } = useBudget();
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Other");
   const [note, setNote] = useState("");
@@ -76,6 +78,8 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
 
   useEffect(() => {
     setConfirmation(null);
+    setPendingStandardTx(null);
+    setSafetyStop(null);
     if (editTx) {
       setAmount(Math.abs(editTx.amount).toString());
       setCategory(editTx.category);
@@ -107,25 +111,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
     }
   }, [editTx, visible, defaultDate, accounts, transferMate, editDebtId, initialValues?.amount, initialValues?.category, initialValues?.note, initialValues?.date, initialValues?.account_id, creationContext]);
 
-  const previewSafetyStop = (tx: Omit<Transaction, "id"> | Transaction) => {
-    const expenseAmount = tx.amount < 0 ? Math.abs(tx.amount) : 0;
-    const existingExpense = editTx?.amount && editTx.amount < 0 ? Math.abs(editTx.amount) : 0;
-    const additionalExpense = editTx ? Math.max(0, expenseAmount - existingExpense) : expenseAmount;
-    if (additionalExpense <= 0) return null;
-    const linkedDebtName = tx.linked_bill_id ? bills.find(bill => bill.id === tx.linked_bill_id)?.name : undefined;
-    const itemName = tx.note?.trim() || linkedDebtName || tx.category || "this scheduled item";
-    return buildSafetyStop({
-      baseline: buildSafetyStopBaseline(tx.date, settings.forecast_horizon_months, getDailyBalances),
-      safetyFloor: settings.safety_floor,
-      scenario: {
-        type: tx.linked_bill_id ? "extra_debt_payment" : "one_time_purchase",
-        name: itemName,
-        amount: additionalExpense,
-        date: tx.date,
-        frequency: "once",
-      },
-    });
-  };
+  const previewSafetyStop = (tx: Omit<Transaction, "id"> | Transaction) => previewTransactionSafetyStop(tx, editTx?.id);
 
   const saveStandardTransaction = async (payload: Omit<Transaction, "id"> | Transaction) => {
     if (savingRef.current) return;
@@ -146,8 +132,8 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
 
   const handleSave = async () => {
     if (savingRef.current || saving) return;
-    const parsed = parseFloat(amount);
-    if (isNaN(parsed) || parsed <= 0) return;
+    const parsed = parseMoneyInput(amount);
+    if (parsed === null || parsed <= 0) { showFormError("Check amount", "Enter a positive amount with up to two decimal places. Use commas only for thousands, such as 1,200.50."); return; }
     if (isTransfer && (!accountId || !transferToAccountId || accountId === transferToAccountId)) {
       Alert.alert("Choose two accounts", "Pick a different from and to account for this transfer.");
       return;
@@ -212,18 +198,6 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
     }
     await saveStandardTransaction(payload);
     return;
-    /*
-    setSaving(true);
-    try {
-      if (editTx?.id) await onSave({ ...data, id: editTx.id });
-      else await onSave(data);
-      onClose();
-    } catch (error) {
-      Alert.alert("Couldn’t save transaction", error instanceof Error ? error.message : "Please try again.");
-    } finally {
-      setSaving(false);
-    }
-    */
   };
 
   const handleDelete = async () => {

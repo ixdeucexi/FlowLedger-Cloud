@@ -2,28 +2,33 @@
 
 ## Reviewed dependency exceptions
 
-As rechecked with `pnpm audit --prod --audit-level high` and the npm registry on 2026-09-09, npm does not publish a patched `image-size` release for
-`GHSA-w3rx-r6r6-pgpr` or `GHSA-5p2g-fcmc-qvqq`. The package is present only
-through Expo's local build tooling. FlowLedger does not pass user uploads,
-Plaid data, or network-supplied images to this parser; production builds read
-only repository-controlled assets.
+Rechecked against the npm registry and official GitHub advisories on
+2026-10-21. `image-size` now has published fixes for `GHSA-w3rx-r6r6-pgpr`
+and `GHSA-5p2g-fcmc-qvqq`, but its 2.0.4 major release is incompatible with
+the installed Expo/Metro toolchain. Actual web and Android exports failed:
+Metro's non-ZIP asset path passes a filename string, while version 2 removed
+filesystem-input support. The attempted override was reverted rather than
+shipping broken builds. Both existing exceptions remain for 1.2.1 pending
+a compatible upstream integration or a separately verified migration.
 
-These two advisories are explicitly ignored in the root pnpm audit policy until
-an upstream release is available. Remove both exceptions and upgrade
-`image-size` as soon as a patched npm version ships. Review this exception with
-each dependency update and at least monthly.
+FlowLedger's inspected parser use is local build tooling reading
+repository-controlled assets, not user uploads, bank data, or network-supplied
+images. Do not introduce untrusted asset inputs under this exception. Recheck
+the compatible fix on dependency updates and at least monthly; published
+security fixes exist, so this is a compatibility exception, not "no fix available."
 
-As rechecked on 2026-10-01, `GHSA-86w9-cpqp-85rv` lists `node-forge` 1.4.1 as
-patched, but npm publishes only through 1.4.0. The affected RSA verifier is
+As rechecked on 2026-10-21, the audit feed names `node-forge` 1.4.1 as
+patched for `GHSA-86w9-cpqp-85rv`, but npm publishes only through 1.4.0 and
+the official advisory has no published patch. The affected RSA verifier is
 present through Expo and EAS build tooling; it is not included in FlowLedger's
 exported PWA JavaScript and does not process user or financial data at runtime.
 This advisory is temporarily ignored until a patched npm release exists. Remove
 the exception and update the lockfile as soon as that release is published.
 
-## October 5 build-tooling review
+## Build-tooling exceptions
 
 `GHSA-vfj7-8cjw-p6xm` affects `braces` 3.0.3 through deeply nested patterns.
-On 2026-10-05 the npm audit response names 3.0.4 as patched, but the npm
+On 2026-10-21 the npm audit response names 3.0.4 as patched, but the npm
 registry does not publish that version and the official
 [GitHub advisory](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) lists no
 patched version. `pnpm why braces --prod` resolves it only through
@@ -34,9 +39,10 @@ the dependency). Production serves static Expo output, not a Metro server.
 Builds use repository-controlled patterns, not user requests, uploads, or
 financial data. Independent review confirmed this reachability assessment.
 
-Only this advisory is temporarily excepted in the audit policy. This is not
-a fix or a claim of zero known vulnerabilities. Remove the exception and
-upgrade the lockfile as soon as a patched release is published. Recheck on
+This, the `node-forge` advisory, and the two `image-size` advisories are the
+four remaining high-severity exceptions in the audit policy. These are not
+fixes or a claim of zero known vulnerabilities. Remove each exception and
+upgrade the lockfile as soon as a compatible patched integration is available. Recheck on
 each dependency update and at least monthly; reassess immediately if a
 runtime glob/pattern feature is added.
 
@@ -48,15 +54,20 @@ Updated compatible transitive versions and the lockfile: `fast-uri` 3.1.6,
 The minimum package-release-age policy and existing audit exceptions are
 unchanged. No new advisory was ignored.
 
-The final production audit reports one unignored moderate advisory and the two
-previously reviewed, ignored `image-size` high advisories. The high-severity
-release gate passes; this is not a claim of zero known advisories.
+The September decoder finding has been superseded by the October 21 review.
+`decode-uri-component` is already overridden to the published patched 0.5.0
+through `query-string` / React Navigation / Expo Router. Its old advisory is
+no longer the visible moderate finding. Deep-link parsing remains relevant
+runtime code and must not be described as build-only.
 
-`decode-uri-component` 0.2.2 is used by `query-string` through React Navigation
-and Expo Router. [GHSA-vcc3-ghjq-m6fr](https://github.com/advisories/GHSA-vcc3-ghjq-m6fr)
-reports excessive decoding work on malformed percent-encoded input and names
-0.4.3 as patched. `pnpm view decode-uri-component@0.4.3 version` returned no
-matching version on September 9. This remains visible in audit output; do not
-silence it or make an unreviewed major query-string/router upgrade to hide it.
-Recheck the upstream fix before the next dependency release. Shared/deep-link
-parsing is relevant, so this must not be described as a build-only dependency.
+## October 21 remaining moderate advisory
+
+`sprintf-js` 1.0.3, through `argparse` 1.0.10 in the build/test graph, is
+affected by [GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c).
+The registry publishes only through 1.1.3; the official advisory has no
+published fix, despite the audit feed naming 1.1.4. Inspected `argparse`
+call sites use fixed internal format strings. No public API formatter or
+user-controlled format path was found in the bounded review. Keep this
+moderate finding visible and unignored; do not add an exception or perform
+an unverified major dependency swap to hide it. Recheck on dependency
+updates and at least monthly, together with the four high-severity tooling exceptions.

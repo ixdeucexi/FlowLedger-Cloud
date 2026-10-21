@@ -1,3 +1,4 @@
+import { parseMoneyInput } from "@/lib/moneyFormInput";
 import Feather from "@expo/vector-icons/Feather";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -593,13 +594,13 @@ function MobileDashboardContent({
   const applyMoveMoney = async () => {
     const targetCategory = moveTargetCategory;
     const sourceCategory = moveSourceCategory;
-    const amount = Number.parseFloat(moveAmount);
+    const amount = parseMoneyInput(moveAmount);
     const sourceRow = categoryPlan.find(row => row.category === sourceCategory);
     if (!targetCategory || !sourceCategory) {
       setMoveError("Choose a category to move money from.");
       return;
     }
-    if (!Number.isFinite(amount) || amount <= 0) {
+    if (amount === null || amount <= 0) {
       setMoveError("Enter an amount to move.");
       return;
     }

@@ -11,6 +11,9 @@
     "outDir": ".test-dist"
   },
   "include": [
+    "lib/nativeBackupPolicy.test.ts",
+    "lib/formSaveValidation.test.ts",
+    "lib/transactionSafetyStop.test.ts",
     "lib/chipScroll.test.ts",
     "lib/safetyFloorYear.test.ts",
     "lib/safetyStop.test.ts",

@@ -1,3 +1,5 @@
+import { showFormError } from "@/lib/formInputAlert";
+import { parseMoneyInput } from "@/lib/moneyFormInput";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/context/AuthContext";
 import Feather from "@expo/vector-icons/Feather";
@@ -134,8 +136,10 @@ export function GoalModal({
 
   const handleSave = async () => {
     if (savingRef.current || pendingGoal) return;
-    const t = parseFloat(target);
-    if (!name.trim() || !Number.isFinite(t) || t <= 0 || !targetDate) return;
+    const t = parseMoneyInput(target);
+    const savedAmount = current.trim() ? parseMoneyInput(current) : 0;
+    if (t === null || t <= 0 || (goalMode === "savings" && savedAmount === null)) { showFormError("Check amounts", "Enter a positive target and a nonnegative saved amount with up to two decimal places."); return; }
+    if (!name.trim() || !targetDate) return;
     if (minimumTargetAmount !== undefined && t + 0.005 < minimumTargetAmount) {
       Alert.alert(
         "Bucket amount is too small",
@@ -149,7 +153,7 @@ export function GoalModal({
       target_amount: t,
       current_amount: goalMode === "budget"
         ? editGoal?.goal_type === "planned_expense" ? editGoal.current_amount : 0
-        : (parseFloat(current) || 0),
+        : (savedAmount ?? 0),
       target_date: targetDate, // stored as YYYY-MM-DD
       goal_type: goalMode === "budget" ? "planned_expense" : "savings",
       closed_at: goalMode === "budget" ? editGoal?.closed_at : undefined,

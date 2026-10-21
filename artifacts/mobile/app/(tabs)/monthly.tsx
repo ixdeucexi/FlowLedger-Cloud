@@ -1,3 +1,5 @@
+import { parseMoneyInput } from "@/lib/moneyFormInput";
+import { showFormError } from "@/lib/formInputAlert";
 import Feather from "@expo/vector-icons/Feather";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "@/lib/haptics";
@@ -431,7 +433,7 @@ export default function MonthlyScreen() {
   };
 
 
-  const [month, setMonth] = useState(new Date().getMonth());
+  const [month, setMonth] = useState(householdCurrentMonth);
   const [activeTab] = useState<TabView>("calendar");
   const [txModalVisible, setTxModalVisible] = useState(false);
   const [editTx, setEditTx] = useState<Transaction | null>(null);
@@ -472,9 +474,8 @@ export default function MonthlyScreen() {
       if (!active) return;
       const saved = preferences.calendar;
       if (!requestedDate && isColdCalendarStart) {
-        const now = new Date();
-        setMonth(now.getMonth());
-        setSelectedYear(now.getFullYear());
+        setMonth(householdCurrentMonth);
+        setSelectedYear(householdCurrentYear);
         // Start on the current month without opening a day overlay. Details
         // appear only after the user taps a calendar date.
         setSelectedDate(null);
@@ -486,7 +487,7 @@ export default function MonthlyScreen() {
       calendarPreferenceReadyRef.current = true;
     });
     return () => { active = false; };
-  }, [activeHousehold?.householdId, routeParams.openDate, setSelectedYear, user?.id]);
+  }, [activeHousehold?.householdId, householdCurrentMonth, householdCurrentYear, routeParams.openDate, setSelectedYear, user?.id]);
 
   useEffect(() => {
     if (!user || !activeHousehold || !calendarPreferenceReadyRef.current) return;
@@ -1061,13 +1062,7 @@ export default function MonthlyScreen() {
     setTimeout(showPrompt, Platform.OS === "web" ? 0 : 250);
   }, [finalizeBillPayment, month, selectedYear, setCustomAmount]);
 
-  const parsePaidInput = useCallback((value: string) => {
-    const normalized = value
-      .trim()
-      .replace(/[$,\s]/g, "")
-      .replace(/^\((.*)\)$/, "-$1");
-    return Number.parseFloat(normalized);
-  }, []);
+  const parsePaidInput = useCallback((value: string) => parseMoneyInput(value.trim().replace(/^\$/, "")), []);
 
   const clearPaidEditForKey = useCallback((key: string) => {
     editingPaidRef.current = { ...editingPaidRef.current };
@@ -1201,7 +1196,7 @@ export default function MonthlyScreen() {
         return;
       }
       const parsed = parsePaidInput(trimmed);
-      if (!Number.isFinite(parsed)) return;
+      if (parsed === null) { showFormError("Check paid amount", "Enter a nonnegative amount with up to two decimal places."); return; }
       const budgeted = bill ? getBillMonthlyTotal(bill, month, selectedYear) : 0;
       const day = bill ? Math.min(new Date(selectedYear, month + 1, 0).getDate(), getCustomDueDay(bill.id, month, selectedYear) ?? bill.due_day) : 1;
       const paidDate = `${selectedYear}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -1311,16 +1306,18 @@ export default function MonthlyScreen() {
     setSurplusPrompt(null);
   };
 
-  const handleAmtBlur = useCallback((bill: { id: string; amount: number }, key: string, occurrenceDate?: string) => {
+  const handleAmtBlur = useCallback(async (bill: { id: string; amount: number }, key: string, occurrenceDate?: string) => {
     const val = editingAmounts[key];
     if (val === undefined) return;
-    const parsed = parseFloat(val);
-    if (occurrenceDate) {
-      void setBillOccurrenceAmount(bill.id, occurrenceDate, isNaN(parsed) || parsed === bill.amount ? undefined : parsed);
-    } else {
-      void setCustomAmount(bill.id, month, selectedYear, isNaN(parsed) || parsed === bill.amount ? undefined : parsed);
+    const parsed = val.trim() ? parseMoneyInput(val) : undefined;
+    if (parsed === null) { showFormError("Check bill amount", "Enter a nonnegative amount with up to two decimals, or leave blank to clear the override."); return; }
+    try {
+      if (occurrenceDate) await setBillOccurrenceAmount(bill.id, occurrenceDate, parsed === bill.amount ? undefined : parsed);
+      else await setCustomAmount(bill.id, month, selectedYear, parsed === bill.amount ? undefined : parsed);
+      setEditingAmounts(previous => { if (previous[key] !== val) return previous; const next = { ...previous }; delete next[key]; return next; });
+    } catch (error) {
+      showFormError("Could not save bill amount", error instanceof Error ? error.message : "Please try again.");
     }
-    setEditingAmounts(p => { const n = { ...p }; delete n[key]; return n; });
   }, [editingAmounts, setBillOccurrenceAmount, setCustomAmount, month, selectedYear]);
 
   const saveDueDayChange = useCallback(async (picker: DueDayPickerState, targetDate: string | undefined) => {
@@ -1392,8 +1389,8 @@ export default function MonthlyScreen() {
   }, [bills, showDebtPaymentNotice]);
 
   const handleApplyExtra = () => {
-    const amt = parseFloat(extraPayment);
-    if (isNaN(amt) || amt <= 0) return;
+    const amt = parseMoneyInput(extraPayment);
+    if (amt === null || amt <= 0) { showFormError("Check payment amount", "Enter a positive amount with up to two decimal places."); return; }
     const debtCount = bills.filter(b => b.is_debt && b.balance > 0).length;
     if (debtCount === 0) { Alert.alert("No Debts", "You have no active debts to apply extra payments to."); return; }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -1406,12 +1403,14 @@ export default function MonthlyScreen() {
 
   const updateSnowballAmount = (value: string) => {
     setExtraPayment(value);
-    const amount = Number.parseFloat(value) || 0;
+    const amount = parseMoneyInput(value);
+    if (amount === null) { setSnowballPreview(null); return; }
     const existing = getExtraPayment(month, selectedYear);
     setSnowballPreview(previewDebtSnowball(month, selectedYear, amount, 0, existing?.payment_date, existing?.id));
   };
 
   const confirmSnowballPayment = async () => {
+    if (parseMoneyInput(extraPayment) === null) { showFormError("Check payment amount", "Enter a valid amount before saving."); return; }
     if (!snowballPreview) return;
     try {
       await applyDebtSnowballPayment(snowballPreview);
@@ -1557,10 +1556,10 @@ export default function MonthlyScreen() {
 
   const saveEditedPlan = async () => {
     if (!editPlan || savingPlan) return;
-    const amount = Number.parseFloat(editPlanAmount);
+    const amount = parseMoneyInput(editPlanAmount);
     const name = editPlanName.trim() || editPlan.name;
-    if (!Number.isFinite(amount) || amount <= 0) {
-      Alert.alert("Amount needed", "Enter an amount greater than $0.");
+    if (amount === null || amount <= 0) {
+      showFormError("Amount needed", "Enter a valid amount greater than $0 with up to two decimal places.");
       return;
     }
     setSavingPlan(true);
@@ -1699,8 +1698,15 @@ export default function MonthlyScreen() {
     const monthKey = `${selectedYear}-${month}`;
     if (desktopSelectionMonthRef.current === monthKey) return;
     desktopSelectionMonthRef.current = monthKey;
-    setSelectedDate(isCurrentMonth ? todayIso : isoDateForMonthDay(selectedYear, month, 1));
-  }, [isCurrentMonth, isDesktop, month, selectedYear, todayIso]);
+    const requestedDate = Array.isArray(routeParams.openDate) ? routeParams.openDate[0] : routeParams.openDate;
+    const monthPrefix = `${selectedYear}-${String(month + 1).padStart(2, "0")}-`;
+    setSelectedDate(current => {
+      // Keep explicit route/overview selections queued before this effect.
+      // Month navigation explicitly clears the selection first.
+      if (current && (current.startsWith(monthPrefix) || current === requestedDate)) return current;
+      return isCurrentMonth ? todayIso : isoDateForMonthDay(selectedYear, month, 1);
+    });
+  }, [isCurrentMonth, isDesktop, month, routeParams.openDate, selectedYear, todayIso]);
 
   const monthSearchOptions = useMemo(() => {
     const query = monthSearchQuery.trim().toLowerCase();

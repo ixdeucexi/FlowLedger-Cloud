@@ -48,3 +48,10 @@ test("Accounts renders authoritative dated balances, never adding already-reconc
   assert.match(paint({ ...account, current_balance: -125, balance_as_of: "" }), /-125\.00/);
   assert.match(paint({ ...account, balance_as_of: "" }), /Balance date unknown/);
 });
+
+import { parseMoneyInput, parseDecimalInput } from "./moneyFormInput";
+test("strict money fields accept full decimals/grouping without silently parsing prefixes", () => {
+  for (const [raw, expected] of [["1,200.50", 1200.5], [" 25.10 ", 25.1], [".50", 0.5], ["0", 0], ["1200", 1200]] as const) assert.equal(parseMoneyInput(raw), expected);
+  for (const raw of ["25oops", "1,20.50", "12,34,567", "Infinity", "NaN", "1e3", "-1", "+10", "5.123", "5..2", "", "9007199254740992", "25.", "$25"]) assert.equal(parseMoneyInput(raw), null, raw);
+  assert.equal(parseDecimalInput("5.875", 4), 5.875);
+});

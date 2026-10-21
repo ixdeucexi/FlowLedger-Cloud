@@ -1,5 +1,7 @@
 # FlowLedger Native Release Runbook
 
+The [October 21 Google Play audit](play-store-readiness-audit.md) records the verified hardening work and outstanding January 2027 submission requirements. It supplements this runbook; it is not a signed-device or store-approval record.
+
 Use this record for every preview, TestFlight, Play internal, and production release. Never release from an uncommitted worktree. `pnpm run deploy:production` is the canonical web production command and refuses a dirty source tree or an unverified rollback tag before running the full release gate. Set `FLOWLEDGER_ROLLBACK_REF` to a pushed annotated `rollback/prod-before-*` tag that points to the currently live commit and records the exact live Vercel deployment ID. The guard verifies both against production and prints the emergency `vercel rollback <deployment-id> --yes` command before deployment begins.
 
 The August 27 baseline deployment `dpl_AfWQ7KRhXzMjcegJkY3GNgf3ertr` reports `gitDirty=1`; its rollback tag therefore identifies the exact immutable Vercel artifact, not a reproducible clean build of commit `566ff37`. This is a one-time inherited baseline. Every replacement production deployment must report the release commit with `gitDirty` absent or not `1` before it is accepted.

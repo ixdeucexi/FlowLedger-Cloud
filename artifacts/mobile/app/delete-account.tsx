@@ -1,7 +1,7 @@
 import Feather from "@expo/vector-icons/Feather";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -30,6 +30,7 @@ export default function DeleteAccountScreen() {
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
+  const reauthInFlightRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [oauthAccessToken, setOauthAccessToken] = useState<string | null>(null);
   const [deletionSubjectId, setDeletionSubjectId] = useState<string | null>(() => user?.id ?? null);
@@ -53,35 +54,36 @@ export default function DeleteAccountScreen() {
       if (Number.isFinite(startedAt) && Date.now() - startedAt <= 10 * 60 * 1000) {
         setOauthAccessToken(session.access_token);
       }
-    });
+    }).catch(() => { setOauthAccessToken(null); });
   }, [deletionSubjectId, oauthReauthKey, session?.access_token, session?.user.id, usesPassword]);
 
   const reauthenticateOauth = async () => {
-    if (!oauthProvider) return;
+    if (!oauthProvider || reauthInFlightRef.current) return;
+    reauthInFlightRef.current = true;
     setBusy(true);
     setError(null);
-    if (!deletionSubjectId || !oauthReauthKey) { setError("Return to this screen from the account you want to delete."); setBusy(false); return; }
-    await AsyncStorage.setItem(oauthReauthKey, String(Date.now()));
-    const reauthError = oauthProvider === "apple"
-      ? await signInWithApple()
-      : await signInWithGoogle();
-    if (reauthError) {
-      await AsyncStorage.removeItem(oauthReauthKey).catch(() => undefined);
-      setError(reauthError);
-      setBusy(false);
-      return;
-    }
-    const freshSession = (await supabase.auth.getSession()).data.session;
-    if (!freshSession || freshSession.user.id !== deletionSubjectId) {
-      await AsyncStorage.removeItem(oauthReauthKey).catch(() => undefined);
-      await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+    setOauthAccessToken(null);
+    try {
+      if (!deletionSubjectId || !oauthReauthKey) throw new Error("Return to this screen from the account you want to delete.");
+      await AsyncStorage.setItem(oauthReauthKey, String(Date.now()));
+      const reauthError = oauthProvider === "apple" ? await signInWithApple() : await signInWithGoogle();
+      if (reauthError) throw new Error(reauthError);
+      const result = await supabase.auth.getSession();
+      if (result.error) throw result.error;
+      const freshSession = result.data.session;
+      if (!freshSession || freshSession.user.id !== deletionSubjectId) {
+        await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+        throw new Error("That provider account does not match the FlowLedger account selected for deletion. No account was deleted; sign in to the original account and try again.");
+      }
+      setOauthAccessToken(freshSession.access_token);
+    } catch (error) {
+      if (oauthReauthKey) await AsyncStorage.removeItem(oauthReauthKey).catch(() => undefined);
       setOauthAccessToken(null);
-      setError("That provider account does not match the FlowLedger account selected for deletion. No account was deleted; sign in to the original account and try again.");
+      setError(error instanceof Error ? error.message : "Couldn’t verify your identity. Please try again.");
+    } finally {
+      reauthInFlightRef.current = false;
       setBusy(false);
-      return;
     }
-    setOauthAccessToken(freshSession?.access_token || null);
-    setBusy(false);
   };
 
   const deleteAccount = async () => {

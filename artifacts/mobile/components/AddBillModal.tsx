@@ -1,3 +1,5 @@
+import { showFormError } from "@/lib/formInputAlert";
+import { parseMoneyInput, parseDecimalInput } from "@/lib/moneyFormInput";
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
 import React, { useEffect, useMemo, useState } from "react";
@@ -165,8 +167,11 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
 
   const handleSave = async () => {
     if (saving) return;
-    const parsedAmount = parseFloat(amount);
-    if (!name.trim() || isNaN(parsedAmount) || parsedAmount <= 0) return;
+    const parsedAmount = parseMoneyInput(amount);
+    const parsedBalance = balance.trim() ? parseMoneyInput(balance) : 0;
+    const parsedRate = interestRate.trim() ? parseDecimalInput(interestRate, 4) : 0;
+    if (parsedAmount === null || parsedAmount <= 0 || (isDebt && (parsedBalance === null || parsedRate === null))) { showFormError("Check bill amounts", "Enter valid nonnegative amounts. Payment and balance allow up to two decimal places; interest rate allows up to four."); return; }
+    if (!name.trim()) return;
     if (frequency === "quarterly" && !nextPaymentDate.trim()) {
       Alert.alert("Choose the first payment date", "FlowLedger uses it to repeat this bill every 3 months.");
       return;
@@ -178,8 +183,8 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       category: isDebt ? "Debt" : category,
       priority: isDebt ? 0 : 99,
       is_debt: isDebt,
-      balance: isDebt ? (parseFloat(balance) || 0) : 0,
-      interest_rate: isDebt ? (parseFloat(interestRate) || 0) : 0,
+      balance: isDebt ? (parsedBalance ?? 0) : 0,
+      interest_rate: isDebt ? (parsedRate ?? 0) : 0,
       due_day: parseInt(dueDay) || 1,
       day_of_week: dayOfWeek,
       next_payment_date: nextPaymentDate.trim() || undefined,

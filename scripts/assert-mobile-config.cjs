@@ -43,6 +43,12 @@ assert.equal(
 );
 
 const config = fs.readFileSync(configPath, "utf8");
+const configuredAndroid = require(configPath).expo.android;
+assert.equal(configuredAndroid.allowBackup, false, "Financial caches must not enter Android system backups.");
+assert.match(config, /withPrivateAndroidBackup/, "Native backups require cloud and device-transfer exclusions.");
+for (const permission of ["android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE", "android.permission.SYSTEM_ALERT_WINDOW"]) {
+  assert.ok(configuredAndroid.blockedPermissions?.includes(permission), `Block unnecessary Android permission: ${permission}`);
+}
 assert.match(config, /bundleIdentifier:\s*"com\.flowledger\.app"/);
 assert.match(config, /package:\s*"com\.flowledger\.app"/);
 assert.match(config, /projectId:\s*"80ec219d-8a12-43f9-b7cf-0dd6541e60f1"/);
