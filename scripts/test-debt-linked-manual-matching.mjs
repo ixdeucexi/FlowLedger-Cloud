@@ -20,7 +20,7 @@ const sql = [
   fn('20260728060934_harden_manual_transaction_reconciliation.sql', 'private.reconcile_manual_transaction'),
   fn('20260813173723_allow_manual_pending_activity_matches.sql', 'private.transfer_manual_activity_metadata'),
   `revoke all on function private.reconcile_manual_transaction(text,text,date,numeric,text) from public,anon; grant execute on function private.reconcile_manual_transaction(text,text,date,numeric,text) to authenticated,service_role; revoke all on function private.transfer_manual_activity_metadata() from public,anon,authenticated;`,
-  read('supabase/migrations/20261022141151_allow_debt_linked_manual_matching.sql'),
+  read('supabase/migrations/20261022142938_allow_debt_linked_manual_matching.sql'),
   fn('20260728011948_reconcile_manual_planned_transactions.sql', 'public.reconcile_manual_transaction'),
   fn('20260728011948_reconcile_manual_planned_transactions.sql', 'public.undo_manual_transaction_reconciliation'),
   `create trigger transactions_transfer_manual_activity_metadata before update of review_resolution on public.transactions for each row execute function private.transfer_manual_activity_metadata();`,
