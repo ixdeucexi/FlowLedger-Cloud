@@ -187,3 +187,23 @@ test("regular bill matching keeps the bill budget when a monthly override is low
   assert.equal(isMatchedPaymentLowerThanPlanned(-349, budgeted), true);
   assert.equal(resolveMatchedBillBudget(390, 370), 390);
 });
+
+
+test("manual selected debt is eligible only with a current scoped debt and retains every other exclusion", () => {
+  const linked = { id: "manual-discover", date: "2026-10-22", amount: -50, category: "Debt", source: "manual", linked_bill_id: "discover" };
+  const debts = [{ id: "discover", is_debt: true }];
+  assert.equal(manualActivityMatchCandidates([{ ...linked, source: null }], "2026-10-22", undefined, debts).length, 1);
+  assert.deepEqual(manualActivityMatchCandidates([linked], "2026-10-22", undefined, debts).map(item => item.billId), [linked.id]);
+  assert.deepEqual(manualActivityMatchCandidates([linked], "2026-10-22"), []);
+  assert.deepEqual(manualActivityMatchCandidates([linked], "2026-10-22", undefined, [{ id: "discover", is_debt: false }]), []);
+  for (const excluded of [{ source: "statement" }, { source: "snowball_plan" }, { source: "plaid" }, { import_hash: "generated" }, { transfer_group_id: "transfer" }, { pending: true }, { deleted_at: "now" }, { removed_at: "now" }, { linked_plan_id: "plan" }, { review_status: "matched" }, { category: "Transfer" }, { amount: 50 }, { date: "2026-09-22" }]) {
+    assert.deepEqual(manualActivityMatchCandidates([{ ...linked, ...excluded }], "2026-10-22", undefined, debts), []);
+  }
+  assert.deepEqual(manualActivityMatchCandidates([linked], "2026-10-22", linked.id, debts), []);
+});
+
+test("manual debt replacement keeps its debt application link without settling a separate planned bill", () => {
+  const bank = { linked_bill_id: "discover", match_reason: "confirmed_manual_match", review_status: "matched", review_resolution: "manual", matched_occurrence_date: "2026-10-22", review_allocations: [{ type: "planned_expense", targetId: "manual-discover", occurrenceDate: "2026-10-22" }] };
+  assert.equal(confirmedBillMatchId(bank), null);
+  assert.equal(isConfirmedBillMatch(bank), false);
+});

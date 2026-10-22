@@ -41,8 +41,10 @@ export function manualActivityMatchCandidates(
   transactions: ManualActivityMatchCandidate[],
   transactionDate: string,
   excludedTransactionId?: string,
+  bills: readonly { id: string; is_debt?: boolean | null }[] = [],
 ): BillMatchCandidate[] {
   const monthPrefix = transactionDate.slice(0, 7);
+  const debtIds = new Set(bills.filter(bill => bill.is_debt).map(bill => bill.id));
   return transactions
     .filter(transaction =>
       transaction.id !== excludedTransactionId
@@ -54,7 +56,7 @@ export function manualActivityMatchCandidates(
       && transaction.pending !== true
       && !transaction.removed_at
       && !transaction.deleted_at
-      && !transaction.linked_bill_id
+      && (!transaction.linked_bill_id || ((transaction.source == null || transaction.source === "manual") && debtIds.has(transaction.linked_bill_id)))
       && !transaction.linked_plan_id
       && transaction.review_status !== "matched"
       && transaction.category !== "Transfer")

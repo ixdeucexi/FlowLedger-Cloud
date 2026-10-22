@@ -130,7 +130,7 @@ import {
   type HouseholdRole,
 } from "@/lib/households";
 import { canEditHouseholdPlan, canManageHouseholdMembers } from "@/lib/householdPermissions";
-import { isActiveTransaction, isConfirmedBillMatch } from "@/lib/billMatching";
+import { isActiveTransaction, isConfirmedBillMatch, manualActivityMatchCandidates } from "@/lib/billMatching";
 import { countReviewQueue } from "@/lib/reviewCenter";
 import { normalizePlanningTools } from "@/lib/planningMode";
 import { canonicalDebtPaymentMethod } from "@/lib/debtOrder";
@@ -781,7 +781,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [billDateMoves, setBillDateMoves, billDateMovesRevision] = useRevisionedState<BillDateMove[]>([]);
   const [transactions,  setTransactions,  transactionsRevision] = useRevisionedState<Transaction[]>([]);
   const demoManualMatchTargets = useRef(new Map<string, Transaction>());
-  const demoManualBankRestore = useRef(new Map<string, Pick<Transaction, "note" | "debt_applied_amount" | "debt_applied_bill_id" | "user_edited_at">>());
+  const demoManualBankRestore = useRef(new Map<string, Pick<Transaction, "linked_bill_id" | "note" | "debt_applied_amount" | "debt_applied_bill_id" | "user_edited_at">>());
   const [deletedTransactions, setDeletedTransactions, deletedTransactionsRevision] = useRevisionedState<Transaction[]>([]);
   const [pendingBankTransactions, setPendingBankTransactions, pendingBankTransactionsRevision] = useRevisionedState<PendingBankTransaction[]>([]);
   const [pendingPlanMatches, setPendingPlanMatches, pendingPlanMatchesRevision] = useRevisionedState<PendingPlanMatch[]>([]);
@@ -4035,15 +4035,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!user) throw new Error("Sign in to match a pending payment");
     assertCanEditHousehold("match a pending payment");
     const pending = pendingBankTransactions.find(item => item.plaid_transaction_id === pendingPlaidTransactionId);
+    const eligibleManualIds = pending && targetType === "manual"
+      ? new Set(manualActivityMatchCandidates(transactions, pending.transaction_date, undefined, bills).map(item => item.billId))
+      : undefined;
     const target = targetType === "bill"
       ? bills.find(item => item.id === targetId)
-      : transactions.find(item =>
-        item.id === targetId
-        && item.source !== "plaid"
-        && item.amount < 0
-        && !item.pending
-        && !item.removed_at
-        && !item.deleted_at);
+      : transactions.find(item => item.id === targetId && eligibleManualIds?.has(item.id));
     if (!pending || !target) throw new Error("Pending payment or matching Activity entry not found");
     if (pending.amount >= 0) throw new Error("Only pending money-out charges can be matched");
     if (targetType === "manual" && "date" in target && target.date.slice(0, 7) !== pending.transaction_date.slice(0, 7)) {
@@ -4304,8 +4301,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       : rawInput;
 
     if (demoMode) {
+      const eligibleManualIds = input.resolution === "manual"
+        ? new Set(manualActivityMatchCandidates(transactions, transaction.date, transaction.id, bills).map(item => item.billId))
+        : undefined;
       const manualTarget = input.resolution === "manual"
-        ? transactions.find(item => item.id === input.targetId && item.source !== "plaid" && item.amount < 0)
+        ? transactions.find(item => item.id === input.targetId && eligibleManualIds?.has(item.id))
         : undefined;
       const snowballPayment = input.resolution === "snowball"
         ? extraPayments.find(payment =>
@@ -4320,6 +4320,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       }
       if (input.resolution === "manual" && !manualTarget) {
         throw new Error("Manual calendar transaction not found");
+      }
+      if (manualTarget && (Math.abs(transaction.debt_applied_amount ?? 0) > 0 || transaction.debt_applied_bill_id)) {
+        throw new Error("This bank transaction already has an applied debt payment. Refresh Review Center before matching");
       }
       const allocation: ReviewAllocation = {
         type: input.resolution === "bill" ? "bill"
@@ -4341,6 +4344,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       if (manualTarget) {
         demoManualMatchTargets.current.set(input.transactionId, manualTarget);
         demoManualBankRestore.current.set(input.transactionId, {
+          linked_bill_id: transaction.linked_bill_id,
           note: transaction.note,
           debt_applied_amount: transaction.debt_applied_amount,
           debt_applied_bill_id: transaction.debt_applied_bill_id,
@@ -4365,7 +4369,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         debt_applied_bill_id: input.resolution === "manual"
           ? manualTarget?.debt_applied_bill_id
           : item.debt_applied_bill_id,
-        linked_bill_id: input.resolution === "bill" ? input.targetId : undefined,
+        linked_bill_id: input.resolution === "bill" ? input.targetId
+          : input.resolution === "manual" ? manualTarget?.linked_bill_id : undefined,
         linked_income_id: input.resolution === "income" ? input.targetId : undefined,
         linked_plan_id: input.resolution === "goal" || input.resolution === "decision" ? input.targetId
           : input.resolution === "snowball" ? snowballPayment?.id
@@ -4653,11 +4658,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const restoredBank = wasManualMatch ? demoManualBankRestore.current.get(transactionId) : undefined;
       setTransactions(previous => {
         const restored = restoredManualTarget && !previous.some(item => item.id === restoredManualTarget.id)
-          ? [...previous, restoredManualTarget]
+          ? [...previous, { ...restoredManualTarget, debt_applied_amount: reviewedTransaction?.debt_applied_amount, debt_applied_bill_id: reviewedTransaction?.debt_applied_bill_id }]
           : previous;
         return restored.map(item => item.id === transactionId ? {
         ...item,
-        linked_bill_id: undefined,
+        linked_bill_id: wasManualMatch ? restoredBank?.linked_bill_id : undefined,
         linked_income_id: undefined,
         linked_plan_id: undefined,
         linked_plan_type: undefined,

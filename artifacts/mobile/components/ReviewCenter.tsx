@@ -107,7 +107,7 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
   const { user } = useAuth();
   const handledCloseRequestRef = useRef<string | null>(null);
   const {
-    activeHousehold, startupCoreReady, transactions, incomes, goals, decisions, extraPayments, categories, canEditHousehold, settings, pendingPlanMatches,
+    activeHousehold, startupCoreReady, transactions, bills, incomes, goals, decisions, extraPayments, categories, canEditHousehold, settings, pendingPlanMatches,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getDailyBalances,
     createSpendingBucketForTransaction, updateGoal, deleteGoal, closeSpendingBucket, closeSpendingBucketAndRouteRemainder, reopenSpendingBucket,
     archiveSpendingBucket, restoreArchivedSpendingBucket,
@@ -254,7 +254,7 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
         snowballTargets.set(occurrenceKey(target.id, target.occurrenceDate), target);
       });
       candidates.push(...snowballTargets.values());
-      manualActivityMatchCandidates(transactions, current.date, current.id)
+      manualActivityMatchCandidates(transactions, current.date, current.id, bills)
         .forEach(target => candidates.push({
           type: "manual",
           id: target.billId,
@@ -262,7 +262,7 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
           category: target.category,
           plannedAmount: target.plannedAmount,
           occurrenceDate: target.occurrenceDates[0],
-          isDebt: Boolean(transactions.find(transaction => transaction.id === target.billId)?.debt_applied_bill_id),
+          isDebt: Boolean(transactions.find(transaction => transaction.id === target.billId)?.debt_applied_bill_id || transactions.find(transaction => transaction.id === target.billId)?.linked_bill_id),
         }));
       goals.filter(isEligibleSpendingBucketMatch)
         .forEach(goal => candidates.push({
@@ -285,7 +285,7 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
       .find(Boolean);
     const linkedRanking = prioritizeSavedBillTarget(learnedRanking, savedBillId);
     return prioritizePendingPlanTarget(linkedRanking, current.id, pendingPlanMatches);
-  }, [current, decisions, extraPayments, getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, goals, incomes, pendingPlanMatches, subscriptionBillLinks, transactions]);
+  }, [bills, current, decisions, extraPayments, getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, goals, incomes, pendingPlanMatches, subscriptionBillLinks, transactions]);
   const groupedTargets = useMemo(() => groupReviewTargets(targets), [targets]);
   const spendingBuckets = useMemo(() => goals
     .filter(goal => goal.goal_type === "planned_expense" && !goal.archived_at)

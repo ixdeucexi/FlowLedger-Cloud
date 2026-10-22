@@ -1510,6 +1510,7 @@ export function ActivityScreen() {
       transactions,
       matchTx.date,
       matchTx.id,
+      bills,
     );
     return rankBillMatches(
       {
@@ -1520,7 +1521,7 @@ export function ActivityScreen() {
       },
       candidates,
     );
-  }, [matchTx, transactions]);
+  }, [matchTx, transactions, bills]);
   const pendingManualMatchOptions = useMemo(() => {
     if (!pendingMatchTx || pendingMatchTx.amount >= 0) return [];
     return rankBillMatches(
@@ -1536,9 +1537,11 @@ export function ActivityScreen() {
       manualActivityMatchCandidates(
         transactions,
         pendingMatchTx.transaction_date,
+        undefined,
+        bills,
       ),
     );
-  }, [pendingMatchTx, transactions]);
+  }, [pendingMatchTx, transactions, bills]);
   const pendingMatchOptions = useMemo(
     () => pendingMatchesForKind(pendingMatchKind, pendingBillMatchOptions, pendingManualMatchOptions, bills),
     [pendingMatchKind, pendingBillMatchOptions, pendingManualMatchOptions, bills],
