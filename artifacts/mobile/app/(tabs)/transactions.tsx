@@ -1,3 +1,4 @@
+import { pendingMatchesForKind, pendingMatchKindLabels, type PendingMatchKind } from "@/lib/pendingMatchChooser";
 import { parseMoneyInput } from "@/lib/moneyFormInput";
 import { showFormError } from "@/lib/formInputAlert";
 import Feather from "@expo/vector-icons/Feather";
@@ -521,8 +522,13 @@ export function ActivityScreen() {
   const [unplannedChargeTx, setUnplannedChargeTx] =
     useState<Transaction | null>(null);
   const [forgottenBillVisible, setForgottenBillVisible] = useState(false);
-  const [pendingMatchTx, setPendingMatchTx] =
+  const [pendingMatchKind, setPendingMatchKind] = useState<PendingMatchKind | null>(null);
+  const [pendingMatchTx, setPendingMatchTxState] =
     useState<PendingBankTransaction | null>(null);
+  const setPendingMatchTx = useCallback((pending: PendingBankTransaction | null) => {
+    setPendingMatchKind(null);
+    setPendingMatchTxState(pending);
+  }, []);
   const [pendingTransactionSource, setPendingTransactionSource] =
     useState<PendingBankTransaction | null>(null);
   const [savingMatch, setSavingMatch] = useState(false);
@@ -1280,7 +1286,7 @@ export function ActivityScreen() {
     "Confirm posted activity so your plan stays accurate.";
   const pendingAttentionTitle = `${pendingActivityCount} bank ${pendingActivityCount === 1 ? "payment is" : "payments are"} ready to match`;
   const pendingAttentionBody =
-    "Choose the bill or Activity entry it is expected to cover. It stays uncounted until it posts.";
+    "Choose a bill, debt, or manual transaction it is expected to cover. It stays uncounted until it posts.";
   const openFirstUnmatchedPending = () => {
     const pending = unmatchedPendingActivity[0];
     if (!pending) return;
@@ -1534,22 +1540,8 @@ export function ActivityScreen() {
     );
   }, [pendingMatchTx, transactions]);
   const pendingMatchOptions = useMemo(
-    () =>
-      [
-        ...pendingBillMatchOptions.map((option) => ({
-          ...option,
-          targetType: "bill" as const,
-        })),
-        ...pendingManualMatchOptions.map((option) => ({
-          ...option,
-          targetType: "manual" as const,
-        })),
-      ].sort(
-        (left, right) =>
-          right.score - left.score ||
-          (left.daysApart ?? 999) - (right.daysApart ?? 999),
-      ),
-    [pendingBillMatchOptions, pendingManualMatchOptions],
+    () => pendingMatchesForKind(pendingMatchKind, pendingBillMatchOptions, pendingManualMatchOptions, bills),
+    [pendingMatchKind, pendingBillMatchOptions, pendingManualMatchOptions, bills],
   );
   const bucketMatchOptions = useMemo(() => {
     if (!matchTx || matchTx.amount >= 0) return [];
@@ -1775,7 +1767,7 @@ export function ActivityScreen() {
         `${option.name} will not show overdue while this bank charge is pending. Confirm it after it posts.`,
       );
     } catch (error) {
-      Alert.alert(
+      showFormError(
         "Could not match pending payment",
         error instanceof Error ? error.message : "Please try again.",
       );
@@ -1803,7 +1795,7 @@ export function ActivityScreen() {
         `${option.name} is linked to this pending charge. It will be replaced by the bank-backed Activity entry after the charge posts and you confirm it.`,
       );
     } catch (error) {
-      Alert.alert(
+      showFormError(
         "Could not match pending payment",
         error instanceof Error ? error.message : "Please try again.",
       );
@@ -3549,7 +3541,7 @@ export function ActivityScreen() {
               </View>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Close pending bill matching"
+                accessibilityLabel="Close pending matching"
                 onPress={() => setPendingMatchTx(null)}
                 style={styles.modalCloseButton}
               >
@@ -3611,7 +3603,7 @@ export function ActivityScreen() {
               <>
                 <Text style={[styles.matchIntro, { color: c.mutedForeground }]}>
                   Create a new Activity transaction for this charge, or link it
-                  to something you already planned.
+                  to a bill, debt, or manual transaction you already planned.
                 </Text>
                 <Pressable
                   accessibilityRole="button"
@@ -3642,6 +3634,23 @@ export function ActivityScreen() {
                   </View>
                   <Feather name="chevron-right" size={17} color={c.mutedForeground} />
                 </Pressable>
+                <Text style={[styles.matchRowTitle, { color: c.foreground, marginTop: 16, marginBottom: 8 }]}>What does this payment cover?</Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+                  {(["bill", "debt", "manual"] as const).map(kind => (
+                    <Pressable
+                      key={kind}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Match pending payment to ${pendingMatchKindLabels[kind].toLowerCase()}`}
+                      accessibilityState={{ selected: pendingMatchKind === kind, disabled: savingMatch }}
+                      aria-pressed={pendingMatchKind === kind}
+                      disabled={savingMatch}
+                      onPress={() => setPendingMatchKind(kind)}
+                      style={{ borderWidth: 1, borderRadius: 10, minHeight: 44, justifyContent: "center", paddingHorizontal: 12, paddingVertical: 10, maxWidth: "100%", borderColor: pendingMatchKind === kind ? c.primary : c.border, backgroundColor: pendingMatchKind === kind ? c.primary + "18" : c.card, opacity: savingMatch ? 0.55 : 1 }}
+                    >
+                      <Text style={{ color: c.foreground, fontFamily: "Inter_600SemiBold", flexShrink: 1 }}>{pendingMatchKindLabels[kind]}</Text>
+                    </Pressable>
+                  ))}
+                </View>
                 <ScrollView
                   style={[
                     styles.matchList,
@@ -3654,7 +3663,7 @@ export function ActivityScreen() {
                       <Pressable
                         key={`${option.targetType}-${option.billId}-${option.nearestOccurrenceDate}`}
                         accessibilityRole="button"
-                        accessibilityLabel={`Temporarily match pending payment to ${option.name}`}
+                        accessibilityLabel={`Match pending payment to ${pendingMatchKind ? pendingMatchKindLabels[pendingMatchKind].toLowerCase() : "entry"} ${option.name}, $${option.plannedAmount.toFixed(2)}, ${option.nearestOccurrenceDate ?? "date unavailable"}`}
                         disabled={savingMatch}
                         onPress={() =>
                           void (option.targetType === "manual"
@@ -3734,9 +3743,9 @@ export function ActivityScreen() {
                             ]}
                           >
                             {option.targetType === "manual"
-                              ? "Manual Activity"
-                              : "Planned bill"}{" "}
-                            · ${option.plannedAmount.toFixed(2)} ·{" "}
+                              ? "Manual transaction"
+                              : pendingMatchKind === "debt" ? "Debt payment" : "Planned bill"}{" "}
+                            · ${option.plannedAmount.toFixed(2)} · {option.nearestOccurrenceDate} ·{" "}
                             {option.daysApart === 0
                               ? "same day"
                               : option.daysApart === 1
@@ -3768,7 +3777,7 @@ export function ActivityScreen() {
                       <Text
                         style={[styles.matchRowTitle, { color: c.foreground }]}
                       >
-                        No planned or manual match found
+                        {pendingMatchKind ? `No eligible ${pendingMatchKindLabels[pendingMatchKind].toLowerCase()} found` : "Choose a match type"}
                       </Text>
                       <Text
                         style={[
@@ -3776,8 +3785,7 @@ export function ActivityScreen() {
                           { color: c.mutedForeground },
                         ]}
                       >
-                        Create a transaction above, add a bill, or return after
-                        you have another planned entry to match.
+                        {pendingMatchKind ? "Choose another type, create a transaction above, or return after you have an eligible entry to match." : "Choose Bill, Debt, or Manual transaction to see matching entries. Nothing is matched until you choose an entry."}
                       </Text>
                     </View>
                   )}
