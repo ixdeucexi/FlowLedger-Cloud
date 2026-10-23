@@ -1,3 +1,4 @@
+import { pendingManualReplacementIds } from "@/lib/pendingManualReplacement";
 import { parseMoneyInput } from "@/lib/moneyFormInput";
 import { showFormError } from "@/lib/formInputAlert";
 import Feather from "@expo/vector-icons/Feather";
@@ -410,7 +411,7 @@ export default function MonthlyScreen() {
   const routeParams = useLocalSearchParams<{ openDate?: string | string[]; openDateAt?: string | string[] }>();
   const { user } = useAuth();
   const {
-    bills, incomes, overrides, billDateMoves, transactions, pendingBankTransactions, pendingPlanMatches, extraPayments, goals, decisions, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
+    bills, incomes, overrides, billDateMoves, transactions, transactionAccountIdentities, pendingBankTransactions, pendingPlanMatches, extraPayments, goals, decisions, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
     setBillOccurrenceAmount, skipBillOccurrence, endBillSeriesBeforeOccurrence,
     getCustomDueDay, setCustomDueDay,
     moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence,
@@ -755,7 +756,11 @@ export default function MonthlyScreen() {
     [transactions, bills],
   );
   const txList = useMemo(() => getTransactionsForMonth(month, selectedYear), [getTransactionsForMonth, month, selectedYear]);
-  const calendarTransactions = useMemo(() => txList.map(transaction => {
+  const provisionalManualIds = useMemo(
+    () => pendingManualReplacementIds(transactions, pendingPlanMatches, transactionAccountIdentities, bills),
+    [transactions, pendingPlanMatches, transactionAccountIdentities, bills],
+  );
+  const calendarTransactions = useMemo(() => txList.filter(transaction => !provisionalManualIds.has(transaction.id)).map(transaction => {
     const reviewedLabel = allocationLabel(transaction);
     const primaryAllocation = transaction.review_allocations?.[0];
     return reviewedLabel ? {
@@ -763,7 +768,7 @@ export default function MonthlyScreen() {
       note: reviewedLabel,
       category: transaction.user_edited_at ? transaction.category : primaryAllocation?.category || transaction.category,
     } : transaction;
-  }), [txList]);
+  }), [txList, provisionalManualIds]);
   const transferTransactionIds = useMemo(
     () => new Set(
       calendarTransactions
@@ -2918,8 +2923,9 @@ export default function MonthlyScreen() {
                           const displayName = transactionDisplayName(tx, matchedBillName);
                           const settlement = reviewSettlementSummary(tx);
                           const remaining = reviewTransactionRemaining(tx, billOccurrenceMatches, incomeOccurrenceMatches, incomesById);
-                          const statusColor = isTransfer ? c.primary : remaining > 0.005 ? c.warning : c.success;
-                          const statusLabel = isTransfer ? "TRANSFER" : remaining > 0.005 ? "PARTIAL" : isMoneyIn ? "RECEIVED" : "PAID";
+                          const awaitingReview = tx.source === "plaid" && tx.review_status === "needs_review";
+                          const statusColor = awaitingReview ? c.warning : isTransfer ? c.primary : remaining > 0.005 ? c.warning : c.success;
+                          const statusLabel = awaitingReview ? "AWAITING REVIEW" : isTransfer ? "TRANSFER" : remaining > 0.005 ? "PARTIAL" : isMoneyIn ? "RECEIVED" : "PAID";
                           return (
                             <View
                               key={`overlay-tx-${tx.id}`}
@@ -2942,6 +2948,12 @@ export default function MonthlyScreen() {
                                   <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>{isMoneyIn && tx.review_resolution === "income" ? "Planned" : "Amount"}</Text>
                                   <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: c.foreground }]}>${settlement.amount.toFixed(2)}</Text>
                                 </View>
+                                {awaitingReview ? (
+                                  <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
+                                    <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Matching</Text>
+                                    <Text style={[styles.dayBillNumberValue, { color: c.warning }]}>Review needed</Text>
+                                  </View>
+                                ) : <>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
                                   <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>{isTransfer ? "Moved" : isMoneyIn ? "Received" : "Paid"}</Text>
                                   <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: c.success }]}>${settlement.paid.toFixed(2)}</Text>
@@ -2950,6 +2962,7 @@ export default function MonthlyScreen() {
                                   <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Left</Text>
                                   <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: remaining > 0.005 ? c.warning : c.success }]}>${remaining.toFixed(2)}</Text>
                                 </View>
+                                </>}
                               </View>
 
                               <View style={styles.dayBillActions}>

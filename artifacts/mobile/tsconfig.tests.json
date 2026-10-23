@@ -12,6 +12,10 @@
   },
   "include": [
     "lib/pendingMatchChooser.test.ts",
+    "lib/matchTargetFilters.ts",
+    "lib/matchTargetFilters.test.ts",
+    "lib/pendingManualReplacement.ts",
+    "lib/pendingManualReplacement.test.ts",
     "lib/nativeBackupPolicy.test.ts",
     "lib/formSaveValidation.test.ts",
     "lib/transactionSafetyStop.test.ts",

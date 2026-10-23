@@ -94,6 +94,7 @@ export function buildTransactionLedger<T extends LedgerTransactionLike>(
   allTransactions: readonly T[],
   visibleTransactions: readonly T[],
   connectedAccounts: readonly LedgerConnectedAccountLike[],
+  options?: { suppressedTransactionIds?: ReadonlySet<string> },
 ): TransactionLedgerSnapshot<T> {
   const issues: LedgerIssue[] = [];
   const uniqueById = new Map<string, T>();
@@ -158,6 +159,9 @@ export function buildTransactionLedger<T extends LedgerTransactionLike>(
     else index.set(key, [transaction]);
   };
   uniqueById.forEach(transaction => {
+    // Callers may consolidate an explicitly linked provisional replacement.
+    // Keep the original rows outside this view for review and settlement facts.
+    if (options?.suppressedTransactionIds?.has(transaction.id)) return;
     const classification = classifyCheckingLedgerTransaction(
       transaction,
       connectedAccounts,

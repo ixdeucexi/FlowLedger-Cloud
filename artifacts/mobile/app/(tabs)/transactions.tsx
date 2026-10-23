@@ -1,3 +1,6 @@
+import { pendingManualReplacementIds } from "@/lib/pendingManualReplacement";
+import { MatchTypeFilters } from "@/components/MatchTypeFilters";
+import { activityTargetsForKind, matchTargetKindLabels, selectedMatchTargetKind, type MatchTargetKind, type MatchTargetSelection } from "@/lib/matchTargetFilters";
 import { pendingMatchesForKind, pendingMatchKindLabels, type PendingMatchKind } from "@/lib/pendingMatchChooser";
 import { parseMoneyInput } from "@/lib/moneyFormInput";
 import { showFormError } from "@/lib/formInputAlert";
@@ -518,7 +521,15 @@ export function ActivityScreen() {
     user?.id,
   ]);
   const [weeklySummaryVisible, setWeeklySummaryVisible] = useState(false);
-  const [matchTx, setMatchTx] = useState<Transaction | null>(null);
+  const [matchTx, setMatchTxState] = useState<Transaction | null>(null);
+  const [matchTargetSelection, setMatchTargetSelection] = useState<MatchTargetSelection>(null);
+  const setMatchTx = useCallback((transaction: Transaction | null) => {
+    setMatchTargetSelection(null);
+    setMatchTxState(transaction);
+  }, []);
+  const matchTargetScope = `${user?.id ?? "demo"}:${activeHousehold?.householdId ?? "personal"}:${matchTx?.id ?? ""}`;
+  const matchTargetKind = selectedMatchTargetKind(matchTargetSelection, matchTargetScope);
+  useEffect(() => { setMatchTargetSelection(null); }, [matchTargetScope]);
   const [unplannedChargeTx, setUnplannedChargeTx] =
     useState<Transaction | null>(null);
   const [forgottenBillVisible, setForgottenBillVisible] = useState(false);
@@ -1025,7 +1036,9 @@ export function ActivityScreen() {
       (activeDateRange.endDate && activeDateRange.endDate < today)
     )
       return new Map<string, number>();
+    const provisionalManualIds = pendingManualReplacementIds(activityTransactions, pendingPlanMatches, transactionAccountIdentities, bills);
     const authoritativeCheckingLedger = activityTransactions
+      .filter(transaction => !provisionalManualIds.has(transaction.id))
       .filter(
         (transaction) =>
           transaction.date <= today &&
@@ -1057,6 +1070,8 @@ export function ActivityScreen() {
     historyHasMore,
     householdTimeZone,
     transactionAccountIdentities,
+    pendingPlanMatches,
+    bills,
   ]);
 
   const exportVisibleActivity = useCallback(() => {
@@ -1588,6 +1603,10 @@ export function ActivityScreen() {
           (left.daysApart ?? 999) - (right.daysApart ?? 999),
       ),
     [billMatchOptions, bucketMatchOptions, manualMatchOptions],
+  );
+  const filteredMatchOptions = useMemo(
+    () => activityTargetsForKind(combinedMatchOptions, matchTargetKind, bills),
+    [combinedMatchOptions, matchTargetKind, bills],
   );
   const matchedBillIdForModal = matchTx ? confirmedBillMatchId(matchTx) : null;
   const matchedBillForModal = matchedBillIdForModal
@@ -3906,8 +3925,13 @@ export function ActivityScreen() {
             ) : (
               <>
                 <Text style={[styles.matchIntro, { color: c.mutedForeground }]}>
-                  Choose what this payment covered.
+                  Choose a match type, then select the entry this payment covered.
                 </Text>
+                <MatchTypeFilters
+                  selected={matchTargetKind}
+                  disabled={savingMatch}
+                  onChange={(kind: MatchTargetKind) => setMatchTargetSelection({ scope: matchTargetScope, kind })}
+                />
                 <ScrollView
                   style={[
                     styles.matchList,
@@ -3915,8 +3939,8 @@ export function ActivityScreen() {
                   ]}
                   showsVerticalScrollIndicator={isDesktop}
                 >
-                  {combinedMatchOptions.length > 0 ? (
-                    combinedMatchOptions.map((option, index) => (
+                  {filteredMatchOptions.length > 0 ? (
+                    filteredMatchOptions.map((option, index) => (
                       <Pressable
                         key={`${option.targetType}-${option.billId}`}
                         accessibilityRole="button"
@@ -4007,7 +4031,7 @@ export function ActivityScreen() {
                               ? "Manual Activity"
                               : option.targetType === "bucket"
                                 ? "Spending bucket"
-                                : "Bill"}{" "}
+                                : matchTargetKind === "debt" ? "Debt payment" : "Bill"}{" "}
                             · ${option.plannedAmount.toFixed(2)}
                             {option.targetType === "bucket"
                               ? " left"
@@ -4045,7 +4069,7 @@ export function ActivityScreen() {
                       <Text
                         style={[styles.matchRowTitle, { color: c.foreground }]}
                       >
-                        Nothing available to match
+                        {matchTargetKind ? `No eligible ${matchTargetKindLabels[matchTargetKind].toLowerCase()} found` : "Choose a match type"}
                       </Text>
                       <Text
                         style={[
@@ -4053,8 +4077,7 @@ export function ActivityScreen() {
                           { color: c.mutedForeground },
                         ]}
                       >
-                        Add a bill, manual plan, or spending bucket, then return
-                        here.
+                        {matchTargetKind ? "Choose another filter, or return after an eligible entry is available." : "Choose Bill, Debt, Manual transaction, or Buckets to see matching entries. Nothing is matched until you choose an entry."}
                       </Text>
                     </View>
                   )}

@@ -1,3 +1,5 @@
+import { MatchTypeFilters } from "@/components/MatchTypeFilters";
+import { matchTargetKindLabels, reviewTargetsForKind, selectedMatchTargetKind, type MatchTargetSelection } from "@/lib/matchTargetFilters";
 import { useAuth } from "@/context/AuthContext";
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
@@ -155,6 +157,15 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
   const [completedThisVisit, setCompletedThisVisit] = useState(0);
   const availableQueue = useMemo(() => reviewQueueAfterSkips(queue, skippedIds), [queue, skippedIds]);
   const current = availableQueue[0] ?? null;
+  const targetFilterScope = `${bucketScope}:${current?.id ?? ""}`;
+  const [targetSelection, setTargetSelection] = useState<MatchTargetSelection>(null);
+  const targetKind = selectedMatchTargetKind(targetSelection, targetFilterScope);
+  const [bucketManagerSelection, setBucketManagerSelection] = useState<{ scope: string; expanded: boolean } | null>(null);
+  const bucketManagerExpanded = bucketManagerSelection?.scope === targetFilterScope ? bucketManagerSelection.expanded : !current;
+  useEffect(() => {
+    setTargetSelection(null);
+    setBucketManagerSelection(null);
+  }, [targetFilterScope]);
   const forgottenBillDefaults = useMemo<AddBillInitialValues | undefined>(() => {
     if (!current) return undefined;
     const defaults = buildForgottenBillDefaults(current);
@@ -287,6 +298,8 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
     return prioritizePendingPlanTarget(linkedRanking, current.id, pendingPlanMatches);
   }, [bills, current, decisions, extraPayments, getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, goals, incomes, pendingPlanMatches, subscriptionBillLinks, transactions]);
   const groupedTargets = useMemo(() => groupReviewTargets(targets), [targets]);
+  const filteredTargets = useMemo(() => reviewTargetsForKind(targets, targetKind), [targets, targetKind]);
+  const suggestion = (current && current.amount > 0 ? targets : filteredTargets)[0];
   const spendingBuckets = useMemo(() => goals
     .filter(goal => goal.goal_type === "planned_expense" && !goal.archived_at)
     .sort((left, right) => Number(Boolean(left.closed_at)) - Number(Boolean(right.closed_at))
@@ -928,8 +941,19 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
               <Text style={[styles.sectionTitle, styles.bucketManagerTitle, { color: c.foreground }]}>Spending buckets</Text>
               <Text style={[styles.sectionCopy, styles.bucketManagerCopy, { color: c.mutedForeground }]}>Edit, close, archive, or delete a bucket.</Text>
             </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${bucketManagerExpanded ? "Hide" : "Show"} spending bucket management`}
+              accessibilityState={{ expanded: bucketManagerExpanded }}
+              aria-expanded={bucketManagerExpanded}
+              onPress={() => setBucketManagerSelection({ scope: targetFilterScope, expanded: !bucketManagerExpanded })}
+              style={{ minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" }}
+            >
+              <Feather name={bucketManagerExpanded ? "chevron-up" : "chevron-down"} size={22} color={c.primary} />
+            </Pressable>
           </View>
           {bucketMessage ? <Text style={[styles.bucketMessage, { color: c.success, backgroundColor: c.success + "12" }]}>{bucketMessage}</Text> : null}
+          {bucketManagerExpanded ? <>
           {spendingBuckets.map((goal, index) => {
             const summary = spendingBucketSummary(goal);
             const routed = routedBucketIds.has(goal.id);
@@ -1037,6 +1061,7 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
               )) : null}
             </View>
           ) : null}
+          </> : null}
         </View>
       ) : null}
 
@@ -1090,12 +1115,21 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
             <Text style={[styles.transactionAmount, { color: current.amount < 0 ? c.destructive : c.success }]}>{current.amount < 0 ? "−" : "+"}{money(current.amount)}</Text>
           </View>
 
-          {targets[0] && targets[0].score >= 78 ? (
+          {current.amount < 0 ? (
+            <MatchTypeFilters
+              selected={targetKind}
+              disabled={saving}
+              includeCalendarPlans={targets.some(target => target.type === "decision")}
+              onChange={kind => setTargetSelection({ scope: targetFilterScope, kind })}
+            />
+          ) : null}
+
+          {suggestion && suggestion.score >= 78 ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Use Flo suggestion ${targets[0].name}`}
+              accessibilityLabel={`Use Flo suggestion ${suggestion.name}`}
               disabled={saving}
-              onPress={() => chooseTarget(targets[0])}
+              onPress={() => chooseTarget(suggestion)}
               style={({ pressed }) => [
                 styles.floSuggestion,
                 {
@@ -1107,9 +1141,9 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
             >
               <FloLogo size={34} />
               <View style={styles.optionCopy}>
-                <Text style={[styles.optionTitle, { color: c.foreground }]}>Flo suggests {targets[0].name}</Text>
+                <Text style={[styles.optionTitle, { color: c.foreground }]}>Flo suggests {suggestion.name}</Text>
                 <Text style={[styles.optionDescription, { color: c.success }]}>
-                  {targets[0].reasons.slice(0, 2).join(" · ")}
+                  {suggestion.reasons.slice(0, 2).join(" · ")}
                 </Text>
               </View>
               <Text style={[styles.useSuggestionText, { color: c.success }]}>Use</Text>
@@ -1121,38 +1155,43 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
             <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>{groupedTargets.income.length ? "Choose the income this deposit belongs to." : "No expected income was found for this month."}</Text>
             {groupedTargets.income.map(renderTarget)}
           </> : <>
-            <Text style={[styles.sectionTitle, { color: c.foreground }]}>Money you set aside</Text>
-            <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>{groupedTargets.setAside.length ? "Choose any open spending bucket. The bank charge replaces that planned amount, so it is counted once." : "No open spending bucket is available. Create one and add this posted transaction now."}</Text>
-            {groupedTargets.setAside.map(renderTarget)}
-            <Pressable accessibilityRole="button" accessibilityLabel="Create bucket and add transaction" disabled={saving} onPress={() => setSpendingBucketVisible(true)} style={({ pressed }) => [styles.bucketButton, { borderColor: c.primary + "66", backgroundColor: c.primary + "10", opacity: saving ? 0.55 : pressed ? 0.76 : 1 }]}>
-              <Feather name="plus-circle" size={18} color={c.primary} />
-              <View style={styles.optionCopy}>
-                <Text style={[styles.optionTitle, { color: c.foreground }]}>Create bucket and add transaction</Text>
-                <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Use the purchase amount, or enter more for future purchases.</Text>
-              </View>
-              <Feather name="chevron-right" size={17} color={c.primary} />
-            </Pressable>
-            {onManageBuckets && (spendingBuckets.length > 0 || archivedBuckets.length > 0) ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Manage spending buckets"
-                onPress={onManageBuckets}
-                style={({ pressed }) => [styles.manageBucketsButton, { opacity: pressed ? 0.7 : 1 }]}
-              >
-                <Feather name="settings" size={14} color={c.primary} />
-                <Text style={[styles.manageBucketsText, { color: c.primary }]}>Manage buckets</Text>
+            <Text style={[styles.sectionTitle, { color: c.foreground }]}>{targetKind ? matchTargetKindLabels[targetKind] : "Choose a match type"}</Text>
+            <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>
+              {!targetKind
+                ? "Choose Bill, Debt, Manual transaction, or Buckets to see matching entries. Nothing is matched until you choose an entry."
+                : !filteredTargets.length
+                  ? `No eligible ${matchTargetKindLabels[targetKind].toLowerCase()} found. Choose another filter.`
+                  : targetKind === "manual"
+                    ? "Replace the manual entry with this posted bank charge so it is counted once."
+                    : targetKind === "bucket"
+                      ? "Choose an open spending bucket. The bank charge replaces that planned amount, so it is counted once."
+                      : "Choose the entry this payment covered."}
+            </Text>
+            {filteredTargets.map(renderTarget)}
+            {targetKind === "bucket" ? <>
+              <Pressable accessibilityRole="button" accessibilityLabel="Create bucket and add transaction" disabled={saving} onPress={() => setSpendingBucketVisible(true)} style={({ pressed }) => [styles.bucketButton, { borderColor: c.primary + "66", backgroundColor: c.primary + "10", opacity: saving ? 0.55 : pressed ? 0.76 : 1 }]}>
+                <Feather name="plus-circle" size={18} color={c.primary} />
+                <View style={styles.optionCopy}>
+                  <Text style={[styles.optionTitle, { color: c.foreground }]}>Create bucket and add transaction</Text>
+                  <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Use the purchase amount, or enter more for future purchases.</Text>
+                </View>
+                <Feather name="chevron-right" size={17} color={c.primary} />
               </Pressable>
-            ) : null}
+              {onManageBuckets && (spendingBuckets.length > 0 || archivedBuckets.length > 0) ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Manage spending buckets"
+                  onPress={() => {
+                    setBucketManagerSelection({ scope: targetFilterScope, expanded: true });
+                    onManageBuckets();
+                  }}
+                  style={({ pressed }) => [styles.manageBucketsButton, { opacity: pressed ? 0.7 : 1 }]}
+                >
+                  <Feather name="settings" size={14} color={c.primary} />
+                  <Text style={[styles.manageBucketsText, { color: c.primary }]}>Manage buckets</Text>
+                </Pressable>
+              ) : null}
 
-            {groupedTargets.bills.length ? <>
-              <Text style={[styles.subsectionTitle, { color: c.foreground }]}>Bills and debt</Text>
-              <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Choose the bill or debt this paid.</Text>
-              {groupedTargets.bills.map(renderTarget)}
-            </> : null}
-            {groupedTargets.manual.length ? <>
-              <Text style={[styles.subsectionTitle, { color: c.foreground }]}>Manual Activity</Text>
-              <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Replace the manual entry with this posted bank charge so it is counted once.</Text>
-              {groupedTargets.manual.map(renderTarget)}
             </> : null}
           </>}
 

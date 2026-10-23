@@ -56,6 +56,7 @@ import { spendingBucketSummary } from "./spendingBuckets";
 import { isBillEligibleForUpcomingPlan } from "./billEligibility";
 import { buildTransactionLedger, remainingPlannedAmount } from "./ledgerEngine";
 import { debtSourceCommitmentsForDebts } from "./pendingPlanMatches";
+import { pendingManualReplacementIds } from "./pendingManualReplacement";
 import {
   buildMatchedFinancialAllocationIndexes,
   financialProjectionMonthCacheKey,
@@ -871,6 +872,7 @@ export function createFinancialProjection(
       [...transactions, ...deletedTransactions],
       transactions,
       transactionAccountIdentities,
+      { suppressedTransactionIds: pendingManualReplacementIds(transactions, pendingPlanMatches, transactionAccountIdentities, bills) },
     ))();
 
   const forecastTransactionsByMonth = transactionLedger.cashTransactionsByMonth;
