@@ -1,5 +1,39 @@
 # Security maintenance
 
+## October 23 maintenance
+
+The full dependency graph was reviewed, including development/code-generation
+tools that the production-only audit gate excludes. Orval is pinned to 8.22.0;
+compatible patches also update Vite, Sharp, node-forge, minimatch, Joi, Ajv,
+markdown-it, linkify-it, http-cache-semantics and lodash. Scoped overrides
+preserve unrelated major versions. The minimum package-release age remains
+1,440 minutes and no new advisory exceptions were added.
+
+The resulting full audit reports **zero critical, four high (the four existing
+ignored tooling exceptions), three moderate and two low findings**. Remaining
+visible findings are `ts-deepmerge` (GHSA-87mf-gv2c-c62c), `moment`
+(GHSA-4p3w-j4w9-5jqw), `fast-copy` (GHSA-jggr-w7fw-pc2j), `diff`
+(GHSA-73rr-hh4g-fpgx), and the Windows development-server `esbuild` advisory
+(GHSA-g7r4-m6w7-qqqr). They are not newly ignored. The inspected `diff` 7.0.0
+and `ts-deepmerge` 6.2.0 paths come through EAS; `moment` 2.30.1 comes through
+EAS / Expo logger / bunyan. `esbuild` 0.27.3 is used by build/development tools,
+including the API-server build and sandbox Vite. `fast-copy` 4.0.2 appears
+through API-server `pino-pretty` / `esbuild-plugin-pino`; the inspected logger
+disables its pretty transport when `NODE_ENV=production`. No inspected public
+API or mobile-library imports use these packages directly. The audit marks
+these remaining findings as development dependencies; this bounded reachability
+assessment is not proof that every indirect path is unreachable. Compatible
+remediation remains follow-up work; a major Expo/EAS migration was not bundled
+into this maintenance pass.
+
+Orval generation and generated-output typechecks were verified in temporary
+directories using the actual local OpenAPI/configuration and existing library
+dependencies. EAS command loading and its actual updated cryptography,
+matching and validation dependencies passed synthetic compatibility checks.
+See the [maintenance audit](docs/app-maintenance-audit-2026-10-23.md) for app
+fixes and final verification evidence. This is a scoped maintenance review,
+not a claim of zero vulnerabilities or a security certification.
+
 ## Reviewed dependency exceptions
 
 Rechecked against the npm registry and official GitHub advisories on

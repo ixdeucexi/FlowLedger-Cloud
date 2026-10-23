@@ -1,3 +1,4 @@
+import { parseMoneyInput } from "@/lib/moneyFormInput";
 import Feather from "@expo/vector-icons/Feather";
 import React, { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -36,8 +37,11 @@ export function SnowballPreviewModal({ visible, method, preview, amount, existin
   const isDesktop = useDesktopExperience();
   const [confirmation, setConfirmation] = useState<ConfirmActionOptions | null>(null);
   useBackDismiss(visible, () => confirmation ? setConfirmation(null) : onClose());
-  const requested = Number.parseFloat(amount) || 0;
-  const valid = !!preview && requested > 0 && requested <= preview.safeMaximum + 0.005 && preview.allocations.length > 0;
+  const requested = parseMoneyInput(amount);
+  const exceedsSafeMaximum = !!preview && requested !== null && requested > preview.safeMaximum + 0.005;
+  const valid = !!preview && requested !== null && requested > 0 && !exceedsSafeMaximum
+    && Number.isFinite(preview.safeMaximum) && Math.abs(preview.selectedExtra - requested) <= 0.005
+    && preview.allocations.length > 0;
   const methodName = method === "avalanche" ? "Avalanche" : "Snowball";
   const [monthOffset, setMonthOffset] = useState(0);
   useEffect(() => {
@@ -63,23 +67,25 @@ export function SnowballPreviewModal({ visible, method, preview, amount, existin
             <Pressable onPress={onClose} hitSlop={8}><Feather name="x" size={21} color={c.mutedForeground} /></Pressable>
           </View>
 
-          {preview && (
-            <ScrollView showsVerticalScrollIndicator contentContainerStyle={styles.scrollContent} style={styles.scroll}>
-              <View style={[styles.safeCard, { backgroundColor: c.success + "15", borderColor: c.success + "40" }]}>
+          <ScrollView showsVerticalScrollIndicator contentContainerStyle={styles.scrollContent} style={styles.scroll}>
+              {preview ? <View style={[styles.safeCard, { backgroundColor: c.success + "15", borderColor: c.success + "40" }]}>
                 <Feather name="shield" size={18} color={c.success} />
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.safeLabel, { color: c.mutedForeground }]}>MAXIMUM SAFE EXTRA</Text>
                   <Text style={[styles.safeValue, { color: c.success }]}>${preview.safeMaximum.toFixed(2)}</Text>
                   <Text style={[styles.safeNote, { color: c.mutedForeground }]}>Keeps the {forecastHorizonMonths}-month forecast at or above ${safetyFloor.toFixed(0)}</Text>
                 </View>
-              </View>
+              </View> : null}
 
               <Text style={[styles.label, { color: c.mutedForeground }]}>EXTRA PAYMENT</Text>
-              <View style={[styles.inputWrap, { backgroundColor: c.card, borderColor: requested > preview.safeMaximum ? c.destructive : c.border }]}>
+              <View style={[styles.inputWrap, { backgroundColor: c.card, borderColor: (requested === null && Boolean(amount.trim())) || exceedsSafeMaximum ? c.destructive : c.border }]}>
                 <Text style={[styles.dollar, { color: c.foreground }]}>$</Text>
-                <TextInput value={amount} onChangeText={onAmountChange} keyboardType="decimal-pad" style={[styles.input, { color: c.foreground }]} />
+                <TextInput accessibilityLabel="Extra debt payment amount" value={amount} onChangeText={onAmountChange} keyboardType="decimal-pad" style={[styles.input, { color: c.foreground }]} />
               </View>
-              {requested > preview.safeMaximum && (
+              {requested === null && amount.trim() ? (
+                <Text style={[styles.error, { color: c.destructive }]}>Enter a positive amount with up to two decimal places, such as 1,200.50.</Text>
+              ) : null}
+              {exceedsSafeMaximum && (
                 <Text style={[styles.error, { color: c.destructive }]}>That amount would move the projected balance below your ${safetyFloor.toFixed(0)} safety floor.</Text>
               )}
 
@@ -94,6 +100,7 @@ export function SnowballPreviewModal({ visible, method, preview, amount, existin
               ) : null}
               {paymentDateMinimumReason ? <Text style={[styles.error, { color: c.warning }]}>{paymentDateMinimumReason}</Text> : null}
 
+              {preview ? <>
               <Text style={[styles.label, { color: c.mutedForeground }]}>THIS PAYMENT</Text>
               <View style={[styles.card, { backgroundColor: c.card }]}>
                 {preview.allocations.map(item => (
@@ -138,8 +145,8 @@ export function SnowballPreviewModal({ visible, method, preview, amount, existin
                   <Text style={[styles.payoffOrder, { color: c.mutedForeground }]}>{preview.payoffOrder.join(" → ") || "No included debts"}</Text>
                 </View>
               </View>
-            </ScrollView>
-          )}
+              </> : null}
+          </ScrollView>
 
           <View style={styles.actions}>
             {existingPayment && onRemove && (

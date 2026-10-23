@@ -1,6 +1,7 @@
 "use client";
 
 import { parseMoneyInput } from "@/lib/moneyFormInput";
+import { parseBillCsv } from "@/lib/billCsv";
 import { showFormError } from "@/lib/formInputAlert";
 
 import Feather from "@expo/vector-icons/Feather";
@@ -602,6 +603,12 @@ export default function MoreScreen({
   const goalContributionInFlightRef = useRef(false);
   const [subscriptionBillLinks, setSubscriptionBillLinks] = useState<Record<string, string>>({});
   const [subscriptionLinkCandidate, setSubscriptionLinkCandidate] = useState<SubscriptionCandidate | null>(null);
+  const billImportInFlightRef = useRef(false);
+  const billImportScopeRef = useRef({ key: "", canEdit: false });
+  billImportScopeRef.current = {
+    key: JSON.stringify([user?.id, activeHousehold?.householdId, activeHousehold?.budgetId]),
+    canEdit: canEditHousehold,
+  };
   const [backupExported, setBackupExported] = useState(() => {
     try {
       return (
@@ -1961,7 +1968,7 @@ export default function MoreScreen({
         .join("\n");
 
       const billHeader =
-        "Name,Amount,Category,Priority,IsDebt,Balance,InterestRate,DueDay,IsRecurring,Frequency";
+        "Name,Amount,Category,Priority,IsDebt,Balance,InterestRate,DueDay,IsRecurring,Frequency,DayOfWeek,NextPaymentDate,StartDate,EndDate";
       const billRows = bills
         .map((b) =>
           [
@@ -1975,6 +1982,10 @@ export default function MoreScreen({
             b.due_day,
             b.is_recurring,
             b.frequency ?? "monthly",
+            b.day_of_week ?? "",
+            b.next_payment_date ?? "",
+            b.start_date ?? "",
+            b.end_date ?? "",
           ]
             .map(csvCell)
             .join(","),
@@ -2080,7 +2091,11 @@ export default function MoreScreen({
   };
 
   const handleImport = async () => {
+    if (billImportInFlightRef.current) return;
+    billImportInFlightRef.current = true;
+    const importScope = billImportScopeRef.current;
     try {
+      if (!importScope.canEdit) throw new Error("This household is view only. Choose an editable household before importing bills.");
       const result = await DocumentPicker.getDocumentAsync({
         type: ["text/csv", "text/comma-separated-values", "*/*"],
       });
@@ -2090,55 +2105,26 @@ export default function MoreScreen({
       let content: string;
       if (Platform.OS === "web") {
         const response = await fetch(file.uri);
+        if (!response.ok) throw new Error("The selected file could not be read.");
         content = await response.text();
       } else {
         content = await FileSystem.readAsStringAsync(file.uri);
       }
-
-      const lines = content
-        .split("\n")
-        .filter((line) => line.trim() && !line.startsWith("="));
-      const headerIdx = lines.findIndex(
-        (line) =>
-          line.toLowerCase().includes("name") &&
-          line.toLowerCase().includes("amount"),
-      );
-      if (headerIdx === -1) {
-        Alert.alert("Invalid CSV", "Could not find Name,Amount header.");
-        return;
-      }
-
-      const imported: Parameters<typeof importBills>[0] = [];
-      for (let i = headerIdx + 1; i < lines.length; i++) {
-        const parts = lines[i]
-          .split(",")
-          .map((part) => part.replace(/"/g, "").trim());
-        const amount = parseFloat(parts[1]);
-        if (!parts[0] || Number.isNaN(amount)) continue;
-        imported.push({
-          name: parts[0],
-          amount,
-          category: parts[2] || "Other",
-          priority: parseInt(parts[3], 10) || i,
-          is_debt: parts[4]?.toLowerCase() === "true",
-          balance: parseFloat(parts[5]) || 0,
-          interest_rate: parseFloat(parts[6]) || 0,
-          due_day: parseInt(parts[7], 10) || 1,
-          is_recurring: parts[8]?.toLowerCase() !== "false",
-          frequency: parts[9] === "weekly" ? "weekly" : "monthly",
-        });
-      }
-
+      const imported = parseBillCsv(content);
       if (!imported.length) {
-        Alert.alert("No Data", "No valid bill rows found.");
+        showFormError("No Data", "No bill rows were found. Other backup sections are not imported as bills.");
         return;
       }
-
+      if (billImportScopeRef.current.key !== importScope.key || !billImportScopeRef.current.canEdit) {
+        throw new Error("Your account, household, or editing permission changed. Select the file again in the intended household.");
+      }
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      importBills(imported);
-      Alert.alert("Imported", `${imported.length} bills added.`);
-    } catch {
-      Alert.alert("Error", "Import failed.");
+      await importBills(imported);
+      showFormError("Imported", `${imported.length} bills added.`);
+    } catch (error) {
+      showFormError("Import failed", error instanceof Error ? error.message : "The bills could not be imported. Please try again.");
+    } finally {
+      billImportInFlightRef.current = false;
     }
   };
 

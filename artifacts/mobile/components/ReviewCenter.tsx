@@ -265,16 +265,20 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
         snowballTargets.set(occurrenceKey(target.id, target.occurrenceDate), target);
       });
       candidates.push(...snowballTargets.values());
+      const manualTransactionById = new Map(transactions.map(transaction => [transaction.id, transaction]));
       manualActivityMatchCandidates(transactions, current.date, current.id, bills)
-        .forEach(target => candidates.push({
-          type: "manual",
-          id: target.billId,
-          name: target.name,
-          category: target.category,
-          plannedAmount: target.plannedAmount,
-          occurrenceDate: target.occurrenceDates[0],
-          isDebt: Boolean(transactions.find(transaction => transaction.id === target.billId)?.debt_applied_bill_id || transactions.find(transaction => transaction.id === target.billId)?.linked_bill_id),
-        }));
+        .forEach(target => {
+          const transaction = manualTransactionById.get(target.billId);
+          candidates.push({
+            type: "manual",
+            id: target.billId,
+            name: target.name,
+            category: target.category,
+            plannedAmount: target.plannedAmount,
+            occurrenceDate: target.occurrenceDates[0],
+            isDebt: Boolean(transaction?.debt_applied_bill_id || transaction?.linked_bill_id),
+          });
+        });
       goals.filter(isEligibleSpendingBucketMatch)
         .forEach(goal => candidates.push({
           type: "goal", id: goal.id, name: goal.name, category: "Planned spending",
@@ -871,7 +875,7 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
       <View style={{ flex: 1 }}>
         <View style={styles.targetHeading}><Text style={[styles.targetName, { color: c.foreground }]} numberOfLines={2}>{target.name}</Text>{index === 0 && target.score >= 48 ? <Text style={[styles.suggested, { color: c.success }]}>SUGGESTED</Text> : null}</View>
         <Text style={[styles.targetMeta, { color: c.mutedForeground }]}>
-          {target.type === "income" ? "Expected income" : target.type === "bill" ? "Bill" : target.type === "snowball" ? "Snowball plan" : target.type === "manual" ? "Manual Activity" : "Set-aside bucket"}: {money(target.plannedAmount)} · {displayDate(target.occurrenceDate)}
+          {target.type === "income" ? "Expected income" : target.type === "bill" ? "Bill" : target.type === "snowball" ? "Snowball plan" : target.type === "manual" ? "Manual Activity" : target.type === "decision" ? "Calendar plan" : "Set-aside bucket"}: {money(target.plannedAmount)} · {displayDate(target.occurrenceDate)}
         </Text>
         {target.reasons.length ? <Text style={[styles.targetReason, { color: c.success }]}>{target.reasons.slice(0, 2).join(" · ")}</Text> : null}
       </View>

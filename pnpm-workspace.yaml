@@ -36,7 +36,7 @@ minimumReleaseAgeExclude:
 
 auditConfig:
   ignoreGhsas:
-    # No patched image-size release exists; see SECURITY.md for reachability review.
+    # image-size 2.0.4 is patched but incompatible with this Metro integration; see SECURITY.md.
     - GHSA-5p2g-fcmc-qvqq
     - GHSA-w3rx-r6r6-pgpr
     # No patched node-forge release exists yet. The affected verifier is reached
@@ -74,7 +74,7 @@ catalog:
   tailwind-merge: ^3.3.1
   tailwindcss: ^4.1.14
   tsx: ^4.21.0
-  vite: ^7.3.0
+  vite: ^7.3.7
   zod: ^3.25.76
 
 autoInstallPeers: false
@@ -87,6 +87,15 @@ onlyBuiltDependencies:
   - unrs-resolver
 
 overrides:
+  # Compatible security patches; preserve unrelated package major versions.
+  "node-forge@<1.4.0": "1.4.0"
+  "minimatch@>=5.0.0 <5.1.8": "5.1.8"
+  "joi@>=17.0.0 <17.13.8": "17.13.8"
+  "ajv@>=8.0.0 <8.18.0": "8.18.0"
+  "markdown-it@>=14.0.0 <14.3.3": "14.3.3"
+  "linkify-it@>=5.0.0 <5.0.2": "5.0.2"
+  "http-cache-semantics@>=4.0.0 <4.3.0": "4.3.0"
+  "lodash@>=4.0.0 <4.18.1": "4.18.1"
   # Expo's navigation toolchain brings an older decoder with a malformed-input
   # denial-of-service advisory; keep the compatible patched release everywhere.
   "decode-uri-component": "0.5.0"

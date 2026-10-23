@@ -3,7 +3,7 @@ import { parseMoneyInput } from "@/lib/moneyFormInput";
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
 import React, { useEffect, useState } from "react";
-import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import colors from "@/constants/colors";
 import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
@@ -115,7 +115,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
     if (!name.trim()) return;
     const payday = firstPayDate.trim();
     if (!payday) {
-      Alert.alert("Payday needed", "Choose the date this income should appear on your calendar.");
+      showFormError("Payday needed", "Choose the date this income should appear on your calendar.");
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -140,7 +140,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
       else await onSave(data);
       onClose();
     } catch (error) {
-      Alert.alert("Couldn’t save income", error instanceof Error ? error.message : "Please try again.");
+      showFormError("Couldn’t save income", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSaving(false);
     }
@@ -177,8 +177,9 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
     });
   };
 
+  const parsedPreviewAmount = parseMoneyInput(amount);
   const monthlyEquiv = (() => {
-    const a = parseFloat(amount) || 0;
+    const a = parsedPreviewAmount ?? 0;
     if (frequency === "weekly")   return (a * 52 / 12);
     if (frequency === "biweekly") return (a * 26 / 12);
     return a;
@@ -194,7 +195,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
     const today = new Date();
     const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     const dates = getUpcomingIncomeOccurrenceDates({
-      amount: parseFloat(amount) || 0,
+      amount: parsedPreviewAmount ?? 0,
       frequency,
       next_payment_date: firstPayDate.trim(),
     }, todayDate);
@@ -229,7 +230,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
             <Text style={lbl}>Amount per Paycheck ($)</Text>
             <TextInput style={input} value={amount} onChangeText={setAmount} placeholder="0.00" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
 
-            {parseFloat(amount) > 0 && (
+            {parsedPreviewAmount !== null && parsedPreviewAmount > 0 && (
               <View style={[styles.equivBadge, { backgroundColor: c.success + "18" }]}>
                 <Feather name="trending-up" size={13} color={c.success} />
                 <Text style={[styles.equivText, { color: c.success }]}>≈ ${monthlyEquiv.toFixed(0)}/month</Text>
