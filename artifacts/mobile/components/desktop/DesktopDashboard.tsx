@@ -1,3 +1,4 @@
+import { SPENDING_BUCKETS_ROUTE } from "@/lib/settingsNavigation";
 import Feather from "@expo/vector-icons/Feather";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -692,6 +693,15 @@ function DesktopDashboardContent({
           <DataFreshnessLabel compact />
         </View>
         <View style={styles.pageActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open spending buckets"
+            onPress={() => router.push(SPENDING_BUCKETS_ROUTE)}
+            style={({ pressed }) => [styles.pageSettingsButton, { minHeight: 44, opacity: pressed ? 0.72 : 1 }]}
+          >
+            <Feather name="shopping-bag" size={16} color="#c4b5fd" />
+            <Text style={styles.pageSettingsText}>Buckets</Text>
+          </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Customize dashboard"

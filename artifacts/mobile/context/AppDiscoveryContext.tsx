@@ -21,7 +21,7 @@ import {
 } from "@/lib/notificationCenter";
 import { pendingOccurrenceKeySet } from "@/lib/pendingPlanMatches";
 import { buildReviewQueue } from "@/lib/reviewCenter";
-import { SETTINGS_SECTIONS } from "@/lib/settingsHub";
+import { visibleSearchSettings } from "@/lib/settingsHub";
 import { supabase } from "@/lib/supabase";
 import {
   buildUniversalSearchIndex,
@@ -208,7 +208,7 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
     goals,
     transactions,
     categories,
-    settings: SETTINGS_SECTIONS.filter(section => section.id !== "admin" || isAdmin),
+    settings: visibleSearchSettings(isAdmin),
   }), [bills, categories, goals, isAdmin, transactions]);
 
   const localResults = useMemo(

@@ -1,3 +1,4 @@
+import { SPENDING_BUCKETS_ROUTE } from "@/lib/settingsNavigation";
 import { parseMoneyInput } from "@/lib/moneyFormInput";
 import Feather from "@expo/vector-icons/Feather";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -687,7 +688,7 @@ function MobileDashboardContent({
       else if (action === "expense")  router.push("/(tabs)/monthly" as any);
       else if (action === "snowball") router.push("/snowball-plan" as any);
       else if (action === "goal")     { setEditGoal(null); setGoalModalVisible(true); }
-      else if (action === "buckets")  router.push({ pathname: "/(tabs)/more", params: { section: "review" } } as any);
+      else if (action === "buckets")  router.push(SPENDING_BUCKETS_ROUTE);
       else if (action === "afford") {} // handled inline
     }, 250);
   };
@@ -1074,6 +1075,18 @@ function MobileDashboardContent({
         onSave={saveSavingsAccountName}
         onReset={resetSavingsAccountName}
       /> : null}
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open spending buckets"
+        onPress={() => router.push(SPENDING_BUCKETS_ROUTE)}
+        style={({ pressed }) => ({ minHeight: 48, marginBottom: 12, paddingHorizontal: 16, paddingVertical: 12, flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14, borderWidth: 1, borderColor: c.primary + "44", backgroundColor: c.card, opacity: pressed ? 0.78 : 1 })}
+      >
+        <Feather name="shopping-bag" size={19} color={c.primary} />
+        <AppText style={{ color: c.foreground, fontFamily: "Inter_700Bold", fontSize: 15, flex: 1 }}>Buckets</AppText>
+        <AppText style={{ color: c.mutedForeground, fontSize: 12 }}>View all</AppText>
+        <Feather name="chevron-right" size={17} color={c.primary} />
+      </Pressable>
 
       <View
         style={[

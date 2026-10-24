@@ -1,8 +1,10 @@
+import { SPENDING_BUCKETS_ROUTE } from "./settingsNavigation";
 import { spendingBucketSummary } from "./spendingBuckets";
 
 export type SearchResultKind =
   | "Bill"
   | "Debt"
+  | "Bucket"
   | "Goal"
   | "Activity"
   | "Category"
@@ -100,14 +102,14 @@ export function buildUniversalSearchIndex(input: UniversalSearchInput): Universa
     const bucket = goal.goal_type === "planned_expense" ? spendingBucketSummary(goal) : null;
     results.push({
       id: goal.id,
-      kind: "Goal",
+      kind: bucket ? "Bucket" : "Goal",
       title: goal.name,
       subtitle: bucket
         ? `${currency(bucket.planned)} planned · ${currency(bucket.spent)} spent · ${bucket.closed ? `${currency(bucket.released)} released · Closed` : `${currency(bucket.remaining)} remaining`}`
         : `${progress}% funded`,
-      icon: "target",
+      icon: bucket ? "shopping-bag" : "target",
       route: "/(tabs)/more",
-      params: { section: "goals" },
+      params: bucket ? SPENDING_BUCKETS_ROUTE.params : { section: "goals" },
     });
   });
 

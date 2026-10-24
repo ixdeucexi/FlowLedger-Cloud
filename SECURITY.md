@@ -1,5 +1,44 @@
 # Security maintenance
 
+## Navigation review security follow-up
+
+The final navigation verification encountered new advisory data. Patched
+published versions update root Zod to `4.6.6`, body-parser to `2.4.0`, and
+Undici 6/7 to `6.29.1` / `7.30.1` through the existing override scopes.
+The database-schema and generated API-validation packages additionally pin
+Zod `4.6.6` directly. This is not a global Zod 3-to-4 override: the mobile
+Zod 3 catalog is unchanged.
+
+All ten database schema files already imported `zod/v4`; the old Zod 3
+package supplied a bundled v4 engine reporting `4.0.0`. Direct fixtures now
+verify their actual Drizzle insert schemas on `4.6.6`, with valid and invalid
+inputs. The generated API-validation surface is the health-response object;
+valid, missing/numeric status and unknown-key stripping cases passed before
+accepting its controlled package transition. No schema definitions, migrations,
+database connections or financial records were changed. The API-server build
+and relevant typechecks passed. Actual resolved body-parser JSON/gzip/error
+forwarding and both Undici localhost GET/POST checks passed, and the final
+peer check reports no dependency issues.
+
+The production-only high-threshold gate passes: **zero critical, three high
+(all existing ignored findings), two moderate and two low**. The complete
+graph audit reports **zero critical, four high, five moderate and four low**.
+One high finding remains visible and unignored: Zod `3.25.76`,
+[GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5),
+through mobile development dependencies (`zod` and `zod-validation-error`).
+The production validator consumers above use the patched version; a broader
+mobile Zod migration was not performed merely to suppress a package-level
+finding. This bounded assessment is not proof that every indirect bundled-v4
+path is unreachable. Keep the finding visible and review a compatible mobile
+migration separately.
+
+Remaining `fast-uri` `3.1.8` findings (two moderate, two low) come through
+Ajv, including Expo build-properties; the other visible findings remain
+`ts-deepmerge`, `moment`, `fast-copy`, `diff` and `esbuild` described below.
+All four configured advisory exceptions and the 1,440-minute minimum
+package-release age are unchanged. Passing the production high-threshold gate
+is not a statement that the full graph is free of high-severity advisories.
+
 ## October 23 maintenance
 
 The full dependency graph was reviewed, including development/code-generation

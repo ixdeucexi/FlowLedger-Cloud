@@ -10,6 +10,7 @@ export type SettingsSectionId =
   | "review"
   | "subscriptions"
   | "reports"
+  | "buckets"
   | "goals"
   | "help"
   | "backup"
@@ -43,7 +44,8 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
   { id: "accounts", label: "Household & accounts", description: "Balances, savings names, and household access", icon: "users" },
   { id: "plaid", label: "Bank connections", description: "Bank sync planned for Pro", icon: "credit-card" },
   { id: "money", label: "Plan settings", description: "Income timing, planning preferences, and payoff rules", icon: "sliders" },
-  { id: "goals", label: "Goals", description: "Savings plans", icon: "target" },
+  { id: "goals", label: "Savings goals", description: "Savings plans", icon: "target" },
+  { id: "buckets", label: "Buckets", description: "Spending plans, purchases, and money left", icon: "shopping-bag" },
   { id: "review", label: "Review Center", description: "Match bank activity", icon: "check-square" },
   { id: "subscriptions", label: "Subscriptions", description: "Recurring charges", icon: "repeat" },
   { id: "reports", label: "Reports & insights", description: "Monthly results and next steps", icon: "bar-chart-2" },
@@ -125,3 +127,12 @@ export function attentionCountStatus(
     ? { label: zeroLabel }
     : { label: formatCountStatus(safeCount, singular, plural), tone: "attention" };
 }
+
+export function visibleSearchSettings(isAdmin: boolean): SettingsSectionMeta[] {
+  return SETTINGS_SECTIONS.filter(section => isAdmin || (section.id !== "admin" && section.id !== "updates"));
+}
+
+export const TOOLS_AND_LISTS = {
+  id: "tools", label: "Tools & lists", description: "Open your plans, spending lists, and activity tools",
+  sectionIds: ["buckets", "goals", "review", "reports", "subscriptions"],
+} as const;

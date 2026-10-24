@@ -1107,7 +1107,8 @@ test("the dashboard and review center link to the existing spending bucket manag
   const reviewCenter = readFileSync("components/ReviewCenter.tsx", "utf8");
 
   assert.match(mobileDashboard, /label: "Spending Buckets"/);
-  assert.match(mobileDashboard, /section: "review"/);
+  assert.match(mobileDashboard, /action === "buckets"\)\s+router.push\(SPENDING_BUCKETS_ROUTE\)/);
+  assert.match(more, /activeSettingsSection === "buckets"[\s\S]*?viewMode="buckets"/);
   assert.match(more, /onManageBuckets=\{scrollToBucketManager\}/);
   assert.match(more, /scrollTo\(\{ y: 0, animated: true \}\)/);
   assert.match(reviewCenter, /accessibilityLabel="Manage spending buckets"/);

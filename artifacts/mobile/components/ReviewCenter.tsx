@@ -87,6 +87,7 @@ function dateOnlyDistanceDays(left: string, right: string) {
 }
 
 type ReviewCenterProps = {
+  viewMode?: "review" | "buckets";
   focusTransactionId?: string;
   closeBucketId?: string;
   closeBucketScope?: string;
@@ -104,31 +105,37 @@ type BucketClosePrompt = {
   fromReview?: boolean;
 };
 
-export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketRequest, onCloseBucketRequestHandled, focusTransactionId, initialFilter = "all", onManageBuckets, subscriptionBillLinks = EMPTY_SUBSCRIPTION_BILL_LINKS }: ReviewCenterProps = {}) {
+export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketScope, closeBucketRequest, onCloseBucketRequestHandled, focusTransactionId, initialFilter = "all", onManageBuckets, subscriptionBillLinks = EMPTY_SUBSCRIPTION_BILL_LINKS }: ReviewCenterProps = {}) {
   const c = useColors();
+  const bucketsOnly = viewMode === "buckets";
   const { user } = useAuth();
   const handledCloseRequestRef = useRef<string | null>(null);
   const {
     activeHousehold, startupCoreReady, transactions, bills, incomes, goals, decisions, extraPayments, categories, canEditHousehold, settings, pendingPlanMatches,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getDailyBalances,
-    createSpendingBucketForTransaction, updateGoal, deleteGoal, closeSpendingBucket, closeSpendingBucketAndRouteRemainder, reopenSpendingBucket,
+    createSpendingBucketForTransaction, addGoal, updateGoal, deleteGoal, closeSpendingBucket, closeSpendingBucketAndRouteRemainder, reopenSpendingBucket,
     archiveSpendingBucket, restoreArchivedSpendingBucket,
     reconcileTransaction, undoTransactionReconciliation, refreshBankData, retryBudgetLoad,
     getExtraPayment, getRemainingDebtPlanForMonth, previewDebtSnowball, applyDebtSnowballPayment, removeReviewSurplusFunding,
   } = useBudget();
   const bucketScope = `${user?.id ?? "demo"}:${activeHousehold?.householdId ?? "personal"}`;
   const mountedBucketScopeRef = useRef<string | null>(bucketScope);
+  const bucketMutationScope = `${bucketScope}:${activeHousehold?.budgetId ?? "personal"}`;
+  const bucketAccessRef = useRef({ scope: bucketMutationScope, canEdit: canEditHousehold });
+  bucketAccessRef.current = { scope: bucketMutationScope, canEdit: canEditHousehold };
+  const canManageCurrentBuckets = () => mountedBucketScopeRef.current === bucketScope
+    && bucketAccessRef.current.scope === bucketMutationScope && bucketAccessRef.current.canEdit;
   useEffect(() => {
     mountedBucketScopeRef.current = bucketScope;
     return () => { mountedBucketScopeRef.current = null; };
   }, [bucketScope]);
   useEffect(() => {
-    void refreshBankData();
-  }, [refreshBankData]);
+    if (!bucketsOnly) void refreshBankData();
+  }, [bucketsOnly, refreshBankData]);
   const localDay = useLocalDay();
   const fullQueue = useMemo(
-    () => buildReviewQueue(transactions, localDay, focusTransactionId),
-    [focusTransactionId, transactions, localDay],
+    () => bucketsOnly ? [] : buildReviewQueue(transactions, localDay, focusTransactionId),
+    [bucketsOnly, focusTransactionId, transactions, localDay],
   );
   const [reviewFilter, setReviewFilter] = useState<"all" | "expense" | "income">(initialFilter);
   const queue = useMemo(() => prioritizeReviewTransaction(fullQueue.filter(transaction =>
@@ -140,6 +147,8 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
   const [unplannedChargeVisible, setUnplannedChargeVisible] = useState(false);
   const [forgottenBillVisible, setForgottenBillVisible] = useState(false);
   const [spendingBucketVisible, setSpendingBucketVisible] = useState(false);
+  const [creatingBucket, setCreatingBucket] = useState(false);
+  const standaloneBucketMode = bucketsOnly || creatingBucket;
   const [editingBucket, setEditingBucket] = useState<Goal | null>(null);
   const [bucketMessage, setBucketMessage] = useState<string | null>(null);
   const [showArchivedBuckets, setShowArchivedBuckets] = useState(false);
@@ -157,15 +166,22 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
   const [completedThisVisit, setCompletedThisVisit] = useState(0);
   const availableQueue = useMemo(() => reviewQueueAfterSkips(queue, skippedIds), [queue, skippedIds]);
   const current = availableQueue[0] ?? null;
-  const targetFilterScope = `${bucketScope}:${current?.id ?? ""}`;
+  const targetFilterScope = `${bucketScope}:${activeHousehold?.budgetId ?? "personal"}:${viewMode}:${current?.id ?? ""}`;
   const [targetSelection, setTargetSelection] = useState<MatchTargetSelection>(null);
   const targetKind = selectedMatchTargetKind(targetSelection, targetFilterScope);
   const [bucketManagerSelection, setBucketManagerSelection] = useState<{ scope: string; expanded: boolean } | null>(null);
-  const bucketManagerExpanded = bucketManagerSelection?.scope === targetFilterScope ? bucketManagerSelection.expanded : !current;
+  const bucketManagerExpanded = bucketsOnly || (bucketManagerSelection?.scope === targetFilterScope ? bucketManagerSelection.expanded : !current);
   useEffect(() => {
     setTargetSelection(null);
     setBucketManagerSelection(null);
   }, [targetFilterScope]);
+  useEffect(() => {
+    setCreatingBucket(false);
+    setEditingBucket(null);
+    setBucketClosePrompt(null);
+    setSpendingBucketVisible(false);
+    setShowArchivedBuckets(false);
+  }, [bucketMutationScope, canEditHousehold, viewMode]);
   const forgottenBillDefaults = useMemo<AddBillInitialValues | undefined>(() => {
     if (!current) return undefined;
     const defaults = buildForgottenBillDefaults(current);
@@ -407,7 +423,7 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
   }, [bucketClosePrompt, bucketPaymentDate, bucketRouteMode, getDailyBalances, getExtraPayment, getRemainingDebtPlanForMonth, previewDebtSnowball, settings.debtPayoffEnabled, settings.forecast_horizon_months, settings.safety_floor, localDay]);
 
   const closeBucketKeepAvailable = async (prompt: BucketClosePrompt) => {
-    if (saving || bucketCloseInFlightRef.current || !canEditHousehold || mountedBucketScopeRef.current !== bucketScope) return;
+    if (saving || bucketCloseInFlightRef.current || !canManageCurrentBuckets()) return;
     bucketCloseInFlightRef.current = true;
     setSaving(true);
     setBucketMessage(null);
@@ -470,7 +486,7 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
   }, [activeHousehold?.householdId, canEditHousehold, closeBucketId, closeBucketRequest, closeBucketScope, goals, onCloseBucketRequestHandled, saving, startupCoreReady, user?.id]);
 
   const routeBucketRemainderToPayoff = async () => {
-    if (!canEditHousehold || mountedBucketScopeRef.current !== bucketScope || !bucketClosePrompt || !bucketSnowballOffer?.safe || !bucketSnowballOffer.preview.allocations.length || saving || bucketCloseInFlightRef.current) return;
+    if (!canManageCurrentBuckets() || !bucketClosePrompt || !bucketSnowballOffer?.safe || !bucketSnowballOffer.preview.allocations.length || saving || bucketCloseInFlightRef.current) return;
     bucketCloseInFlightRef.current = true;
     setSaving(true);
     setBucketMessage(null);
@@ -500,7 +516,7 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
   };
 
   const reopenBucket = async (goal: Goal) => {
-    if (saving) return;
+    if (saving || !canManageCurrentBuckets()) return;
     setSaving(true);
     setBucketMessage(null);
     try {
@@ -524,12 +540,13 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
   };
 
   const archiveBucket = (goal: Goal) => {
-    if (!goal.closed_at || saving) return;
+    if (!goal.closed_at || saving || !canManageCurrentBuckets()) return;
     confirmAction({
       title: `Archive ${goal.name}?`,
       message: "This removes the completed bucket from your active list. Its matched transactions and history stay saved.",
       confirmText: "Archive bucket",
       onConfirm: async () => {
+        if (!canManageCurrentBuckets()) return;
         setSaving(true);
         setBucketMessage(null);
         try {
@@ -546,7 +563,7 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
   };
 
   const restoreBucket = async (goal: Goal) => {
-    if (saving) return;
+    if (saving || !canManageCurrentBuckets()) return;
     setSaving(true);
     setBucketMessage(null);
     try {
@@ -561,13 +578,14 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
   };
 
   const deleteBucket = (goal: Goal) => {
-    if (saving) return;
+    if (saving || !canManageCurrentBuckets()) return;
     confirmAction({
       title: `Delete ${goal.name}?`,
       message: "This removes the bucket from Monthly and your plan. Matched bank transactions stay in Activity.",
       confirmText: "Delete bucket",
       destructive: true,
       onConfirm: async () => {
+        if (!canManageCurrentBuckets()) return;
         setSaving(true);
         setBucketMessage(null);
         try {
@@ -855,7 +873,7 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
-  if (!canEditHousehold) {
+  if (!canEditHousehold && !bucketsOnly) {
     return (
       <View style={[styles.emptyCard, { backgroundColor: c.card, borderColor: c.border }]}>
         <Feather name="eye" size={25} color={c.primary} />
@@ -893,6 +911,7 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
 
   return (
     <>
+      {!bucketsOnly ? <>
       <View style={[styles.hero, { backgroundColor: c.card, borderColor: c.primary + "44" }]}>
         <View style={[styles.heroIcon, { backgroundColor: c.primary + "18" }]}><Feather name="check-square" size={22} color={c.primary} /></View>
         <View style={{ flex: 1 }}>
@@ -937,15 +956,17 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
         })}
       </View>
 
-      {spendingBuckets.length || archivedBuckets.length ? (
+      </> : null}
+
+      {bucketsOnly || spendingBuckets.length || archivedBuckets.length ? (
         <View style={[styles.bucketManager, { backgroundColor: c.card, borderColor: c.border }]}>
           <View style={styles.bucketManagerHeader}>
             <View style={[styles.heroIcon, { backgroundColor: c.primary + "18" }]}><Feather name="shopping-bag" size={19} color={c.primary} /></View>
             <View style={styles.optionCopy}>
               <Text style={[styles.sectionTitle, styles.bucketManagerTitle, { color: c.foreground }]}>Spending buckets</Text>
-              <Text style={[styles.sectionCopy, styles.bucketManagerCopy, { color: c.mutedForeground }]}>Edit, close, archive, or delete a bucket.</Text>
+              <Text style={[styles.sectionCopy, styles.bucketManagerCopy, { color: c.mutedForeground }]}>{canEditHousehold ? "See your spending plans and how much is left." : "View your household’s spending plans and how much is left."}</Text>
             </View>
-            <Pressable
+            {!bucketsOnly ? <Pressable
               accessibilityRole="button"
               accessibilityLabel={`${bucketManagerExpanded ? "Hide" : "Show"} spending bucket management`}
               accessibilityState={{ expanded: bucketManagerExpanded }}
@@ -954,10 +975,22 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
               style={{ minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" }}
             >
               <Feather name={bucketManagerExpanded ? "chevron-up" : "chevron-down"} size={22} color={c.primary} />
-            </Pressable>
+            </Pressable> : null}
           </View>
           {bucketMessage ? <Text style={[styles.bucketMessage, { color: c.success, backgroundColor: c.success + "12" }]}>{bucketMessage}</Text> : null}
           {bucketManagerExpanded ? <>
+          {bucketsOnly && canEditHousehold ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Create spending bucket" disabled={saving} onPress={() => setCreatingBucket(true)} style={[styles.bucketButton, { minHeight: 44, backgroundColor: c.primary + "12", borderColor: c.primary + "55" }]}>
+              <Feather name="plus-circle" size={18} color={c.primary} />
+              <Text style={[styles.optionTitle, { color: c.primary }]}>Create bucket</Text>
+            </Pressable>
+          ) : null}
+          {bucketsOnly && !spendingBuckets.length ? (
+            <View style={{ paddingVertical: 20, gap: 8 }}>
+              <Text style={[styles.optionTitle, { color: c.foreground }]}>{archivedBuckets.length ? "No active spending buckets" : "No spending buckets yet"}</Text>
+              <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>{canEditHousehold ? "Create a bucket for a planned purchase, trip, or event." : "A household editor can create a spending bucket."}</Text>
+            </View>
+          ) : null}
           {spendingBuckets.map((goal, index) => {
             const summary = spendingBucketSummary(goal);
             const routed = routedBucketIds.has(goal.id);
@@ -970,7 +1003,7 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
                   </View>
                   <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Planned {money(summary.planned)} · Spent {money(summary.spent)} · {summary.closed ? `Released ${money(summary.released)}` : `${money(summary.remaining)} left`}</Text>
                 </View>
-                <View style={styles.bucketActions}>
+                {canEditHousehold ? <View style={styles.bucketActions}>
                   {!routed ? (
                     <Pressable
                       accessibilityRole="button"
@@ -1017,7 +1050,7 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
                       <Text style={[styles.bucketActionText, { color: c.destructive }]}>Delete</Text>
                     </Pressable>
                   ) : null}
-                </View>
+                </View> : null}
               </View>
             );
           })}
@@ -1039,7 +1072,7 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
                     <Text numberOfLines={1} style={[styles.optionTitle, { color: c.foreground }]}>{goal.name}</Text>
                     <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Completed bucket · history preserved</Text>
                   </View>
-                  <View style={styles.bucketActions}>
+                  {canEditHousehold ? <View style={styles.bucketActions}>
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Restore ${goal.name} bucket`}
@@ -1060,7 +1093,7 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
                       <Feather name="trash-2" size={13} color={c.destructive} />
                       <Text style={[styles.bucketActionText, { color: c.destructive }]}>Delete</Text>
                     </Pressable>
-                  </View>
+                  </View> : null}
                 </View>
               )) : null}
             </View>
@@ -1069,6 +1102,7 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
         </View>
       ) : null}
 
+      {!bucketsOnly ? <>
       {lastCompleted ? (
         <View style={[styles.undoCard, { backgroundColor: c.success + "12", borderColor: c.success + "44" }]}>
           <Feather name="check-circle" size={18} color={c.success} />
@@ -1235,6 +1269,8 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
         </View>
       )}
 
+      </> : null}
+
       <UnplannedChargeModal
         visible={unplannedChargeVisible && !!current}
         transaction={current}
@@ -1261,13 +1297,16 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
       />
 
       <GoalModal
-        visible={(spendingBucketVisible && !!current) || Boolean(editingBucket)}
-        onClose={() => { setSpendingBucketVisible(false); setEditingBucket(null); }}
+        visible={canEditHousehold && ((spendingBucketVisible && !!current) || Boolean(editingBucket) || creatingBucket)}
+        onClose={() => { setSpendingBucketVisible(false); setEditingBucket(null); setCreatingBucket(false); }}
         onSave={async data => {
+          if (!canManageCurrentBuckets()) throw new Error("Your household or editing access changed. Open the bucket again.");
           if ("id" in data) await updateGoal(data as Goal);
+          else if (standaloneBucketMode) await addGoal(data as Omit<Goal, "id" | "created_at">);
           else await createBucketAndAddTransaction(data as Omit<Goal, "id" | "created_at">);
           setSpendingBucketVisible(false);
           setEditingBucket(null);
+          setCreatingBucket(false);
         }}
         onDelete={deleteGoal}
         editGoal={editingBucket}
@@ -1275,13 +1314,13 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
         initialName={current ? `${transactionName(current)} spending` : ""}
         initialTargetAmount={current ? Math.abs(current.amount) : undefined}
         initialTargetDate={current?.date}
-        title={editingBucket ? undefined : "Create bucket and add transaction"}
-        saveLabel={editingBucket ? undefined : "Create bucket and add transaction"}
+        title={editingBucket ? undefined : standaloneBucketMode ? "Create spending bucket" : "Create bucket and add transaction"}
+        saveLabel={editingBucket ? undefined : standaloneBucketMode ? "Create bucket" : "Create bucket and add transaction"}
         lockedMode={editingBucket ? undefined : "budget"}
         minimumTargetAmount={editingBucket || !current ? undefined : Math.abs(current.amount)}
         minimumTargetDate={editingBucket ? undefined : current?.date}
-        hint={editingBucket ? undefined : "This purchase has already posted. It will be added to the new bucket now; any amount left stays available for future purchases."}
-        skipAffordabilityCheck={!editingBucket}
+        hint={editingBucket || standaloneBucketMode ? undefined : "This purchase has already posted. It will be added to the new bucket now; any amount left stays available for future purchases."}
+        skipAffordabilityCheck={!editingBucket && !standaloneBucketMode}
       />
 
       <BillSurplusModal
@@ -1312,7 +1351,7 @@ export function ReviewCenter({ closeBucketId, closeBucketScope, closeBucketReque
       />
 
       <BillSurplusModal
-        visible={Boolean(bucketClosePrompt)}
+        visible={canEditHousehold && Boolean(bucketClosePrompt)}
         billName={bucketClosePrompt?.goal.name ?? "this bucket"}
         itemType="bucket"
         budgeted={bucketClosePrompt?.goal.target_amount ?? 0}
@@ -1409,10 +1448,10 @@ const styles = StyleSheet.create({
   bucketNameRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   closedBadge: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.6, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3 },
   bucketActions: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
-  bucketActionButton: { minHeight: 36, borderWidth: 1, borderRadius: 12, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  bucketActionButton: { minHeight: 44, borderWidth: 1, borderRadius: 12, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
   bucketActionText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   archivedSection: { borderTopWidth: 1, marginTop: 4, paddingTop: 6 },
-  archivedToggle: { minHeight: 42, flexDirection: "row", alignItems: "center", gap: 8 },
+  archivedToggle: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8 },
   archivedToggleText: { flex: 1, fontSize: 12, fontFamily: "Inter_700Bold" },
   archivedRow: { minHeight: 58, borderTopWidth: 1, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 10 },
   undoCard: { marginTop: 10, borderWidth: 1, borderRadius: 14, padding: 12, flexDirection: "row", alignItems: "center", gap: 9 },

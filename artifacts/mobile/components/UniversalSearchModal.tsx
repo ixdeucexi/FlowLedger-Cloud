@@ -20,7 +20,7 @@ type Props = {
   onClose: () => void;
 };
 
-const KIND_ORDER: SearchResultKind[] = ["Command", "Bill", "Debt", "Goal", "Activity", "Category", "Report", "Review Center", "Settings"];
+const KIND_ORDER: SearchResultKind[] = ["Command", "Bill", "Debt", "Bucket", "Goal", "Activity", "Category", "Report", "Review Center", "Settings"];
 
 function HighlightedText({ text, query, color }: { text: string; query: string; color: string }) {
   const normalized = query.trim();
@@ -74,7 +74,7 @@ export function UniversalSearchModal(props: Props) {
     results: results.map((result, index) => ({ result, index })).filter(item => item.result.kind === kind),
   })).filter(group => group.results.length > 0), [results]);
 
-  const prompt = mode === "commands" ? "Search actions…" : "Search bills, debts, goals, activity…";
+  const prompt = mode === "commands" ? "Search actions…" : "Search bills, debts, buckets, goals, activity…";
 
   return (
     <Modal visible={visible} transparent animationType={reduceMotion ? "none" : compact ? "slide" : "fade"} onRequestClose={onClose}>

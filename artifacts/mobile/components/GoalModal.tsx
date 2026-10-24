@@ -1,3 +1,4 @@
+import { SPENDING_BUCKETS_ROUTE } from "@/lib/settingsNavigation";
 import { showFormError } from "@/lib/formInputAlert";
 import { parseMoneyInput } from "@/lib/moneyFormInput";
 import { useRouter } from "expo-router";
@@ -64,7 +65,7 @@ export function GoalModal({
     closeNavigationRef.current = true;
     onClose();
     router.push({ pathname: "/(tabs)/more", params: {
-      section: "review", closeBucketId: currentBucket.id,
+      ...SPENDING_BUCKETS_ROUTE.params, closeBucketId: currentBucket.id,
       closeBucketScope: `${user?.id ?? "demo"}:${activeHousehold?.householdId ?? "personal"}`,
       closeBucketAt: String(Date.now()),
     } });
@@ -211,7 +212,7 @@ export function GoalModal({
             <Text style={[styles.title, { color: c.foreground }]}>
               {title ?? (editGoal ? "Edit Goal or Bucket" : "Set Aside Money")}
             </Text>
-            <Pressable disabled={saving} onPress={requestClose} hitSlop={8}>
+            <Pressable accessibilityRole="button" accessibilityLabel={lockedMode === "budget" || editGoal?.goal_type === "planned_expense" || goalMode === "budget" ? "Close bucket editor" : "Close savings goal editor"} disabled={saving} onPress={requestClose} hitSlop={8} style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>
               <Feather name="x" size={22} color={c.mutedForeground} />
             </Pressable>
           </View>

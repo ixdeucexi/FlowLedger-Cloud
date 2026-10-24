@@ -1,3 +1,4 @@
+import { SPENDING_BUCKETS_ROUTE } from "./settingsNavigation";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -471,7 +472,7 @@ test("editor Close bucket navigates once to reviewed choices without saving a fi
   const routes: any[] = [];
   let closed = 0;
   const bindings = {
-    canCloseBucket: true, savingRef: { current: false }, closeNavigationRef: { current: false },
+    SPENDING_BUCKETS_ROUTE, canCloseBucket: true, savingRef: { current: false }, closeNavigationRef: { current: false },
     currentBucket: { id: "trip" }, user: { id: "owner" }, activeHousehold: { householdId: "home" },
     onClose: () => { closed++; }, router: { push: (route: unknown) => routes.push(route) },
   };
@@ -481,7 +482,7 @@ test("editor Close bucket navigates once to reviewed choices without saving a fi
   assert.equal(closed, 1); assert.equal(routes.length, 1);
   assert.equal(routes[0].params.closeBucketId, "trip");
   assert.equal(routes[0].params.closeBucketScope, "owner:home");
-  assert.equal(routes[0].params.section, "review");
+  assert.equal(routes[0].params.section, "buckets");
   assert.doesNotMatch(body, /updateGoal|onSave|closeSpendingBucket/);
 });
 
@@ -490,7 +491,8 @@ test("close deep link reuses explicit keep/Snowball coordinator with scope, retr
   assert.match(source, /handledCloseRequestRef.current === request/);
   assert.match(source, /requestedBucketCloseGoal\(/);
   assert.match(source, /openBucketCloseChoicesRef.current\(goal\)/);
-  assert.match(source, /mountedBucketScopeRef.current !== bucketScope/);
+  assert.match(source, /const canManageCurrentBuckets = \(\) => mountedBucketScopeRef.current === bucketScope/);
+  assert.match(source, /bucketAccessRef.current.scope === bucketMutationScope && bucketAccessRef.current.canEdit/);
   assert.match(source, /return \(\) => \{ mountedBucketScopeRef.current = null; \}/);
   assert.match(source, /expectedSpent: summary.spent/);
   assert.match(source, /expectedRemainder: bucketSnowballOffer.remainder/);

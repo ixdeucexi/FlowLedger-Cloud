@@ -282,6 +282,7 @@ const FINANCIAL_DATA_SECTIONS = new Set<SettingsSectionId>([
   "accounts",
   "money",
   "review",
+  "buckets",
   "subscriptions",
   "reports",
   "goals",
@@ -1505,7 +1506,8 @@ export default function MoreScreen({
   >(
     () => ({
       accounts: { label: formatCountStatus(activeAccounts.length, "account") },
-      goals: { label: formatCountStatus(goals.length, "goal") },
+      goals: { label: formatCountStatus(growthGoals.length, "goal") },
+      buckets: { label: formatCountStatus(goals.filter(goal => goal.goal_type === "planned_expense" && !goal.archived_at).length, "bucket") },
       review: attentionCountStatus(
         reviewTransactionCount,
         "Clear",
@@ -1548,7 +1550,8 @@ export default function MoreScreen({
       activeAccounts.length,
       backupExported,
       deletedTransactions.length,
-      goals.length,
+      goals,
+      growthGoals.length,
       membershipStatusLabel,
       newFeedbackCount,
       reviewTransactionCount,
@@ -3971,6 +3974,18 @@ export default function MoreScreen({
 
             {/* ── Data ── */}
           </>
+        )}
+
+        {activeSettingsSection === "buckets" && (
+          <ReviewCenter
+            key={`${user?.id ?? "demo"}:${activeHousehold?.householdId ?? "personal"}:${activeHousehold?.budgetId ?? "personal"}:buckets`}
+            viewMode="buckets"
+            onCloseBucketRequestHandled={consumeBucketCloseRequest}
+            closeBucketId={Array.isArray(routeParams.closeBucketId) ? routeParams.closeBucketId[0] : routeParams.closeBucketId}
+            closeBucketScope={Array.isArray(routeParams.closeBucketScope) ? routeParams.closeBucketScope[0] : routeParams.closeBucketScope}
+            closeBucketRequest={Array.isArray(routeParams.closeBucketAt) ? routeParams.closeBucketAt[0] : routeParams.closeBucketAt}
+            subscriptionBillLinks={subscriptionBillLinks}
+          />
         )}
 
         {activeSettingsSection === "review" && (

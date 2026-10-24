@@ -12,6 +12,7 @@
   },
   "include": [
     "lib/pendingMatchChooser.test.ts",
+    "lib/accessNavigation.test.ts",
     "lib/billCsv.test.ts",
     "lib/scanPreviewRegression.test.ts",
     "lib/matchTargetFilters.ts",

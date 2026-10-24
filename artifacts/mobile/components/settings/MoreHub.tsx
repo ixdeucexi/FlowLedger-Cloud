@@ -11,6 +11,7 @@ import {
 import { useColors } from "@/hooks/useColors";
 import {
   settingsSectionById,
+  TOOLS_AND_LISTS,
   type SettingsDestinationId,
   type SettingsStatus,
   visibleSettingsGroups,
@@ -178,7 +179,7 @@ export function MoreHub({
         </View>
       </View>
 
-      {visibleSettingsGroups(isAdmin).map((group) => (
+      {[TOOLS_AND_LISTS, ...visibleSettingsGroups(isAdmin)].map((group) => (
         <View key={group.id} style={styles.groupBlock}>
           <Text style={[styles.groupTitle, { color: colors.foreground }]}>
             {group.label}

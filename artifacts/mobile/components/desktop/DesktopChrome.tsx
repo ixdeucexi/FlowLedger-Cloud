@@ -118,7 +118,7 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Search FlowLedger"
-              accessibilityHint="Search this household's bills, debts, goals, activity, reports, and settings"
+              accessibilityHint="Search this household's bills, debts, buckets, goals, activity, reports, and settings"
               onPress={openSearch}
               style={({ pressed }) => [styles.discoveryButton, isCollapsed && styles.discoveryButtonCollapsed, pressed && styles.pressed]}
             >

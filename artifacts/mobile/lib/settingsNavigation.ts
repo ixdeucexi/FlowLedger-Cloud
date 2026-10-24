@@ -1,3 +1,5 @@
+export const SPENDING_BUCKETS_ROUTE = { pathname: "/(tabs)/more", params: { section: "buckets" } } as const;
+
 /** Empty is an explicit Back-to-Settings request, not a missing preference. */
 export function requestedSettingsSection(
   routeSection: string | string[] | undefined,

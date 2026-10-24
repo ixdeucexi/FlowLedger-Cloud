@@ -87,6 +87,7 @@ onlyBuiltDependencies:
   - unrs-resolver
 
 overrides:
+  "zod@>=4.0.0 <4.6.6": "4.6.6"
   # Compatible security patches; preserve unrelated package major versions.
   "node-forge@<1.4.0": "1.4.0"
   "minimatch@>=5.0.0 <5.1.8": "5.1.8"
@@ -106,7 +107,7 @@ overrides:
   "brace-expansion@<2.0.0": "1.1.21"
   "brace-expansion@>=2.0.0 <3.0.0": "2.1.7"
   "brace-expansion@>=3.0.0 <5.0.12": "5.0.12"
-  "body-parser@<2.3.0": "2.3.0"
+  "body-parser@<2.4.0": "2.4.0"
   "compression@<1.8.2": "1.8.2"
   "form-data@>=4.0.0 <4.0.6": "4.0.6"
   "fast-uri@<3.1.8": "3.1.8"
@@ -121,8 +122,8 @@ overrides:
   "shell-quote@<1.11.0": "1.11.0"
   "source-map-js@<1.2.2": "1.2.2"
   "tar@<=7.5.20": "7.5.21"
-  "undici@<6.28.1": "6.28.1"
-  "undici@>=7.0.0 <7.29.1": "7.29.1"
+  "undici@<6.29.1": "6.29.1"
+  "undici@>=7.0.0 <7.30.1": "7.30.1"
   "uuid@<11.1.1": "11.1.1"
   "ws@>=6.0.0 <6.2.4": "6.2.4"
   "ws@>=7.0.0 <7.5.11": "7.5.11"
