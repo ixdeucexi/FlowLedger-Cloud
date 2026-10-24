@@ -1076,18 +1076,6 @@ function MobileDashboardContent({
         onReset={resetSavingsAccountName}
       /> : null}
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Open spending buckets"
-        onPress={() => router.push(SPENDING_BUCKETS_ROUTE)}
-        style={({ pressed }) => ({ minHeight: 48, marginBottom: 12, paddingHorizontal: 16, paddingVertical: 12, flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14, borderWidth: 1, borderColor: c.primary + "44", backgroundColor: c.card, opacity: pressed ? 0.78 : 1 })}
-      >
-        <Feather name="shopping-bag" size={19} color={c.primary} />
-        <AppText style={{ color: c.foreground, fontFamily: "Inter_700Bold", fontSize: 15, flex: 1 }}>Buckets</AppText>
-        <AppText style={{ color: c.mutedForeground, fontSize: 12 }}>View all</AppText>
-        <Feather name="chevron-right" size={17} color={c.primary} />
-      </Pressable>
-
       <View
         style={[
           styles.referenceCommandHeroFlipShell,
@@ -1419,6 +1407,18 @@ function MobileDashboardContent({
             </AppText>
           </View>
         </View>
+      </Pressable>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open spending buckets"
+        onPress={() => router.push(SPENDING_BUCKETS_ROUTE)}
+        style={({ pressed }) => [styles.dashboardBucketsShortcut, { borderColor: c.border, backgroundColor: c.card, opacity: pressed ? 0.78 : 1 }]}
+      >
+        <Feather name="shopping-bag" size={19} color={c.primary} />
+        <AppText style={{ color: c.foreground, fontFamily: "Inter_700Bold", fontSize: 15, flex: 1 }}>Buckets</AppText>
+        <AppText style={{ color: c.mutedForeground, fontSize: 12 }}>View all</AppText>
+        <Feather name="chevron-right" size={17} color={c.primary} />
       </Pressable>
 
       <StabilityPathCard
@@ -2226,6 +2226,7 @@ const styles = StyleSheet.create({
   dashboardSnapshotLabel: { fontSize: 10, lineHeight: 13, fontFamily: "Inter_700Bold", textAlign: "center" },
   dashboardSnapshotValue: { maxWidth: "100%", fontSize: 18, lineHeight: 23, letterSpacing: -0.5, fontFamily: "Inter_800ExtraBold", marginTop: 4, textAlign: "center" },
   dashboardProgressCard: { borderWidth: 1, borderRadius: 24, padding: 17, marginTop: 12, marginBottom: 12 },
+  dashboardBucketsShortcut: { minHeight: 48, marginBottom: 12, paddingHorizontal: 16, paddingVertical: 12, flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14, borderWidth: 1 },
   dashboardProgressHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 },
   dashboardProgressHeaderCopy: { flex: 1, minWidth: 0 },
   dashboardProgressTitle: { fontSize: 18, letterSpacing: -0.4 },

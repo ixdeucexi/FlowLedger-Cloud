@@ -695,15 +695,6 @@ function DesktopDashboardContent({
         <View style={styles.pageActions}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Open spending buckets"
-            onPress={() => router.push(SPENDING_BUCKETS_ROUTE)}
-            style={({ pressed }) => [styles.pageSettingsButton, { minHeight: 44, opacity: pressed ? 0.72 : 1 }]}
-          >
-            <Feather name="shopping-bag" size={16} color="#c4b5fd" />
-            <Text style={styles.pageSettingsText}>Buckets</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
             accessibilityLabel="Customize dashboard"
             onPress={() => setCustomizerOpen(true)}
             style={({ pressed }) => [styles.pageSettingsButton, { opacity: pressed ? 0.72 : 1 }]}
@@ -1170,6 +1161,17 @@ function DesktopDashboardContent({
                   </Pressable>
                 ))}
               </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Open spending buckets"
+                onPress={() => router.push(SPENDING_BUCKETS_ROUTE)}
+                style={({ pressed }) => [styles.quickBucketsShortcut, { opacity: pressed ? 0.72 : 1 }]}
+              >
+                <Feather name="shopping-bag" size={17} color="#c4b5fd" />
+                <Text style={styles.quickBucketsLabel}>Buckets</Text>
+                <Text style={styles.quickBucketsHint}>View all</Text>
+                <Feather name="chevron-right" size={16} color="#9aa9be" />
+              </Pressable>
             </View>
           </SurfaceCard>
         </View>
@@ -1916,6 +1918,9 @@ const styles = StyleSheet.create({
   },
   quickIcon: { width: 33, height: 33, borderRadius: 11, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   quickLabel: { color: "#d3dbea", fontSize: 11, fontFamily: "Inter_700Bold", marginTop: 6, textAlign: "center" },
+  quickBucketsShortcut: { minHeight: 44, marginTop: 10, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: "rgba(148,163,184,0.14)", flexDirection: "row", alignItems: "center", gap: 9 },
+  quickBucketsLabel: { flex: 1, color: "#d3dbea", fontSize: 13, fontFamily: "Inter_700Bold" },
+  quickBucketsHint: { color: "#9aa9be", fontSize: 11 },
   quickFooter: { flexDirection: "row", gap: 8, marginTop: 10 },
   quickFooterButton: {
     flex: 1,
