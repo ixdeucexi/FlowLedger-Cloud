@@ -2,13 +2,13 @@
 
 Plan date: October 26, 2026. The owner authorized a phased upgrade, verification before advancing, and publication of each verified phase. Existing configured OpenAI access is reused; the provider and model override remain unchanged.
 
-**Current status: Phase 1 implementation, synthetic evaluations and independent semantic review of all 40 final/repeat answers have passed. The release candidate is approved for paired function deployment; deployment/postflight are not yet claimed complete. Phases 2 and 3 are planned, not implemented.**
+**Current status: Phase 1 is live. Both production functions match the reviewed candidate and passed access postflight. Phase 2 investigation has started; Phase 3 is planned.**
 
 ## Phase gates
 
 | Phase | Intended outcome | Verification required before advancing | Status |
 | --- | --- | --- | --- |
-| 1 — Account accuracy | Resolve named accounts consistently, preserve ambiguity, and distinguish recorded cash, liabilities and unavailable facts | Source/regression checks; actual configured-model evaluations on fixed fictional records; independent answer review; paired function deployment and postflight | Implementation, evaluations and 40-answer review passed; paired deployment/postflight pending |
+| 1 — Account accuracy | Resolve named accounts consistently, preserve ambiguity, and distinguish recorded cash, liabilities and unavailable facts | Source/regression checks; actual configured-model evaluations on fixed fictional records; independent answer review; paired function deployment and postflight | Live; verification passed |
 | 2 — Temporary conversation context | Preserve bounded context within a conversation, with fresh financial reads, household/user cleanup, history-off behavior and a clear new-chat reset | Continuation and reset cases; stale-fact rejection; scope changes; limits and history-off checks; independent review; deployment/postflight | Planned |
 | 3 — Clearer grounded answers | Explain verified facts more clearly, offer contextual follow-ups and navigate to the relevant source screen | Answer/source agreement; useful follow-ups without invented facts; valid source navigation; regression/independent review; deployment/postflight | Planned |
 
@@ -57,7 +57,7 @@ The frozen candidate packages are:
 | `flo-chat` | `abd2d2a47e185cf9d5454aa05b4a3420f0b3697897c4f980c84641e1f6b9e5c3` |
 | `flo-chat-v4` | `1d7bb48e5fe52e2e6edf821cae19b13946098648bd45673611ffa04f040616e4` |
 
-The answer-review gate has passed; deploy and verify both function packages together. The coordinating release pass will record actual deployed versions and postflight results; none is inferred here from a package hash.
+The reviewed source was committed and pushed as `b51ce56e5077a12daec01d2adceb6570f3da6015`. Production `flo-chat` version 38 and `flo-chat-v4` version 5 are ACTIVE with JWT verification retained. All 48 runtime files returned for each function exactly match its reviewed candidate; candidate packaging also includes type-only sources omitted from runtime downloads. Their deployment hashes are `fdf9b6e5ce83fd649bdbab20a7e7c7d9251d6dfcbbcfb28f50e4a4fa5db00a98` and `45b0c7dd0f45ce70ac8671a65bc3a4c5eabf02734cc5663dc301f5c546a799c2`, respectively. Both endpoints returned 401 for missing JWT and for a public anonymous JWT. This verifies the access boundary; functional answer evidence is the exact matching synthetic-model evaluation, not a signed-in customer-data session.
 
 The web app remains unchanged at source `12bb`, deployment `dpl_6yWcVNzP7tSAYEh291LQM4pc1CNG`. The immediate pre-production rollback points, pushed and verified after evaluator retirement, are:
 
@@ -69,4 +69,4 @@ The earlier pre-evaluation points remain available for provenance; the release u
 - `rollback/prod-before-flo-phase1-20261026-1941`, pointing to the pre-phase web source `12bb`.
 - `rollback/flo-functions-before-phase1-20261026-1941`, exact function JSON snapshot commit `801fdf0a18d2c64572152a37d70feec36124dd5c`, including pre-phase function/evaluator and web metadata.
 
-Publication and rollback must use those exact recorded artifacts rather than assume the unchanged website proves the functions were deployed. Phases 2 and 3 stay pending until Phase 1 release verification is recorded.
+Rollback must use those exact recorded artifacts. Phase 1 release verification is complete; Phase 2 may now proceed. No frontend deployment or schema change was needed for Phase 1.
