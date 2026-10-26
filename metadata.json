@@ -1,0 +1,1 @@
+{"project": "imqmhfdquqlqxgtcdbvc", "webDeployment": "dpl_6yWcVNzP7tSAYEh291LQM4pc1CNG", "webCommit": "12bb26c82082f963791fc2db3bc335a6d2811dcc", "versions": {"flo-chat": 37, "flo-chat-v4": 4, "flo-analysis-eval": 13}, "verify_jwt": true, "description": "Exact live packages after retired verification, immediately before Phase1 production release; provider secrets unchanged."}
