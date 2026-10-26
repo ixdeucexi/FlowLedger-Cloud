@@ -2,7 +2,7 @@
 
 Plan date: October 26, 2026. The owner authorized a phased upgrade, verification before advancing, and publication of each verified phase. Existing configured OpenAI access is reused; the provider and model override remain unchanged.
 
-**Current status: Phases 1 and 2 are live and verified. Phase 3 backend, privacy, navigation, retention and final main/negative browser checks passed. Final independent release review passed; production deployment/postflight remain pending. Phase 3 is not claimed live.**
+**Current status: All three phases are live and verified. Phase 3 passed independent review, paired backend deployment, web deployment and production postflight.**
 
 ## Phase gates
 
@@ -10,7 +10,7 @@ Plan date: October 26, 2026. The owner authorized a phased upgrade, verification
 | --- | --- | --- | --- |
 | 1 — Account accuracy | Resolve named accounts consistently, preserve ambiguity, and distinguish recorded cash, liabilities and unavailable facts | Source/regression checks; actual configured-model evaluations on fixed fictional records; independent answer review; paired function deployment and postflight | Live; verification passed |
 | 2 — Temporary conversation context | Preserve bounded context within a conversation, with fresh financial reads, household/user cleanup, history-off behavior and a clear new-chat reset | Continuation and reset cases; stale-fact rejection; scope changes; limits and history-off checks; independent review; deployment/postflight | Live; verification passed |
-| 3 — Clearer grounded answers | Explain verified facts more clearly, offer contextual follow-ups and navigate to the relevant source screen | Answer/source agreement; useful follow-ups without invented facts; valid source navigation; regression/independent review; deployment/postflight | Independent release gate passed; production deployment/postflight pending |
+| 3 — Clearer grounded answers | Explain verified facts more clearly, offer contextual follow-ups and navigate to the relevant source screen | Answer/source agreement; useful follow-ups without invented facts; valid source navigation; regression/independent review; deployment/postflight | Live; verification passed |
 
 Each phase must pass its own gate before the next begins. A synthetic evaluation does not substitute for deployment postflight or the later conversation/UI checks. This plan does not promise competitor-wide feature parity or autonomous financial actions.
 
@@ -113,7 +113,7 @@ All 18 Expo Doctor checks passed after using the environment's configured networ
 
 ## Phase 3 — Grounded detail, follow-ups and temporary session continuity
 
-**Phase 3 final release review passed. Backend/privacy, navigation/retention and main/negative browser checks passed; production deployment/postflight remain pending. Not yet live.** The candidate adds clearer bucket detail, typed follow-up chips and source navigation. Suggestions ask a grounded question or open an allowed app destination; they do not autonomously move money. Connected-account destinations remain read-only.
+**Live and verified.** Backend/privacy, navigation/retention, main/negative browser checks and production postflight passed. The release adds clearer bucket detail, typed follow-up chips and source navigation. Suggestions ask a grounded question or open an allowed app destination; they do not autonomously move money. Connected-account destinations remain read-only.
 
 Bucket answers use canonical amounts rather than inventing totals from an incomplete history. The fictional reference bucket has **500 planned, 125 recorded spent and 375 remaining**; split-purchase history shows **30 assigned to this bucket from a full 100 bank transaction**. The full transaction amount is not treated as the bucket allocation. The evaluation covers purchase history, closed/overspent states, pending/removed activity, invalid allocations, ambiguous names, missing sources and date/year/period scoping. Account and credit follow-ups retain the earlier phases' separation of cash, liabilities and credit.
 
@@ -136,11 +136,11 @@ The final retention receipt independently passed at **390 and 1,200 pixels** aga
 
 The final main browser matrix passed at 390/1,200 pixels with **32 v4 POST requests**, against the same exported entry/hash above. Normal flows recorded zero console/page errors, overflow, history writes or unhandled non-local traffic. The connected-account negative case passed: held loading and an injected 500 hid the prior record; Retry showed fictional Beta 333; returning to Alpha showed 700. An unavailable balance was not displayed as zero. This injected-failure case recorded **one expected 500 resource-console entry and zero page errors**; it is not reported as a zero-console run. All browsers and test servers were closed, with no listeners remaining on ports 8126/8127.
 
-SENTINEL independently approved the whole Phase 3 production release after reviewing the final browser evidence, privacy boundaries and all 90 answers. Actual deployed artifacts and production postflight must be recorded before Phase 3 is marked complete; the passed local browser and backend gates do not establish that the release is live.
+SENTINEL independently approved the whole Phase 3 production release after reviewing the final browser evidence, privacy boundaries and all 90 answers. Deployment and live postflight subsequently passed as recorded below. The local browser fixtures and synthetic evaluations remain distinct from the public production checks; no authenticated real-customer financial session is claimed.
 
 ### Phase 3 rollback provenance
 
-The reviewed backend packages remain frozen. All reported source/browser checks passed; independent release review passed; production deployment/postflight remain pending:
+The following frozen backend packages passed review and exactly match all returned production runtime source files:
 
 | Function package | SHA-256 |
 | --- | --- |
@@ -154,4 +154,21 @@ Fresh pre-production rollback points were pushed and remotely verified:
 - `rollback/prod-before-flo-phase3-release-20261026-2204` captures source `0cd70ed4f39e381344b831f111c5fc338da93a4a`, production deployment `dpl_DZ8Lyvp2LKGU2wBAqEM71sAeN5Yp`.
 - `rollback/flo-functions-before-phase3-release-20261026-2204` captures exact prior function/evaluator source at snapshot commit `06daf56a288905a58b8f34eda96f19c60b673f98`: `flo-chat` 39, `flo-chat-v4` 6 and inert evaluator 17.
 
-These are rollback artifacts, not evidence that Phase 3 is already deployed. Earlier phase provenance above remains historical and unchanged.
+Earlier phase provenance above remains historical and unchanged. A rollback must restore both the recorded web artifact and the paired function snapshot.
+
+### Phase 3 production release and postflight
+
+Reviewed source `02179cb548f6066de75c5d22803c7794d6e852df` was committed, pushed and checked clean before deployment. The backend was deployed first:
+
+| Function | Active version | JWT verification | Returned runtime files matching the reviewed candidate | Deployment SHA-256 |
+| --- | --- | --- | --- | --- |
+| `flo-chat` | 40 | Enabled | 51/51 | `025f05e133dbb1d6af6876687ef5fa6c12992d8b4d92ba6a0871f85ebe4b00de` |
+| `flo-chat-v4` | 7 | Enabled | 51/51 | `5b026bfa6684cb217a42de342c3a5c9778280ce4f7c4bf71c88447e2a9d39e04` |
+
+Both endpoints returned 401 for missing JWT and for a public anonymous JWT. These access checks do not constitute a customer-data answer session. Evaluator version 17 remained inert, with missing-JWT 401 and valid public-anonymous-JWT 404 reconfirmed after release.
+
+The exact source is READY in production deployment `dpl_HAvp3QGcJXZXs9eDaonkiSkdgm95`, immutable URL `flow-ledger-cloud-mctwgja77-flow-ledger-s-projects.vercel.app`. The canonical domain, www, project Vercel domain and legacy team domain were independently inspected after readiness and all resolve to this same production source/deployment. The legacy team alias was explicitly moved after readiness. All 13 required environment names and all 14 configured records passed the Production-only metadata scope check without inspecting plaintext credentials; canonical project/team identity and Node 24 were verified.
+
+Production postflight passed clean-source provenance, registered app routes, startup HTML with no-store caching, executable immutable hashed JavaScript, prior release signatures plus connected-balance/chat copy, health 200, missing API/asset 404, exact no-store service worker and guide-PDF parity. Read-only public login browser checks passed at 390/1,200 pixels with zero writes, page errors or horizontal overflow. Runtime inspection found one stderr entry: the pre-existing Node `DEP0169` `url.parse()` deprecation warning from the successful health check. No new application failure was observed; this is not a claim of zero log entries.
+
+Phase 3 release verification is complete. This report's postflight update is documentation only; the deployed application source remains the exact reviewed commit above.
