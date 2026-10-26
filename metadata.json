@@ -1,0 +1,7 @@
+{
+  "project": "imqmhfdquqlqxgtcdbvc",
+  "webDeployment": "dpl_6yWcVNzP7tSAYEh291LQM4pc1CNG",
+  "webCommit": "12bb26c82082f963791fc2db3bc335a6d2811dcc",
+  "verify_jwt": true,
+  "description": "Exact deployed Edge packages before Flo phased upgrades; eval is inert404; existing provider secrets unchanged."
+}
