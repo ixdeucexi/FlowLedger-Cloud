@@ -1,5 +1,30 @@
 # Security maintenance
 
+## Deep scan security follow-up
+
+Compatible scoped overrides now use `fast-uri` **3.1.9**, `moment` **2.31.0**
+and `fast-copy` **4.1.2**. Their published versions exceed the existing minimum
+release age. Unused direct mobile Zod/Zod-validation-error development
+dependencies and the unused sandbox Zod dependency were removed after confirming
+there are no source imports. The existing production Zod 4.6.6 consumers and
+Zod 3 catalog declaration are unchanged; this is dependency removal, not a
+global Zod major-version substitution.
+
+The full audit now reports **zero critical, three high (all existing ignored
+findings), one moderate and two low**. Visible findings are `ts-deepmerge`
+(GHSA-87mf-gv2c-c62c), `diff` (GHSA-73rr-hh4g-fpgx), and `esbuild`
+(GHSA-g7r4-m6w7-qqqr). Patched versions require separate tooling compatibility
+work. The production-only audit reports **three high, all existing
+ignored findings, with no visible unignored findings**. All four policy
+exceptions and the 1,440-minute package-release-age rule remain unchanged.
+
+Actual resolved consumer fixtures verify Pino Pretty’s `fast-copy`, EAS
+logger/Bunyan’s `moment`, and Expo build-properties’ Ajv/`fast-uri` reference
+resolution. Peer validation and EAS command loading pass. No live database or
+user data is used in these fixtures. The previous sections below retain the
+historical audit counts and assessments; this section supersedes their current
+dependency-state totals. See the [deep scan review](docs/deep-scan-fixes.md).
+
 ## Navigation review security follow-up
 
 The final navigation verification encountered new advisory data. Patched

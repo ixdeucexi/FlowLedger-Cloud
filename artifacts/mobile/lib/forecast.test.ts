@@ -194,7 +194,7 @@ describe("anchorForecastToBankBalance", () => {
     assert.ok(Math.abs(result.days[19].balance - 1_689.39) < 1e-8);
   });
 
-  it("keeps past plans out of history but applies today's planned money in and out", () => {
+  it("keeps open bucket money reserved on the observation day without rewriting settled history", () => {
     const posted = event({
       id: "transaction:bank",
       sourceType: "transaction",
@@ -216,9 +216,12 @@ describe("anchorForecastToBankBalance", () => {
     );
     const result = forecastBalances({ ...anchored, startDate: "2026-07-18", endDate: "2026-07-21" });
 
-    assert.deepEqual(anchored.events.map(item => item.id), [posted.id, todayPlan.id, todayUnpostedIncome.id, futureBill.id]);
-    assert.equal(result.days[2].balance, 1_879.39);
-    assert.ok(Math.abs(result.days[3].balance - 1_591.87) < 1e-8);
+    assert.deepEqual(anchored.events.map(item => item.id), [posted.id, pastBucket.id, todayPlan.id, todayUnpostedIncome.id, futureBill.id]);
+    assert.equal(anchored.events.find(item => item.id === pastBucket.id)?.date, "2026-07-20");
+    assert.equal(pastBucket.date, "2026-07-18");
+    assert.equal(result.days[0].balance, 1_689.39);
+    assert.ok(Math.abs(result.days[2].balance - 1_740.07) < 1e-8);
+    assert.ok(Math.abs(result.days[3].balance - 1_452.55) < 1e-8);
   });
 
   it("keeps the unanchored canonical plan as the calendar display source", () => {

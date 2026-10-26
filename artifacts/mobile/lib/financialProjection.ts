@@ -963,7 +963,7 @@ export function createFinancialProjection(
         return sum + occurrences * signedAmount;
       }, 0);
     const goalAllocations = goals.reduce((sum, goal) => {
-      if (goal.goal_type !== "planned_expense" || !goal.target_date) return sum;
+      if (goal.goal_type !== "planned_expense" || goal.archived_at || !goal.target_date) return sum;
       const target = parseGoalTargetDate(goal.target_date);
       return target?.year === year && target.month === month
         ? sum + getGoalRemainingAmount(goal)
@@ -1095,7 +1095,7 @@ export function createFinancialProjection(
         .filter((t) => includeDate(t.date))
         .reduce((s, t) => s + t.amount, 0);
       const goalDeductions = goals.reduce((s, g) => {
-        if (g.goal_type !== "planned_expense") return s;
+        if (g.goal_type !== "planned_expense" || g.archived_at) return s;
         if (!g.target_date) return s;
         const targetDate = parseGoalTargetDate(g.target_date);
         const date = targetDate
@@ -1502,7 +1502,7 @@ export function createFinancialProjection(
         });
     const goalsByDay: Record<number, GoalExpense[]> = {};
     goals.forEach((g) => {
-      if (g.goal_type !== "planned_expense") return;
+      if (g.goal_type !== "planned_expense" || g.archived_at) return;
       if (!g.target_date) return;
       const targetDate = parseGoalTargetDate(g.target_date);
       if (!targetDate || targetDate.year !== year || targetDate.month !== month)
@@ -1559,6 +1559,29 @@ export function createFinancialProjection(
     // reserve cash on the bank observation date in the balance projection.
     const displayEvents = suppressDebtBillPlanDuplicates(financialEvents);
     let balanceEvents = [...displayEvents];
+    if (bankAnchor?.date.startsWith(currentMonthPrefix)) {
+      // The bank balance still contains money reserved in older open buckets.
+      // Restore that commitment once in the observed month without inventing
+      // a second calendar occurrence or changing the original target date.
+      goals.forEach((goal) => {
+        if (goal.goal_type !== "planned_expense" || goal.archived_at || !goal.target_date) return;
+        const target = parseGoalTargetDate(goal.target_date);
+        if (!target) return;
+        const targetDate = `${target.year}-${String(target.month + 1).padStart(2, "0")}-${String(target.day).padStart(2, "0")}`;
+        const remaining = getGoalRemainingAmount(goal);
+        if (targetDate >= `${currentMonthPrefix}-01` || remaining <= 0) return;
+        balanceEvents.push({
+          id: `goal:${goal.id}:${target.year}-${target.month + 1}-${target.day}`,
+          sourceType: "goal",
+          sourceId: goal.id,
+          date: targetDate,
+          kind: "goal",
+          amount: -remaining,
+          status: "planned",
+          name: goal.name,
+        });
+      });
+    }
     if (connectedBankAnchor?.date.startsWith(currentMonthPrefix)) {
       const settledTransactionEventIds = new Set(
         monthTxs

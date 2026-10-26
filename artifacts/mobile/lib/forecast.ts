@@ -62,7 +62,7 @@ export function suppressDebtBillPlanDuplicates(events: readonly FinancialEvent[]
  * Before the bank's as-of date, only settled ledger events may move the balance.
  * When a stable opening balance is available, a newly observed bank change lands
  * on the as-of date instead of rewriting prior days. A matching same-day plan is
- * absorbed once the bank has already included it. Unpaid bill/minimum-payment
+ * absorbed once the bank has already included it. Unpaid bill/bucket/minimum-payment
  * commitments remain reserved on the observation date; history stays unchanged.
  */
 export function anchorForecastToBankBalance(
@@ -98,7 +98,7 @@ export function anchorForecastToBankBalance(
 
   const isUnpaidObligation = (event: FinancialEvent) => event.amount < 0
     && (event.status === "planned" || event.status === "scheduled" || event.status === "pending")
-    && (event.kind === "bill" || (event.kind === "debt_payment" && event.debtPlanAllocationKind === "required"));
+    && (event.kind === "bill" || event.kind === "goal" || (event.kind === "debt_payment" && event.debtPlanAllocationKind === "required"));
   const balanceEvents = events.filter(event =>
     !absorbedPlanIds.has(event.id)
     && (

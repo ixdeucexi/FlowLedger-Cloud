@@ -20,10 +20,15 @@ function assertDbResult(result, fallback) {
 }
 
 function allowlistedNativeRoute(value) {
-  const route = String(value || "");
+  const route = typeof value === "string" ? value : "";
+  if (route === "/(tabs)") return route;
   if (/^\/bills(?:\?attention=overdue)?$/.test(route)) return route;
   if (route === "/transactions") return route;
-  if (/^\/more\?section=(review|feedback)$/.test(route)) return route;
+  if (/^\/more\?section=(review|admin|help)$/.test(route)) return route;
+  if (route === "/more?section=feedback") return "/more?section=help";
+  const feedbackPrefix = "/more?section=help&feedback=";
+  if (route.startsWith(feedbackPrefix)
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(route.slice(feedbackPrefix.length))) return route;
   return "/(tabs)";
 }
 

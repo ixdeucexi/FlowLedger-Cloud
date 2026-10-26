@@ -15,7 +15,7 @@ import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { DESKTOP_MODAL_HANDLE, DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR } from "@/lib/desktopModal";
 import type { ConfirmActionOptions } from "@/lib/confirmAction";
 import { MONTH_NAMES } from "@/lib/dateLabels";
-import { getLatestRecordedIncomeAmount, getUpcomingIncomeOccurrenceDates, normalizeIncomeExcludedDates } from "@/lib/schedule";
+import { getLatestRecordedIncomeAmount, getUpcomingIncomeOccurrenceDates, monthlyIncomeAnchorDate, normalizeIncomeExcludedDates } from "@/lib/schedule";
 
 const FREQUENCIES: { key: IncomeItem["frequency"]; label: string; desc: string }[] = [
   { key: "monthly",  label: "Monthly",  desc: "×1/mo"   },
@@ -44,6 +44,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
   const [amount,          setAmount]          = useState("");
   const [frequency,       setFrequency]       = useState<IncomeItem["frequency"]>("monthly");
   const [firstPayDate,    setFirstPayDate]    = useState("");
+  const [monthlyLastDay, setMonthlyLastDay] = useState(false);
   const [baselineAmount,  setBaselineAmount]  = useState(0);
 
   const [history,         setHistory]         = useState<IncomeAmountEntry[]>([]);
@@ -56,6 +57,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
   const setMonthlyEdge = (edge: "first" | "last") => {
     const now = new Date();
     if (edge === "first") {
+      setMonthlyLastDay(false);
       const target = now.getDate() === 1 ? now : new Date(now.getFullYear(), now.getMonth() + 1, 1);
       setFirstPayDate(`${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-01`);
       return;
@@ -64,9 +66,8 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
     if (target < new Date(now.getFullYear(), now.getMonth(), now.getDate())) {
       target = new Date(now.getFullYear(), now.getMonth() + 2, 0);
     }
-    // Day 31 is the recurring "last day" anchor; the calendar safely clamps it for shorter months.
-    const anchorMonth = target.getMonth() === 1 ? new Date(target.getFullYear(), 2, 31) : new Date(target.getFullYear(), target.getMonth(), 31);
-    setFirstPayDate(`${anchorMonth.getFullYear()}-${String(anchorMonth.getMonth() + 1).padStart(2, "0")}-31`);
+    setMonthlyLastDay(true);
+    setFirstPayDate(`${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`);
   };
 
   const handleDelete = () => {
@@ -95,12 +96,15 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
       setBaselineAmount(editItem.amount);
       setAmount(getLatestRecordedIncomeAmount(editItem).toString());
       setFrequency(editItem.frequency);
-      setFirstPayDate(editItem.next_payment_date ?? editItem.start_date ?? "");
+      const lastDay = editItem.frequency === "monthly" && Number((editItem.next_payment_date ?? editItem.start_date ?? "").slice(8, 10)) === 31;
+      setMonthlyLastDay(lastDay);
+      setFirstPayDate(lastDay ? editItem.start_date ?? editItem.next_payment_date ?? "" : editItem.next_payment_date ?? editItem.start_date ?? "");
       setHistory(editItem.amount_history ?? []);
     } else {
       setName(""); setAmount(""); setFrequency("monthly");
       setBaselineAmount(0);
       setFirstPayDate(""); setHistory([]);
+      setMonthlyLastDay(false);
     }
     setShowUpdateForm(false);
     setRaiseAmount("");
@@ -130,7 +134,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
       amount: nextHistory.length > 0 ? baselineAmount : a,
       frequency,
       start_date: payday,
-      next_payment_date: payday,
+      next_payment_date: monthlyIncomeAnchorDate(payday, frequency === "monthly" && monthlyLastDay),
       amount_history: nextHistory.length > 0 ? nextHistory : undefined,
       excluded_dates: editItem ? normalizeIncomeExcludedDates(editItem.excluded_dates) : undefined,
     };
@@ -242,7 +246,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
               {FREQUENCIES.map(f => (
                 <Pressable
                   key={f.key}
-                  onPress={() => setFrequency(f.key)}
+                  onPress={() => { setFrequency(f.key); if (f.key !== frequency) setMonthlyLastDay(false); }}
                   style={[styles.freqBtn, { backgroundColor: frequency === f.key ? c.primary : "transparent", borderRadius: 8 }]}
                 >
                   <Text style={[styles.freqLabel, { color: frequency === f.key ? c.primaryForeground : c.mutedForeground }]}>{f.label}</Text>
@@ -252,9 +256,9 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
             </View>
 
             <DatePickerField
-              label={isRecurring ? `First pay date (sets the ${frequency === "biweekly" ? "every-14-day" : "weekly"} schedule)` : "Payday"}
+              label={isRecurring ? `First pay date (sets the ${frequency === "biweekly" ? "every-14-day" : "weekly"} schedule)` : "First payday"}
               value={firstPayDate}
-              onChange={setFirstPayDate}
+              onChange={(date) => { setFirstPayDate(date); setMonthlyLastDay(false); }}
               placeholder={isRecurring ? "Pick any known pay date" : "Choose the monthly payday"}
             />
             {frequency === "monthly" ? (
@@ -263,7 +267,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
                   <Feather name="skip-back" size={13} color={c.primary} />
                   <Text style={[styles.monthEdgeText, { color: c.foreground }]}>First day</Text>
                 </Pressable>
-                <Pressable onPress={() => setMonthlyEdge("last")} style={[styles.monthEdgeButton, { borderColor: c.border, backgroundColor: c.card }]}>
+                <Pressable accessibilityRole="button" accessibilityState={{ selected: monthlyLastDay }} onPress={() => setMonthlyEdge("last")} style={[styles.monthEdgeButton, { borderColor: monthlyLastDay ? c.primary : c.border, backgroundColor: c.card }]}>
                   <Text style={[styles.monthEdgeText, { color: c.foreground }]}>Last day</Text>
                   <Feather name="skip-forward" size={13} color={c.primary} />
                 </Pressable>
@@ -274,7 +278,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
               <Text style={[styles.infoText, { color: c.mutedForeground }]}>
                 {isRecurring
                   ? `FlowLedger will place this income every ${frequency === "biweekly" ? "14" : "7"} days from the date you choose.`
-                  : "FlowLedger will place this income on this day each month."}
+                  : monthlyLastDay ? "FlowLedger will place this income on the last day of each month." : "FlowLedger will place this income on this day each month."}
               </Text>
             </View>
 

@@ -59,7 +59,7 @@ test("native group and feedback pushes cannot overwrite the authoritative app ba
   assert.equal(Object.hasOwn(requests[0], "badge"), false);
   assert.equal(Object.hasOwn(requests[1], "badge"), false);
   assert.deepEqual(requests[0].data, { route: "/transactions", householdId: "household-1" });
-  assert.deepEqual(requests[1].data, { route: "/more?section=feedback", householdId: "household-1" });
+  assert.deepEqual(requests[1].data, { route: "/more?section=help", householdId: "household-1" });
 });
 
 test("the unified queue considers either web or native destinations", () => {

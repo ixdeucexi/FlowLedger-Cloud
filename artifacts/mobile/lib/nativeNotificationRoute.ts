@@ -3,8 +3,11 @@ export interface NativeNotificationDestination { route: string; householdId: str
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function notificationRoute(value: unknown): string | null {
-  const route = String(value || "");
-  if (/^\/bills(?:\?attention=overdue)?$/.test(route) || route === "/transactions" || /^\/more\?section=(review|feedback)$/.test(route)) return route;
+  const route = typeof value === "string" ? value : "";
+  if (route === "/(tabs)" || /^\/bills(?:\?attention=overdue)?$/.test(route) || route === "/transactions" || /^\/more\?section=(review|admin|help)$/.test(route)) return route;
+  if (route === "/more?section=feedback") return "/more?section=help";
+  const feedbackPrefix = "/more?section=help&feedback=";
+  if (route.startsWith(feedbackPrefix) && UUID_PATTERN.test(route.slice(feedbackPrefix.length))) return route;
   return null;
 }
 

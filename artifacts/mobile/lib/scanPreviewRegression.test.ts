@@ -3,6 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { transpileModule, ModuleKind, JsxEmit } from "typescript";
 import { parseMoneyInput } from "./moneyFormInput";
+import { monthlyIncomeAnchorDate } from "./schedule";
 
 function evaluateDeclarations(file: string, startToken: string, endToken: string, bindings: Record<string, unknown>, result: string) {
   const source = readFileSync(file, "utf8"), start = source.indexOf(startToken);
@@ -30,7 +31,7 @@ test("income's actual save handler visibly reports missing payday and persistenc
       saving: false, amount: "1,200.50", parseMoneyInput, name: "Income", firstPayDate: payday,
       showFormError: (title: string) => errors.push(title),
       Haptics: { impactAsync() {}, ImpactFeedbackStyle: { Medium: "medium" } },
-      history: [], frequency: "monthly", editItem: null,
+      history: [], frequency: "monthly", monthlyLastDay: false, monthlyIncomeAnchorDate, editItem: null,
       setSaving: (value: boolean) => { saving = value; }, onClose: () => closed++,
       onSave: async () => { saves++; throw new Error("Offline"); },
     };

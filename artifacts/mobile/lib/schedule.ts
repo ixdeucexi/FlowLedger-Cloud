@@ -328,10 +328,27 @@ export function getUpcomingIncomeOccurrenceDates(
   fromDate: string,
   count = 4,
 ): string[] {
-  if (income.frequency === "monthly" || !income.next_payment_date) return [];
-  const anchor = parseCalendarDate(income.next_payment_date);
   const from = parseCalendarDate(fromDate);
-  if (!anchor || !from || !Number.isSafeInteger(count) || count < 1) return [];
+  if (!from || !Number.isSafeInteger(count) || count < 1) return [];
+  if (income.frequency === "monthly") {
+    const start = parseCalendarDate(income.start_date);
+    const first = start && calendarDayNumber(start) > calendarDayNumber(from) ? start : from;
+    const dates: string[] = [];
+    const limit = Math.min(count, 52);
+    // Each excluded date can skip at most one monthly occurrence.
+    const searchMonths = limit + normalizeIncomeExcludedDates(income.excluded_dates).length + 1;
+    for (let offset = 0; offset < searchMonths && dates.length < limit; offset++) {
+      const cursor = new Date(first.year, first.month - 1 + offset, 1);
+      const year = cursor.getFullYear(), month = cursor.getMonth();
+      for (const day of getIncomeOccurrenceDays(income, month, year)) {
+        const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        if (date >= fromDate) dates.push(date);
+      }
+    }
+    return dates;
+  }
+  const anchor = parseCalendarDate(income.next_payment_date);
+  if (!anchor) return [];
   const intervalDays = income.frequency === "biweekly" ? 14 : 7;
   let cursor = firstOccurrenceOnOrAfter(
     calendarDayNumber(anchor),
@@ -343,6 +360,19 @@ export function getUpcomingIncomeOccurrenceDates(
     cursor += intervalDays;
     return occurrence;
   });
+}
+
+/** Store a real first payday separately from the recurring day-31 anchor. */
+export function monthlyIncomeAnchorDate(firstPayDate: string, lastDay: boolean): string {
+  const first = parseCalendarDate(firstPayDate);
+  if (!lastDay || !first) return firstPayDate;
+  for (let offset = 0; offset <= 2; offset++) {
+    const month = new Date(first.year, first.month - 1 + offset, 1);
+    if (new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate() === 31) {
+      return `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, "0")}-31`;
+    }
+  }
+  return firstPayDate;
 }
 
 /**

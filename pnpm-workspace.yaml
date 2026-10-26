@@ -97,6 +97,8 @@ overrides:
   "linkify-it@>=5.0.0 <5.0.2": "5.0.2"
   "http-cache-semantics@>=4.0.0 <4.3.0": "4.3.0"
   "lodash@>=4.0.0 <4.18.1": "4.18.1"
+  "moment@>=2.0.0 <2.31.0": "2.31.0"
+  "fast-copy@>=4.0.0 <4.1.2": "4.1.2"
   # Expo's navigation toolchain brings an older decoder with a malformed-input
   # denial-of-service advisory; keep the compatible patched release everywhere.
   "decode-uri-component": "0.5.0"
@@ -110,7 +112,7 @@ overrides:
   "body-parser@<2.4.0": "2.4.0"
   "compression@<1.8.2": "1.8.2"
   "form-data@>=4.0.0 <4.0.6": "4.0.6"
-  "fast-uri@<3.1.8": "3.1.8"
+  "fast-uri@<3.1.9": "3.1.9"
   "js-yaml@<4.0.0": "3.15.2"
   "js-yaml@>=4.0.0 <4.3.2": "4.3.2"
   "nanoid@<3.3.18": "3.3.18"

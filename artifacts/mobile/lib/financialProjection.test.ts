@@ -50,6 +50,49 @@ function debtPreviewFixture(): FinancialProjectionSnapshot {
 }
 const previewClock = { now: new Date("2026-10-01T12:00:00Z"), timeZone: "America/Chicago" };
 
+test("open bucket reserves survive observed balances and roll forward exactly once", () => {
+  for (const manual of [false, true]) {
+    for (const targetDate of ["2026-10-01", "2026-09-01", "2025-12-31"]) {
+      const snapshot = bankObligationFixture();
+      snapshot.bills = [];
+      snapshot.goals = [{ id: "bucket", name: "Trip", target_amount: 250, current_amount: 40, target_date: targetDate, goal_type: "planned_expense", created_at: "2025-01-01" }];
+      if (manual) {
+        snapshot.connectedBankAccounts = [];
+        snapshot.accounts = [{ id: "manual", name: "Checking", account_type: "checking", current_balance: 1000, balance_as_of: "2026-10-02", is_active: true, created_at: "2025-01-01" }];
+      }
+      const before = structuredClone(snapshot);
+      const projection = createFinancialProjection(snapshot, { now: new Date("2026-10-02T12:00:00Z"), timeZone: "America/Chicago" });
+      // Request a future month first to exercise anchor-month carryover seeding.
+      assert.equal(projection.getDailyBalances(11, 2026).at(-1)?.balance, 790);
+      const october = projection.getDailyBalances(9, 2026);
+      assert.equal(october[1].balance, 790);
+      assert.equal(october.at(-1)?.balance, 790);
+      assert.equal(projection.getDailyBalances(10, 2026)[0].balance, 790);
+      assert.strictEqual(projection.getDailyBalances(9, 2026), october);
+      assert.equal(october.flatMap(day => day.projectionEvents ?? []).filter(event => event.sourceId === "bucket").length, 1);
+      const display = october.flatMap(day => day.events ?? []).filter(event => event.sourceId === "bucket");
+      assert.deepEqual(display.map(event => event.date), targetDate.startsWith("2026-10") ? [targetDate] : []);
+      assert.deepEqual(snapshot, before);
+    }
+  }
+});
+
+test("bucket anchors preserve future targets and release closed, archived or fully spent reserves", () => {
+  for (const changes of [{ closed_at: "2026-10-01" }, { archived_at: "2026-10-01" }, { current_amount: 250 }, { goal_type: "savings" as const }]) {
+    const snapshot = bankObligationFixture(); snapshot.bills = [];
+    snapshot.goals = [{ id: "bucket", name: "Trip", target_amount: 250, current_amount: 0, target_date: "2026-09-01", goal_type: "planned_expense", created_at: "2026-01-01", ...changes }];
+    const projection = createFinancialProjection(snapshot, { now: new Date("2026-10-02T12:00:00Z"), timeZone: "America/Chicago" });
+    assert.equal(projection.getDailyBalances(9, 2026).at(-1)?.balance, 1000);
+    assert.equal(projection.getDailyBalances(0, 2027)[0].balance, 1000);
+  }
+  const snapshot = bankObligationFixture(); snapshot.bills = [];
+  snapshot.goals = [{ id: "future", name: "Future trip", target_amount: 250, current_amount: 0, target_date: "2026-10-03", goal_type: "planned_expense", created_at: "2026-01-01" }];
+  const projection = createFinancialProjection(snapshot, { now: new Date("2026-10-02T12:00:00Z"), timeZone: "America/Chicago" });
+  assert.equal(projection.getDailyBalances(9, 2026)[1].balance, 1000);
+  assert.equal(projection.getDailyBalances(9, 2026)[2].balance, 750);
+  assert.equal(projection.getDailyBalances(10, 2026)[0].balance, 750);
+});
+
 test("full matched moved debt closes only its occurrence across schedule, forecast, notifications and history", () => {
   const snapshot = debtPreviewFixture();
   snapshot.bills[0] = { ...snapshot.bills[0], name: "Tesla", amount: 700, due_day: 28, balance: 10000 };

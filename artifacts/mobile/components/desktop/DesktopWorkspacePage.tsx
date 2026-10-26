@@ -9,6 +9,8 @@ import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
 import { desktopPlannerDestination } from "@/lib/desktopActions";
 import { spendingBucketSummary } from "@/lib/spendingBuckets";
 import { debtOccurrenceProgress } from "@/lib/debtPlanDomain";
+import { getUpcomingIncomeOccurrenceDates } from "@/lib/schedule";
+import { localDateString } from "@/lib/dateLabels";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 
@@ -374,7 +376,7 @@ function IncomePage({ onOpenPlanner }: { onOpenPlanner: () => void }) {
           <View key={income.id} style={[styles.tableRow, index > 0 && styles.tableDivider]}>
             <View style={styles.nameColumn}><View style={styles.rowNameWrap}><View style={[styles.rowIcon, styles.rowIconGreen]}><Feather name="briefcase" size={15} color="#6ee7b7" /></View><Text style={[styles.rowName, { flex: 1 }]} numberOfLines={1}>{income.name}</Text></View></View>
             <Text style={[styles.rowText, styles.categoryColumn]}>{income.frequency}</Text>
-            <Text style={[styles.rowText, styles.dateColumn]}>{shortDate(income.next_payment_date)}</Text>
+            <Text style={[styles.rowText, styles.dateColumn]}>{shortDate(income.frequency === "monthly" ? getUpcomingIncomeOccurrenceDates(income, localDateString(), 1)[0] : income.next_payment_date)}</Text>
             <Text style={[styles.rowMoney, styles.positiveMoney, styles.moneyColumn]}>{currency(income.amount)}</Text>
           </View>
         )) : <EmptyRow text="Add your first recurring income source." />}

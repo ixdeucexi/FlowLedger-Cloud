@@ -480,6 +480,10 @@ export default function MoreScreen({
   const [newCategory, setNewCategory] = useState("");
   const [renamingCategory, setRenamingCategory] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [categorySaveBusy, setCategorySaveBusy] = useState(false);
+  const categoryMutationInFlightRef = useRef(false);
+  const categoryDraftRef = useRef({ renamingCategory, renameValue });
+  categoryDraftRef.current = { renamingCategory, renameValue };
   const [safetyFloorText, setSafetyFloorText] = useState(
     settings.safety_floor.toString(),
   );
@@ -1869,9 +1873,9 @@ export default function MoreScreen({
   };
 
   const handleDeleteIncome = (item: IncomeItem) => {
-    const doDelete = () => {
+    const doDelete = async () => {
+      await deleteIncome(item.id);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      deleteIncome(item.id);
     };
     confirmAction({
       title: "Delete Income",
@@ -1882,31 +1886,50 @@ export default function MoreScreen({
     });
   };
 
-  const handleAddCategory = () => {
+  const handleAddCategory = async () => {
     const trimmed = newCategory.trim();
-    if (!trimmed) return;
-    addCategory(trimmed);
-    setNewCategory("");
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (!trimmed || categoryMutationInFlightRef.current) return;
+    categoryMutationInFlightRef.current = true;
+    setCategorySaveBusy(true);
+    try {
+      await addCategory(trimmed);
+      setNewCategory(current => current === newCategory ? "" : current);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (error) {
+      showFormError("Couldn’t add category", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      categoryMutationInFlightRef.current = false;
+      setCategorySaveBusy(false);
+    }
   };
 
-  const handleRenameCategory = (oldName: string) => {
+  const handleRenameCategory = async (oldName: string) => {
+    if (categoryMutationInFlightRef.current) return;
     const trimmed = renameValue.trim();
     if (!trimmed || trimmed === oldName) {
       setRenamingCategory(null);
       return;
     }
-    updateCategory(oldName, trimmed);
-    setRenamingCategory(null);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    categoryMutationInFlightRef.current = true;
+    setCategorySaveBusy(true);
+    try {
+      await updateCategory(oldName, trimmed);
+      if (categoryDraftRef.current.renamingCategory === oldName && categoryDraftRef.current.renameValue === renameValue) setRenamingCategory(null);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (error) {
+      showFormError("Couldn’t rename category", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      categoryMutationInFlightRef.current = false;
+      setCategorySaveBusy(false);
+    }
   };
 
   const handleDeleteCategory = (name: string) => {
     const inUse =
       bills.filter((b) => b.category === name).length +
       transactions.filter((t) => t.category === name).length;
-    const doDelete = () => {
-      deleteCategory(name);
+    const doDelete = async () => {
+      await deleteCategory(name);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     };
     const msg =
@@ -3598,6 +3621,8 @@ export default function MoreScreen({
                         </Text>
                         <Pressable
                           onPress={() => handleDeleteIncome(item)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Delete ${item.name} income`}
                           hitSlop={12}
                           style={styles.deleteIcon}
                         >
@@ -3714,6 +3739,7 @@ export default function MoreScreen({
                           { backgroundColor: c.muted, color: c.foreground },
                         ]}
                         value={renameValue}
+                        editable={!categorySaveBusy}
                         onChangeText={setRenameValue}
                         autoFocus
                         returnKeyType="done"
@@ -3722,6 +3748,9 @@ export default function MoreScreen({
                       />
                       <Pressable
                         onPress={() => handleRenameCategory(cat)}
+                        disabled={categorySaveBusy}
+                        accessibilityRole="button"
+                        accessibilityLabel="Save category name"
                         style={[
                           styles.renameConfirm,
                           { backgroundColor: c.primary },
@@ -3758,6 +3787,7 @@ export default function MoreScreen({
                           <Pressable
                             accessibilityLabel={`Rename ${cat}`}
                             accessibilityRole="button"
+                            disabled={categorySaveBusy}
                             onPress={() => {
                               setRenamingCategory(cat);
                               setRenameValue(cat);
@@ -3774,6 +3804,7 @@ export default function MoreScreen({
                           <Pressable
                             accessibilityLabel={`Delete ${cat}`}
                             accessibilityRole="button"
+                            disabled={categorySaveBusy}
                             onPress={() => handleDeleteCategory(cat)}
                             hitSlop={8}
                             style={styles.catActionBtn}
@@ -3814,6 +3845,9 @@ export default function MoreScreen({
                 />
                 <Pressable
                   onPress={handleAddCategory}
+                  disabled={categorySaveBusy}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add category"
                   style={({ pressed }) => [
                     styles.addCatBtn,
                     { backgroundColor: c.primary, opacity: pressed ? 0.75 : 1 },
