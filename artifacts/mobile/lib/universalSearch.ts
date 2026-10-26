@@ -1,3 +1,5 @@
+import type { ReviewTransactionLike } from "./reviewCenter";
+import { createTransactionNameResolver } from "./transactionNames";
 import { SPENDING_BUCKETS_ROUTE } from "./settingsNavigation";
 import { spendingBucketSummary } from "./spendingBuckets";
 
@@ -26,8 +28,9 @@ export type UniversalSearchResult = {
 
 export type UniversalSearchInput = {
   bills: Array<{ id: string; name: string; category: string; is_debt: boolean; balance: number; amount: number }>;
+  incomes?: Array<{ id: string; name: string }>;
   goals: Array<{ id: string; name: string; current_amount: number; target_amount: number; goal_type?: "savings" | "planned_expense"; closed_at?: string; archived_at?: string }>;
-  transactions: Array<{ id: string; date: string; note: string; category: string; merchant_name?: string; amount: number; removed_at?: string; pending?: boolean }>;
+  transactions: ReviewTransactionLike[];
   categories: string[];
   settings: Array<{ id: string; label: string; description: string; icon: string }>;
 };
@@ -113,16 +116,17 @@ export function buildUniversalSearchIndex(input: UniversalSearchInput): Universa
     });
   });
 
+  const transactionName = createTransactionNameResolver(input.bills, input.incomes);
   input.transactions.filter(transaction => !transaction.removed_at && transaction.pending !== true).forEach(transaction => {
     results.push({
       id: transaction.id,
       kind: "Activity",
-      title: transaction.merchant_name?.trim() || transaction.note?.trim() || transaction.category || "Transaction",
+      title: transactionName(transaction),
       subtitle: `${transaction.date} · ${transaction.category || "Other"} · ${transaction.amount >= 0 ? "+" : "−"}${currency(transaction.amount)}`,
       icon: transaction.amount >= 0 ? "arrow-down-left" : "arrow-up-right",
       route: "/(tabs)/transactions",
       params: { activityId: transaction.id, activityDate: transaction.date, activityAt: String(Date.now()) },
-      keywords: transaction.note,
+      keywords: `${transaction.merchant_name ?? ""} ${transaction.note}`,
     });
   });
 

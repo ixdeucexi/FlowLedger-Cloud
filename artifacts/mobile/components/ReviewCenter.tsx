@@ -1,3 +1,4 @@
+import { createTransactionNameResolver } from "@/lib/transactionNames";
 import { BucketDetailModal } from "@/components/BucketDetailModal";
 import { showFormError } from "@/lib/formInputAlert";
 import { MatchTypeFilters } from "@/components/MatchTypeFilters";
@@ -44,10 +45,6 @@ function displayDate(value: string) {
   const [year, month, day] = value.split("-").map(Number);
   const date = new Date(year, month - 1, day);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-function transactionName(transaction: Transaction) {
-  return transaction.merchant_name?.trim() || transaction.note?.trim() || transaction.category || "Bank transaction";
 }
 
 type VarianceChoice = { transaction: Transaction; target: RankedReviewTarget; direction: "lower" | "higher" };
@@ -121,6 +118,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
     reconcileTransaction, undoTransactionReconciliation, refreshBankData, retryBudgetLoad,
     getExtraPayment, getRemainingDebtPlanForMonth, previewDebtSnowball, applyDebtSnowballPayment, removeReviewSurplusFunding,
   } = useBudget();
+  const transactionName = useMemo(() => createTransactionNameResolver(bills, incomes), [bills, incomes]);
   const bucketScope = `${user?.id ?? "demo"}:${activeHousehold?.householdId ?? "personal"}`;
   const mountedBucketScopeRef = useRef<string | null>(bucketScope);
   const bucketMutationScope = `${bucketScope}:${activeHousehold?.budgetId ?? "personal"}`;

@@ -1,3 +1,4 @@
+import { createTransactionNameResolver } from "@/lib/transactionNames";
 import { SPENDING_BUCKETS_ROUTE } from "@/lib/settingsNavigation";
 import Feather from "@expo/vector-icons/Feather";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -539,6 +540,7 @@ function DesktopDashboardContent({
     updateBill,
     updateGoal,
   } = useBudget();
+  const transactionName = useMemo(() => createTransactionNameResolver(bills, incomes), [bills, incomes]);
   const { readiness: setupReadiness } = useSetupReadiness();
 
   useEffect(
@@ -929,7 +931,7 @@ function DesktopDashboardContent({
                       <Pressable
                         key={transaction.id}
                         accessibilityRole="button"
-                        accessibilityLabel={`Open ${transaction.merchant_name || transaction.note || transaction.category || "transaction"}`}
+                        accessibilityLabel={`Open ${transactionName(transaction)}`}
                         onPress={() => router.push(desktopActivityDestination(transaction.id, String(Date.now())) as never)}
                         style={[styles.activityRow, index > 0 && styles.rowDivider]}
                       >
@@ -954,10 +956,7 @@ function DesktopDashboardContent({
                         </View>
                         <View style={{ flex: 1, minWidth: 0 }}>
                           <Text style={styles.activityName} numberOfLines={1}>
-                            {transaction.merchant_name ||
-                              transaction.note ||
-                              transaction.category ||
-                              "Transaction"}
+                            {transactionName(transaction)}
                           </Text>
                           <Text style={styles.activityMeta} numberOfLines={1}>
                             {transaction.review_status === "needs_review"

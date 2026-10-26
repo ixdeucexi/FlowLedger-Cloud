@@ -26,9 +26,11 @@ export interface ReviewTransactionLike {
   review_resolution?: string;
   review_allocations?: ReviewAllocationLike[];
   user_edited_at?: string;
+  match_reason?: string;
   pending?: boolean;
   removed_at?: string;
   linked_bill_id?: string | null;
+  linked_income_id?: string | null;
   debt_applied_bill_id?: string | null;
 }
 
@@ -699,9 +701,20 @@ export function allocationLabel(transaction: ReviewTransactionLike): string | nu
   }).join(" + ");
 }
 
-export function transactionDisplayName(transaction: ReviewTransactionLike, plannedLabel?: string): string {
-  if (transaction.user_edited_at && transaction.note.trim()) return transaction.note.trim();
-  return plannedLabel || transaction.merchant_name?.trim() || transaction.note.trim() || transaction.category || "Transaction";
+export type TransactionDisplayNameInput = Pick<ReviewTransactionLike, "note" | "category" | "merchant_name" | "user_edited_at" | "match_reason" | "review_resolution" | "review_allocations">;
+
+export function transactionDisplayName(transaction: TransactionDisplayNameInput, plannedLabel?: string): string {
+  const note = transaction.note.trim();
+  if (transaction.user_edited_at && note) return note;
+  if (plannedLabel) return plannedLabel;
+  if (transaction.match_reason === "confirmed_bucket_replacement" && note) return note;
+  if (transaction.review_resolution === "manual" || transaction.match_reason === "confirmed_manual_match" || transaction.match_reason === "confirmed_manual_transaction_match") {
+    // An explicitly matched manual transaction retains its saved name in its
+    // transaction allocation. Goal allocation names identify the whole bucket.
+    const savedName = transaction.review_allocations?.find(allocation => allocation?.type === "planned_expense" && allocation.source === "transaction" && typeof allocation.name === "string" && allocation.name.trim())?.name?.trim();
+    if (savedName) return savedName;
+  }
+  return transaction.merchant_name?.trim() || note || transaction.category || "Transaction";
 }
 
 export function transactionCategoryParts(transaction: ReviewTransactionLike): { category: string; amount: number; label: string }[] {

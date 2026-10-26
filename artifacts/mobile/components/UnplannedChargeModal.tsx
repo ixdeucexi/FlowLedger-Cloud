@@ -1,8 +1,9 @@
+import { createTransactionNameResolver } from "@/lib/transactionNames";
 import Feather from "@expo/vector-icons/Feather";
 import React, { useEffect, useMemo, useState } from "react";
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import type { Transaction } from "@/context/BudgetContext";
+import { useBudget, type Transaction } from "@/context/BudgetContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
@@ -28,12 +29,10 @@ function displayDate(value: string) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 
-function transactionName(transaction: Transaction) {
-  return transaction.merchant_name?.trim() || transaction.note?.trim() || transaction.category || "Bank charge";
-}
-
 export function UnplannedChargeModal({ visible, transaction, categories, saving, onClose, onSaveOneTime, onCreateBill }: UnplannedChargeModalProps) {
   const c = useColors();
+  const { bills, incomes } = useBudget();
+  const transactionName = useMemo(() => createTransactionNameResolver(bills, incomes), [bills, incomes]);
   const isDesktop = useDesktopExperience();
   useBackDismiss(visible, onClose);
   const categoryOptions = useMemo(() => categories.filter(category => category !== "Income"), [categories]);

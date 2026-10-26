@@ -1,3 +1,4 @@
+import { createTransactionNameResolver } from "./transactionNames";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -629,4 +630,45 @@ test("manual edits replace stale reviewed labels and categories", () => {
   assert.equal(allocationLabel(edited), "Tia Game");
   assert.equal(transactionDisplayName({ ...edited, merchant_name: "Apple" }), "Tia Game");
   assert.deepEqual(transactionCategoryParts(edited), [{ category: "Debt", amount: -4.34, label: "Tia Game" }]);
+});
+
+
+test("transaction names preserve explicit saved names, current plan labels and bank fallbacks", () => {
+  const bank = { id: "charge", date: "2026-10-26", amount: -50, note: "BANK FULL DESCRIPTION", merchant_name: "Bank merchant", category: "Shopping" };
+  const manualAllocation = { type: "planned_expense" as const, source: "transaction" as const, amount: 50, name: "  Saved family purchase  " };
+  for (const reason of ["confirmed_manual_match", "confirmed_manual_transaction_match"]) {
+    const matched = { ...bank, match_reason: reason, review_allocations: [manualAllocation] };
+    assert.equal(transactionDisplayName(matched), "Saved family purchase");
+    assert.equal(transactionDisplayName(matched, "Current debt name"), "Current debt name");
+    assert.equal(transactionDisplayName({ ...matched, note: "My later edit", user_edited_at: "2026-10-26" }, "Current debt name"), "My later edit");
+  }
+  assert.equal(transactionDisplayName({ ...bank, review_resolution: "manual", review_allocations: [manualAllocation] }), "Saved family purchase");
+  assert.equal(transactionDisplayName({ ...bank, match_reason: "confirmed_bucket_replacement", note: "Saved bucket purchase" }), "Saved bucket purchase");
+  assert.equal(transactionDisplayName({ ...bank, match_reason: "confirmed_bucket_replacement", note: "  " }), "Bank merchant");
+  assert.equal(transactionDisplayName({ ...bank, review_resolution: "goal", review_allocations: [{ ...manualAllocation, source: "goal", name: "Whole bucket" }] }), "Bank merchant");
+  assert.equal(transactionDisplayName({ ...bank, review_resolution: "manual", review_allocations: [{ ...manualAllocation, source: "goal", name: "Whole bucket" }] }), "Bank merchant");
+  assert.equal(transactionDisplayName({ ...bank, review_allocations: [manualAllocation] }), "Bank merchant", "unconfirmed allocations do not rename a purchase");
+  assert.equal(transactionDisplayName({ ...bank, note: " ", merchant_name: " ", category: "" }), "Transaction");
+  assert.equal(transactionDisplayName({ ...bank, note: " ", merchant_name: " ", user_edited_at: "2026-10-26" }, "Current income name"), "Current income name");
+  assert.equal(transactionDisplayName({ ...bank, match_reason: "confirmed_manual_match", review_allocations: [{ ...manualAllocation, name: " " }] }), "Bank merchant");
+});
+
+
+test("verified saved bill, debt and income names resolve current plans and narrowly scoped historical fallbacks", () => {
+  const transaction = { id: "posted", date: "2026-10-26", amount: -50, note: "BANK UTILITY ACH", merchant_name: "Bank merchant", category: "Other", review_status: "matched", review_resolution: "bill", match_reason: "confirmed_bill_match", linked_bill_id: "utility", review_allocations: [{ type: "bill" as const, targetId: "utility", amount: 50, name: "Home electricity" }] };
+  const resolve = createTransactionNameResolver([{ id: "utility", name: "Renamed electricity" }, { id: "debt", name: "Renamed card" }], [{ id: "income", name: "Renamed payroll" }]);
+  assert.equal(resolve(transaction), "Renamed electricity");
+  assert.equal(resolve({ ...transaction, linked_bill_id: "debt" }), "Renamed card");
+  assert.equal(resolve({ ...transaction, linked_bill_id: undefined }), "Renamed electricity", "confirmed bill allocation target identifies live plan");
+  assert.equal(createTransactionNameResolver([])(transaction), "Home electricity");
+  assert.equal(resolve({ ...transaction, note: "My edited charge", user_edited_at: "2026-10-26" }), "My edited charge");
+  assert.equal(resolve({ ...transaction, match_reason: undefined }), "Bank merchant", "unconfirmed linked metadata cannot rename a charge");
+  assert.equal(resolve({ ...transaction, linked_bill_id: undefined, review_status: "needs_review" }), "Bank merchant");
+  assert.equal(createTransactionNameResolver([])({ ...transaction, linked_bill_id: "different" }), "Bank merchant", "historical allocation must match the verified identity");
+  assert.equal(resolve({ ...transaction, linked_bill_id: undefined, review_resolution: "goal", match_reason: "confirmed_plan_match", review_allocations: [{ type: "planned_expense", source: "goal", targetId: "utility", name: "Whole bucket", amount: 50 }] }), "Bank merchant");
+  const payroll = { ...transaction, amount: 50, linked_bill_id: undefined, linked_income_id: "income", match_reason: "confirmed_income_match", review_resolution: "income", review_allocations: [{ type: "income" as const, targetId: "income", name: "Saved payroll", amount: 50 }] };
+  assert.equal(resolve(payroll), "Renamed payroll");
+  assert.equal(createTransactionNameResolver([])(payroll), "Saved payroll");
+  assert.equal(resolve({ ...payroll, note: "My edited payday", user_edited_at: "2026-10-26" }), "My edited payday");
+  for (const missingGuard of [{ match_reason: undefined }, { review_status: "needs_review" }, { review_resolution: "category" }]) assert.equal(resolve({ ...payroll, ...missingGuard }), "Bank merchant");
 });

@@ -1,6 +1,7 @@
+import { createTransactionNameResolver } from "@/lib/transactionNames";
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useBudget, type Transaction } from "@/context/BudgetContext";
@@ -13,13 +14,10 @@ function displayDate(value?: string): string {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-function transactionName(transaction: Transaction): string {
-  return transaction.merchant_name?.trim() || transaction.note?.trim() || "Transaction";
-}
-
 export function RecentlyDeletedTransactions() {
   const c = useColors();
-  const { deletedTransactions, restoreDeletedTransaction, canEditHousehold } = useBudget();
+  const { bills, incomes, deletedTransactions, restoreDeletedTransaction, canEditHousehold } = useBudget();
+  const transactionName = useMemo(() => createTransactionNameResolver(bills, incomes), [bills, incomes]);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 

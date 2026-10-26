@@ -1,6 +1,7 @@
+import { createTransactionNameResolver } from "@/lib/transactionNames";
 import Feather from "@expo/vector-icons/Feather";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { useBudget } from "@/context/BudgetContext";
@@ -255,7 +256,8 @@ function BillsPage({ debtOnly, onOpenPlanner, onOpenSnowball }: { debtOnly: bool
 }
 
 function ActivityPage({ onOpenReview }: { onOpenReview: () => void }) {
-  const { getTransactionsForMonth, pendingBankTransactions, selectedYear } = useBudget();
+  const { bills, incomes, getTransactionsForMonth, pendingBankTransactions, selectedYear } = useBudget();
+  const transactionName = useMemo(() => createTransactionNameResolver(bills, incomes), [bills, incomes]);
   const month = new Date().getMonth();
   const rows = getTransactionsForMonth(month, selectedYear)
     .filter(isActiveTransaction)
@@ -291,7 +293,7 @@ function ActivityPage({ onOpenReview }: { onOpenReview: () => void }) {
                   <View style={[styles.rowIcon, positive && styles.rowIconGreen]}>
                     <Feather name={positive ? "arrow-down-left" : "shopping-bag"} size={15} color={positive ? "#6ee7b7" : "#8fb7ff"} />
                   </View>
-                  <Text style={[styles.rowName, { flex: 1 }]} numberOfLines={1}>{row.merchant_name || row.note || "Transaction"}</Text>
+                  <Text style={[styles.rowName, { flex: 1 }]} numberOfLines={1}>{transactionName(row)}</Text>
                 </View>
               </View>
               <Text style={[styles.rowText, styles.categoryColumn]} numberOfLines={1}>{row.category || (positive ? "Income" : "Uncategorized")}</Text>

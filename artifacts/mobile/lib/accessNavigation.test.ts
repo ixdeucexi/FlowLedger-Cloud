@@ -6,6 +6,7 @@ import { SPENDING_BUCKETS_ROUTE, requestedSettingsSection } from "./settingsNavi
 import { SETTINGS_GROUPS, TOOLS_AND_LISTS, settingsSectionById, visibleSearchSettings, formatCountStatus, attentionCountStatus } from "./settingsHub";
 import { buildUniversalSearchIndex } from "./universalSearch";
 import * as reviewTools from "./reviewCenter";
+import * as transactionNames from "./transactionNames";
 import * as targetFilters from "./matchTargetFilters";
 import * as bucketTools from "./spendingBuckets";
 import * as pendingTools from "./pendingPlanMatches";
@@ -48,7 +49,7 @@ function reviewHarness(goals: any[] = [open, closed, archived], canEdit = true) 
     useMemo: (fn: () => any) => { cursor++; return fn(); },
     useEffect: (fn: () => void, deps: any[]) => { const index = cursor++; if (!states[index] || deps.some((value, i) => !Object.is(value, states[index][i]))) { states[index] = deps; effects.push(fn); } },
   };
-  const modules: Record<string, any> = { reviewCenter: reviewTools, matchTargetFilters: targetFilters, spendingBuckets: bucketTools, pendingPlanMatches: pendingTools, billMatching, billMatchCandidates: candidateTools, competitiveGrowth: competitiveTools, billSurplusRouting: surplusRouting, snowballFunding, forecastDisplay };
+  const modules: Record<string, any> = { transactionNames, reviewCenter: reviewTools, matchTargetFilters: targetFilters, spendingBuckets: bucketTools, pendingPlanMatches: pendingTools, billMatching, billMatchCandidates: candidateTools, competitiveGrowth: competitiveTools, billSurplusRouting: surplusRouting, snowballFunding, forecastDisplay };
   const js = transpileModule(readFileSync("components/ReviewCenter.tsx", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, jsx: JsxEmit.React, esModuleInterop: true } }).outputText;
   new Function("exports", "require", js)(exported, (name: string) => {
     if (name === "react") return hooks;

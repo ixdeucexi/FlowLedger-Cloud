@@ -148,6 +148,16 @@ test("desktop grid and selected-day labels share the live scoped resolver for te
   const monthly = readFileSync("app/(tabs)/monthly.tsx", "utf8");
   assert.equal((desktop.match(/resolveEventLabel\(event\)/g) ?? []).length, 4);
   assert.equal((desktop.match(/resolveEventLabel=\{props.resolveEventLabel\}/g) ?? []).length, 2);
-  assert.match(monthly, /createCalendarEventLabelResolver\(transactions, bills\),\s*\[transactions, bills\]/);
+  assert.match(monthly, /createCalendarEventLabelResolver\(transactions, bills, incomes\),\s*\[transactions, bills, incomes\]/);
   assert.match(monthly, /resolveEventLabel=\{resolveDesktopEventLabel\}/);
+});
+
+
+test("Calendar bank income events use current saved payroll names and retain explicit edits", () => {
+  const transaction = { ...bankTransaction, amount: 100, linked_bill_id: undefined, linked_income_id: "payroll", match_reason: "confirmed_income_match", review_status: "matched", review_resolution: "income", review_allocations: [{ type: "income" as const, targetId: "payroll", name: "Saved payroll", amount: 100 }] };
+  const incomes = [{ id: "payroll", name: "Current payroll" }];
+  assert.equal(createCalendarEventLabelResolver([transaction], [], incomes)(bankEvent), "Current payroll");
+  assert.equal(createCalendarEventLabelResolver([transaction], [])(bankEvent), "Saved payroll");
+  assert.equal(createCalendarEventLabelResolver([{ ...transaction, user_edited_at: "2026-10-26", note: "My paycheck" }], [], incomes)(bankEvent), "My paycheck");
+  assert.equal(createCalendarEventLabelResolver([{ ...transaction, match_reason: undefined }], [], incomes)(bankEvent), "Bank merchant");
 });

@@ -752,8 +752,8 @@ export default function MonthlyScreen() {
   const totalPaid = billSummary.totalPaid;
 
   const resolveDesktopEventLabel = useMemo(
-    () => createCalendarEventLabelResolver(transactions, bills),
-    [transactions, bills],
+    () => createCalendarEventLabelResolver(transactions, bills, incomes),
+    [transactions, bills, incomes],
   );
   const txList = useMemo(() => getTransactionsForMonth(month, selectedYear), [getTransactionsForMonth, month, selectedYear]);
   const provisionalManualIds = useMemo(

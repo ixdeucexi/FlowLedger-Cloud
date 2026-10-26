@@ -3,7 +3,7 @@ import { Platform } from "react-native";
 import { useRouter } from "expo-router";
 
 import { useAuth } from "@/context/AuthContext";
-import { useBudget, type Transaction } from "@/context/BudgetContext";
+import { useBudget } from "@/context/BudgetContext";
 import { useMembership } from "@/context/MembershipContext";
 import { localDateInTimeZone } from "@/lib/dailyCheckingClose";
 import { buildForecastBillNotifications } from "@/lib/forecastBillNotifications";
@@ -20,7 +20,8 @@ import {
   type NotificationCenterState,
 } from "@/lib/notificationCenter";
 import { pendingOccurrenceKeySet } from "@/lib/pendingPlanMatches";
-import { buildReviewQueue } from "@/lib/reviewCenter";
+import { buildReviewQueue, type ReviewAllocationLike } from "@/lib/reviewCenter";
+import { createTransactionNameResolver } from "@/lib/transactionNames";
 import { visibleSearchSettings } from "@/lib/settingsHub";
 import { supabase } from "@/lib/supabase";
 import {
@@ -50,10 +51,6 @@ type AppDiscoveryValue = {
 };
 
 const AppDiscoveryContext = createContext<AppDiscoveryValue | null>(null);
-
-function transactionTitle(transaction: Pick<Transaction, "merchant_name" | "note" | "category">) {
-  return transaction.merchant_name?.trim() || transaction.note?.trim() || transaction.category || "Transaction";
-}
 
 function currency(value: number) {
   return Math.abs(Number.isFinite(value) ? value : 0).toLocaleString("en-US", {
@@ -98,6 +95,7 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
     activeHousehold,
     householdTimeZone,
     bills,
+    incomes,
     categories,
     goals,
     pendingBankTransactions,
@@ -109,6 +107,7 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
     setDashboardFilter,
   } = useBudget();
 
+  const transactionTitle = useMemo(() => createTransactionNameResolver(bills, incomes), [bills, incomes]);
   const [searchVisible, setSearchVisible] = useState(false);
   const [mode, setMode] = useState<DiscoveryMode>("search");
   const [query, setQuery] = useState("");
@@ -119,6 +118,7 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
   const notificationStateRef = useRef(notificationState);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const remoteSearchCacheRef = useRef(new Map<string, UniversalSearchResult[]>());
+  const remoteSearchNamingRef = useRef({ resolver: transactionTitle, transactions });
 
   const userId = user?.id ?? null;
   const householdId = activeHousehold?.householdId ?? null;
@@ -205,11 +205,12 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
 
   const searchIndex = useMemo(() => buildUniversalSearchIndex({
     bills,
+    incomes,
     goals,
     transactions,
     categories,
     settings: visibleSearchSettings(isAdmin),
-  }), [bills, categories, goals, isAdmin, transactions]);
+  }), [bills, incomes, categories, goals, isAdmin, transactions]);
 
   const localResults = useMemo(
     () => mode === "commands" ? filterCommands(query) : searchUniversalIndex(searchIndex, query),
@@ -218,6 +219,10 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     setRemoteResults([]);
+    if (remoteSearchNamingRef.current.resolver !== transactionTitle || remoteSearchNamingRef.current.transactions !== transactions) {
+      remoteSearchCacheRef.current.clear();
+      remoteSearchNamingRef.current = { resolver: transactionTitle, transactions };
+    }
     if (!searchVisible || mode !== "search" || demoMode || !userId || !householdId || query.trim().length < 2) {
       setRemoteLoading(false);
       return;
@@ -239,7 +244,7 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
       setRemoteLoading(true);
       void supabase
         .from("transactions")
-        .select("id,date,amount,category,note,merchant_name")
+        .select("id,date,amount,category,note,merchant_name,user_edited_at,match_reason,review_status,review_resolution,review_allocations,linked_bill_id,linked_income_id")
         .eq("household_id", householdId)
         .is("removed_at", null)
         .or(`merchant_name.ilike.%${safeQuery}%,note.ilike.%${safeQuery}%,category.ilike.%${safeQuery}%`)
@@ -253,12 +258,23 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
             const nextResults = (data ?? []).map(row => ({
               id: String(row.id),
               kind: "Activity" as const,
-              title: String(row.merchant_name || row.note || row.category || "Transaction"),
+              title: transactionTitle({
+                note: typeof row.note === "string" ? row.note : "",
+                category: typeof row.category === "string" ? row.category : "",
+                merchant_name: typeof row.merchant_name === "string" ? row.merchant_name : undefined,
+                user_edited_at: typeof row.user_edited_at === "string" ? row.user_edited_at : undefined,
+                match_reason: typeof row.match_reason === "string" ? row.match_reason : undefined,
+                review_status: typeof row.review_status === "string" ? row.review_status : undefined,
+                linked_bill_id: typeof row.linked_bill_id === "string" ? row.linked_bill_id : undefined,
+                linked_income_id: typeof row.linked_income_id === "string" ? row.linked_income_id : undefined,
+                review_resolution: typeof row.review_resolution === "string" ? row.review_resolution : undefined,
+                review_allocations: Array.isArray(row.review_allocations) ? row.review_allocations.filter(allocation => allocation !== null && typeof allocation === "object" && !Array.isArray(allocation)) as unknown as ReviewAllocationLike[] : undefined,
+              }),
               subtitle: `${row.date} · ${row.category || "Other"} · ${Number(row.amount) >= 0 ? "+" : "−"}${currency(Number(row.amount))}`,
               icon: Number(row.amount) >= 0 ? "arrow-down-left" : "arrow-up-right",
               route: "/(tabs)/transactions",
               params: { activityId: String(row.id), activityDate: String(row.date), activityAt: String(Date.now()) },
-              keywords: String(row.note || ""),
+              keywords: `${row.merchant_name || ""} ${row.note || ""}`,
             }));
             remoteSearchCacheRef.current.set(cacheKey, nextResults);
             setRemoteResults(nextResults);
@@ -270,7 +286,7 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [demoMode, householdId, mode, query, searchVisible, userId]);
+  }, [demoMode, householdId, mode, query, searchVisible, userId, transactionTitle, transactions]);
 
   const searchResults = useMemo(
     () => mode === "commands" ? localResults : mergeSearchResults(localResults, remoteResults),

@@ -1,3 +1,4 @@
+import { createTransactionNameResolver } from "@/lib/transactionNames";
 import { pendingManualReplacementIds } from "@/lib/pendingManualReplacement";
 import { MatchTypeFilters } from "@/components/MatchTypeFilters";
 import { activityTargetsForKind, matchTargetKindLabels, selectedMatchTargetKind, type MatchTargetKind, type MatchTargetSelection } from "@/lib/matchTargetFilters";
@@ -1610,6 +1611,7 @@ export function ActivityScreen() {
     () => activityTargetsForKind(combinedMatchOptions, matchTargetKind, bills),
     [combinedMatchOptions, matchTargetKind, bills],
   );
+  const transactionName = useMemo(() => createTransactionNameResolver(bills, incomes), [bills, incomes]);
   const matchedBillIdForModal = matchTx ? confirmedBillMatchId(matchTx) : null;
   const matchedBillForModal = matchedBillIdForModal
     ? bills.find((bill) => bill.id === matchedBillIdForModal)
@@ -3857,9 +3859,7 @@ export function ActivityScreen() {
                   style={[styles.matchTitle, { color: c.foreground }]}
                   numberOfLines={2}
                 >
-                  {matchTx?.merchant_name ||
-                    matchTx?.note ||
-                    "Imported transaction"}
+                  {matchTx ? transactionName(matchTx) : "Imported transaction"}
                 </Text>
                 <Text style={[styles.matchAmount, { color: c.destructive }]}>
                   −${Math.abs(matchTx?.amount ?? 0).toFixed(2)} ·{" "}
@@ -4103,11 +4103,7 @@ export function ActivityScreen() {
                     () =>
                       setPendingBucketDraft({
                         transactionId: transaction.id,
-                        name:
-                          transaction.merchant_name?.trim() ||
-                          transaction.note?.trim() ||
-                          transaction.category ||
-                          "Spending",
+                        name: transactionName(transaction),
                         amount: Math.abs(transaction.amount),
                         date: transaction.date,
                       }),

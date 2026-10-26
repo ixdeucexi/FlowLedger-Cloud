@@ -1,3 +1,4 @@
+import { createTransactionNameResolver } from "@/lib/transactionNames";
 import Feather from "@expo/vector-icons/Feather";
 import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -5,7 +6,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { AddTransactionModal } from "@/components/AddTransactionModal";
 import { GoalModal } from "@/components/GoalModal";
 import { useAuth } from "@/context/AuthContext";
-import { useBudget, type Goal, type Transaction } from "@/context/BudgetContext";
+import { useBudget, type Goal } from "@/context/BudgetContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
@@ -27,7 +28,6 @@ type Props = {
 };
 type Screen = "detail" | "add" | "record" | "budget";
 const money = (value: number) => `$${Math.abs(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const purchaseName = (tx: Transaction) => tx.merchant_name?.trim() || tx.note?.trim() || tx.category || "Purchase";
 function purchaseDate(value: string) {
   const [year, month, day] = value.slice(0, 10).split("-").map(Number);
   return new Date(year, month - 1, day).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -39,7 +39,8 @@ export function BucketDetailModal({ bucketId, suspended = false, busy = false, r
   const c = useColors();
   const desktop = useDesktopExperience();
   const { user } = useAuth();
-  const { goals, transactions, transactionAccountIdentities, activeHousehold, canEditHousehold, addBucketPurchase, removeBucketPurchase, updateGoal } = useBudget();
+  const { bills, incomes, goals, transactions, transactionAccountIdentities, activeHousehold, canEditHousehold, addBucketPurchase, removeBucketPurchase, updateGoal } = useBudget();
+  const purchaseName = useMemo(() => createTransactionNameResolver(bills, incomes), [bills, incomes]);
   const goal = goals.find(item => item.id === bucketId && item.goal_type === "planned_expense");
   const [screen, setScreen] = useState<Screen>("detail");
   const [kind, setKind] = useState<"bank" | "manual" | null>(null);

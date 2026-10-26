@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { JsxEmit, ModuleKind, transpileModule } from "typescript";
 import { bucketPurchaseCandidates, bucketPurchaseHistory } from "./bucketPurchases";
 import { spendingBucketSummary } from "./spendingBuckets";
+import { createTransactionNameResolver } from "./transactionNames";
 
 function flatten(node: any): any[] {
   return Array.isArray(node) ? node.flatMap(flatten) : node && typeof node === "object" ? [node, ...flatten(node.props?.children)] : [];
@@ -45,6 +46,7 @@ function harness(component = "BucketDetailModal", overrides: Record<string, any>
     if (leaf === "useColors") return { useColors: () => new Proxy({}, { get: () => "#000000" }) };
     if (leaf === "useDesktopExperience") return { useDesktopExperience: () => false };
     if (leaf === "useBackDismiss") return { useBackDismiss() {} };
+    if (leaf === "transactionNames") return { createTransactionNameResolver };
     if (leaf === "bucketPurchases") return { bucketPurchaseCandidates, bucketPurchaseHistory };
     if (leaf === "spendingBuckets") return { spendingBucketSummary };
     if (leaf === "billMatching") return { createPlaidTransactionAccountKindClassifier: () => (tx: any) => tx.plaid_account_id === "checking" ? "checking" : "unknown" };
@@ -230,4 +232,39 @@ test("stale full-close confirmation refreshes the detail before a new explicit r
   assert.equal(h.button("Adjust Holiday budget").props.disabled, false);
   h.button("Close Holiday bucket").props.onPress();
   assert.equal(choices.length, 1); assert.equal(choices[0].target_amount, 150);
+});
+
+
+test("bucket purchase history and picker use saved names while retaining bank-name search", () => {
+  const h = harness();
+  h.budget.transactions[0] = { ...purchase, merchant_name: "BANK PRIOR", note: "Family gift", user_edited_at: "2026-10-26" };
+  h.budget.transactions[1] = { ...bank, merchant_name: "BANK POS 123", note: "Family dinner", user_edited_at: "2026-10-26" };
+  assert.match(copy(h.render()), /Family gift/); assert.ok(h.button("Remove Family gift from bucket"));
+  h.button("Add purchase to Holiday").props.onPress(); h.button("Bank transaction").props.onPress();
+  for (const query of ["Family dinner", "BANK POS 123"]) {
+    flatten(h.render()).find(node => node.type === "TextInput" && node.props.accessibilityLabel === "Search bucket purchase transactions").props.onChangeText(query);
+    assert.ok(h.button("Select Family dinner, $50.00"));
+  }
+});
+
+test("unplanned-charge and deleted-transaction labels retain saved names and restore accessibility text", () => {
+  const transaction = { ...bank, merchant_name: "BANK POS 123", note: "Saved dinner", user_edited_at: "2026-10-26" };
+  const unplanned = harness("UnplannedChargeModal");
+  Object.assign(unplanned.props, { transaction, categories: ["Other"], saving: false });
+  assert.match(copy(unplanned.render()), /Saved dinner/); assert.doesNotMatch(copy(unplanned.render()), /BANK POS 123/);
+  const deleted = harness("RecentlyDeletedTransactions", { deletedTransactions: [transaction] });
+  assert.match(copy(deleted.render()), /Saved dinner/); assert.ok(deleted.button("Restore Saved dinner"));
+});
+
+
+test("deleted and unplanned charge surfaces resolve live confirmed bill and income names", () => {
+  const transaction = { ...bank, match_reason: "confirmed_bill_match", linked_bill_id: "bill", review_status: "matched", review_resolution: "bill", review_allocations: [{ type: "bill", targetId: "bill", name: "Old electricity name", amount: 50 }] };
+  const bills = [{ id: "bill", name: "Current electricity name" }];
+  const deleted = harness("RecentlyDeletedTransactions", { bills, deletedTransactions: [transaction] });
+  assert.ok(deleted.button("Restore Current electricity name"));
+  const unplanned = harness("UnplannedChargeModal", { bills }); Object.assign(unplanned.props, { transaction, categories: ["Other"], saving: false });
+  assert.match(copy(unplanned.render()), /Current electricity name/);
+  const payroll = { ...transaction, amount: 50, match_reason: "confirmed_income_match", review_resolution: "income", linked_bill_id: undefined, linked_income_id: "payroll", review_allocations: [{ type: "income", targetId: "payroll", name: "Old payroll", amount: 50 }] };
+  deleted.budget.incomes = [{ id: "payroll", name: "Current payroll" }]; deleted.budget.deletedTransactions = [payroll];
+  assert.ok(deleted.button("Restore Current payroll"));
 });
