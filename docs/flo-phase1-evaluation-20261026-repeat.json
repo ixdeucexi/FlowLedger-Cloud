@@ -1,0 +1,534 @@
+[
+  {
+    "status": 200,
+    "data": {
+      "caseId": "natural-name",
+      "question": "Could you check how much is sitting in Cedar Daily?",
+      "expected": {
+        "recordedBalance": 700
+      },
+      "answer": {
+        "answer": "Cedar Daily Checking: $700.00 recorded as of 2026-09-10.\n\nThis is not a live available-funds or safe-to-spend amount.\n\nAssumptions: These are recorded balance observations, not live bank funds or safe-to-spend amounts. Pending transactions and future obligations are not deducted here.\n\nThat is a recorded account balance, not a spending allowance. I’d check upcoming obligations before making a spending decision.",
+        "claims": [],
+        "caveat": null,
+        "evidenceIds": [
+          "financialAnalysis:39d98b7ca61487f7:0"
+        ],
+        "followups": [
+          "How much can I safely spend before my next paycheck?",
+          "What bills are due before my next paycheck?"
+        ]
+      },
+      "sources": [
+        {
+          "id": "financialAnalysis:39d98b7ca61487f7:0",
+          "type": "money",
+          "label": "Money calculation",
+          "asOf": "2026-09-09T15:00:00.000Z",
+          "freshness": "stale",
+          "route": "/(tabs)/monthly"
+        }
+      ],
+      "aggregate": {
+        "partial": false,
+        "dataAsOf": "2026-09-09T15:00:00.000Z",
+        "coverage": {
+          "complete": true,
+          "tools": 1,
+          "partialTools": 0,
+          "exclusions": [],
+          "reasons": [],
+          "dateRanges": []
+        }
+      },
+      "records": [
+        {
+          "id": "financialAnalysis:39d98b7ca61487f7:0",
+          "recordedBalance": 700,
+          "accountCount": 1,
+          "accountName": "Cedar Daily Checking",
+          "accountType": "checking",
+          "balanceAsOf": "2026-09-10",
+          "oldestObservationDate": "2026-09-10",
+          "newestObservationDate": "2026-09-10",
+          "safeToSpend": null
+        }
+      ],
+      "usage": {
+        "inputTokens": 9838,
+        "outputTokens": 516
+      },
+      "durationMs": 5940
+    },
+    "checkedAt": "2026-10-26T20:11:38.532Z",
+    "checks": [
+      "pass"
+    ],
+    "expected": {
+      "recordedBalance": 700
+    }
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "natural-ambiguous",
+      "question": "How much is sitting in Reserve?",
+      "expected": {
+        "clarification": true,
+        "noPickedBalance": true
+      },
+      "answer": {
+        "answer": "That name matches more than one active account. Which do you mean: Reserve 1 (manual savings); Reserve 2 (manual savings)?\n\nWhat I could not verify: That name matches more than one active account. Which do you mean: Reserve 1 (manual savings); Reserve 2 (manual savings)?.\n\nAssumptions: These are recorded balance observations, not live bank funds or safe-to-spend amounts. Pending transactions and future obligations are not deducted here.\n\nI need the missing information listed here before drawing a stronger conclusion.",
+        "claims": [],
+        "caveat": "That name matches more than one active account. Which do you mean: Reserve 1 (manual savings); Reserve 2 (manual savings)?",
+        "evidenceIds": [
+          "financialAnalysis:39d98b7ca61487f7:0"
+        ],
+        "followups": []
+      },
+      "sources": [
+        {
+          "id": "financialAnalysis:39d98b7ca61487f7:0",
+          "type": "money",
+          "label": "Money calculation",
+          "asOf": "2026-09-09T15:00:00.000Z",
+          "freshness": "stale",
+          "route": "/(tabs)/monthly"
+        }
+      ],
+      "aggregate": {
+        "partial": true,
+        "dataAsOf": "2026-09-09T15:00:00.000Z",
+        "coverage": {
+          "complete": false,
+          "tools": 1,
+          "partialTools": 1,
+          "exclusions": [
+            "That name matches more than one active account. Which do you mean: Reserve 1 (manual savings); Reserve 2 (manual savings)?"
+          ],
+          "reasons": [
+            "analysis_data_incomplete"
+          ],
+          "dateRanges": []
+        }
+      },
+      "records": [
+        {
+          "id": "financialAnalysis:39d98b7ca61487f7:0"
+        }
+      ],
+      "usage": {
+        "inputTokens": 9777,
+        "outputTokens": 373
+      },
+      "durationMs": 5616
+    },
+    "checkedAt": "2026-10-26T20:11:44.463Z",
+    "checks": [
+      "pass"
+    ],
+    "expected": {
+      "clarification": true,
+      "noPickedBalance": true
+    }
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "numbered-paraphrase",
+      "question": "Please tell me the balance for Reserve 2",
+      "expected": {
+        "recordedBalance": 220
+      },
+      "answer": {
+        "answer": "Reserve 2: $220.00 recorded as of 2026-09-10.\n\nThis is not a live available-funds or safe-to-spend amount.\n\nAssumptions: These are recorded balance observations, not live bank funds or safe-to-spend amounts. Pending transactions and future obligations are not deducted here.\n\nThat is a recorded account balance, not a spending allowance. I’d check upcoming obligations before making a spending decision.",
+        "claims": [],
+        "caveat": null,
+        "evidenceIds": [
+          "financialAnalysis:39d98b7ca61487f7:0"
+        ],
+        "followups": [
+          "How much can I safely spend before my next paycheck?",
+          "What bills are due before my next paycheck?"
+        ]
+      },
+      "sources": [
+        {
+          "id": "financialAnalysis:39d98b7ca61487f7:0",
+          "type": "money",
+          "label": "Money calculation",
+          "asOf": "2026-09-09T15:00:00.000Z",
+          "freshness": "stale",
+          "route": "/(tabs)/monthly"
+        }
+      ],
+      "aggregate": {
+        "partial": false,
+        "dataAsOf": "2026-09-09T15:00:00.000Z",
+        "coverage": {
+          "complete": true,
+          "tools": 1,
+          "partialTools": 0,
+          "exclusions": [],
+          "reasons": [],
+          "dateRanges": []
+        }
+      },
+      "records": [
+        {
+          "id": "financialAnalysis:39d98b7ca61487f7:0",
+          "recordedBalance": 220,
+          "accountCount": 1,
+          "accountName": "Reserve 2",
+          "accountType": "savings",
+          "balanceAsOf": "2026-09-10",
+          "oldestObservationDate": "2026-09-10",
+          "newestObservationDate": "2026-09-10",
+          "safeToSpend": null
+        }
+      ],
+      "usage": {
+        "inputTokens": 9833,
+        "outputTokens": 587
+      },
+      "durationMs": 7030
+    },
+    "checkedAt": "2026-10-26T20:11:51.929Z",
+    "checks": [
+      "pass"
+    ],
+    "expected": {
+      "recordedBalance": 220
+    }
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "missing-numbered-paraphrase",
+      "question": "Please tell me the balance for Reserve 2",
+      "expected": {
+        "noPickedBalance": true
+      },
+      "answer": {
+        "answer": "No active recorded account or configured debt matches that name. Available accounts: Manual Card Account (manual credit_card); Manual Checking (manual checking); Reserve 1 (manual savings); Travel Wallet (manual cash); Cedar Daily Checking (connected checking); Main Card (connected credit). Please use a saved account name; I cannot substitute the household balance.\n\nWhat I could not verify: No active recorded account or configured debt matches that name. Available accounts: Manual Card Account (manual credit_card); Manual Checking (manual checking); Reserve 1 (manual savings); Travel Wallet (manual cash); Cedar Daily Checking (connected checking); Main Card (connected credit). Please use a saved account name; I cannot substitute the household balance..\n\nAssumptions: These are recorded balance observations, not live bank funds or safe-to-spend amounts. Pending transactions and future obligations are not deducted here.\n\nI need the missing information listed here before drawing a stronger conclusion.",
+        "claims": [],
+        "caveat": "No active recorded account or configured debt matches that name. Available accounts: Manual Card Account (manual credit_card); Manual Checking (manual checking); Reserve 1 (manual savings); Travel Wallet (manual cash); Cedar Daily Checking (connected checking); Main Card (connected credit). Please use a saved account name; I cannot substitute the household balance.",
+        "evidenceIds": [
+          "financialAnalysis:cfdf32aa4214874e:0"
+        ],
+        "followups": []
+      },
+      "sources": [
+        {
+          "id": "financialAnalysis:cfdf32aa4214874e:0",
+          "type": "money",
+          "label": "Money calculation",
+          "asOf": "2026-09-09T15:00:00.000Z",
+          "freshness": "stale",
+          "route": "/(tabs)/monthly"
+        }
+      ],
+      "aggregate": {
+        "partial": true,
+        "dataAsOf": "2026-09-09T15:00:00.000Z",
+        "coverage": {
+          "complete": false,
+          "tools": 1,
+          "partialTools": 1,
+          "exclusions": [
+            "No active recorded account or configured debt matches that name. Available accounts: Manual Card Account (manual credit_card); Manual Checking (manual checking); Reserve 1 (manual savings); Travel Wallet (manual cash); Cedar Daily Checking (connected checking); Main Card (connected credit). Please use a saved account name; I cannot substitute the household balance."
+          ],
+          "reasons": [
+            "analysis_data_incomplete"
+          ],
+          "dateRanges": []
+        }
+      },
+      "records": [
+        {
+          "id": "financialAnalysis:cfdf32aa4214874e:0"
+        }
+      ],
+      "usage": {
+        "inputTokens": 9855,
+        "outputTokens": 409
+      },
+      "durationMs": 5414
+    },
+    "checkedAt": "2026-10-26T20:11:57.625Z",
+    "checks": [
+      "pass"
+    ],
+    "expected": {
+      "noPickedBalance": true
+    }
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "missing-marker-chain",
+      "question": "Please inspect Reserve account number 2 balance",
+      "expected": {
+        "noPickedBalance": true
+      },
+      "answer": {
+        "answer": "No active recorded account or configured debt matches that name. Available accounts: Manual Card Account (manual credit_card); Manual Checking (manual checking); Reserve 1 (manual savings); Travel Wallet (manual cash); Cedar Daily Checking (connected checking); Main Card (connected credit). Please use a saved account name; I cannot substitute the household balance.\n\nWhat I could not verify: No active recorded account or configured debt matches that name. Available accounts: Manual Card Account (manual credit_card); Manual Checking (manual checking); Reserve 1 (manual savings); Travel Wallet (manual cash); Cedar Daily Checking (connected checking); Main Card (connected credit). Please use a saved account name; I cannot substitute the household balance..\n\nAssumptions: These are recorded balance observations, not live bank funds or safe-to-spend amounts. Pending transactions and future obligations are not deducted here.\n\nI need the missing information listed here before drawing a stronger conclusion.",
+        "claims": [],
+        "caveat": "No active recorded account or configured debt matches that name. Available accounts: Manual Card Account (manual credit_card); Manual Checking (manual checking); Reserve 1 (manual savings); Travel Wallet (manual cash); Cedar Daily Checking (connected checking); Main Card (connected credit). Please use a saved account name; I cannot substitute the household balance.",
+        "evidenceIds": [
+          "financialAnalysis:cfdf32aa4214874e:0"
+        ],
+        "followups": []
+      },
+      "sources": [
+        {
+          "id": "financialAnalysis:cfdf32aa4214874e:0",
+          "type": "money",
+          "label": "Money calculation",
+          "asOf": "2026-09-09T15:00:00.000Z",
+          "freshness": "stale",
+          "route": "/(tabs)/monthly"
+        }
+      ],
+      "aggregate": {
+        "partial": true,
+        "dataAsOf": "2026-09-09T15:00:00.000Z",
+        "coverage": {
+          "complete": false,
+          "tools": 1,
+          "partialTools": 1,
+          "exclusions": [
+            "No active recorded account or configured debt matches that name. Available accounts: Manual Card Account (manual credit_card); Manual Checking (manual checking); Reserve 1 (manual savings); Travel Wallet (manual cash); Cedar Daily Checking (connected checking); Main Card (connected credit). Please use a saved account name; I cannot substitute the household balance."
+          ],
+          "reasons": [
+            "analysis_data_incomplete"
+          ],
+          "dateRanges": []
+        }
+      },
+      "records": [
+        {
+          "id": "financialAnalysis:cfdf32aa4214874e:0"
+        }
+      ],
+      "usage": {
+        "inputTokens": 9853,
+        "outputTokens": 469
+      },
+      "durationMs": 7194
+    },
+    "checkedAt": "2026-10-26T20:12:05.259Z",
+    "checks": [
+      "pass"
+    ],
+    "expected": {
+      "noPickedBalance": true
+    }
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "missing-no-dot",
+      "question": "Please inspect Reserve No.2 balance",
+      "expected": {
+        "noPickedBalance": true
+      },
+      "answer": {
+        "answer": "No active recorded account or configured debt matches that name. Available accounts: Manual Card Account (manual credit_card); Manual Checking (manual checking); Reserve 1 (manual savings); Travel Wallet (manual cash); Cedar Daily Checking (connected checking); Main Card (connected credit). Please use a saved account name; I cannot substitute the household balance.\n\nWhat I could not verify: No active recorded account or configured debt matches that name. Available accounts: Manual Card Account (manual credit_card); Manual Checking (manual checking); Reserve 1 (manual savings); Travel Wallet (manual cash); Cedar Daily Checking (connected checking); Main Card (connected credit). Please use a saved account name; I cannot substitute the household balance..\n\nAssumptions: These are recorded balance observations, not live bank funds or safe-to-spend amounts. Pending transactions and future obligations are not deducted here.\n\nI need the missing information listed here before drawing a stronger conclusion.",
+        "claims": [],
+        "caveat": "No active recorded account or configured debt matches that name. Available accounts: Manual Card Account (manual credit_card); Manual Checking (manual checking); Reserve 1 (manual savings); Travel Wallet (manual cash); Cedar Daily Checking (connected checking); Main Card (connected credit). Please use a saved account name; I cannot substitute the household balance.",
+        "evidenceIds": [
+          "financialAnalysis:cfdf32aa4214874e:0"
+        ],
+        "followups": []
+      },
+      "sources": [
+        {
+          "id": "financialAnalysis:cfdf32aa4214874e:0",
+          "type": "money",
+          "label": "Money calculation",
+          "asOf": "2026-09-09T15:00:00.000Z",
+          "freshness": "stale",
+          "route": "/(tabs)/monthly"
+        }
+      ],
+      "aggregate": {
+        "partial": true,
+        "dataAsOf": "2026-09-09T15:00:00.000Z",
+        "coverage": {
+          "complete": false,
+          "tools": 1,
+          "partialTools": 1,
+          "exclusions": [
+            "No active recorded account or configured debt matches that name. Available accounts: Manual Card Account (manual credit_card); Manual Checking (manual checking); Reserve 1 (manual savings); Travel Wallet (manual cash); Cedar Daily Checking (connected checking); Main Card (connected credit). Please use a saved account name; I cannot substitute the household balance."
+          ],
+          "reasons": [
+            "analysis_data_incomplete"
+          ],
+          "dateRanges": []
+        }
+      },
+      "records": [
+        {
+          "id": "financialAnalysis:cfdf32aa4214874e:0"
+        }
+      ],
+      "usage": {
+        "inputTokens": 9851,
+        "outputTokens": 427
+      },
+      "durationMs": 6789
+    },
+    "checkedAt": "2026-10-26T20:12:12.428Z",
+    "checks": [
+      "pass"
+    ],
+    "expected": {
+      "noPickedBalance": true
+    }
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "negative-card-balance",
+      "question": "What is my Main Card balance?",
+      "expected": {
+        "recordedLiabilityBalance": -50,
+        "liabilityStatus": "account_credit",
+        "recordedAmountOwed": 0,
+        "recordedAccountCredit": 50
+      },
+      "answer": {
+        "answer": "Main Card: -$50.00 recorded credit liability balance, observed as of 2026-09-10. This is a recorded account credit/overpayment of $50.00, not an amount owed or spendable cash. Confirm its treatment with the issuer. No other debt, account balance or duplicate source is added.\n\nAssumptions: These are recorded balance observations, not live bank funds or safe-to-spend amounts. Pending transactions and future obligations are not deducted here. This is the named account's recorded credit liability; configured debt-plan records are not added.",
+        "claims": [],
+        "caveat": null,
+        "evidenceIds": [
+          "financialAnalysis:24fe4ae312ced783:0"
+        ],
+        "followups": []
+      },
+      "sources": [
+        {
+          "id": "financialAnalysis:24fe4ae312ced783:0",
+          "type": "money",
+          "label": "Money calculation",
+          "asOf": "2026-09-09T15:00:00.000Z",
+          "freshness": "stale",
+          "route": "/(tabs)/monthly"
+        }
+      ],
+      "aggregate": {
+        "partial": false,
+        "dataAsOf": "2026-09-09T15:00:00.000Z",
+        "coverage": {
+          "complete": true,
+          "tools": 1,
+          "partialTools": 0,
+          "exclusions": [],
+          "reasons": [],
+          "dateRanges": []
+        }
+      },
+      "records": [
+        {
+          "id": "financialAnalysis:24fe4ae312ced783:0",
+          "recordedLiabilityBalance": -50,
+          "balanceAsOf": "2026-09-10",
+          "accountName": "Main Card",
+          "accountType": "credit",
+          "accountCount": 1,
+          "liabilityStatus": "account_credit",
+          "recordedAmountOwed": 0,
+          "recordedAccountCredit": 50,
+          "safeToSpend": null
+        }
+      ],
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0
+      },
+      "durationMs": 2
+    },
+    "checkedAt": "2026-10-26T20:12:12.760Z",
+    "checks": [
+      "pass"
+    ],
+    "expected": {
+      "recordedLiabilityBalance": -50,
+      "liabilityStatus": "account_credit",
+      "recordedAmountOwed": 0,
+      "recordedAccountCredit": 50
+    }
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "zero-card-balance",
+      "question": "What is my Main Card balance?",
+      "expected": {
+        "recordedLiabilityBalance": 0,
+        "liabilityStatus": "no_amount_owed",
+        "recordedAmountOwed": 0
+      },
+      "answer": {
+        "answer": "Main Card: $0.00 recorded credit liability balance, observed as of 2026-09-10. No amount is recorded as owed on this account. A zero liability is not spendable cash. No other debt, account balance or duplicate source is added.\n\nAssumptions: These are recorded balance observations, not live bank funds or safe-to-spend amounts. Pending transactions and future obligations are not deducted here. This is the named account's recorded credit liability; configured debt-plan records are not added.",
+        "claims": [],
+        "caveat": null,
+        "evidenceIds": [
+          "financialAnalysis:a5c5d4146087f381:0"
+        ],
+        "followups": []
+      },
+      "sources": [
+        {
+          "id": "financialAnalysis:a5c5d4146087f381:0",
+          "type": "money",
+          "label": "Money calculation",
+          "asOf": "2026-09-09T15:00:00.000Z",
+          "freshness": "stale",
+          "route": "/(tabs)/monthly"
+        }
+      ],
+      "aggregate": {
+        "partial": false,
+        "dataAsOf": "2026-09-09T15:00:00.000Z",
+        "coverage": {
+          "complete": true,
+          "tools": 1,
+          "partialTools": 0,
+          "exclusions": [],
+          "reasons": [],
+          "dateRanges": []
+        }
+      },
+      "records": [
+        {
+          "id": "financialAnalysis:a5c5d4146087f381:0",
+          "recordedLiabilityBalance": 0,
+          "balanceAsOf": "2026-09-10",
+          "accountName": "Main Card",
+          "accountType": "credit",
+          "accountCount": 1,
+          "liabilityStatus": "no_amount_owed",
+          "recordedAmountOwed": 0,
+          "recordedAccountCredit": 0,
+          "safeToSpend": null
+        }
+      ],
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0
+      },
+      "durationMs": 18
+    },
+    "checkedAt": "2026-10-26T20:12:13.172Z",
+    "checks": [
+      "pass"
+    ],
+    "expected": {
+      "recordedLiabilityBalance": 0,
+      "liabilityStatus": "no_amount_owed",
+      "recordedAmountOwed": 0
+    }
+  }
+]

@@ -11,7 +11,7 @@ import { scenarioAnalysis, stabilityAnalysis } from "./analysisStability.ts";
 import { recurringAnalysis } from "./analysisRecurring.ts";
 import { scheduleAnalysis } from "./analysisSchedule.ts";
 import { reviewAnalysis } from "./analysisReview.ts";
-import { currentBalanceAnalysis } from "./analysisAccounts.ts";
+import { accountInventoryAnalysis, currentBalanceAnalysis } from "./analysisAccounts.ts";
 import { localDay, validDate, type AnalysisRequest, type AnalysisResult, type AnalysisSnapshot } from "./analysisTypes.ts";
 import { aggregateCoverage, freshness, oldestSourceAsOf, type FloGroundedAnswer, type FloToolEnvelope, type FloSourceRef } from "./contract.ts";
 import type { FloToolRuntime } from "./tools.ts";
@@ -47,12 +47,13 @@ export function distinctAnalysisParagraphs(texts:readonly string[]):string[] {
 }
 
 const projectionDomains=new Set(["money","forecast","purchase","bills","subscriptions","income","stability","buffer","paycheck","progress","health"]);
-export function calculateFinancialAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequest): AnalysisResult {
+export function calculateFinancialAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequest, question?: string): AnalysisResult {
   const invalid=validateAnalysisRequest(request,snapshot.today);
   if(invalid) return {text:invalid,facts:isTimelinePurpose(request)?{timelineOutcome:"not_estimable"}:{},sources:[],assumptions:[],missing:[invalid],scenario:Boolean(request.scenario)};
   if(isGuidancePurpose(request.purpose))return guidanceAnalysis(snapshot,request);
+  if(request.purpose==="account_inventory")return accountInventoryAnalysis(snapshot,request);
   if(request.purpose==="balance_history")return historyAnalysis(snapshot,request);
-  if(request.domain==="money"&&request.operation==="detail"&&!request.scenario&&request.dateEvent==="none")return currentBalanceAnalysis(snapshot,request);
+  if(request.domain==="money"&&request.operation==="detail"&&!request.scenario&&request.dateEvent==="none")return currentBalanceAnalysis(snapshot,request,question);
   const historicalBills=request.domain==="bills"&&request.endDate!==null&&request.endDate<snapshot.today;
   const receivedIncome=request.domain==="income"&&request.incomeTiming==="received";
   const scheduleOnly=["bills","subscriptions","income"].includes(request.domain)&&!request.scenario;
@@ -101,7 +102,7 @@ export async function runFinancialAnalysis(options:{runtime:FloToolRuntime;quest
   if(clarification)return recordAnalysis(runtime,[clarification],null,{inputTokens:0,outputTokens:0});
   const interpretationStartedAt=performance.now();
   const candidate=deterministicAnalysisPlan(question,today,settings?.payment_method==="avalanche"?"avalanche":"snowball");
-  const directPlan=!prior.length||candidate?.requests.every(r=>r.purpose==="current_balance"&&r.accountGroup)?candidate:null;
+  const directPlan=!prior.length||candidate?.requests.every(r=>r.purpose==="account_inventory"||r.purpose==="current_balance"&&r.accountGroup)?candidate:null;
   const catalog=directPlan?{}:await loadAnalysisEntityCatalog(runtime.client,runtime.householdId);
   const interpret=(correction="")=>generateText({model:createOpenAI({apiKey:options.apiKey}).responses(options.modelId),output:Output.object({schema}),maxRetries:0,abortSignal:AbortSignal.timeout(interpretationAttemptMs(interpretationStartedAt,performance.now(),Boolean(correction))),providerOptions:{openai:{store:false,safetyIdentifier:options.safetyIdentifier,reasoningEffort:"low",textVerbosity:"low"}},
     system:analysisInterpreterPrompt({today,timeZone,debtMethod:settings?.payment_method??"snowball",correction}),prompt:JSON.stringify({question,conversation,availableRecordNames:catalog})});
@@ -118,10 +119,10 @@ export async function runFinancialAnalysis(options:{runtime:FloToolRuntime;quest
   const snapshot=await loadAnalysisSnapshot(runtime.client,runtime.householdId,runtime.now,requestedSources);
   const results:AnalysisResult[]=[];
   for(const request of plan.requests) {
-    try { results.push(requestedDebtCoverage(question,calculateFinancialAnalysis(snapshot,request))); }
+    try { results.push(requestedDebtCoverage(question,calculateFinancialAnalysis(snapshot,request,question))); }
     catch { results.push({text:"I could not complete the requested calculation safely. Check the requested dates and the forecast horizon.",facts:{},sources:projectionSources,assumptions:[],missing:["The requested calculation could not be verified"],scenario:Boolean(request.scenario)}); }
   }
-  if(plan.requests.some(r=>r.domain==="review"||(projectionDomains.has(r.domain)&&!["bills","subscriptions","income"].includes(r.domain))||r.scenario)) {
+  if(plan.requests.some(r=>r.domain==="review"||(r.purpose!=="account_inventory"&&projectionDomains.has(r.domain)&&!["bills","subscriptions","income"].includes(r.domain))||r.scenario)) {
     // Evidence labels are not a dependency graph: debt scenarios also consume
     // income, transactions and cash-flow inputs not listed in their prose.
     const stable=await verifyAnalysisSnapshot(runtime.client,snapshot,requestedSources.filter(table=>snapshot.sources[table]?.complete));

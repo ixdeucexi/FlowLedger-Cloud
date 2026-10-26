@@ -33,20 +33,49 @@ function lowerPaycheckScenario(question:string,today:string):AnalysisRequest["sc
   const match=question.match(/^\s*what\s+if\s+(?:my|our|the)\s+paycheck\s+(?:is\s+\$\s*(\d+(?:\.\d{1,2})?)\s+lower|(?:falls?|drops?)\s+by\s+\$\s*(\d+(?:\.\d{1,2})?))[?.!]*\s*$/i);
   if(!match)return null;const amount=Number(match[1]??match[2]);return amount>0&&amount<=1e9?{kind:"income_change",amount:-amount,amountMode:null,date:today,sourceDate:null,entity:null,repeat:"once"}:null;
 }
+/** Inventory is an explicit present account-list request, never a forecast,
+ * transaction list, app how-to or instruction to change recorded data. */
+export function isAccountInventoryQuestion(question: string): boolean {
+  const q = question.trim().replace(/[?.!]+$/, "");
+  return /^(?:what|which) accounts (?:can you see|do (?:i|we) have|are (?:saved|recorded|connected))$/i.test(q)
+    || /^(?:list|show(?: me)?) (?:(?:all|both) )?(?:(?:my|our|the) )?(?:active |recorded |saved )?accounts(?: and (?:their )?(?:balances|types))?$/i.test(q);
+}
+/** A narrow present-balance grammar retains the user's account phrase before
+ * a model can expand an ambiguous abbreviation into a chosen saved name. */
+export function currentNamedAccountPhrase(question: string): string | null {
+  if (currentAccountBalanceGroup(question) || /\b(?:next|tomorrow|yesterday|last|after|before|future|forecast|history|historical|and|or|compare|safely|spend|afford|will|would)\b/i.test(question)) return null;
+  const q = question.trim().replace(/[?.!]+$/, "");
+  const match = q.match(/^(?:what(?:'s| is)|show me) (?:(?:my|our|the) )?(?:current )?(.+?) balance$/i)
+    ?? q.match(/^how much(?: money)? (?:is|do (?:i|we) have) in (?:(?:my|our|the) )?(.+?)$/i);
+  const phrase = match?.[1]?.trim();
+  return phrase && !/^(?:debt|credit|card|buffer|cushion|goal|total(?: account)?)$/i.test(phrase) ? phrase : null;
+}
+/** This extraction is used only after typed interpretation selected a current
+ * named balance; it is not a shortcut that interprets arbitrary money prose. */
+export function interpretedAccountPhrase(question: string): string | null {
+  const direct = currentNamedAccountPhrase(question);
+  if (direct) return direct;
+  const q = question.trim().replace(/[?.!]+$/, "");
+  const match = q.match(/^(?:could you (?:please )?(?:check|tell me) )?how much(?: money)? is (?:sitting|held|kept) in (?:(?:my|our|the) )?(.+)$/i)
+    ?? q.match(/^(?:please )?(?:tell me|check|show me) (?:the )?(?:current )?balance (?:for|of|on|in) (?:(?:my|our|the) )?(.+)$/i);
+  return match && !/\b(?:next|tomorrow|after|before|last|and|or|compare|by|on)\b/i.test(match[1]) ? match[1].trim() : null;
+}
 /** Parse only self-contained supported grammar into the same typed calculator
  * requests. No balances, eligibility, dates of payment, or answers are guessed. */
 export function deterministicAnalysisPlan(question:string,today:string,debtMethod:"snowball"|"avalanche"="snowball"):AnalysisPlan|null {
   if(!validDate(today))return null;
   const seed:AnalysisRequest={purpose:"general",planDays:null,metric:null,amountRole:"none",contribution:null,domain:"forecast",operation:"summary",groupBy:"none",incomeTiming:"expected",startDate:null,endDate:null,dateEvent:"none",merchant:null,category:null,entity:null,amount:null,comparisonStart:null,comparisonEnd:null,target:"none",debtMethod,scenario:null};
   let request:AnalysisRequest|null=null;
-  const balanceGroup = currentAccountBalanceGroup(question);
+  const balanceGroup = currentAccountBalanceGroup(question), namedAccount = currentNamedAccountPhrase(question);
   const afterBill=afterBillBalanceName(question),purchase=currentPurchaseAmount(question);
   const monthlyIncome=normalMonthlyIncomeWindow(question,today);
   const weekday=relativeWeekdayTarget(question,today),threshold=checkingBalanceTarget(question),comparison=monthEdgeComparison(question,today),spending=currentSpendingComparison(question,today),search=transactionAmountSearch(question),emergency=emergencyReservePeriod(question),bill=simpleBillPriceChange(question,today),lower=lowerPaycheckScenario(question,today),choice=debtOrSavingsAmount(question);
   const extra=question.match(/^\s*what\s+if\s+i\s+(?:pay|put|add)\s+(?:an?\s+)?(?:extra\s+)?\$\s*(\d+(?:\.\d{1,2})?)\s+(?:(?:extra|more)\s+)?(?:toward(?:s)?|on)\s+(?:my\s+)?debt\s+(?:(?:per|each|every)\s+month|monthly)[?.!]*\s*$/i)
     ??question.match(/^\s*what\s+if\s+i\s+(?:pay|put|add)\s+(?:an?\s+)?(?:extra\s+)?\$\s*(\d+(?:\.\d{1,2})?)\s+(?:(?:extra|more)\s+)?(?:(?:per|each|every)\s+month|monthly)\s+(?:toward(?:s)?|on)\s+(?:my\s+)?debt[?.!]*\s*$/i);
-  if(isAfterPaydayBillScheduleQuestion(question))request={...seed,domain:"bills",dateEvent:"after_payday"};
+  if(isAccountInventoryQuestion(question))request={...seed,purpose:"account_inventory",domain:"money",operation:"detail"};
+  else if(isAfterPaydayBillScheduleQuestion(question))request={...seed,domain:"bills",dateEvent:"after_payday"};
   else if(balanceGroup)request={...seed,purpose:"current_balance",domain:"money",operation:"detail",accountGroup:balanceGroup};
+  else if(namedAccount)request={...seed,purpose:"current_balance",domain:"money",operation:"detail",entity:namedAccount};
   else if(isUnqualifiedSafeSpendingQuestion(question))request={...seed,purpose:"affordability",domain:"money",startDate:today,endDate:today};
   else if(monthlyIncome)request={...seed,domain:"income",operation:"average",incomeTiming:"received",...monthlyIncome};
   else if(afterBill)request={...seed,purpose:"forecast_balance",dateEvent:"after_bill",entity:afterBill};
@@ -239,7 +268,12 @@ function normalizeInterpreterPlan(question:string,plan:AnalysisPlan,today?:strin
     if(cancellation)next={...next,scenario:{...next.scenario!,repeat:cancellation,...(cancellation==="monthly"?{sourceDate:null}:{})}};
     return plan.requests.length===1&&usesOneTimeScenarioDefault(question,next)&&next.scenario?.repeat!=="once"?{...next,scenario:{...next.scenario!,repeat:"once" as const}}:next;
   })};
-  const normalized=normalizeIncomeEventBalance(question,normalizeRelativeWeekdayPlan(question,normalizeGenericAccountScope(question,coherent),today));
+  const namedPhrase = interpretedAccountPhrase(question);
+  const named = namedPhrase ? { ...coherent, requests: coherent.requests.map(r => {
+    const inventoryInsteadOfBalance = coherent.requests.length === 1 && r.purpose === "account_inventory" && r.domain === "money" && r.operation === "detail" && !r.scenario && r.dateEvent === "none" && [r.startDate,r.endDate,r.comparisonStart,r.comparisonEnd].every(date=>date==null);
+    return (r.purpose === "current_balance" && r.domain === "money" && !r.scenario) || inventoryInsteadOfBalance ? { ...r, purpose: "current_balance" as const, entity: namedPhrase, accountGroup: null } : r;
+  }) } : coherent;
+  const normalized=normalizeIncomeEventBalance(question,normalizeRelativeWeekdayPlan(question,normalizeGenericAccountScope(question,named),today));
   if(!normalized.legacy&&normalized.requests.length===1) {
     const r=normalized.requests[0];
     const historicalWindow=today?historicalMonthWindow(question,today):null;
@@ -315,6 +349,7 @@ export function isAppNavigationQuestion(question: string): boolean {
 }
 export function validateRequestSemantics(r: AnalysisRequest): string | null {
   if(r.accountGroup && !["checking","savings","all"].includes(r.accountGroup))return "The account group is not supported.";
+  if(r.purpose === "account_inventory" && (r.domain !== "money" || r.operation !== "detail" || r.entity || r.accountGroup || r.scenario || r.dateEvent !== "none" || [r.startDate,r.endDate,r.comparisonStart,r.comparisonEnd].some(date=>date!=null) || r.amount!=null || r.contribution))return "Account inventory requires present money/detail without a named account, dates, scenario or financial amount.";
   const scopedSavingsHistory=r.purpose==="balance_history"&&r.domain==="savings"&&r.accountGroup==="savings";
   if(r.accountGroup && r.accountGroup!=="checking" && r.purpose!=="current_balance"&&!scopedSavingsHistory)return "Savings and combined-account forecasts are not supported; I cannot substitute the household checking forecast for those accounts.";
   if(r.purpose==="allocation_choice"&&(r.domain!=="stability"||r.operation!=="plan"||r.amount===null||r.amount<=0||r.amountRole!=="payment_amount"||r.entity||r.scenario))return "A debt-versus-savings choice requires the shared-capacity plan and an explicit amount, not separate payoff or contribution timelines.";
@@ -349,6 +384,8 @@ export function validateRequestSemantics(r: AnalysisRequest): string | null {
 /** Safety invariants for model interpretation, not a natural-language money calculator. */
 export function validateAnalysisPlan(question: string, plan: AnalysisPlan, today?: string): string[] {
   const issues = plan.requests.map(validateRequestSemantics).filter((x): x is string => Boolean(x));
+  if(isAccountInventoryQuestion(question) && (!plan.requests.some(r=>r.purpose === "account_inventory") || plan.legacy))issues.push("An explicit account inventory requires account_inventory/money/detail; a planning total omits manual identities excluded by connected-account precedence.");
+  if(interpretedAccountPhrase(question) && plan.requests.some(r=>r.purpose === "account_inventory"))issues.push("A named current-balance question requires its literal account phrase and a current_balance request. An account inventory does not resolve the named balance or clarify ambiguous account names.");
   const currentDebtTotal=isWholeDebtTotalQuestion(question)&&!/\b(?:when|after|before|historical|history|previous|last|payoff)\b|\bwhat\s+if\b/i.test(question);
   if(currentDebtTotal&&!plan.requests.some(r=>r.purpose==="general"&&r.domain==="debt"&&["summary","detail"].includes(r.operation)&&!r.scenario))issues.push("A current total-debt question requires the general debt reader and its configured-plan scope limitation. Checking, savings and other asset balances are not debt. Independently requested account balances may coexist but cannot replace the debt reader.");
   if(isCurrentBufferAssessment(question)&&!plan.requests.some(r=>r.purpose==="general"&&r.domain==="buffer"&&["summary","detail"].includes(r.operation)&&!r.scenario))issues.push("A present buffer/cushion assessment requires general/buffer/summary or detail, not buffer_timeline. Read the existing available buffer without inventing a target or asking when it will be reached.");
@@ -471,7 +508,8 @@ The current buffer or cushion (what it is now, how much buffer the household has
 How many paychecks/paydays asks for timelineUnit household_paydays; how many months asks for timelineUnit months. Preserve this requested unit separately from the target and contribution frequency. Do not invent a contribution to convert between units or label a month estimate as a paycheck count; the calculator will clarify any missing per-paycheck contribution.
 How much is needed for three/six months of emergency savings uses general/emergency/summary, amount null, amountRole none, contribution null. Three and six are month counts, not dollars; the emergency calculator reports both reserve targets. Use target three_months or six_months for a single requested period, none when both are asked. This is not a contribution schedule or a timeline to reach the fund.
 All timeline purposes require a duration/date, already-reached result or explicit missing reason. Never substitute a savings balance summary. Debt payoff timing uses debt_timeline, debt/plan or debt/scenario. Extra-debt affordability uses affordability, purchase with an extra_debt scenario, not the debt payoff calculator. Purchase affordability uses purchase; only when/safest-date purchase questions use operation plan.
-Future balances use forecast_balance/forecast. Current account balances use current_balance/money/detail and accountGroup checking, savings, or all. Savings account balance requires accountGroup savings; combined checking plus savings requires all. Leave entity null for generic account groups. Exact named accounts use entity and accountGroup null. accountGroup is otherwise null; future savings/combined-account forecasts are unsupported and must never be replaced with checking forecasts. Safe-to-spend uses affordability/money/summary.
+Requests to list/show accounts, account types or what accounts you can see use account_inventory/money/detail, entity null, accountGroup null, no dates, dateEvent none and scenario null. This calculator lists all active recorded identities including manual accounts excluded from planning totals, and separates credit liabilities. A balance total is not an account inventory. A question such as 'How much is sitting in Reserve?' asks for a named current_balance, not an inventory; preserve Reserve literally so the calculator can clarify ambiguous names. Preserve independently requested other analyses.
+Future balances use forecast_balance/forecast. Current account balances use current_balance/money/detail and accountGroup checking, savings, or all. Savings account balance requires accountGroup savings; combined checking plus savings requires all. Leave entity null for generic account groups. Named accounts use the account words the user supplied in entity and accountGroup null. Do not expand an ambiguous partial name to one chosen catalog entry. The calculator resolves exact aliases first, then unique whole-token saved-name matches; ambiguity must ask which saved account. Preserve numeric suffixes. Never guess a typo or substitute a household total. accountGroup is otherwise null; future savings/combined-account forecasts are unsupported and must never be replaced with checking forecasts. Safe-to-spend uses affordability/money/summary.
 What can I spend without touching bill money, safely spend now, or uncommitted cash asks for the same money/summary affordability calculation protecting bill reserves and the cushion. It is not a savings target or timeline. Preserve explicit named-account, future-date or conversational scope rather than substituting a household estimate.
 Can I send extra money to debt safely, without a stated payment amount, asks for that same verified optional cash capacity: affordability/money/summary, amount null and amountRole none. Do not invent a payment or request a debt payoff timeline. Specific amounts, named debts and dated scenarios retain their stated scope.
 When checking will reach a stated balance uses forecast_balance/forecast, operation threshold, amountRole threshold. That is a total checking-balance crossing, NOT buffer_timeline: a cash buffer is additional money above the configured cushion. Do not convert explicit checking thresholds into buffer goals; context may resolve genuine follow-up pronouns.

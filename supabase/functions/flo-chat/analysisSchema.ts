@@ -7,7 +7,7 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable();
 const search = z.string().max(100).nullable();
 const domain = z.enum(["money", "forecast", "purchase", "spending", "bills", "subscriptions", "income", "debt", "credit", "savings", "emergency", "budget", "stability", "buffer", "paycheck", "progress", "transactions", "unusual", "fees", "health", "review"]);
 const operation = z.enum(["summary", "detail", "compare", "minimum", "maximum", "threshold", "plan", "scenario", "search", "average"]);
-const entity = search.describe("Exact named bill, debt, goal, account, or income source. For a balance before/after a named paycheck, use that income source with dateEvent before_payday/after_payday; it selects an event, not an account forecast. Never invent a record name or use a numeric amount as its name.");
+const entity = search.describe("Named bill, debt, goal, account, or income source. For named account balances preserve the user's account words and digits, including an abbreviated phrase; the calculator resolves saved aliases or asks which account. Do not choose a full saved name when multiple names fit the user's wording. For a balance before/after a named paycheck, use that income source with dateEvent before_payday/after_payday; it selects an event, not an account forecast. Never invent a record name or use a numeric amount as its name.");
 const scenario = z.object({
   kind: z.enum(["purchase", "income_change", "extra_debt", "save", "bill_increase", "cancel_bill", "move_bill"]),
   amount: z.number().min(-1e9).max(1e9),
@@ -24,6 +24,7 @@ const hypothetical = scenario.nullable().describe("Explicit what-if only, never 
  * full schema in every provider call. No defaults or transforms guess scope. */
 const calculation = z.discriminatedUnion("purpose", [
   z.object({ purpose: z.literal("general"), domain, operation, entity, scenario: hypothetical }).strict(),
+  z.object({ purpose: z.literal("account_inventory").describe("List active recorded account identities, types and balance observations, including accounts excluded by planning precedence. Not a household balance total or future forecast."), domain: z.literal("money"), operation: z.literal("detail"), entity: z.null(), scenario: z.null() }).strict(),
   z.object({ purpose: z.literal("current_balance"), domain: z.literal("money"), operation: z.literal("detail"), entity, scenario: z.null() }).strict(),
   z.object({ purpose: z.literal("forecast_balance"), domain: z.literal("forecast"), operation: z.enum(["summary", "detail", "compare", "minimum", "maximum", "threshold", "scenario"]), entity, scenario: hypothetical }).strict(),
   z.discriminatedUnion("domain", [

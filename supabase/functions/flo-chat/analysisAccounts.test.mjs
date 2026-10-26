@@ -4,13 +4,13 @@ import { currentBalanceAnalysis } from './analysisAccounts.ts';
 const request = (patch={}) => ({domain:'money',operation:'detail',startDate:null,endDate:null,dateEvent:'none',entity:null,scenario:null,...patch});
 const manual = (patch={}) => ({id:'m',name:'Wallet',account_type:'cash',current_balance:25,balance_as_of:'2026-09-10',is_active:true,...patch});
 const bank = (patch={}) => ({id:'b',name:'Checking',display_name:'Main checking',account_type:'depository',account_subtype:'checking',current_balance:500,is_active:true,updated_at:'2026-09-10T15:00:00Z',...patch});
-const snapshot = (accounts=[],banks=[]) => ({today:'2026-09-10',timeZone:'America/Chicago',sources:{accounts:{complete:true,rows:accounts},plaid_accounts:{complete:true,rows:banks},household_settings:{complete:true,rows:[]}}});
+const snapshot = (accounts=[],banks=[]) => ({today:'2026-09-10',timeZone:'America/Chicago',sources:{accounts:{complete:true,rows:accounts},plaid_accounts:{complete:true,rows:banks},household_settings:{complete:true,rows:[]},bills:{complete:true,rows:[]}}});
 test('named checking and savings resolve exact normalized names, not household total',()=>{
  const s=snapshot([manual()],[bank(),bank({id:'s',name:'Savings',display_name:'Rainy day',account_subtype:'savings',current_balance:1200})]);
  assert.equal(currentBalanceAnalysis(s,request({entity:' MAIN  CHECKING '})).facts.recordedBalance,500);
  assert.equal(currentBalanceAnalysis(s,request({entity:'Rainy day'})).facts.recordedBalance,1200);
  assert.equal(currentBalanceAnalysis(s,request({entity:'Wallet'})).facts.recordedBalance,25);
- assert.deepEqual(currentBalanceAnalysis(s,request({entity:'Main'})).facts,{});
+ assert.equal(currentBalanceAnalysis(s,request({entity:'Main'})).facts.recordedBalance,500);
 });
 test('connected precedence and canonical reconnect identity avoid duplicate totals; savings separate',()=>{
  const s=snapshot([manual({account_type:'checking',current_balance:500}),manual({id:'s',account_type:'savings',current_balance:1200})],[bank({persistent_account_id:'same',updated_at:'2026-09-09T15:00:00Z',current_balance:400}),bank({id:'new',persistent_account_id:'same'}),bank({id:'sav',account_subtype:'savings',current_balance:1000})]);

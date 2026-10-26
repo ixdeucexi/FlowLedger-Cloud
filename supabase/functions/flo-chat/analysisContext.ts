@@ -38,7 +38,9 @@ export async function loadAnalysisEntityCatalog(client: any, householdId: string
   ];
   return Object.fromEntries(await Promise.all(catalogs.map(async ({ table, fields }) => {
     try {
-      const { data, error } = await client.from(table).select(fields.join(",")).eq("household_id", householdId).order("id").limit(150);
+      let query = client.from(table).select(fields.join(",")).eq("household_id", householdId);
+      if (table === "accounts" || table === "plaid_accounts") query = query.eq("is_active", true);
+      const { data, error } = await query.order("id").limit(150);
       return [table, error ? [] : [...new Set((data ?? []).flatMap((row: any) => fields.map(field =>
         typeof row[field] === "string" ? row[field].slice(0, 100) : "")).filter(Boolean))]];
     } catch { return [table, []]; }
