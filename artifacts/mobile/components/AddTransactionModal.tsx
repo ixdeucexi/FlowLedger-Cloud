@@ -1,10 +1,10 @@
+import { transferExpected } from "@/lib/transferMutation";
 import { showFormError } from "@/lib/formInputAlert";
 import { parseMoneyInput } from "@/lib/moneyFormInput";
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -48,7 +48,7 @@ interface Props {
 export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDeleteTransfer, editTx, defaultDate, initialValues, creationContext, bucketId }: Props) {
   const c = useColors();
   const isDesktop = useDesktopExperience();
-  const { categories, accounts, bills, transactions, goals, previewTransactionSafetyStop, previewBucketPurchaseSafetyStop } = useBudget();
+  const { categories, accounts, bills, transactions, goals, previewTransactionSafetyStop, previewBucketPurchaseSafetyStop, saveTransfer } = useBudget();
   const bucketPurchase = creationContext === "bucket_purchase";
   const bucket = bucketPurchase ? goals?.find(goal => goal.id === bucketId) : undefined;
   const bucketName = bucket?.name;
@@ -65,6 +65,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const savingRef = useRef(false);
+  const transferIntentRef = useRef<{ groupId: string; fromId: string; toId: string } | null>(null);
   const [confirmation, setConfirmation] = useState<ConfirmActionOptions | null>(null);
   const [safetyStop, setSafetyStop] = useState<SafetyStopWarning | null>(null);
   const [pendingStandardTx, setPendingStandardTx] = useState<Omit<Transaction, "id"> | Transaction | null>(null);
@@ -125,6 +126,8 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
     }
   }, [editTx, visible, defaultDate, accounts, transferMate, editDebtId, initialValues?.amount, initialValues?.category, initialValues?.note, initialValues?.date, initialValues?.account_id, creationContext, bucketPurchase]);
 
+  useEffect(() => { transferIntentRef.current = null; }, [visible, editTx?.id]);
+
   const previewSafetyStop = (tx: Omit<Transaction, "id"> | Transaction) => bucketPurchase && bucketId
     ? previewBucketPurchaseSafetyStop(bucketId, tx) : previewTransactionSafetyStop(tx, editTx?.id);
 
@@ -155,50 +158,28 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
       return;
     }
     if (isTransfer && (!accountId || !transferToAccountId || accountId === transferToAccountId)) {
-      Alert.alert("Choose two accounts", "Pick a different from and to account for this transfer.");
+      setSaveError("Pick two different active accounts for this transfer.");
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (isTransfer) {
       const fromName = accounts.find(account => account.id === accountId)?.name ?? "account";
       const toName = accounts.find(account => account.id === transferToAccountId)?.name ?? "account";
-      const transferGroupId = editTx?.transfer_group_id ?? `transfer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      savingRef.current = true;
-      setSaving(true);
-      const createdIds: string[] = [];
+      const fromTx = editTx && editTx.amount < 0 ? editTx : transferMate;
+      const toTx = editTx && editTx.amount >= 0 ? editTx : transferMate;
+      if (editTx && (!fromTx || !toTx)) { setSaveError("Both sides of this transfer are required. Refresh and try again."); return; }
+      const intent = transferIntentRef.current ??= { groupId: editTx?.transfer_group_id ?? `transfer_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        fromId: fromTx?.id ?? `transfer_from_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        toId: toTx?.id ?? `transfer_to_${Date.now()}_${Math.random().toString(36).slice(2)}` };
+      savingRef.current = true; setSaving(true); setSaveError(null);
       try {
-        const fromTx = editTx && editTx.amount < 0 ? editTx : transferMate;
-        const toTx = editTx && editTx.amount >= 0 ? editTx : transferMate;
-        const fromPayload = {
-          amount: -parsed,
-          category: "Transfer",
-          note: note.trim() || `Transfer to ${toName}`,
-          date,
-          account_id: accountId,
-          transfer_group_id: transferGroupId,
-        };
-        const toPayload = {
-          amount: parsed,
-          category: "Transfer",
-          note: note.trim() || `Transfer from ${fromName}`,
-          date,
-          account_id: transferToAccountId,
-          transfer_group_id: transferGroupId,
-        };
-        const fromResult = await onSave(fromTx ? { ...fromPayload, id: fromTx.id } : fromPayload);
-        if (!fromTx && typeof fromResult === "string") createdIds.push(fromResult);
-        const toResult = await onSave(toTx ? { ...toPayload, id: toTx.id } : toPayload);
-        if (!toTx && typeof toResult === "string") createdIds.push(toResult);
-        onClose();
+        await saveTransfer({ ...intent, amount: parsed, date, fromAccountId: accountId!, toAccountId: transferToAccountId!,
+          fromNote: note.trim() || `Transfer to ${toName}`, toNote: note.trim() || `Transfer from ${fromName}`,
+          expected: fromTx && toTx ? [transferExpected(fromTx), transferExpected(toTx)] : null });
+        transferIntentRef.current = null; onClose();
       } catch (error) {
-        if (createdIds.length > 0 && onDelete) {
-          await Promise.allSettled(createdIds.map(id => onDelete(id)));
-        }
-        Alert.alert("Could not save transfer", error instanceof Error ? error.message : "Please try again.");
-      } finally {
-        savingRef.current = false;
-        setSaving(false);
-      }
+        setSaveError(error instanceof Error ? error.message : "Could not save transfer. Please try again.");
+      } finally { savingRef.current = false; setSaving(false); }
       return;
     }
     const data: Omit<Transaction, "id"> = {
@@ -230,7 +211,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
         else await onDelete(editTx.id);
         onClose();
       } catch (error) {
-        Alert.alert(isEditingTransfer ? "Couldn’t delete transfer" : "Couldn’t delete transaction", error instanceof Error ? error.message : "Please try again.");
+        setSaveError(error instanceof Error ? error.message : "Could not delete this transaction. Please try again.");
       } finally {
         setSaving(false);
       }

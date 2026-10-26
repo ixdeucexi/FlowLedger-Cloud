@@ -3,6 +3,7 @@
 import { parseMoneyInput } from "@/lib/moneyFormInput";
 import { parseBillCsv } from "@/lib/billCsv";
 import { showFormError } from "@/lib/formInputAlert";
+import { StatementImportPanel, type StatementImportFeedback } from "@/components/StatementImportPanel";
 
 import Feather from "@expo/vector-icons/Feather";
 import { UpdateCenter } from "@/components/settings/UpdateCenter";
@@ -632,6 +633,36 @@ export default function MoreScreen({
   const goalContributionInFlightRef = useRef(false);
   const [subscriptionBillLinks, setSubscriptionBillLinks] = useState<Record<string, string>>({});
   const [subscriptionLinkCandidate, setSubscriptionLinkCandidate] = useState<SubscriptionCandidate | null>(null);
+  const [statementImportOpen, setStatementImportOpen] = useState(false);
+  const [statementImportBusy, setStatementImportBusy] = useState(false);
+  const [statementImportFeedback, setStatementImportFeedback] = useState<StatementImportFeedback | null>(null);
+  const statementImportInFlightRef = useRef(false);
+  const statementImportMountedRef = useRef(true);
+  const statementImportScopeRef = useRef({ key: "", canEdit: false, revision: 0 });
+  const statementImportDraftScopeRef = useRef<{ key: string; revision: number } | null>(null);
+  const statementImportAccountsRef = useRef(accounts);
+  statementImportAccountsRef.current = accounts;
+  const statementImportScopeKey = JSON.stringify([user?.id, activeHousehold?.householdId, activeHousehold?.budgetId]);
+  if (statementImportScopeRef.current.key !== statementImportScopeKey || statementImportScopeRef.current.canEdit !== canEditHousehold) {
+    statementImportScopeRef.current = { key: statementImportScopeKey, canEdit: canEditHousehold, revision: statementImportScopeRef.current.revision + 1 };
+  }
+  useEffect(() => {
+    statementImportMountedRef.current = true;
+    return () => { statementImportMountedRef.current = false; statementImportScopeRef.current.revision++; };
+  }, []);
+  useEffect(() => {
+    const draft = statementImportDraftScopeRef.current;
+    if (draft && (draft.key !== statementImportScopeRef.current.key || draft.revision !== statementImportScopeRef.current.revision || !canEditHousehold)) {
+      statementImportDraftScopeRef.current = null;
+      setStatementImportOpen(false);
+      setStatementImportFeedback({ kind: "info", message: "Your household or editing access changed. Review Activity in the original household before retrying an import." });
+    }
+  }, [statementImportScopeKey, canEditHousehold]);
+  useEffect(() => {
+    setStatementImportOpen(false);
+    statementImportDraftScopeRef.current = null;
+    setStatementImportFeedback(null);
+  }, [activeSettingsSection]);
   const billImportInFlightRef = useRef(false);
   const billImportScopeRef = useRef({ key: "", canEdit: false });
   billImportScopeRef.current = {
@@ -2179,63 +2210,89 @@ export default function MoreScreen({
   };
 
   const readPickedFile = async () => {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: ["text/csv", "text/comma-separated-values", "*/*"],
-    });
+    const result = await DocumentPicker.getDocumentAsync({ type: ["text/csv", "text/comma-separated-values", "*/*"] });
     if (result.canceled || !result.assets?.length) return null;
     const file = result.assets[0];
     if (Platform.OS === "web") {
       const response = await fetch(file.uri);
+      if (!response.ok) throw new Error("The selected file could not be read. Choose the file again.");
       return response.text();
     }
     return FileSystem.readAsStringAsync(file.uri);
   };
 
-  const importStatementFor = async (account: Account) => {
+  const assertStatementImportAccess = (scope: { key: string; revision: number } | null, accountId?: string) => {
+    const current = statementImportScopeRef.current;
+    if (!statementImportMountedRef.current || !scope || !current.canEdit || current.key !== scope.key || current.revision !== scope.revision) {
+      throw new Error("Your account, household, or editing permission changed. Start again in the intended household.");
+    }
+    if (accountId && !statementImportAccountsRef.current.some(account => account.id === accountId && account.is_active)) {
+      throw new Error("This account is no longer active. Choose another account before importing.");
+    }
+  };
+
+  const importStatementFor = async (accountId: string) => {
+    if (statementImportInFlightRef.current || !statementImportMountedRef.current) return;
+    statementImportInFlightRef.current = true;
+    setStatementImportBusy(true);
+    setStatementImportFeedback(null);
+    const importScope = statementImportDraftScopeRef.current;
     try {
+      assertStatementImportAccess(importScope, accountId);
       const content = await readPickedFile();
-      if (!content) return;
-      const rows = parseStatementCsv(content, account.id);
-      if (!rows.length) {
-        Alert.alert(
-          "No transactions found",
-          "Use a CSV with Date, Description, and Amount columns (or separate Debit and Credit columns).",
-        );
+      assertStatementImportAccess(importScope, accountId);
+      if (content === null) {
+        setStatementImportFeedback({ kind: "info", message: "No file selected. Choose an account to try again, or cancel." });
         return;
       }
-      const result = await importStatementTransactions(account.id, rows);
-      Alert.alert(
-        "Statement imported",
-        `${result.imported} new transaction${result.imported === 1 ? "" : "s"} added.${result.duplicates ? ` ${result.duplicates} duplicate${result.duplicates === 1 ? " was" : "s were"} skipped.` : ""}`,
-      );
-    } catch {
-      Alert.alert(
-        "Import failed",
-        "The statement could not be imported. Your existing transactions were not changed.",
-      );
+      const rows = parseStatementCsv(content, accountId);
+      if (!rows.length) {
+        setStatementImportFeedback({ kind: "error", message: "No transactions found. Use a CSV with Date, Description, and Amount columns (or separate Debit and Credit columns)." });
+        return;
+      }
+      assertStatementImportAccess(importScope, accountId);
+      const result = await importStatementTransactions(accountId, rows);
+      if (!statementImportMountedRef.current || statementImportScopeRef.current.key !== importScope!.key || statementImportScopeRef.current.revision !== importScope!.revision) return;
+      setStatementImportOpen(false);
+      statementImportDraftScopeRef.current = null;
+      setStatementImportFeedback({ kind: "success", message: `Statement imported. ${result.imported} new transaction${result.imported === 1 ? "" : "s"} added.${result.duplicates ? ` ${result.duplicates} duplicate${result.duplicates === 1 ? " was" : "s were"} skipped.` : ""}` });
+    } catch (error) {
+      if (statementImportMountedRef.current) {
+        const currentScope = statementImportScopeRef.current;
+        const changed = !importScope || currentScope.key !== importScope.key || currentScope.revision !== importScope.revision || !currentScope.canEdit;
+        setStatementImportFeedback(changed
+          ? { kind: "info", message: "Your household or editing access changed. Review Activity in the original household before retrying an import." }
+          : { kind: "error", message: `Import failed. ${error instanceof Error ? error.message : "The statement could not be imported. Please try again."}` });
+      }
+    } finally {
+      statementImportInFlightRef.current = false;
+      if (statementImportMountedRef.current) setStatementImportBusy(false);
     }
   };
 
   const handleStatementImport = () => {
-    const active = accounts.filter((account) => account.is_active);
-    if (!active.length) {
-      Alert.alert(
-        "Add an account first",
-        "Transactions need an account so FlowLedger can detect duplicate statement rows.",
-      );
+    if (statementImportInFlightRef.current || !statementImportMountedRef.current) return;
+    const scope = statementImportScopeRef.current;
+    if (!scope.canEdit) {
+      setStatementImportFeedback({ kind: "info", message: "Only household editors can import statements." });
       return;
     }
-    if (active.length === 1) {
-      void importStatementFor(active[0]);
+    if (!statementImportAccountsRef.current.some(account => account.is_active)) {
+      statementImportDraftScopeRef.current = null;
+      setStatementImportOpen(false);
+      setStatementImportFeedback({ kind: "info", message: "Add an active account first. Transactions need an account so FlowLedger can detect duplicate statement rows." });
       return;
     }
-    Alert.alert("Choose account", "Which account is this statement for?", [
-      ...active.slice(0, 4).map((account) => ({
-        text: account.name,
-        onPress: () => void importStatementFor(account),
-      })),
-      { text: "Cancel", style: "cancel" as const },
-    ]);
+    statementImportDraftScopeRef.current = { key: scope.key, revision: scope.revision };
+    setStatementImportFeedback(null);
+    setStatementImportOpen(true);
+  };
+
+  const cancelStatementImport = () => {
+    if (statementImportInFlightRef.current || !statementImportMountedRef.current) return;
+    statementImportDraftScopeRef.current = null;
+    setStatementImportOpen(false);
+    setStatementImportFeedback(null);
   };
 
   const handleResetFlo = () => {
@@ -2621,10 +2678,13 @@ export default function MoreScreen({
                 ) : <PlaidLinkButton colors={c} onConnected={refreshBankData} />}
               </PlanFeatureGate>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Import a bank statement"
+                disabled={statementImportBusy || !canEditHousehold}
                 onPress={handleStatementImport}
                 style={({ pressed }) => [
                   styles.balanceSaveFullBtn,
-                  { backgroundColor: c.primary, opacity: pressed ? 0.78 : 1 },
+                  { backgroundColor: c.primary, opacity: statementImportBusy || !canEditHousehold ? 0.5 : pressed ? 0.78 : 1 },
                 ]}
               >
                 <Feather name="upload" size={15} color={c.primaryForeground} />
@@ -2637,6 +2697,7 @@ export default function MoreScreen({
                   Import a bank statement
                 </Text>
               </Pressable>
+              <StatementImportPanel key={statementImportScopeKey} open={statementImportOpen} accounts={accounts} canEdit={canEditHousehold} busy={statementImportBusy} feedback={statementImportFeedback} onSelect={accountId => void importStatementFor(accountId)} onCancel={cancelStatementImport} />
             </View>
           </>
         )}
@@ -4714,15 +4775,18 @@ export default function MoreScreen({
                   color: c.destructive,
                 },
               ].map((item, i) => (
+                <React.Fragment key={item.label}>
                 <Pressable
-                  key={item.label}
+                  accessibilityRole="button"
+                  accessibilityLabel={item.label === "Import Bank Statement" ? item.label : undefined}
+                  disabled={item.label === "Import Bank Statement" && (statementImportBusy || !canEditHousehold)}
                   onPress={item.onPress}
                   style={({ pressed }) => [
                     styles.dataRow,
                     {
                       borderTopWidth: i > 0 ? 1 : 0,
                       borderTopColor: c.border,
-                      opacity: pressed ? 0.7 : 1,
+                      opacity: item.label === "Import Bank Statement" && (statementImportBusy || !canEditHousehold) ? 0.5 : pressed ? 0.7 : 1,
                     },
                   ]}
                 >
@@ -4750,6 +4814,8 @@ export default function MoreScreen({
                     color={c.mutedForeground}
                   />
                 </Pressable>
+                {item.label === "Import Bank Statement" ? <StatementImportPanel key={statementImportScopeKey} open={statementImportOpen} accounts={accounts} canEdit={canEditHousehold} busy={statementImportBusy} feedback={statementImportFeedback} onSelect={accountId => void importStatementFor(accountId)} onCancel={cancelStatementImport} /> : null}
+                </React.Fragment>
               ))}
             </View>
 

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -539,10 +539,7 @@ test("transaction archive retries never perform a non-atomic client debt restore
       restoreStart > transactionStart,
   );
 
-  for (const source of [
-    context.slice(transferStart, transactionStart),
-    context.slice(transactionStart, restoreStart),
-  ]) {
+  for (const source of [context.slice(transactionStart, restoreStart)]) {
     assert.match(source, /runTrackedFinancialMutation/);
     assert.match(source, /debt_applied_bill_id/);
     assert.doesNotMatch(source, /restoreDebtApplicationsForTransactions/);
@@ -550,10 +547,16 @@ test("transaction archive retries never perform a non-atomic client debt restore
   }
 
   const transfer = context.slice(transferStart, transactionStart);
-  assert.match(
-    transfer,
-    /idsToDelete\.some\(transactionId => !archivedIds\.has\(transactionId\)\)/,
-  );
+  assert.match(transfer, /mutateTransfer[\s\S]+"delete"/);
+  const atomicTransfer = context.slice(context.indexOf("const mutateTransfer"), transferStart);
+  assert.match(atomicTransfer, /runTrackedFinancialMutation/);
+  assert.match(atomicTransfer, /supabase\.rpc\("mutate_transfer"/);
+  assert.match(atomicTransfer, /data\.transactions\.length !== 2/);
+  const migrationName = readdirSync("../../supabase/migrations").find(name => name.endsWith("_atomic_transfers_and_allocated_edit_guards.sql"));
+  assert.ok(migrationName);
+  const migration = readFileSync(`../../supabase/migrations/${migrationName}`, "utf8");
+  assert.match(migration, /t\.debt_applied_bill_id is not null/);
+  assert.match(migration, /coalesce\(t\.debt_applied_amount,0\)<>0/);
 
   const deletion = context.slice(transactionStart, restoreStart);
   assert.match(deletion, /undo_manual_transaction_reconciliation/);

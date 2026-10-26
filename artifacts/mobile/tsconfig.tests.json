@@ -17,6 +17,8 @@
     "lib/scanPreviewRegression.test.ts",
     "lib/deepScanRegression.test.ts",
     "lib/bucketPurchaseUi.test.ts",
+    "lib/financialDeepFixes.test.ts",
+    "lib/statementImport.test.ts",
     "lib/bucketPurchases.test.ts",
     "lib/matchTargetFilters.ts",
     "lib/matchTargetFilters.test.ts",

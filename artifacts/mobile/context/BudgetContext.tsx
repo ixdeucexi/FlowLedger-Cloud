@@ -1,3 +1,4 @@
+import { transferExpected, assertUnallocatedEdit, type TransferMutation } from "@/lib/transferMutation";
 import { previewBucketPurchase, previewBucketBudget } from "@/lib/bucketPurchasePreview";
 import { bucketPurchaseRpc } from "@/lib/bucketPurchaseApi";
 import { bucketPurchaseAllocation, bucketPurchaseTransaction, isBucketLinkedManualPurchase, type BucketPurchaseIntent } from "@/lib/bucketPurchases";
@@ -376,6 +377,7 @@ interface BudgetContextType {
   updateTransaction: (tx: Transaction) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
   restoreDeletedTransaction: (id: string) => Promise<void>;
+  saveTransfer: (input: TransferMutation) => Promise<void>;
   deleteTransfer: (transferGroupId: string) => Promise<void>;
   matchTransactionToBill: (transactionId: string, billId: string, occurrenceDate?: string, plannedAmount?: number) => Promise<void>;
   unmatchTransactionFromBill: (transactionId: string) => Promise<void>;
@@ -780,6 +782,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const userId = user?.id ?? null;
   const userScopeIdRef = useRef<string | null>(userId);
+  const financialScopeGenerationRef = useRef(0);
+  if (userScopeIdRef.current !== userId) financialScopeGenerationRef.current += 1;
   userScopeIdRef.current = userId;
   const financialDataUserIdRef = useRef<string | null>(userId);
   const demoMode = isDevDemoMode();
@@ -1024,6 +1028,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   );
   const replaceActiveHouseholdScope = useCallback((next: HouseholdMembership | null) => {
     if (householdScopeRef.current?.householdId !== next?.householdId) resetSaveLifecycle();
+    if (householdScopeRef.current?.householdId !== next?.householdId || householdScopeRef.current?.budgetId !== next?.budgetId) financialScopeGenerationRef.current += 1;
     householdScopeRef.current = next;
     setActiveHouseholdId(next?.householdId ?? null);
   }, [resetSaveLifecycle]);
@@ -1138,6 +1143,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (householdScopeRef.current?.householdId === activeHousehold?.householdId) {
+      if (householdScopeRef.current?.budgetId !== activeHousehold?.budgetId) financialScopeGenerationRef.current += 1;
       householdScopeRef.current = activeHousehold;
     }
   }, [activeHousehold]);
@@ -1267,8 +1273,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const applyHouseholdSelect = useCallback((query: any, uid: string) => {
-    const scope = householdScopeRef.current;
+  const applyHouseholdSelect = useCallback((query: any, uid: string, scope = householdScopeRef.current) => {
     if (!scope) return query.eq("user_id", uid);
     if (ownsLegacyPersonalRows(scope)) {
       return query.or(`household_id.eq.${scope.householdId},and(household_id.is.null,user_id.eq.${uid})`);
@@ -1276,14 +1281,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     return query.eq("household_id", scope.householdId);
   }, []);
 
-  const loadAllTransactions = useCallback((uid: string) => loadAllDateIdKeysetRows<any>((cursor, pageSize) => {
+  const loadAllTransactions = useCallback((uid: string, scope = householdScopeRef.current) => loadAllDateIdKeysetRows<any>((cursor, pageSize) => {
     let query = applyHouseholdSelect(
       supabase.from("transactions")
         .select("*")
         .order("date", { ascending: false })
         .order("id", { ascending: false })
         .limit(pageSize),
-      uid,
+      uid, scope,
     );
     if (cursor) query = query.or(dateIdKeysetFilter(cursor));
     return query;
@@ -3905,47 +3910,53 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Transactions ─────────────────────────────────────────────────────────────
 
+  const debtRefreshRequestRef = useRef(0);
   const refreshDebtRows = useCallback(async () => {
-    if (!user) return;
+    if (!user || user.id !== userScopeIdRef.current) return;
+    const uid = user.id, scope = householdScopeRef.current;
+    const generation = financialScopeGenerationRef.current, request = ++debtRefreshRequestRef.current;
+    const current = () => uid === userScopeIdRef.current && generation === financialScopeGenerationRef.current
+      && request === debtRefreshRequestRef.current && scope?.householdId === householdScopeRef.current?.householdId
+      && scope?.budgetId === householdScopeRef.current?.budgetId;
     const [billRows, transactionRows] = await Promise.all([
-      applyHouseholdSelect(supabase.from("bills").select("*"), user.id),
-      loadAllTransactions(user.id),
+      applyHouseholdSelect(supabase.from("bills").select("*"), uid, scope), loadAllTransactions(uid, scope),
     ]);
+    if (!current()) return;
     if (billRows.error) throw new Error(`Refresh debts: ${billRows.error.message}`);
     if (transactionRows.error) throw new Error(`Refresh transactions: ${transactionRows.error.message}`);
-    setBills(reorderDebtPriorities((billRows.data ?? []).map(normalizeBillRow)));
-    const transactionCollections = accountAwareTransactionCollections(transactionRows.data ?? [], transactionAccountIdentitiesRef.current);
-    setTransactions(transactionCollections.active);
-    setDeletedTransactions(transactionCollections.deleted);
+    const nextBills = reorderDebtPriorities((billRows.data ?? []).map(normalizeBillRow));
+    const collections = accountAwareTransactionCollections(transactionRows.data ?? [], transactionAccountIdentitiesRef.current);
+    if (!current()) return;
+    setBills(nextBills); setTransactions(collections.active); setDeletedTransactions(collections.deleted);
   }, [user, applyHouseholdSelect, loadAllTransactions]);
 
   const syncDebtTransactionsAndRefresh = useCallback(async () => {
-    if (!user || demoMode) return;
-    if (!canEditHousehold) return;
+    if (!user || demoMode || !canEditHousehold || user.id !== userScopeIdRef.current) return;
+    const uid = user.id, scope = householdScopeRef.current, generation = financialScopeGenerationRef.current;
     const synced = await supabase.rpc("sync_due_debt_transactions", {
-      p_as_of_date: localDateInTimeZone(new Date(), householdTimeZone),
-      p_household_id: householdScopeRef.current?.householdId ?? null,
+      p_as_of_date: localDateInTimeZone(new Date(), householdTimeZone), p_household_id: scope?.householdId ?? null,
     });
-    if (synced.error) {
-      throw new Error(`Sync debt payments: ${synced.error.message}`);
-    }
+    if (uid !== userScopeIdRef.current || generation !== financialScopeGenerationRef.current) return;
+    if (synced.error) throw new Error(`Sync debt payments: ${synced.error.message}`);
     await refreshDebtRows();
   }, [user, demoMode, canEditHousehold, householdTimeZone, refreshDebtRows]);
 
   useEffect(() => {
     if (!user || demoMode) return;
-    let timer: ReturnType<typeof setTimeout>;
+    let timer: ReturnType<typeof setTimeout> | undefined, disposed = false;
     const schedule = () => {
+      if (disposed) return;
       const now = new Date();
       const nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
       timer = setTimeout(() => {
+        if (disposed) return;
         void syncDebtTransactionsAndRefresh()
           .catch(error => console.warn("Scheduled debt sync skipped", error instanceof Error ? error.message : error))
           .finally(schedule);
       }, nextDay.getTime() - now.getTime());
     };
     schedule();
-    return () => clearTimeout(timer);
+    return () => { disposed = true; if (timer) clearTimeout(timer); };
   }, [user, syncDebtTransactionsAndRefresh, demoMode]);
 
   const addTransaction = useCallback(async (tx: Omit<Transaction, "id">) => {
@@ -3994,6 +4005,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       }, persist);
       await persist(); return;
     }
+    assertUnallocatedEdit(existing, tx);
     const editedTransaction: Transaction = { ...tx, user_edited_at: new Date().toISOString() };
     const applyOptimisticEdit = () => {
       setTransactions(prev => prev.map(item => item.id === tx.id ? editedTransaction : item));
@@ -4006,18 +4018,23 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       if (transactionEditTokensRef.current.get(tx.id) !== editToken) return;
       applyOptimisticEdit();
       try {
+        // "No debt" must serialize null for ordinary manual payments. Keep
+        // confirmed/imported links intact when an editor omits that field.
+        const linkedBillId = editedTransaction.linked_bill_id
+          ?? ((existing?.source === "plaid" || existing?.import_hash || existing?.review_status === "matched") ? existing?.linked_bill_id : null);
         const persisted = await supabase.from("transactions")
-          .update({ ...editedTransaction })
+          .update({ ...editedTransaction, linked_bill_id: linkedBillId ?? null })
           .eq("id", tx.id)
           .select("*")
           .single();
         if (persisted.error) throw new Error(`Update transaction: ${persisted.error.message}`);
         const savedTransaction = normalizeTransactionRow(persisted.data);
-        if (editedTransaction.linked_bill_id || existing?.linked_bill_id || existing?.debt_applied_bill_id) {
-          await syncDebtTransactionsAndRefresh();
-        }
+        const debtSyncRequired = Boolean(editedTransaction.linked_bill_id || existing?.linked_bill_id || existing?.debt_applied_bill_id);
+        if (debtSyncRequired) await syncDebtTransactionsAndRefresh();
         if (transactionEditTokensRef.current.get(tx.id) === editToken) {
-          setTransactions(prev => prev.map(item => item.id === tx.id ? savedTransaction : item));
+          // The sync refresh contains newer applied-debt metadata than this
+          // pre-sync save response, including a completed "No debt" removal.
+          if (!debtSyncRequired) setTransactions(prev => prev.map(item => item.id === tx.id ? savedTransaction : item));
           transactionEditTokensRef.current.delete(tx.id);
         }
       } catch (error) {
@@ -4880,62 +4897,40 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     await undoTransactionReconciliation(transactionId);
   }, [user, transactions, bills, undoTransactionReconciliation, assertCanEditHousehold]);
 
-  const deleteTransfer = useCallback(async (transferGroupId: string) => {
-    if (!user) return;
-    assertCanEditHousehold("delete a transfer");
-    const idsToDelete = transactions
-      .filter(transaction => transaction.transfer_group_id === transferGroupId)
-      .map(transaction => transaction.id);
-    if (idsToDelete.length === 0) return;
-    const itemsToDelete = transactions.filter(transaction => idsToDelete.includes(transaction.id));
-    if (itemsToDelete.some(transaction => transaction.debt_applied_bill_id || Number(transaction.debt_applied_amount ?? 0) > 0.005)) {
-      throw new Error("Unmatch the debt payment before deleting this transfer so its balance stays correct.");
-    }
-    const deletedAt = new Date().toISOString();
-    if (demoMode) {
-      const archived = transactions
-        .filter(transaction => idsToDelete.includes(transaction.id))
-        .map(transaction => ({ ...transaction, deleted_at: deletedAt, deleted_by: user.id }));
-      setTransactions(prev => prev.filter(transaction => !idsToDelete.includes(transaction.id)));
-      setDeletedTransactions(prev => [...archived, ...prev.filter(transaction => !idsToDelete.includes(transaction.id))]);
-      return;
-    }
+  const mutateTransfer = useCallback(async (input: TransferMutation, action: "save" | "delete" | "restore" = "save") => {
+    if (!user) throw new Error("Sign in to save a transfer");
+    assertCanEditHousehold(`${action} a transfer`);
+    const scope = householdScopeRef.current, generation = financialScopeGenerationRef.current;
     const persist: () => Promise<void> = () => runTrackedFinancialMutation(async () => {
-      const authoritativeResult = await supabase
-        .from("transactions")
-        .select("*")
-        .eq("transfer_group_id", transferGroupId);
-      if (authoritativeResult.error) throw new Error(`Verify transfer: ${authoritativeResult.error.message}`);
-      const authoritative = (authoritativeResult.data ?? []).map(normalizeTransactionRow);
-      const authoritativeIds = new Set(authoritative.map(transaction => transaction.id));
-      if (authoritative.length !== idsToDelete.length || idsToDelete.some(transactionId => !authoritativeIds.has(transactionId))) {
-        throw new Error("This transfer changed on another device. Refresh before deleting it.");
+      let rows: Transaction[];
+      if (demoMode) {
+        rows = [{ id: input.fromId, amount: -input.amount, account_id: input.fromAccountId, note: input.fromNote },
+          { id: input.toId, amount: input.amount, account_id: input.toAccountId, note: input.toNote }].map(t => ({ ...t, date: input.date, category: "Transfer", source: "manual" as const, transfer_group_id: input.groupId, ...(action === "delete" ? { deleted_at: new Date().toISOString(), deleted_by: user.id } : {}) }));
+      } else {
+        const { data, error } = await supabase.rpc("mutate_transfer", { p_household_id: scope?.householdId, p_budget_id: scope?.budgetId,
+          p_group_id: input.groupId, p_from_id: input.fromId, p_to_id: input.toId, p_expected: input.expected, p_payload: input, p_action: action });
+        if (error) throw new Error(error.message);
+        if (!Array.isArray(data?.transactions) || data.transactions.length !== 2) throw new Error("The transfer could not be verified. Refresh and try again.");
+        rows = data.transactions.map(normalizeTransactionRow);
+        if (!rows.some(t => t.id === input.fromId) || !rows.some(t => t.id === input.toId) || rows.some(t => t.transfer_group_id !== input.groupId) || rows[0].amount + rows[1].amount !== 0) throw new Error("The saved transfer pair could not be verified.");
       }
-      if (authoritative.some(transaction => transaction.debt_applied_bill_id || Number(transaction.debt_applied_amount ?? 0) > 0.005)) {
-        throw new Error("Unmatch the debt payment before deleting this transfer so its balance stays correct.");
-      }
-      const { data, error } = await supabase
-        .from("transactions")
-        .update({
-          deleted_at: deletedAt,
-          deleted_by: user.id,
-        })
-        .eq("transfer_group_id", transferGroupId)
-        .in("id", idsToDelete)
-        .is("debt_applied_bill_id", null)
-        .lte("debt_applied_amount", 0.005)
-        .select("*");
-      if (error) throw new Error(`Delete transfer: ${error.message}`);
-      const archived = (data ?? []).map(normalizeTransactionRow);
-      const archivedIds = new Set(archived.map(transaction => transaction.id));
-      if (archived.length !== idsToDelete.length || idsToDelete.some(transactionId => !archivedIds.has(transactionId))) {
-        throw new Error("Delete transfer did not save every transaction. Try again.");
-      }
-      setTransactions(prev => prev.filter(t => !idsToDelete.includes(t.id)));
-      setDeletedTransactions(prev => [...archived, ...prev.filter(transaction => !idsToDelete.includes(transaction.id))]);
+      if (user.id !== userScopeIdRef.current || generation !== financialScopeGenerationRef.current) return;
+      const ids = new Set(rows.map(t => t.id));
+      setTransactions(previous => [...previous.filter(t => !ids.has(t.id)), ...rows.filter(t => !t.deleted_at)]);
+      setDeletedTransactions(previous => [...rows.filter(t => t.deleted_at), ...previous.filter(t => !ids.has(t.id))]);
     }, persist);
     await persist();
-  }, [user, transactions, demoMode, assertCanEditHousehold, runTrackedFinancialMutation]);
+  }, [user, demoMode, assertCanEditHousehold, runTrackedFinancialMutation]);
+  const saveTransfer = useCallback((input: TransferMutation) => mutateTransfer(input), [mutateTransfer]);
+  const transferInputForPair = (pair: Transaction[]): TransferMutation => {
+    const from = pair.find(t => t.amount < 0), to = pair.find(t => t.amount > 0);
+    if (pair.length !== 2 || !from || !to || !from.account_id || !to.account_id || !from.transfer_group_id) throw new Error("This transfer needs both sides. Refresh before continuing.");
+    return { groupId: from.transfer_group_id, fromId: from.id, toId: to.id, amount: -from.amount, date: from.date,
+      fromAccountId: from.account_id, toAccountId: to.account_id, fromNote: from.note, toNote: to.note, expected: [transferExpected(from), transferExpected(to)] };
+  };
+  const deleteTransfer = useCallback(async (groupId: string) => {
+    await mutateTransfer(transferInputForPair(transactions.filter(t => t.transfer_group_id === groupId)), "delete");
+  }, [transactions, mutateTransfer]);
 
   const deleteTransaction = useCallback(async (id: string) => {
     if (!user) return;
@@ -5034,6 +5029,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     assertCanEditHousehold("restore a deleted transaction");
     const archived = deletedTransactions.find(transaction => transaction.id === id);
     if (!archived) throw new Error("Deleted transaction not found");
+    if (archived.transfer_group_id) {
+      await mutateTransfer(transferInputForPair(deletedTransactions.filter(t => t.transfer_group_id === archived.transfer_group_id)), "restore");
+      return;
+    }
     const idsToRestore = archived.transfer_group_id
       ? deletedTransactions.filter(transaction => transaction.transfer_group_id === archived.transfer_group_id).map(transaction => transaction.id)
       : [id];
@@ -5090,7 +5089,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       ]);
     }, persist);
     await persist();
-  }, [user, deletedTransactions, demoMode, assertCanEditHousehold, runTrackedFinancialMutation, syncDebtTransactionsAndRefresh]);
+  }, [user, deletedTransactions, demoMode, assertCanEditHousehold, runTrackedFinancialMutation, syncDebtTransactionsAndRefresh, mutateTransfer]);
 
   const transactionsByMonth = useMemo(
     () => indexRecordsByMonth(transactions),
@@ -6239,7 +6238,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       getMonthlyBills, getBillOccurrencesInMonth, getBillOccurrenceAmount, getBillMonthlyTotal, getBillEffectiveMonthlyTotal, getDebtMonthSettlements, getDebtSourceCommitment, getDebtPlanForMonth, getRemainingDebtPlanForMonth,
       runSnowball, previewDebtSnowball, applyDebtSnowballPayment, saveExtraPayment, getExtraPayment, deleteExtraPayment, removeDebtSnowballPayment, finalizeBillPayment,
       addBucketPurchase, removeBucketPurchase, previewBucketPurchaseSafetyStop, previewBucketBudgetSafetyStop,
-      addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, matchPendingTransactionToBill, matchPendingTransactionToManual, createTransactionForPendingCharge, removePendingPlanMatch, reconcileTransaction, createSpendingBucketForTransaction, undoTransactionReconciliation, removeReviewSurplusFunding, getTransactionsForMonth,
+      addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, saveTransfer, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, matchPendingTransactionToBill, matchPendingTransactionToManual, createTransactionForPendingCharge, removePendingPlanMatch, reconcileTransaction, createSpendingBucketForTransaction, undoTransactionReconciliation, removeReviewSurplusFunding, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome, getIncomeOccurrencesInMonth,
       addGoal, updateGoal, closeSpendingBucket, closeSpendingBucketAndRouteRemainder, reopenSpendingBucket, archiveSpendingBucket, restoreArchivedSpendingBucket, deleteGoal, checkGoalAffordability,
       getCashFlow, getDailyBalances, previewTransactionSafetyStop, getCalendarDailyBalances, getPlanSimulationBaseline,
