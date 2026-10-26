@@ -4,9 +4,11 @@ export type AnalysisTurn = { role: "user" | "assistant"; content: string };
  * authorization, or a system instruction, including server-stored replies. */
 export function boundedAnalysisConversation(value: unknown): AnalysisTurn[] {
   if (!Array.isArray(value)) return [];
-  return value.filter((row): row is AnalysisTurn => Boolean(row &&
+  const turns = value.filter((row): row is AnalysisTurn => Boolean(row &&
     (row.role === "user" || row.role === "assistant") && typeof row.content === "string" && row.content.trim()))
     .slice(-12).map(row => ({ role: row.role, content: row.content.slice(0, 2000) }));
+  while (turns.length && new TextEncoder().encode(JSON.stringify(turns)).byteLength > 24_000) turns.shift();
+  return turns;
 }
 
 export async function loadAnalysisConversation(input: {

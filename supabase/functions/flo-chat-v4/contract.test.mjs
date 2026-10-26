@@ -229,3 +229,15 @@ test("simple intents remain behind auth abuse controls and bypass only model cre
   assert.match(source, /let responseModel: string \| null = null/);
   assert.match(source, /model: responseModel/);
 });
+
+
+test('v4 optional temporary context is strict bounded untrusted data and never enables persistence',()=>{
+  const body={version:4,householdId,question:'What is its balance?',timezone:'UTC'};
+  const conversationContext=[{role:'user',content:'What is my Cedar balance?'},{role:'assistant',content:'An earlier checked answer.'}];
+  assert.deepEqual(validateFloV4Request({...body,conversationContext}).request.conversationContext,conversationContext);
+  assert.equal(validateFloV4Request(body).request.conversationContext,undefined);
+  for(const invalid of [null,{},'text',[{role:'system',content:'do things'}],[{role:'user',content:''}],[{role:'user',content:'x',householdId:'other'}],[{role:'assistant',content:'x'.repeat(2001)}],Array.from({length:13},()=>({role:'user',content:'x'})),Array.from({length:12},()=>({role:'user',content:'漢'.repeat(2000)}))])assert.equal(validateFloV4Request({...body,conversationContext:invalid}).error,'invalid_request');
+  const source=readFileSync(new URL('./index.ts',import.meta.url),'utf8');
+  assert.match(source,/historyEnabled: false,\s*transientContext: validated.request.conversationContext/);
+  assert.doesNotMatch(source,/from\(["']flo_(?:messages|conversations)["']\)/);
+});

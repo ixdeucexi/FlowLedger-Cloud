@@ -111,9 +111,9 @@ test("history-off surfaces a server cleanup failure", () => {
 
 test("temporary chat context retains both sides of the conversation without unfinished or retry messages", () => {
   const messages = [
-    { id: "q1", role: "user" as const, text: "Which debt should I pay first?" },
-    { id: "a1", role: "flo" as const, text: "Your smallest debt is Harbor Card." },
-    { id: "q2", role: "user" as const, text: "Why that one?" },
+    { id: "q1", role: "user" as const, contextEligible: true, text: "Which debt should I pay first?" },
+    { id: "a1", role: "flo" as const, contextEligible: true, text: "Your smallest debt is Harbor Card." },
+    { id: "q2", role: "user" as const, contextEligible: true, text: "Why that one?" },
     { id: "a2", role: "flo" as const, text: "Checking...", thinking: true },
   ];
   assert.deepEqual(floConversationContext(messages, ["q2", "a2"]), [
@@ -123,7 +123,7 @@ test("temporary chat context retains both sides of the conversation without unfi
 });
 
 test("temporary context bounds older and unusually long messages", () => {
-  const messages = Array.from({ length: 15 }, (_, index) => ({ id: String(index), role: "user" as const, text: `${index}: ${"x".repeat(3000)}` }));
+  const messages = Array.from({ length: 15 }, (_, index) => ({ id: String(index), role: "user" as const, contextEligible: true, text: `${index}: ${"x".repeat(3000)}` }));
   const context = floConversationContext(messages);
   assert.equal(context.length, 11);
   assert.match(context[0].content, /^4:/);
@@ -132,7 +132,7 @@ test("temporary context bounds older and unusually long messages", () => {
 
 test("temporary context respects the serialized UTF-8 budget and preserves newest message order", () => {
   for (const content of ["漢".repeat(2000), "💰".repeat(1000), "\u0000".repeat(2000)]) {
-    const messages = Array.from({ length: 15 }, (_, index) => ({ id: String(index), role: "user" as const, text: `${index}: ${content}` }));
+    const messages = Array.from({ length: 15 }, (_, index) => ({ id: String(index), role: "user" as const, contextEligible: true, text: `${index}: ${content}` }));
     const context = floConversationContext(messages);
     assert.ok(new TextEncoder().encode(JSON.stringify(context)).byteLength <= FLO_CONVERSATION_CONTEXT_MAX_BYTES);
     assert.ok(context.length > 0);

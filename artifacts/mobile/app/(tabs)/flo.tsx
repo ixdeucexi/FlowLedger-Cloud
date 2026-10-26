@@ -166,6 +166,7 @@ export default function FloScreen() {
   const preferencesControlsReady = preferencesReady && floPreferencesReadyForScope(memoryScopeKey, floDataScopeKey);
   const floDataScopeKeyRef = useRef(floDataScopeKey);
   floDataScopeKeyRef.current = floDataScopeKey;
+  const [chatScopeKey, setChatScopeKey] = useState<string | null>(null);
   const activeConversationIdRef = useRef(activeConversationId);
   activeConversationIdRef.current = activeConversationId;
   const now = useMemo(() => new Date(), []);
@@ -197,7 +198,11 @@ export default function FloScreen() {
     const loadGeneration = requestGenerationRef.current;
     streamAbortRef.current?.abort();
     streamAbortRef.current = null;
+    activeRequestRef.current = null;
+    setChatScopeKey(floDataScopeKey);
     retryRequestRef.current = null;
+    setRetryAllowed(true);
+    setInput("");
     setConversations([]);
     setActiveConversationId(null);
     setLastPrompt("");
@@ -271,7 +276,7 @@ export default function FloScreen() {
     }
     void listFloMessages(activeConversationId).then(page => {
       if (!requestIsCurrent()) return;
-      dispatch({ type: "hydrate", messages: page.messages.map(message => ({ id: message.id, role: message.role, text: message.text })) });
+      dispatch({ type: "hydrate", messages: page.messages.map((message, index) => ({ id: message.id, role: message.role, text: message.text, contextEligible: message.status === "completed" && (message.role === "flo" || page.messages[index + 1]?.role === "flo" && page.messages[index + 1]?.status === "completed") })) });
       setSourcesByMessageId(Object.fromEntries(page.messages.filter(message => message.sources.length).map(message => [message.id, message.sources])));
       setFollowUpsByMessageId(Object.fromEntries(page.messages.filter(message => message.followUps.length).map(message => [message.id, message.followUps])));
       void Promise.all(page.messages.filter(message => message.proposal?.kind === "recurring_bill_change").map(async message => {
@@ -713,10 +718,16 @@ export default function FloScreen() {
   }, [categoryPlan, decisionHistory, decisionRiskAlerts, demoMode, hasSetupAnswers, setupPersonalization]);
 
   const startNewConversation = () => {
-    if (activeRequestRef.current !== null || historyMutationRef.current) return;
+    if (historyMutationRef.current) return;
     requestGenerationRef.current = nextFloRequestGeneration(requestGenerationRef.current);
     streamAbortRef.current?.abort();
     streamAbortRef.current = null;
+    activeRequestRef.current = null;
+    setChatScopeKey(floDataScopeKeyRef.current);
+    setInput("");
+    setLastPrompt("");
+    setRetryAllowed(true);
+    setAiConsentPrompt(null);
     setActiveConversationId(null);
     setOlderMessageCursor(null);
     setSourcesByMessageId({});
@@ -875,7 +886,7 @@ export default function FloScreen() {
     try {
       const page = await listFloMessages(requestConversationId, requestCursor);
       if (!requestIsCurrent()) return;
-      dispatch({ type: "prepend", messages: page.messages.map(message => ({ id: message.id, role: message.role, text: message.text })) });
+      dispatch({ type: "prepend", messages: page.messages.map((message, index) => ({ id: message.id, role: message.role, text: message.text, contextEligible: message.status === "completed" && (message.role === "flo" || page.messages[index + 1]?.role === "flo" && page.messages[index + 1]?.status === "completed") })) });
       setSourcesByMessageId(previous => ({ ...previous, ...Object.fromEntries(page.messages.filter(message => message.sources.length).map(message => [message.id, message.sources])) }));
       setFollowUpsByMessageId(previous => ({ ...previous, ...Object.fromEntries(page.messages.filter(message => message.followUps.length).map(message => [message.id, message.followUps])) }));
       setGroundingByMessageId(previous => ({ ...previous, ...Object.fromEntries(page.messages.filter(message => message.dataAsOf || message.partial || message.coverage || message.caveat).map(message => [message.id, { dataAsOf: message.dataAsOf, partial: message.partial, coverage: describeCoverage(message.coverage), caveat: message.caveat }])) }));
@@ -892,16 +903,27 @@ export default function FloScreen() {
   };
 
   const stopStreaming = () => {
+    requestGenerationRef.current = nextFloRequestGeneration(requestGenerationRef.current);
     streamAbortRef.current?.abort();
     streamAbortRef.current = null;
+    activeRequestRef.current = null;
+    const stoppedId = retryRequestRef.current?.assistantMessageId;
+    if (stoppedId) {
+      dispatch({ type: "replace", id: stoppedId, text: "Response stopped before Flo could verify an answer." });
+      setSourcesByMessageId(previous => ({ ...previous, [stoppedId]: [] }));
+      setFollowUpsByMessageId(previous => ({ ...previous, [stoppedId]: [] }));
+      setProposalByMessageId(previous => ({ ...previous, [stoppedId]: null }));
+      setGroundingByMessageId(previous => ({ ...previous, [stoppedId]: { partial: true, coverage: "No verified account data" } }));
+    }
     dispatch({ type: "stop" });
+    setRetryAllowed(true);
     setChatError("Response stopped. You can retry the last question.");
   };
 
   const send = async (text = input, retry = false, consentOverride = false) => {
     const clean = text.trim();
     if (!clean || chat.sending || activeRequestRef.current !== null || historyMutationRef.current || floAccessLocked || !user?.id || !activeHousehold?.householdId) return;
-    if (!aiConsentReady || !preferencesReady) return;
+    if (!aiConsentReady || !preferencesReady || chatScopeKey !== floDataScopeKey) return;
     if (!aiConsentAccepted && !consentOverride) {
       setAiConsentPrompt(clean);
       return;
@@ -911,7 +933,8 @@ export default function FloScreen() {
     activeRequestRef.current = requestGeneration;
     const requestUserId = user.id;
     const requestHouseholdId = activeHousehold.householdId;
-    const requestIsCurrent = () => isFloRequestGenerationCurrent(requestGeneration, requestGenerationRef.current);
+    const requestScopeKey = `${requestUserId}:${requestHouseholdId}`;
+    const requestIsCurrent = () => isFloRequestGenerationCurrent(requestGeneration, requestGenerationRef.current) && requestScopeKey === floDataScopeKeyRef.current;
     setInput("");
     setChatError(null);
     setRetryAllowed(true);
@@ -924,6 +947,7 @@ export default function FloScreen() {
     let conversationId = floConversationForRequest(historyEnabled, priorRequest?.conversationId ?? activeConversationId);
     retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId };
     let reply = "";
+    let completedAnswer = false;
     const verifiedFallback: { current: FloVerifiedFallback | null } = { current: null };
     const streamFailure: { current: { code: string; message: string } | null } = { current: null };
     try {
@@ -955,7 +979,7 @@ export default function FloScreen() {
           label: Array.isArray(params.label) ? params.label[0] : params.label,
         },
         historyEnabled,
-        conversationContext: historyEnabled || floV4Preview ? undefined : floConversationContext(chat.messages, [userMessageId, assistantMessageId]),
+        conversationContext: historyEnabled ? undefined : chatScopeKey === requestScopeKey ? floConversationContext(chat.messages, [userMessageId, assistantMessageId]) : [],
         signal: controller.signal,
         onEvent: event => {
           if (!requestIsCurrent()) return;
@@ -977,6 +1001,7 @@ export default function FloScreen() {
           } else if (event.type === "error") {
             streamFailure.current = { code: event.code, message: event.message };
           } else if (event.type === "done") {
+            completedAnswer = true;
             reply = event.answer?.answer ?? event.text ?? reply;
             dispatch({ type: "replace", id: assistantMessageId, text: reply });
             if (event.answer) setGroundingByMessageId(previous => ({ ...previous, [assistantMessageId]: {
@@ -992,6 +1017,7 @@ export default function FloScreen() {
       if (!requestIsCurrent()) return;
       streamAbortRef.current = null;
       if (streamFailure.current) throw new Error(streamFailure.current.code);
+      if (completedAnswer && reply.trim()) dispatch({ type: "complete", id: assistantMessageId, userId: userMessageId });
       dispatch({ type: "stop" });
     } catch (error) {
       if (!requestIsCurrent()) return;
@@ -1049,8 +1075,11 @@ export default function FloScreen() {
   const acceptAiConsent = async () => {
     if (!user?.id || !aiConsentPrompt) return;
     const prompt = aiConsentPrompt;
+    const consentScopeKey = floDataScopeKey;
+    const consentGeneration = requestGenerationRef.current;
     try {
       await AsyncStorage.setItem(floAiConsentStorageKey(user.id), createFloAiConsent(user.id));
+      if (consentScopeKey !== floDataScopeKeyRef.current || consentGeneration !== requestGenerationRef.current) return;
       setAiConsentAccepted(true);
       setAiConsentPrompt(null);
       await send(prompt, false, true);
@@ -1097,6 +1126,13 @@ export default function FloScreen() {
       </LinearGradient>
 
       {!floV4Preview ? (isDesktop ? <View style={styles.desktopHistoryLayer}><FloConversationBar desktop conversations={conversations} activeId={activeConversationId} disabled={chat.sending || historyBusy} preferencesDisabled={!preferencesControlsReady} householdName={activeHousehold?.name ?? "Personal household"} preferences={floPreferences} onNew={startNewConversation} onSelect={selectConversation} onRename={renameConversation} onDelete={removeConversation} onDeleteAll={removeAllConversations} onExport={exportConversations} onSearchHistory={searchHistory} onPreferencesChange={updatePreferences} /></View> : <FloConversationBar conversations={conversations} activeId={activeConversationId} disabled={chat.sending || historyBusy} preferencesDisabled={!preferencesControlsReady} householdName={activeHousehold?.name ?? "Personal household"} preferences={floPreferences} onNew={startNewConversation} onSelect={selectConversation} onRename={renameConversation} onDelete={removeConversation} onDeleteAll={removeAllConversations} onExport={exportConversations} onSearchHistory={searchHistory} onPreferencesChange={updatePreferences} />) : null}
+
+      {floV4Preview ? <View style={styles.previewChatTools}>
+        <Pressable accessibilityRole="button" accessibilityLabel="New chat" onPress={startNewConversation} style={[styles.previewNewChat, { borderColor: colors.border, backgroundColor: colors.card }]}>
+          <Feather name="plus" size={16} color={colors.foreground} />
+          <Text style={{ color: colors.foreground, fontFamily: "Inter_600SemiBold" }}>New chat</Text>
+        </Pressable>
+      </View> : null}
 
       <ScrollView
         ref={scrollRef}
@@ -1285,6 +1321,8 @@ function decisionStillHasSource(decision: { status: string; scenario: { type?: s
 }
 
 const styles = StyleSheet.create({
+  previewChatTools: { flexDirection: "row", justifyContent: "flex-end", paddingHorizontal: 16, paddingVertical: 8 },
+  previewNewChat: { minHeight: 44, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderRadius: 12, flexDirection: "row", alignItems: "center", gap: 8 },
   screen: { flex: 1 },
   header: {
     minHeight: 96,

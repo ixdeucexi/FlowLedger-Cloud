@@ -46,7 +46,8 @@ export function currentNamedAccountPhrase(question: string): string | null {
   if (currentAccountBalanceGroup(question) || /\b(?:next|tomorrow|yesterday|last|after|before|future|forecast|history|historical|and|or|compare|safely|spend|afford|will|would)\b/i.test(question)) return null;
   const q = question.trim().replace(/[?.!]+$/, "");
   const match = q.match(/^(?:what(?:'s| is)|show me) (?:(?:my|our|the) )?(?:current )?(.+?) balance$/i)
-    ?? q.match(/^how much(?: money)? (?:is|do (?:i|we) have) in (?:(?:my|our|the) )?(.+?)$/i);
+    ?? q.match(/^how much(?: money)? (?:is|do (?:i|we) have) in (?:(?:my|our|the) )?(.+?)$/i)
+    ?? q.match(/^what about (?:(?:my|our|the) )?(.+?) instead$/i);
   const phrase = match?.[1]?.trim();
   return phrase && !/^(?:debt|credit|card|buffer|cushion|goal|total(?: account)?)$/i.test(phrase) ? phrase : null;
 }
@@ -57,7 +58,8 @@ export function interpretedAccountPhrase(question: string): string | null {
   if (direct) return direct;
   const q = question.trim().replace(/[?.!]+$/, "");
   const match = q.match(/^(?:could you (?:please )?(?:check|tell me) )?how much(?: money)? is (?:sitting|held|kept) in (?:(?:my|our|the) )?(.+)$/i)
-    ?? q.match(/^(?:please )?(?:tell me|check|show me) (?:the )?(?:current )?balance (?:for|of|on|in) (?:(?:my|our|the) )?(.+)$/i);
+    ?? q.match(/^(?:please )?(?:tell me|check|show me) (?:the )?(?:current )?balance (?:for|of|on|in) (?:(?:my|our|the) )?(.+)$/i)
+    ?? (!/^(?:what|how|when|show|list|my|our|the|current|total|checking|cash|savings)\b/i.test(q) ? q.match(/^([\p{L}\p{N}][\p{L}\p{N} .’'_-]{0,80}) balance$/iu) : null);
   return match && !/\b(?:next|tomorrow|after|before|last|and|or|compare|by|on)\b/i.test(match[1]) ? match[1].trim() : null;
 }
 /** Parse only self-contained supported grammar into the same typed calculator
@@ -97,6 +99,7 @@ export function deterministicAnalysisPlan(question:string,today:string,debtMetho
  * interpretation so future dates or affordability cannot become raw cash. */
 export function currentAccountBalanceGroup(question:string):"checking"|"savings"|"all"|null {
   const q=question.trim().replace(/[?.!]+$/,"");
+  if(/^what about (?:(?:my|our|the) )?(?:checking|cash|savings) instead$/i.test(q))return /savings/i.test(q)?"savings":"checking";
   if(/^(?:what(?:'s| is)|show me) (?:my|our) (?:current )?(?:checking|cash|savings)(?: account)? balance$/i.test(q))return /savings/i.test(q)?"savings":"checking";
   if(/^how much(?: money)? (?:do (?:i|we) have|is there) in (?:my |our |the )?(?:checking|cash|savings)(?: accounts?)?(?: right now| today)?$/i.test(q))return /savings/i.test(q)?"savings":"checking";
   if(/^(?:how much money do (?:i|we) have|what(?:'s| is) (?:my|our) (?:current )?balance)(?: right now| today)?$/i.test(q))return "checking";

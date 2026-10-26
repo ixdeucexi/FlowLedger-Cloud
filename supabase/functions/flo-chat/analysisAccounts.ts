@@ -66,6 +66,42 @@ export function recordedAccountRows(snapshot: AnalysisSnapshot): BalanceRow[] {
   return [...manual, ...connected];
 }
 
+export type AccountReferenceProvenance = { householdId: string; userPhrase: string; accountId: string; source: "manual" | "connected" | "configured_debt"; accountName: string };
+const referenceSource = (row: BalanceRow) => row.configuredDebt ? "configured_debt" : row.connected ? "connected" : "manual";
+export function isCurrentAccountReferenceQuestion(question: string): boolean {
+  const q = normalizeAccountName(question);
+  return /^(?:what is|what s|show me) (?:that (?:account|card|one)(?: s)?|the same (?:account|card)(?: s)?|its|it s) balance(?: now| today| right now)?$/.test(q)
+    || /^how much(?: money)? is (?:in|sitting in) (?:that|the same) (?:account|card)(?: now| today)?$/.test(q)
+    || /^what about (?:that|the same) (?:account|card|one)(?: now| today)?$/.test(q)
+    || /^and (?:that|the same) (?:account|card|one)$/.test(q);
+}
+export function recordedBalanceTargets(snapshot: AnalysisSnapshot): BalanceRow[] {
+  const debts: BalanceRow[] = (snapshot.sources.bills?.rows ?? []).filter(row => row.is_debt === true && (!row.end_date || row.end_date >= snapshot.today)).map(row => {
+    let date: string | null = null;
+    if (typeof row.last_reviewed_at === "string" && Number.isFinite(Date.parse(row.last_reviewed_at))) {
+      try { date = localDay(row.last_reviewed_at, snapshot.timeZone); } catch { /* No invented date. */ }
+    }
+    return { id: String(row.id), name: label(row.name), aliases: [String(row.name ?? "")], kind: "configured debt", balance: numeric(row.balance), date, connected: false, configuredDebt: true };
+  });
+  return [...recordedAccountRows(snapshot), ...debts];
+}
+/** Only prior USER references can identify the target. Assistant amounts and
+ * names are not evidence. Every candidate is resolved from the current snapshot. */
+export function resolvePriorAccountReference(snapshot: AnalysisSnapshot, prior: readonly { question: string; phrase: string | null }[]): { reference?: AccountReferenceProvenance; clarification?: AnalysisResult } {
+  const sources = ["accounts", "plaid_accounts", "bills"], missing = requireSources(snapshot, sources);
+  const clarify = (reason: string) => ({ clarification: { text: reason, facts: {}, sources, assumptions: [], missing: [...missing, reason], scenario: false } });
+  if (missing.length) return clarify("I could not verify the current account names. Please retry or name the account explicitly.");
+  for (const turn of [...prior].reverse()) {
+    if (isCurrentAccountReferenceQuestion(turn.question) || /^(?:thanks|thank you|ok|okay|got it|understood|great|appreciate it)$/.test(normalizeAccountName(turn.question))) continue;
+    if (!turn.phrase) break;
+    const resolved = resolveAccountName(recordedBalanceTargets(snapshot), turn.phrase);
+    if (!resolved.selected) return clarify(resolved.candidates.length ? `Which account do you mean: ${accountChoices(resolved.candidates)}? The earlier name was ambiguous.` : "The earlier named account no longer identifies one active saved record. Please name the account you mean.");
+    const account = resolved.selected;
+    return { reference: { householdId: snapshot.householdId, userPhrase: turn.phrase, accountId: account.id, accountName: account.name, source: referenceSource(account) } };
+  }
+  return clarify("Which saved account do you mean? Please name it; this conversation has no unique account reference I can verify.");
+}
+
 const accountChoices = (rows: readonly BalanceRow[]) => rows.map(row => `${row.name} (${row.connected ? "connected" : "manual"} ${row.kind})`).join("; ");
 
 export function accountInventoryAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequest): AnalysisResult {
@@ -102,7 +138,7 @@ export function accountInventoryAnalysis(snapshot: AnalysisSnapshot, request: An
 }
 
 /** Observations only: no forecast, available-funds or affordability inference. */
-export function currentBalanceAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequest, question?: string): AnalysisResult {
+export function currentBalanceAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequest, question?: string, reference?: AccountReferenceProvenance): AnalysisResult {
   const sources = ["accounts", "plaid_accounts", ...(request.entity ? ["bills"] : [])];
   const missing = requireSources(snapshot, sources);
   const assumptions = ["These are recorded balance observations, not live bank funds or safe-to-spend amounts. Pending transactions and future obligations are not deducted here."];
@@ -116,7 +152,9 @@ export function currentBalanceAnalysis(snapshot: AnalysisSnapshot, request: Anal
   const cash = all.filter(row => ["checking", "savings", ...(!row.connected ? ["cash"] : [])].includes(row.kind));
   const manual = cash.filter(row => !row.connected), connected = cash.filter(row => row.connected);
   const entity = normalizeAccountName(request.entity);
-  if (entity && question) {
+  const referenceTarget = reference ? resolveAccountName(recordedBalanceTargets(snapshot), reference.userPhrase).selected : null;
+  const verifiedReference = Boolean(reference && question && isCurrentAccountReferenceQuestion(question) && reference.householdId === snapshot.householdId && referenceTarget && referenceTarget.id === reference.accountId && referenceSource(referenceTarget) === reference.source && normalizeAccountName(referenceTarget.name) === entity);
+  if (entity && question && !verifiedReference) {
     const words = normalizeAccountName(question).split(" ");
     if (omittedAccountNumber(question, request.entity!)) return unavailable(`Your account reference includes a number that was not preserved. Please confirm the full saved account name; I cannot select a differently numbered account.${all.length ? ` Available accounts: ${accountChoices(all)}.` : ""}`);
     if (!entity.split(" ").every(token => words.includes(token))) return unavailable(`Please confirm the saved account name. I cannot choose an expanded name that introduces words or digits you did not specify.${all.length ? ` Available accounts: ${accountChoices(all)}.` : ""}`);
@@ -124,14 +162,7 @@ export function currentBalanceAnalysis(snapshot: AnalysisSnapshot, request: Anal
   const accountGroup = request.accountGroup ?? (request.domain === "savings" ? "savings" : "checking");
   let selected: BalanceRow[];
   if (entity) {
-    const debts: BalanceRow[] = rows("bills").filter(row => row.is_debt === true && (!row.end_date || row.end_date >= snapshot.today)).map(row => {
-      let date: string | null = null;
-      if (typeof row.last_reviewed_at === "string" && Number.isFinite(Date.parse(row.last_reviewed_at))) {
-        try { date = localDay(row.last_reviewed_at, snapshot.timeZone); } catch { /* No invented date. */ }
-      }
-      return { id: String(row.id), name: label(row.name), aliases: [String(row.name ?? "")], kind: "configured debt", balance: numeric(row.balance), date, connected: false, configuredDebt: true };
-    });
-    const resolved = resolveAccountName([...all, ...debts], request.entity!);
+    const resolved = resolveAccountName(recordedBalanceTargets(snapshot), request.entity!);
     if (!resolved.selected) return unavailable(resolved.candidates.length ? `That name matches more than one active account. Which do you mean: ${accountChoices(resolved.candidates)}?` : `No active recorded account or configured debt matches that name.${all.length ? ` Available accounts: ${accountChoices(all)}.` : ""} Please use a saved account name; I cannot substitute the household balance.`);
     selected = [resolved.selected];
     if (selected[0].identityKnown === false) return unavailable("The matching account has an incomplete recorded identity. I cannot confirm its balance.");

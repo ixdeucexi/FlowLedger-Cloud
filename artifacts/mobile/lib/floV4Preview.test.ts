@@ -13,7 +13,7 @@ test("v4 endpoint selection is exclusively controlled by exact admin authority",
 test("Flo client maps v4 to its isolated endpoint and closed request body", () => {
   const source = readFileSync(path.resolve(__dirname, "../lib/floChat.ts"), "utf8");
   assert.match(source, /engine === "v4" \? "flo-chat-v4" : "flo-chat"/);
-  assert.match(source, /if \(engine === "v4"\) return \{\s*version: 4,\s*householdId: input\.householdId,\s*question: input\.text,\s*timezone: input\.timezone,\s*\}/s);
+  assert.match(source, /if \(engine === "v4"\) return \{\s*version: 4,\s*householdId: input\.householdId,\s*question: input\.text,\s*timezone: input\.timezone,\s*\.\.\.\(input\.conversationContext \? \{ conversationContext: input\.conversationContext \} : \{\}\),\s*\}/s);
   assert.match(source, /let ephemeralCleaned = engine === "v4" \|\|/);
 });
 

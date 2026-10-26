@@ -238,6 +238,7 @@ async function handle(request: Request): Promise<Response> {
             modelId,
             safetyIdentifier: await stableSafetyIdentifier(auth.userId, safetySecret!),
             historyEnabled: false,
+            transientContext: validated.request.conversationContext,
           },
           now,
         ),

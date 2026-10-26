@@ -61,11 +61,16 @@ export function floPreferencesReadyForScope(loadedScope: string | null, currentS
 }
 
 export function floConversationContext(
-  messages: Array<{ id: string; role: "user" | "flo"; text: string; thinking?: boolean }>,
+  messages: Array<{ id: string; role: "user" | "flo"; text: string; thinking?: boolean; contextEligible?: boolean }>,
   excludedIds: string[] = [],
 ): FloConversationContext {
-  const context: FloConversationContext = messages
-    .filter(message => !message.thinking && !excludedIds.includes(message.id) && message.text.trim())
+  const relevant = messages.filter(message => !excludedIds.includes(message.id));
+  let afterIncomplete = 0;
+  relevant.forEach((message, index) => {
+    if (message.contextEligible !== true || message.thinking || !message.text.trim()) afterIncomplete = index + 1;
+  });
+  const context: FloConversationContext = relevant
+    .slice(afterIncomplete)
     .slice(-12)
     .map(message => ({ role: message.role === "flo" ? "assistant" : "user", content: message.text.trim().slice(0, 2000) }));
   const encoder = new TextEncoder();

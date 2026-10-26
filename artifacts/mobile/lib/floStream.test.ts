@@ -99,7 +99,7 @@ test("temporary context is only sent with history disabled", () => {
   assert.match(source, /input.historyEnabled === false \? \{ conversationContext: input.conversationContext \?\? \[\] \} : \{\}/);
   assert.match(screen, /const historyEnabled = !floV4Preview && floPreferences.historyEnabled/);
   assert.match(screen, /floConversationForRequest\(historyEnabled, priorRequest\?\.conversationId \?\? activeConversationId\)/);
-  assert.match(screen, /conversationContext: historyEnabled \|\| floV4Preview \? undefined/);
+  assert.match(screen, /conversationContext: historyEnabled \? undefined : chatScopeKey === requestScopeKey \? floConversationContext/);
   assert.match(screen, /preferences.historyEnabled !== floPreferences.historyEnabled\) retryRequestRef.current = null/);
 });
 
@@ -108,7 +108,7 @@ test("send and route prompts wait for scoped history preferences and controls lo
   const bar = readFileSync("components/FloConversationBar.tsx", "utf8");
   const preferences = readFileSync("lib/floPreferences.ts", "utf8");
   const send = screen.slice(screen.indexOf("const send = async"), screen.indexOf("const acceptAiConsent"));
-  assert.match(send, /if \(!aiConsentReady \|\| !preferencesReady\) return/);
+  assert.match(send, /if \(!aiConsentReady \|\| !preferencesReady \|\| chatScopeKey !== floDataScopeKey\) return/);
   assert.ok(send.indexOf("!preferencesReady") < send.indexOf("createFloConversation"));
   assert.match(screen, /floPreferencesReadyForScope\(preferencesScopeKey, floDataScopeKey\)/);
   assert.match(screen, /!aiConsentReady \|\| !preferencesReady \|\| !user\?\.id/);

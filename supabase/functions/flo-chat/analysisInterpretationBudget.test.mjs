@@ -294,9 +294,9 @@ test('self-contained deterministic plans preserve typed intent slots and avoid d
   for(const question of ['What will my Main Checking balance be next Friday?','What if Rent increases to $1200 monthly starting October 1?','What if my rent increases by $100?','What if our rent increases by $100?','What if the rent increases by $100?','What if "CORE Test Rent" increases by $100?','Should I put $100 toward debt or savings next month?','Find the $35 transaction at Walmart last month','What if I pay an extra $100 toward Main Card debt every month?'])assert.equal(deterministicAnalysisPlan(question,'2026-09-10'),null,question);
 });
 
-test('runtime preserves conversational scope except explicit current account groups or self-contained inventory and clarifies orphan before interpretation',()=>{
+test('runtime preserves conversational scope except explicit self-contained current balances or inventory and clarifies orphan before interpretation',()=>{
   const source=readFileSync(new URL('./analysisPlanner.ts',import.meta.url),'utf8');
-  assert.match(source,/!prior\.length\|\|candidate\?\.requests\.every\(r=>r\.purpose==="account_inventory"\|\|r\.purpose==="current_balance"&&r\.accountGroup\)/);
+  assert.match(source,/!prior\.length\|\|candidate\?\.requests\.every\(r=>r\.purpose==="account_inventory"\|\|r\.purpose==="current_balance"\)/);
   assert.ok(source.indexOf('if(clarification)return recordAnalysis')<source.indexOf('const interpret='));
   assert.match(source,/if\(clarification\)return recordAnalysis\(runtime,\[clarification\],null,\{inputTokens:0,outputTokens:0\}\)/);
   assert.match(source,/loadAnalysisConversation/);

@@ -11,11 +11,11 @@ import { scenarioAnalysis, stabilityAnalysis } from "./analysisStability.ts";
 import { recurringAnalysis } from "./analysisRecurring.ts";
 import { scheduleAnalysis } from "./analysisSchedule.ts";
 import { reviewAnalysis } from "./analysisReview.ts";
-import { accountInventoryAnalysis, currentBalanceAnalysis } from "./analysisAccounts.ts";
+import { accountInventoryAnalysis, currentBalanceAnalysis, isCurrentAccountReferenceQuestion, resolvePriorAccountReference, type AccountReferenceProvenance } from "./analysisAccounts.ts";
 import { localDay, validDate, type AnalysisRequest, type AnalysisResult, type AnalysisSnapshot } from "./analysisTypes.ts";
 import { aggregateCoverage, freshness, oldestSourceAsOf, type FloGroundedAnswer, type FloToolEnvelope, type FloSourceRef } from "./contract.ts";
 import type { FloToolRuntime } from "./tools.ts";
-import { analysisInterpreterPrompt, analysisInterpretationError, deterministicAnalysisPlan, explicitUnsupportedForecastScope, interpretAnalysisQuestion, interpretationAttemptMs, isTimelinePurpose, isWholeDebtTotalQuestion, unresolvedContributionClarification, validateRequestSemantics } from "./analysisSemantics.ts";
+import { analysisInterpreterPrompt, analysisInterpretationError, deterministicAnalysisPlan, explicitUnsupportedForecastScope, interpretAnalysisQuestion, interpretationAttemptMs, isTimelinePurpose, isWholeDebtTotalQuestion, interpretedAccountPhrase, unresolvedContributionClarification, validateRequestSemantics } from "./analysisSemantics.ts";
 import { guidanceAnalysis, isGuidancePurpose } from "./analysisGuidance.ts";
 import { historyAnalysis } from "./analysisHistory.ts";
 
@@ -47,13 +47,13 @@ export function distinctAnalysisParagraphs(texts:readonly string[]):string[] {
 }
 
 const projectionDomains=new Set(["money","forecast","purchase","bills","subscriptions","income","stability","buffer","paycheck","progress","health"]);
-export function calculateFinancialAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequest, question?: string): AnalysisResult {
+export function calculateFinancialAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequest, question?: string, reference?: AccountReferenceProvenance): AnalysisResult {
   const invalid=validateAnalysisRequest(request,snapshot.today);
   if(invalid) return {text:invalid,facts:isTimelinePurpose(request)?{timelineOutcome:"not_estimable"}:{},sources:[],assumptions:[],missing:[invalid],scenario:Boolean(request.scenario)};
   if(isGuidancePurpose(request.purpose))return guidanceAnalysis(snapshot,request);
   if(request.purpose==="account_inventory")return accountInventoryAnalysis(snapshot,request);
   if(request.purpose==="balance_history")return historyAnalysis(snapshot,request);
-  if(request.domain==="money"&&request.operation==="detail"&&!request.scenario&&request.dateEvent==="none")return currentBalanceAnalysis(snapshot,request,question);
+  if(request.domain==="money"&&request.operation==="detail"&&!request.scenario&&request.dateEvent==="none")return currentBalanceAnalysis(snapshot,request,question,reference);
   const historicalBills=request.domain==="bills"&&request.endDate!==null&&request.endDate<snapshot.today;
   const receivedIncome=request.domain==="income"&&request.incomeTiming==="received";
   const scheduleOnly=["bills","subscriptions","income"].includes(request.domain)&&!request.scenario;
@@ -100,9 +100,20 @@ export async function runFinancialAnalysis(options:{runtime:FloToolRuntime;quest
   }],null,{inputTokens:0,outputTokens:0});
   const clarification=unresolvedContributionClarification(question,prior);
   if(clarification)return recordAnalysis(runtime,[clarification],null,{inputTokens:0,outputTokens:0});
+  if (isCurrentAccountReferenceQuestion(question)) {
+    const snapshot = await loadAnalysisSnapshot(runtime.client,runtime.householdId,runtime.now,["accounts","plaid_accounts","bills"]);
+    const resolved = resolvePriorAccountReference(snapshot,conversation.filter(turn=>turn.role==="user").map(turn=>({question:turn.content,phrase:interpretedAccountPhrase(turn.content)})));
+    if (!resolved.reference) return recordAnalysis(runtime,[resolved.clarification!],snapshot,{inputTokens:0,outputTokens:0},["money"]);
+    const seed = deterministicAnalysisPlan("What is my checking balance?",today)!.requests[0];
+    const request: AnalysisRequest = {...seed,entity:resolved.reference.accountName,accountGroup:null};
+    const result = calculateFinancialAnalysis(snapshot,request,question,resolved.reference);
+    const stable = await verifyAnalysisSnapshot(runtime.client,snapshot,["household_settings","accounts","plaid_accounts","bills"].filter(table=>snapshot.sources[table]?.complete));
+    if (!stable) return recordAnalysis(runtime,[{text:"Your account records changed while I checked. Please ask again so I can use the latest balance.",facts:{},sources:result.sources,assumptions:[],missing:["Account records changed or could not be rechecked"],scenario:false}],snapshot,{inputTokens:0,outputTokens:0},["money"]);
+    return recordAnalysis(runtime,[result],snapshot,{inputTokens:0,outputTokens:0},["money"]);
+  }
   const interpretationStartedAt=performance.now();
   const candidate=deterministicAnalysisPlan(question,today,settings?.payment_method==="avalanche"?"avalanche":"snowball");
-  const directPlan=!prior.length||candidate?.requests.every(r=>r.purpose==="account_inventory"||r.purpose==="current_balance"&&r.accountGroup)?candidate:null;
+  const directPlan=!prior.length||candidate?.requests.every(r=>r.purpose==="account_inventory"||r.purpose==="current_balance")?candidate:null;
   const catalog=directPlan?{}:await loadAnalysisEntityCatalog(runtime.client,runtime.householdId);
   const interpret=(correction="")=>generateText({model:createOpenAI({apiKey:options.apiKey}).responses(options.modelId),output:Output.object({schema}),maxRetries:0,abortSignal:AbortSignal.timeout(interpretationAttemptMs(interpretationStartedAt,performance.now(),Boolean(correction))),providerOptions:{openai:{store:false,safetyIdentifier:options.safetyIdentifier,reasoningEffort:"low",textVerbosity:"low"}},
     system:analysisInterpreterPrompt({today,timeZone,debtMethod:settings?.payment_method??"snowball",correction}),prompt:JSON.stringify({question,conversation,availableRecordNames:catalog})});

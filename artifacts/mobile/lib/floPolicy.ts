@@ -195,7 +195,7 @@ export interface FloCategoryFact {
   topTransaction?: { name: string; amount: number; date: string };
 }
 
-export type FloChatMessage = { id: string; role: "user" | "flo"; text: string; thinking?: boolean };
+export type FloChatMessage = { id: string; role: "user" | "flo"; text: string; thinking?: boolean; contextEligible?: boolean };
 export interface FloResponseCard {
   title: string;
   value: string;
@@ -271,6 +271,7 @@ export type FloChatAction =
   | { type: "status"; id: string; text: string }
   | { type: "stream-delta"; id: string; delta: string }
   | { type: "replace"; id: string; text: string }
+  | { type: "complete"; id: string; userId: string }
   | { type: "stop" };
 
 export const AI_USAGE_UNAVAILABLE_MESSAGE =
@@ -337,6 +338,11 @@ export function reduceFloChat(state: FloChatState, action: FloChatAction): FloCh
       messages: state.messages.map(message => message.id === action.id ? { ...message, text: action.text, thinking: false } : message),
       sending: false,
     };
+  }
+  if (action.type === "complete") {
+    const answer = state.messages.find(message => message.id === action.id && message.role === "flo" && !message.thinking && message.text.trim());
+    if (!answer) return state;
+    return { messages: state.messages.map(message => message.id === action.id || message.id === action.userId ? { ...message, contextEligible: true } : message), sending: false };
   }
   if (action.type === "stop") {
     return {

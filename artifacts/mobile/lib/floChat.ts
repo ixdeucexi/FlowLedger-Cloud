@@ -33,6 +33,7 @@ export function floChatRequestBody(engine: FloEngine, input: FloChatRequestInput
     householdId: input.householdId,
     question: input.text,
     timezone: input.timezone,
+    ...(input.conversationContext ? { conversationContext: input.conversationContext } : {}),
   };
   return {
     version: 3,
