@@ -2,6 +2,8 @@ type QueryClient = { from: (table: string) => any };
 
 export type FloV4SimpleIntent =
   | { kind: "greeting" }
+  | { kind: "thanks" }
+  | { kind: "app_help"; topic: "income" | "bucket_create" | "bucket_purchase" }
   | { kind: "current_date" }
   | { kind: "current_time" }
   | { kind: "weather"; location: string | null };
@@ -28,6 +30,7 @@ type SimpleResult = {
     label: string;
     asOf: string | null;
     freshness: "current" | "stale" | "unknown";
+    route?: string;
   }>;
   aggregate: {
     dataAsOf: string | null;
@@ -95,6 +98,10 @@ export function classifyFloV4SimpleIntent(
   question: string,
 ): FloV4SimpleIntent | null {
   const value = question.trim();
+  if (/^(?:thanks|thank you)(?:,?\s+Flo)?[?!.]*$/i.test(value)) return { kind: "thanks" };
+  if (/^(?:how (?:do|can) I|how to|where (?:do|can) I) add (?:an? )?income(?: source)?[?!.]*$/i.test(value)) return { kind: "app_help", topic: "income" };
+  if (/^(?:how (?:do|can) I|how to|where (?:do|can) I) (?:create|add) (?:a )?(?:spending )?bucket[?!.]*$/i.test(value)) return { kind: "app_help", topic: "bucket_create" };
+  if (/^(?:how (?:do|can) I|how to|where (?:do|can) I) add (?:a )?purchase to (?:a|an existing|my) (?:spending )?bucket[?!.]*$/i.test(value)) return { kind: "app_help", topic: "bucket_purchase" };
   if (
     /^(?:hi|hello|hey|good\s+(?:morning|afternoon|evening)|how\s+are\s+you)[?!.]*$/i.test(
       value,
@@ -503,6 +510,23 @@ export async function weatherResult(
   );
 }
 
+/** Pure allowlisted static responses, shared by the endpoint and evaluator.
+ * Financial questions are not classified here and keep the analysis pipeline. */
+export function floV4StaticIntentResult(intent: FloV4SimpleIntent): SimpleResult | null {
+  if (intent.kind === "greeting" || intent.kind === "thanks") {
+    const result = complete(intent.kind === "greeting" ? "Hi! I’m Flo. I can help you understand your accounts, bills, spending, and buckets. What would you like to check?" : "You’re welcome. What would you like to check next?", `simple_${intent.kind}`);
+    result.answer.followups = ["What accounts can you see?", "What bills are due before my next paycheck?", "How do I create a spending bucket?"];
+    return result;
+  }
+  if (intent.kind !== "app_help") return null;
+  const help = {
+    income: { text: "Open Settings → Plan settings → Income, then choose Add income source. Enter its amount and schedule, review the details, and save it in the app.", route: "/(tabs)/more?section=money", label: "Income settings" },
+    bucket_create: { text: "Open Buckets from the Dashboard or Settings → Tools & lists, then choose Create bucket. Enter its name, planned amount, and target date, review the details, and save it in the app.", route: "/(tabs)/more?section=buckets", label: "Spending buckets" },
+    bucket_purchase: { text: "Open the bucket in Buckets. If it’s closed, choose Reopen bucket first; if its budget is used up, choose Adjust budget. Then choose Add purchase and pick an existing bank transaction, an existing manual transaction, or enter a new purchase. Review the amount and confirm it in the app. I haven’t recorded or changed anything.", route: "/(tabs)/more?section=buckets", label: "Spending buckets" },
+  }[intent.topic];
+  return complete(help.text, "simple_app_help", { sources: [{ id: `app-help:${intent.topic}`, type: "help", label: help.label, asOf: null, freshness: "unknown", route: help.route }] });
+}
+
 export async function runFloV4SimpleIntent(
   intent: FloV4SimpleIntent,
   dependencies: {
@@ -513,11 +537,7 @@ export async function runFloV4SimpleIntent(
     fetcher?: Fetcher;
   },
 ): Promise<SimpleResult> {
-  if (intent.kind === "greeting")
-    return complete(
-      "Hi! I’m Flo. I can help with your balances, bills, income, spending, debt, and read-only financial scenarios.",
-      "simple_greeting",
-    );
+  if (intent.kind === "greeting" || intent.kind === "thanks" || intent.kind === "app_help") return floV4StaticIntentResult(intent)!;
   if (intent.kind === "current_date" || intent.kind === "current_time")
     return householdClockResult(
       dependencies.client,

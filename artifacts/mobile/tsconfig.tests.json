@@ -90,6 +90,8 @@
     ,"lib/floV4Preview.ts"
     ,"lib/floV4Preview.test.ts"
     ,"lib/floPhaseTwo.test.ts"
+    ,"lib/floVolatileSession.test.ts"
+    ,"lib/connectedBalanceList.test.ts"
     ,"lib/debtOrder.ts"
     ,"lib/debtOrder.test.ts"
     ,"lib/debtPaymentPlan.ts"

@@ -1,6 +1,6 @@
 export const FLO_V4_POLICY_VERSION = "flo-v4-preview.0";
 export const FLO_V4_MAX_BODY_BYTES = 65_536;
-export const FLO_V4_UNSUPPORTED_ANSWER = "Flo v4 preview cannot answer that question through its verified financial-analysis pipeline yet. Try asking about balances, cash flow, bills, income, debt, spending, savings, or a read-only scenario.";
+export const FLO_V4_UNSUPPORTED_ANSWER = "I couldn’t verify that request yet. I can help you check recorded balances, bills, income, debt, spending, and buckets, or show you where to find things in the app.";
 
 export type FloV4Request = {
   version: 4;
@@ -56,7 +56,7 @@ export function unsupportedFloV4Result(_now: string) {
     answer: {
       answer: FLO_V4_UNSUPPORTED_ANSWER,
       claims: [],
-      caveat: "This preview does not fall back to a different answer engine.",
+      caveat: "No account or plan changes were made.",
       evidenceIds: [],
       followups: [],
     },

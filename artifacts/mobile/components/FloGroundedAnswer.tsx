@@ -1,6 +1,6 @@
 import Feather from "@expo/vector-icons/Feather";
 import React, { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
 import { floAnswerAsOf, floFreshnessLabel, floSourceDescription, safeFloSourceRoute, type FloEvidenceRef, type FloReviewProposal } from "@/lib/floExperience";
@@ -54,7 +54,21 @@ export function FloGroundedAnswer({ text, sources, dataAsOf, partial, coverage, 
                   </>
                 );
                 return route ? (
-                  <Pressable key={key} accessibilityRole="link" accessibilityLabel={`Open source ${source.label}`} onPress={() => onOpenSource(route)} style={[styles.source, { borderColor: c.border }]}>{body}</Pressable>
+                  <Pressable
+                    key={key}
+                    {...(Platform.OS === "web" ? { href: route.replace(/^\/\(tabs\)(?=\/|$)/, "") || "/" } : {})}
+                    accessibilityRole="link"
+                    accessibilityLabel={`Open source ${source.label}`}
+                    onPress={event => {
+                      if (Platform.OS === "web") {
+                        const modifiers = event.nativeEvent as unknown as { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean };
+                        if (modifiers.metaKey || modifiers.ctrlKey || modifiers.shiftKey || modifiers.altKey) return;
+                        event.preventDefault();
+                      }
+                      onOpenSource(route);
+                    }}
+                    style={[styles.source, { borderColor: c.border }]}
+                  >{body}</Pressable>
                 ) : <View key={key} style={[styles.source, { borderColor: c.border }]}>{body}</View>;
               })}
               {sources.length > 3 ? <Pressable accessibilityRole="button" accessibilityState={{ expanded: allSourcesOpen }} onPress={() => setAllSourcesOpen(open => !open)} style={styles.sourceToggle}><Text style={{ color: c.primary, fontFamily: "Inter_600SemiBold", fontSize: 12 }}>{allSourcesOpen ? "Show fewer sources" : `View all ${sources.length} sources`}</Text></Pressable> : null}

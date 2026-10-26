@@ -19,7 +19,7 @@ test("Flo client maps v4 to its isolated endpoint and closed request body", () =
 
 test("Flo preview UI is visibly history-off and suppresses proposals", () => {
   const source = readFileSync(path.resolve(__dirname, "../app/(tabs)/flo.tsx"), "utf8");
-  assert.match(source, /v4 preview · Read only · History off/);
+  assert.match(source, /Read only · Chat not saved/);
   assert.match(source, /engine: floV4Preview \? "v4" : "v3"/);
   assert.match(source, /historyEnabled = !floV4Preview/);
   assert.match(source, /proposal=\{floV4Preview \? null/);

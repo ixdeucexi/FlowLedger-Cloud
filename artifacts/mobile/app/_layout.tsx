@@ -41,6 +41,7 @@ import {
   BiometricLockProvider,
   useBiometricLock,
 } from "@/context/BiometricLockContext";
+import { FloVolatileSessionProvider } from "@/context/FloVolatileSessionContext";
 import { BudgetProvider, useBudget } from "@/context/BudgetContext";
 import { MembershipProvider } from "@/context/MembershipContext";
 import { ThemeProvider, useThemeMode } from "@/context/ThemeContext";
@@ -1021,10 +1022,12 @@ export default function RootLayout() {
                 <BiometricLockProvider>
                   <BudgetProvider>
                     <MembershipProvider>
-                      <RootNavigator
-                        fontsReady={fontsReady}
-                        hideSplash={hideSplash}
-                      />
+                      <FloVolatileSessionProvider>
+                        <RootNavigator
+                          fontsReady={fontsReady}
+                          hideSplash={hideSplash}
+                        />
+                      </FloVolatileSessionProvider>
                     </MembershipProvider>
                   </BudgetProvider>
                 </BiometricLockProvider>

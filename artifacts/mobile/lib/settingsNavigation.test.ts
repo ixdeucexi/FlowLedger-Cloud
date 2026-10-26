@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { createSettingsRestoreGuard, requestedSettingsSection, restoreSavedSettingsSection } from "./settingsNavigation";
+import { createSettingsRestoreGuard, requestedSettingsSection, restoreSavedSettingsSection, settingsSectionOwnsPathname } from "./settingsNavigation";
 
 type Section = "overview" | "household" | "money";
 
@@ -76,4 +76,16 @@ test("More screen wires explicit overview and invalidates restoration before rou
   assert.match(source, /if \(requestedSection !== undefined\)[\s\S]*?setActiveSettingsSection\(isSettingsSectionId\(requestedSection\) \? requestedSection : "overview"\);\s*return;/);
   assert.match(source, /settingsRequestKeyRef.current === settingsRequestKey/);
   assert.match(source, /return \(\) => \{ active = false; \}/);
+});
+
+
+test("section Back listeners own only their More or dedicated wrapper route", () => {
+  for (const initial of [undefined, "accounts", "review", "reports"]) {
+    const owner = initial ? `/${initial}` : "/more";
+    assert.equal(settingsSectionOwnsPathname(owner, initial), true);
+    assert.equal(settingsSectionOwnsPathname(`${owner}/`, initial), true);
+    assert.equal(settingsSectionOwnsPathname(`/(tabs)${owner}`, initial), true);
+    for (const other of ["/flo", "/monthly", "/bills", ...["/more", "/accounts", "/review", "/reports"].filter(path => path !== owner)])
+      assert.equal(settingsSectionOwnsPathname(other, initial), false);
+  }
 });

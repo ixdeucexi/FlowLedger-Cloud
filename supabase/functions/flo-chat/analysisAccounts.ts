@@ -95,13 +95,23 @@ export function resolvePriorAccountReference(snapshot: AnalysisSnapshot, prior: 
     if (isCurrentAccountReferenceQuestion(turn.question) || /^(?:thanks|thank you|ok|okay|got it|understood|great|appreciate it)$/.test(normalizeAccountName(turn.question))) continue;
     if (!turn.phrase) break;
     const resolved = resolveAccountName(recordedBalanceTargets(snapshot), turn.phrase);
-    if (!resolved.selected) return clarify(resolved.candidates.length ? `Which account do you mean: ${accountChoices(resolved.candidates)}? The earlier name was ambiguous.` : "The earlier named account no longer identifies one active saved record. Please name the account you mean.");
+    if (!resolved.selected) {
+      const result = clarify(resolved.candidates.length ? `Which account do you mean: ${accountChoices(resolved.candidates)}? The earlier name was ambiguous.` : "The earlier named account no longer identifies one active saved record. Please name the account you mean.");
+      const names = accountChoiceNames(resolved.candidates, recordedBalanceTargets(snapshot));
+      return { clarification: { ...result.clarification, choices: resolved.candidates.length ? { kind: "account", names } : undefined } };
+    }
     const account = resolved.selected;
     return { reference: { householdId: snapshot.householdId, userPhrase: turn.phrase, accountId: account.id, accountName: account.name, source: referenceSource(account) } };
   }
   return clarify("Which saved account do you mean? Please name it; this conversation has no unique account reference I can verify.");
 }
 
+function accountChoiceNames(candidates: readonly BalanceRow[], all: readonly BalanceRow[]): string[] {
+  return candidates.filter(candidate => {
+    const selected = resolveAccountName(all,candidate.name).selected;
+    return candidate.aliases.some(alias=>normalizeAccountName(alias)===normalizeAccountName(candidate.name)) && selected?.id === candidate.id && referenceSource(selected!) === referenceSource(candidate);
+  }).map(candidate=>candidate.name);
+}
 const accountChoices = (rows: readonly BalanceRow[]) => rows.map(row => `${row.name} (${row.connected ? "connected" : "manual"} ${row.kind})`).join("; ");
 
 export function accountInventoryAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequest): AnalysisResult {
@@ -163,7 +173,10 @@ export function currentBalanceAnalysis(snapshot: AnalysisSnapshot, request: Anal
   let selected: BalanceRow[];
   if (entity) {
     const resolved = resolveAccountName(recordedBalanceTargets(snapshot), request.entity!);
-    if (!resolved.selected) return unavailable(resolved.candidates.length ? `That name matches more than one active account. Which do you mean: ${accountChoices(resolved.candidates)}?` : `No active recorded account or configured debt matches that name.${all.length ? ` Available accounts: ${accountChoices(all)}.` : ""} Please use a saved account name; I cannot substitute the household balance.`);
+    if (!resolved.selected) {
+      const names = accountChoiceNames(resolved.candidates, recordedBalanceTargets(snapshot));
+      return { ...unavailable(resolved.candidates.length ? `That name matches more than one active account. Which do you mean: ${accountChoices(resolved.candidates)}?` : `No active recorded account or configured debt matches that name.${all.length ? ` Available accounts: ${accountChoices(all)}.` : ""} Please use a saved account name; I cannot substitute the household balance.`), choices: resolved.candidates.length ? { kind: "account", names } : undefined };
+    }
     selected = [resolved.selected];
     if (selected[0].identityKnown === false) return unavailable("The matching account has an incomplete recorded identity. I cannot confirm its balance.");
     const liability = ["credit", "credit_card", "configured debt"].includes(selected[0].kind);

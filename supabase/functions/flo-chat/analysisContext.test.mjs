@@ -28,7 +28,7 @@ test('catalog selects names only and scopes every table to the authorized househ
   const catalog=await loadAnalysisEntityCatalog(client,'h');
   assert.deepEqual(catalog.bills,['Concert']);
   assert.equal(calls.filter(x=>x[1]==='eq'&&x[2]==='household_id'&&x[3]==='h').length,6);
-  assert.ok(calls.filter(x=>x[1]==='select').every(x=>x[2].split(',').every(field=>['name','display_name','official_name','category'].includes(field))));
+  assert.ok(calls.filter(x=>x[1]==='select').every(x=>x[2].split(',').every(field=>['name','display_name','official_name','category','goal_type','archived_at'].includes(field))));
 });
 
 test('catalog offers actual budget category and connected-account aliases without financial values', async () => {

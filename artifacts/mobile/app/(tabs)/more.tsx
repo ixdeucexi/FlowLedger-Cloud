@@ -14,7 +14,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "@/lib/haptics";
 import * as Sharing from "expo-sharing";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, usePathname, useRouter } from "expo-router";
 import React, {
   useCallback,
   useEffect,
@@ -37,6 +37,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ConnectedBalanceList } from "@/components/ConnectedBalanceList";
 import { AccountModal } from "@/components/AccountModal";
 import { AdminMembershipTools } from "@/components/AdminMembershipTools";
 import { BiometricLockSettings } from "@/components/BiometricLockSettings";
@@ -105,7 +106,7 @@ import {
   readOnboardingPreferences,
 } from "@/lib/onboardingPreferences";
 import { readInterfacePreferences, updateInterfacePreferences } from "@/lib/interfacePreferences";
-import { createSettingsRestoreGuard, requestedSettingsSection, restoreSavedSettingsSection } from "@/lib/settingsNavigation";
+import { createSettingsRestoreGuard, requestedSettingsSection, restoreSavedSettingsSection, settingsSectionOwnsPathname } from "@/lib/settingsNavigation";
 import {
   getForecastSafetyLayout,
   isCompactSettingsLayout,
@@ -388,6 +389,8 @@ export default function MoreScreen({
     [viewportWidth],
   );
   const router = useRouter();
+  const pathname = usePathname();
+  const settingsRouteActive = settingsSectionOwnsPathname(pathname, initialSection);
   const { openCommands, openNotifications, openSearch, unreadNotificationCount } = useAppDiscovery();
   const routeParams = useLocalSearchParams<{
     section?: string;
@@ -432,6 +435,9 @@ export default function MoreScreen({
     settings,
     updateSettings,
     accounts,
+    connectedBankAccounts,
+    householdTimeZone,
+    startupCoreReady,
     forecastConfidence,
     addIncome,
     updateIncome,
@@ -559,7 +565,11 @@ export default function MoreScreen({
     owned.layers.add(layer);
     if (layer.endsWith("-history")) owned.layers.add(layer.slice(0, -"-history".length));
   }, []);
-  useBackDismiss(activeSettingsSection !== "overview", (event) => {
+  useBackDismiss(activeSettingsSection !== "overview" && settingsRouteActive, (event) => {
+    // popstate may precede React's route update/effect cleanup. Check the
+    // browser destination synchronously before writing any section params.
+    if (Platform.OS === "web" && typeof window !== "undefined"
+      && !settingsSectionOwnsPathname(window.location.pathname, initialSection)) return;
     if (activeSettingsSection === "buckets" || activeSettingsSection === "review") {
       const owned = bucketOverlayHistoryRef.current;
       const destination = event ? event.state : Platform.OS === "web" && typeof window !== "undefined" ? window.history.state : undefined;
@@ -3533,6 +3543,7 @@ export default function MoreScreen({
               </Pressable>
             </View>
 
+            <ConnectedBalanceList accounts={connectedBankAccounts} ready={startupCoreReady && !budgetLoading && !budgetLoadError} timeZone={householdTimeZone} />
             {/* ── Income Sources ── */}
           </>
         )}

@@ -296,7 +296,7 @@ test('self-contained deterministic plans preserve typed intent slots and avoid d
 
 test('runtime preserves conversational scope except explicit self-contained current balances or inventory and clarifies orphan before interpretation',()=>{
   const source=readFileSync(new URL('./analysisPlanner.ts',import.meta.url),'utf8');
-  assert.match(source,/!prior\.length\|\|candidate\?\.requests\.every\(r=>r\.purpose==="account_inventory"\|\|r\.purpose==="current_balance"\)/);
+  assert.match(source,/!prior\.length\|\|candidate\?\.requests\.every\(r=>r\.purpose==="bucket_details"\|\|r\.purpose==="account_inventory"\|\|r\.purpose==="current_balance"\)/);
   assert.ok(source.indexOf('if(clarification)return recordAnalysis')<source.indexOf('const interpret='));
   assert.match(source,/if\(clarification\)return recordAnalysis\(runtime,\[clarification\],null,\{inputTokens:0,outputTokens:0\}\)/);
   assert.match(source,/loadAnalysisConversation/);

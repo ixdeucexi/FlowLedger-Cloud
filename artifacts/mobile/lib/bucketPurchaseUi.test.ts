@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { settingsSectionOwnsPathname } from "./settingsNavigation";
 import { readFileSync } from "node:fs";
 import { JsxEmit, ModuleKind, transpileModule } from "typescript";
 import { bucketPurchaseCandidates, bucketPurchaseHistory } from "./bucketPurchases";
@@ -119,21 +120,21 @@ test("bucket recording locks expense mode, calls the combined preview and expose
   assert.match(copy(tree), /Fictional persistence failure/);
 });
 
-function settingsBucketBack(section = "buckets") {
-  const window = { history: { state: { flowledgerLayer: "section-layer" } } };
+function settingsBucketBack(section = "buckets", initialSection?: string) {
+  const window = { location: { pathname: initialSection ? `/${initialSection}` : "/more" }, history: { state: { flowledgerLayer: "section-layer" } } };
   const navigated: string[] = []; let callback!: (event?: { state?: unknown }) => void;
   const source = readFileSync("app/(tabs)/more.tsx", "utf8");
   const start = source.indexOf("  const bucketOverlayHistoryRef =");
   const end = source.indexOf("  useEffect(() => {", start);
   assert.ok(start >= 0 && end > start);
   const body = transpileModule(source.slice(start, end), { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
-  const bindings = { window, Platform: { OS: "web" }, activeSettingsSection: section,
+  const bindings = { window, Platform: { OS: "web" }, activeSettingsSection: section, initialSection, settingsRouteActive: true, settingsSectionOwnsPathname,
     useRef: (value: any) => ({ current: value }), useCallback: (fn: any) => fn,
     useBackDismiss: (_active: boolean, fn: (event?: { state?: unknown }) => void) => { callback = fn; },
     openSettingsSection: (value: string) => navigated.push(value),
   };
   const changed = new Function(...Object.keys(bindings), `${body}; return onBucketOverlayChange;`)(...Object.values(bindings));
-  return { changed, navigated, back: (event?: { state?: unknown }) => callback(event), layer: (value: string) => { window.history.state.flowledgerLayer = value; } };
+  return { changed, navigated, path: (value: string) => { window.location.pathname = value; }, back: (event?: { state?: unknown }) => callback(event), layer: (value: string) => { window.history.state.flowledgerLayer = value; } };
 }
 
 test("Settings ancestor ignores bucket-owned nested disposal without replacing its section listener", () => {
@@ -267,4 +268,15 @@ test("deleted and unplanned charge surfaces resolve live confirmed bill and inco
   const payroll = { ...transaction, amount: 50, match_reason: "confirmed_income_match", review_resolution: "income", linked_bill_id: undefined, linked_income_id: "payroll", review_allocations: [{ type: "income", targetId: "payroll", name: "Old payroll", amount: 50 }] };
   deleted.budget.incomes = [{ id: "payroll", name: "Current payroll" }]; deleted.budget.deletedTransactions = [payroll];
   assert.ok(deleted.button("Restore Current payroll"));
+});
+
+
+test("leaving More wrappers cannot write overview params into Flo during a stale pop callback", () => {
+  for (const initial of [undefined, "accounts", "review", "reports"]) {
+    const h = settingsBucketBack(initial ?? "buckets", initial);
+    h.path("/flo"); h.back({ state: null });
+    assert.deepEqual(h.navigated, [], "the pop destination is another route even before hook cleanup");
+    h.path(initial ? `/${initial}` : "/more"); h.back({ state: null });
+    assert.deepEqual(h.navigated, ["overview"], "same-route section Back still closes its section");
+  }
 });

@@ -1,0 +1,846 @@
+[
+  {
+    "status": 200,
+    "data": {
+      "caseId": "p2:fresh-reference",
+      "turns": [
+        {
+          "question": "What is my Cedar Daily Checking balance?",
+          "answer": {
+            "answer": "Cedar Daily Checking: $700.00 recorded as of 2026-09-10.\n\nThis is not a live available-funds or safe-to-spend amount.\n\nAssumptions: These are recorded balance observations, not live bank funds or safe-to-spend amounts. Pending transactions and future obligations are not deducted here.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [
+              "financialAnalysis:39d98b7ca61487f7:0"
+            ],
+            "followups": [
+              "What bills are due before my next paycheck?",
+              "How much can I safely spend?"
+            ]
+          },
+          "sources": [
+            {
+              "id": "financialAnalysis:39d98b7ca61487f7:0",
+              "type": "money",
+              "label": "Recorded account balance",
+              "asOf": "2026-09-09T15:00:00.000Z",
+              "freshness": "stale",
+              "route": "/(tabs)/accounts"
+            }
+          ],
+          "aggregate": {
+            "partial": false,
+            "dataAsOf": "2026-09-09T15:00:00.000Z",
+            "coverage": {
+              "complete": true,
+              "tools": 1,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            }
+          },
+          "records": [
+            {
+              "id": "financialAnalysis:39d98b7ca61487f7:0",
+              "recordedBalance": 700,
+              "accountCount": 1,
+              "accountName": "Cedar Daily Checking",
+              "accountType": "checking",
+              "balanceAsOf": "2026-09-10",
+              "oldestObservationDate": "2026-09-10",
+              "newestObservationDate": "2026-09-10",
+              "safeToSpend": null
+            }
+          ],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "durationMs": 2,
+          "expected": {
+            "recordedBalance": 700
+          }
+        },
+        {
+          "question": "What is that account's balance now?",
+          "answer": {
+            "answer": "Cedar Daily Checking: $650.00 recorded as of 2026-09-10.\n\nThis is not a live available-funds or safe-to-spend amount.\n\nAssumptions: These are recorded balance observations, not live bank funds or safe-to-spend amounts. Pending transactions and future obligations are not deducted here.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [
+              "financialAnalysis:9f56d5c324a1a346:0"
+            ],
+            "followups": [
+              "What bills are due before my next paycheck?",
+              "How much can I safely spend?"
+            ]
+          },
+          "sources": [
+            {
+              "id": "financialAnalysis:9f56d5c324a1a346:0",
+              "type": "money",
+              "label": "Recorded account balance",
+              "asOf": "2026-09-09T15:00:00.000Z",
+              "freshness": "stale",
+              "route": "/(tabs)/accounts"
+            }
+          ],
+          "aggregate": {
+            "partial": false,
+            "dataAsOf": "2026-09-09T15:00:00.000Z",
+            "coverage": {
+              "complete": true,
+              "tools": 1,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            }
+          },
+          "records": [
+            {
+              "id": "financialAnalysis:9f56d5c324a1a346:0",
+              "recordedBalance": 650,
+              "accountCount": 1,
+              "accountName": "Cedar Daily Checking",
+              "accountType": "checking",
+              "balanceAsOf": "2026-09-10",
+              "oldestObservationDate": "2026-09-10",
+              "newestObservationDate": "2026-09-10",
+              "safeToSpend": null
+            }
+          ],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "durationMs": 2,
+          "expected": {
+            "recordedBalance": 650
+          }
+        }
+      ]
+    },
+    "checkedAt": "2026-10-26T21:57:51.357Z",
+    "checks": [
+      "pass"
+    ]
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "p2:reset-reference",
+      "turns": [
+        {
+          "question": "What is my Cedar Daily Checking balance?",
+          "answer": {
+            "answer": "Cedar Daily Checking: $700.00 recorded as of 2026-09-10.\n\nThis is not a live available-funds or safe-to-spend amount.\n\nAssumptions: These are recorded balance observations, not live bank funds or safe-to-spend amounts. Pending transactions and future obligations are not deducted here.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [
+              "financialAnalysis:39d98b7ca61487f7:0"
+            ],
+            "followups": [
+              "What bills are due before my next paycheck?",
+              "How much can I safely spend?"
+            ]
+          },
+          "sources": [
+            {
+              "id": "financialAnalysis:39d98b7ca61487f7:0",
+              "type": "money",
+              "label": "Recorded account balance",
+              "asOf": "2026-09-09T15:00:00.000Z",
+              "freshness": "stale",
+              "route": "/(tabs)/accounts"
+            }
+          ],
+          "aggregate": {
+            "partial": false,
+            "dataAsOf": "2026-09-09T15:00:00.000Z",
+            "coverage": {
+              "complete": true,
+              "tools": 1,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            }
+          },
+          "records": [
+            {
+              "id": "financialAnalysis:39d98b7ca61487f7:0",
+              "recordedBalance": 700,
+              "accountCount": 1,
+              "accountName": "Cedar Daily Checking",
+              "accountType": "checking",
+              "balanceAsOf": "2026-09-10",
+              "oldestObservationDate": "2026-09-10",
+              "newestObservationDate": "2026-09-10",
+              "safeToSpend": null
+            }
+          ],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "durationMs": 22,
+          "expected": {
+            "recordedBalance": 700
+          }
+        },
+        {
+          "question": "What is that account's balance?",
+          "answer": {
+            "answer": "Which saved account do you mean? Please name it; this conversation has no unique account reference I can verify.\n\nWhat I could not verify: Which saved account do you mean? Please name it; this conversation has no unique account reference I can verify..",
+            "claims": [],
+            "caveat": "Which saved account do you mean? Please name it; this conversation has no unique account reference I can verify.",
+            "evidenceIds": [
+              "financialAnalysis:39d98b7ca61487f7:0"
+            ],
+            "followups": []
+          },
+          "sources": [
+            {
+              "id": "financialAnalysis:39d98b7ca61487f7:0",
+              "type": "money",
+              "label": "Recorded account balance",
+              "asOf": "2026-09-09T15:00:00.000Z",
+              "freshness": "stale",
+              "route": "/(tabs)/accounts"
+            }
+          ],
+          "aggregate": {
+            "partial": true,
+            "dataAsOf": "2026-09-09T15:00:00.000Z",
+            "coverage": {
+              "complete": false,
+              "tools": 1,
+              "partialTools": 1,
+              "exclusions": [
+                "Which saved account do you mean? Please name it; this conversation has no unique account reference I can verify."
+              ],
+              "reasons": [
+                "analysis_data_incomplete"
+              ],
+              "dateRanges": []
+            }
+          },
+          "records": [
+            {
+              "id": "financialAnalysis:39d98b7ca61487f7:0"
+            }
+          ],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "durationMs": 2,
+          "expected": {
+            "noPickedBalance": true,
+            "clarification": true
+          }
+        }
+      ]
+    },
+    "checkedAt": "2026-10-26T21:57:51.784Z",
+    "checks": [
+      "pass"
+    ]
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "p3:bucket-natural",
+      "turns": [
+        {
+          "question": "Could you check what is still earmarked for Christmas Shopping and how much I have used from it?",
+          "answer": {
+            "answer": "Christmas Shopping: $375.00 left in the bucket.\n\nPlanned $500.00 · Spent $125.00.\n\nRecent linked purchases (showing 1 of 1 retained purchases):\n2026-09-09 · Saved toy store purchase: $30.00 assigned to this bucket from a $100.00 transaction.\n\nThis is bucket budget headroom, not spendable bank cash.\n\nAssumptions: Bucket money left is planned budget headroom, not bank cash or permission to spend. Check the household cash-flow plan before a new purchase. Spent comes from the bucket’s saved spent amount. Retained linked purchases can be incomplete and are not summed to replace it. Pending, deleted and removed activity is excluded from purchase history.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [
+              "financialAnalysis:83d7a522d3d54330:0"
+            ],
+            "followups": [
+              "Show my Christmas Shopping bucket purchases.",
+              "How do I add a purchase to a bucket?"
+            ]
+          },
+          "sources": [
+            {
+              "id": "financialAnalysis:83d7a522d3d54330:0",
+              "type": "budget",
+              "label": "Spending bucket details",
+              "asOf": null,
+              "freshness": "unknown",
+              "route": "/(tabs)/more?section=buckets"
+            }
+          ],
+          "aggregate": {
+            "partial": false,
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 1,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            }
+          },
+          "records": [
+            {
+              "id": "financialAnalysis:83d7a522d3d54330:0",
+              "bucketId": "christmas",
+              "bucketName": "Christmas Shopping",
+              "bucketPlanned": 500,
+              "bucketSpent": 125,
+              "bucketRemaining": 375,
+              "bucketReleased": 0,
+              "bucketClosed": false,
+              "bucketOverage": 0,
+              "bucketTargetDate": "2026-12-25",
+              "bucketHistoryCount": 1,
+              "bucketHistoryShown": 1,
+              "bucketHistoryAllocated": 30,
+              "safeToSpend": null,
+              "purchase1Name": "Saved toy store purchase",
+              "purchase1Allocated": 30,
+              "purchase1TransactionAmount": 100,
+              "purchase1Date": "2026-09-09"
+            }
+          ],
+          "usage": {
+            "inputTokens": 8980,
+            "outputTokens": 211
+          },
+          "durationMs": 5377,
+          "expected": {
+            "bucketPlanned": 500,
+            "bucketSpent": 125,
+            "bucketRemaining": 375
+          }
+        }
+      ]
+    },
+    "checkedAt": "2026-10-26T21:57:57.362Z",
+    "checks": [
+      "pass"
+    ]
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "p3:bucket-purchases",
+      "turns": [
+        {
+          "question": "Show my Christmas Shopping bucket purchases.",
+          "answer": {
+            "answer": "Christmas Shopping: $375.00 left in the bucket.\n\nPlanned $500.00 · Spent $125.00.\n\nRecent linked purchases (showing 1 of 1 retained purchases):\n2026-09-09 · Saved toy store purchase: $30.00 assigned to this bucket from a $100.00 transaction.\n\nThis is bucket budget headroom, not spendable bank cash.\n\nAssumptions: Bucket money left is planned budget headroom, not bank cash or permission to spend. Check the household cash-flow plan before a new purchase. Spent comes from the bucket’s saved spent amount. Retained linked purchases can be incomplete and are not summed to replace it. Pending, deleted and removed activity is excluded from purchase history.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [
+              "financialAnalysis:83d7a522d3d54330:0"
+            ],
+            "followups": [
+              "How do I add a purchase to a bucket?"
+            ]
+          },
+          "sources": [
+            {
+              "id": "financialAnalysis:83d7a522d3d54330:0",
+              "type": "budget",
+              "label": "Spending bucket details",
+              "asOf": null,
+              "freshness": "unknown",
+              "route": "/(tabs)/more?section=buckets"
+            }
+          ],
+          "aggregate": {
+            "partial": false,
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 1,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            }
+          },
+          "records": [
+            {
+              "id": "financialAnalysis:83d7a522d3d54330:0",
+              "bucketId": "christmas",
+              "bucketName": "Christmas Shopping",
+              "bucketPlanned": 500,
+              "bucketSpent": 125,
+              "bucketRemaining": 375,
+              "bucketReleased": 0,
+              "bucketClosed": false,
+              "bucketOverage": 0,
+              "bucketTargetDate": "2026-12-25",
+              "bucketHistoryCount": 1,
+              "bucketHistoryShown": 1,
+              "bucketHistoryAllocated": 30,
+              "safeToSpend": null,
+              "purchase1Name": "Saved toy store purchase",
+              "purchase1Allocated": 30,
+              "purchase1TransactionAmount": 100,
+              "purchase1Date": "2026-09-09"
+            }
+          ],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "durationMs": 24,
+          "expected": {
+            "bucketHistoryCount": 1,
+            "bucketHistoryAllocated": 30,
+            "purchaseName": "Saved toy store purchase"
+          }
+        }
+      ]
+    },
+    "checkedAt": "2026-10-26T21:57:57.808Z",
+    "checks": [
+      "pass"
+    ]
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "p3:bucket-closed",
+      "turns": [
+        {
+          "question": "What is left in my Christmas Shopping bucket?",
+          "answer": {
+            "answer": "Christmas Shopping: This bucket is closed: $0.00 left in the bucket and $375.00 of unused budget released.\n\nPlanned $500.00 · Spent $125.00.\n\nRecent linked purchases (showing 1 of 1 retained purchases):\n2026-09-09 · Saved toy store purchase: $30.00 assigned to this bucket from a $100.00 transaction.\n\nThis is bucket budget headroom, not spendable bank cash.\n\nAssumptions: Bucket money left is planned budget headroom, not bank cash or permission to spend. Check the household cash-flow plan before a new purchase. Spent comes from the bucket’s saved spent amount. Retained linked purchases can be incomplete and are not summed to replace it. Pending, deleted and removed activity is excluded from purchase history.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [
+              "financialAnalysis:2620dcf33176a4f4:0"
+            ],
+            "followups": [
+              "Show my Christmas Shopping bucket purchases."
+            ]
+          },
+          "sources": [
+            {
+              "id": "financialAnalysis:2620dcf33176a4f4:0",
+              "type": "budget",
+              "label": "Spending bucket details",
+              "asOf": null,
+              "freshness": "unknown",
+              "route": "/(tabs)/more?section=buckets"
+            }
+          ],
+          "aggregate": {
+            "partial": false,
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 1,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            }
+          },
+          "records": [
+            {
+              "id": "financialAnalysis:2620dcf33176a4f4:0",
+              "bucketId": "christmas",
+              "bucketName": "Christmas Shopping",
+              "bucketPlanned": 500,
+              "bucketSpent": 125,
+              "bucketRemaining": 0,
+              "bucketReleased": 375,
+              "bucketClosed": true,
+              "bucketOverage": 0,
+              "bucketTargetDate": "2026-12-25",
+              "bucketHistoryCount": 1,
+              "bucketHistoryShown": 1,
+              "bucketHistoryAllocated": 30,
+              "safeToSpend": null,
+              "purchase1Name": "Saved toy store purchase",
+              "purchase1Allocated": 30,
+              "purchase1TransactionAmount": 100,
+              "purchase1Date": "2026-09-09"
+            }
+          ],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "durationMs": 23,
+          "expected": {
+            "bucketRemaining": 0,
+            "bucketReleased": 375,
+            "bucketClosed": true
+          }
+        }
+      ]
+    },
+    "checkedAt": "2026-10-26T21:57:58.222Z",
+    "checks": [
+      "pass"
+    ]
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "p3:bucket-overspent",
+      "turns": [
+        {
+          "question": "What is left in my Christmas Shopping bucket?",
+          "answer": {
+            "answer": "Christmas Shopping: $0.00 left in the bucket.\n\nPlanned $500.00 · Spent $550.00. Spending is $50.00 over the planned amount.\n\nRecent linked purchases (showing 1 of 1 retained purchases):\n2026-09-09 · Saved toy store purchase: $30.00 assigned to this bucket from a $100.00 transaction.\n\nThis is bucket budget headroom, not spendable bank cash.\n\nAssumptions: Bucket money left is planned budget headroom, not bank cash or permission to spend. Check the household cash-flow plan before a new purchase. Spent comes from the bucket’s saved spent amount. Retained linked purchases can be incomplete and are not summed to replace it. Pending, deleted and removed activity is excluded from purchase history.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [
+              "financialAnalysis:1a4c69409a59736a:0"
+            ],
+            "followups": [
+              "Show my Christmas Shopping bucket purchases."
+            ]
+          },
+          "sources": [
+            {
+              "id": "financialAnalysis:1a4c69409a59736a:0",
+              "type": "budget",
+              "label": "Spending bucket details",
+              "asOf": null,
+              "freshness": "unknown",
+              "route": "/(tabs)/more?section=buckets"
+            }
+          ],
+          "aggregate": {
+            "partial": false,
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 1,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            }
+          },
+          "records": [
+            {
+              "id": "financialAnalysis:1a4c69409a59736a:0",
+              "bucketId": "christmas",
+              "bucketName": "Christmas Shopping",
+              "bucketPlanned": 500,
+              "bucketSpent": 550,
+              "bucketRemaining": 0,
+              "bucketReleased": 0,
+              "bucketClosed": false,
+              "bucketOverage": 50,
+              "bucketTargetDate": "2026-12-25",
+              "bucketHistoryCount": 1,
+              "bucketHistoryShown": 1,
+              "bucketHistoryAllocated": 30,
+              "safeToSpend": null,
+              "purchase1Name": "Saved toy store purchase",
+              "purchase1Allocated": 30,
+              "purchase1TransactionAmount": 100,
+              "purchase1Date": "2026-09-09"
+            }
+          ],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "durationMs": 24,
+          "expected": {
+            "bucketSpent": 550,
+            "bucketRemaining": 0,
+            "bucketOverage": 50
+          }
+        }
+      ]
+    },
+    "checkedAt": "2026-10-26T21:57:58.643Z",
+    "checks": [
+      "pass"
+    ]
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "p3:bucket-ambiguous",
+      "turns": [
+        {
+          "question": "What is left in my Holiday bucket?",
+          "answer": {
+            "answer": "Which spending bucket do you mean: Holiday 1; Holiday 2?\n\nWhat I could not verify: Which spending bucket do you mean: Holiday 1; Holiday 2?.\n\nAssumptions: Bucket money left is planned budget headroom, not bank cash or permission to spend. Check the household cash-flow plan before a new purchase. Spent comes from the bucket’s saved spent amount. Retained linked purchases can be incomplete and are not summed to replace it. Pending, deleted and removed activity is excluded from purchase history.",
+            "claims": [],
+            "caveat": "Which spending bucket do you mean: Holiday 1; Holiday 2?",
+            "evidenceIds": [
+              "financialAnalysis:f01ed1b673458b6c:0"
+            ],
+            "followups": [
+              "What is left in my Holiday 1 bucket?",
+              "What is left in my Holiday 2 bucket?"
+            ]
+          },
+          "sources": [
+            {
+              "id": "financialAnalysis:f01ed1b673458b6c:0",
+              "type": "budget",
+              "label": "Spending bucket details",
+              "asOf": null,
+              "freshness": "unknown",
+              "route": "/(tabs)/more?section=buckets"
+            }
+          ],
+          "aggregate": {
+            "partial": true,
+            "dataAsOf": null,
+            "coverage": {
+              "complete": false,
+              "tools": 1,
+              "partialTools": 1,
+              "exclusions": [
+                "Which spending bucket do you mean: Holiday 1; Holiday 2?"
+              ],
+              "reasons": [
+                "analysis_data_incomplete"
+              ],
+              "dateRanges": []
+            }
+          },
+          "records": [
+            {
+              "id": "financialAnalysis:f01ed1b673458b6c:0"
+            }
+          ],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "durationMs": 20,
+          "expected": {
+            "noBucketBalance": true,
+            "clarification": true,
+            "choices": [
+              "What is left in my Holiday 1 bucket?",
+              "What is left in my Holiday 2 bucket?"
+            ]
+          }
+        }
+      ]
+    },
+    "checkedAt": "2026-10-26T21:57:59.057Z",
+    "checks": [
+      "pass"
+    ]
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "p3:bucket-date-scope",
+      "turns": [
+        {
+          "question": "What is left in my Christmas Shopping bucket on December 25?",
+          "answer": {
+            "answer": "I can show this bucket’s current recorded budget and purchases. I can’t establish its balance for a different date or period, project a future bucket balance, or confirm purchase affordability from its remaining budget.\n\nWhat I could not verify: I can show this bucket’s current recorded budget and purchases. I can’t establish its balance for a different date or period, project a future bucket balance, or confirm purchase affordability from its remaining budget..\n\nAssumptions: Bucket money left is planned budget headroom, not bank cash or permission to spend. Check the household cash-flow plan before a new purchase. Spent comes from the bucket’s saved spent amount. Retained linked purchases can be incomplete and are not summed to replace it. Pending, deleted and removed activity is excluded from purchase history.",
+            "claims": [],
+            "caveat": "I can show this bucket’s current recorded budget and purchases. I can’t establish its balance for a different date or period, project a future bucket balance, or confirm purchase affordability from its remaining budget.",
+            "evidenceIds": [
+              "financialAnalysis:83d7a522d3d54330:0"
+            ],
+            "followups": []
+          },
+          "sources": [
+            {
+              "id": "financialAnalysis:83d7a522d3d54330:0",
+              "type": "budget",
+              "label": "Spending bucket details",
+              "asOf": null,
+              "freshness": "unknown",
+              "route": "/(tabs)/more?section=buckets"
+            }
+          ],
+          "aggregate": {
+            "partial": true,
+            "dataAsOf": null,
+            "coverage": {
+              "complete": false,
+              "tools": 1,
+              "partialTools": 1,
+              "exclusions": [
+                "I can show this bucket’s current recorded budget and purchases. I can’t establish its balance for a different date or period, project a future bucket balance, or confirm purchase affordability from its remaining budget."
+              ],
+              "reasons": [
+                "analysis_data_incomplete"
+              ],
+              "dateRanges": []
+            }
+          },
+          "records": [
+            {
+              "id": "financialAnalysis:83d7a522d3d54330:0"
+            }
+          ],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "durationMs": 1,
+          "expected": {
+            "noBucketBalance": true,
+            "partial": true
+          }
+        }
+      ]
+    },
+    "checkedAt": "2026-10-26T21:57:59.332Z",
+    "checks": [
+      "pass"
+    ]
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "p3:bucket-numeric-date",
+      "turns": [
+        {
+          "question": "What is left in my Christmas Shopping bucket on 12/25?",
+          "answer": {
+            "answer": "I can show this bucket’s current recorded budget and purchases. I can’t establish its balance for a different date or period, project a future bucket balance, or confirm purchase affordability from its remaining budget.\n\nWhat I could not verify: I can show this bucket’s current recorded budget and purchases. I can’t establish its balance for a different date or period, project a future bucket balance, or confirm purchase affordability from its remaining budget..\n\nAssumptions: Bucket money left is planned budget headroom, not bank cash or permission to spend. Check the household cash-flow plan before a new purchase. Spent comes from the bucket’s saved spent amount. Retained linked purchases can be incomplete and are not summed to replace it. Pending, deleted and removed activity is excluded from purchase history.",
+            "claims": [],
+            "caveat": "I can show this bucket’s current recorded budget and purchases. I can’t establish its balance for a different date or period, project a future bucket balance, or confirm purchase affordability from its remaining budget.",
+            "evidenceIds": [
+              "financialAnalysis:83d7a522d3d54330:0"
+            ],
+            "followups": []
+          },
+          "sources": [
+            {
+              "id": "financialAnalysis:83d7a522d3d54330:0",
+              "type": "budget",
+              "label": "Spending bucket details",
+              "asOf": null,
+              "freshness": "unknown",
+              "route": "/(tabs)/more?section=buckets"
+            }
+          ],
+          "aggregate": {
+            "partial": true,
+            "dataAsOf": null,
+            "coverage": {
+              "complete": false,
+              "tools": 1,
+              "partialTools": 1,
+              "exclusions": [
+                "I can show this bucket’s current recorded budget and purchases. I can’t establish its balance for a different date or period, project a future bucket balance, or confirm purchase affordability from its remaining budget."
+              ],
+              "reasons": [
+                "analysis_data_incomplete"
+              ],
+              "dateRanges": []
+            }
+          },
+          "records": [
+            {
+              "id": "financialAnalysis:83d7a522d3d54330:0"
+            }
+          ],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "durationMs": 1,
+          "expected": {
+            "noBucketBalance": true,
+            "partial": true
+          }
+        }
+      ]
+    },
+    "checkedAt": "2026-10-26T21:57:59.450Z",
+    "checks": [
+      "pass"
+    ]
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "p3:credit-followup",
+      "turns": [
+        {
+          "question": "What is my Main Card balance?",
+          "answer": {
+            "answer": "Main Card: $400.00 recorded credit liability balance, observed as of 2026-09-10. This is recorded debt owed, not cash available to spend. No other debt, account balance or duplicate source is added.\n\nAssumptions: These are recorded balance observations, not live bank funds or safe-to-spend amounts. Pending transactions and future obligations are not deducted here. This is the named account's recorded credit liability; configured debt-plan records are not added.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [
+              "financialAnalysis:39d98b7ca61487f7:0"
+            ],
+            "followups": [
+              "What is my Main Card credit utilization?"
+            ]
+          },
+          "sources": [
+            {
+              "id": "financialAnalysis:39d98b7ca61487f7:0",
+              "type": "money",
+              "label": "Recorded account balance",
+              "asOf": "2026-09-09T15:00:00.000Z",
+              "freshness": "stale",
+              "route": "/(tabs)/bills?view=debt"
+            }
+          ],
+          "aggregate": {
+            "partial": false,
+            "dataAsOf": "2026-09-09T15:00:00.000Z",
+            "coverage": {
+              "complete": true,
+              "tools": 1,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            }
+          },
+          "records": [
+            {
+              "id": "financialAnalysis:39d98b7ca61487f7:0",
+              "recordedLiabilityBalance": 400,
+              "balanceAsOf": "2026-09-10",
+              "accountName": "Main Card",
+              "accountType": "credit",
+              "accountCount": 1,
+              "liabilityStatus": "amount_owed",
+              "recordedAmountOwed": 400,
+              "recordedAccountCredit": 0,
+              "safeToSpend": null
+            }
+          ],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "durationMs": 2,
+          "expected": {
+            "recordedLiabilityBalance": 400,
+            "choices": [
+              "What is my Main Card credit utilization?"
+            ],
+            "route": "/(tabs)/bills?view=debt"
+          }
+        }
+      ]
+    },
+    "checkedAt": "2026-10-26T21:57:59.554Z",
+    "checks": [
+      "pass"
+    ]
+  }
+]

@@ -29,6 +29,7 @@ const spendingSources = ["transactions", "plaid_transactions", "plaid_accounts",
  * Unknown routes retain full coverage rather than treating unloaded data as empty. */
 export function analysisSourceDependencies(request: AnalysisRequest): string[] {
   const withSettings = (tables: readonly string[]) => [...new Set(["household_settings", ...tables])];
+  if (request.purpose === "bucket_details") return withSettings(["goals", "transactions"]);
   if (request.purpose === "account_inventory") return withSettings(["accounts", "plaid_accounts"]);
   if (request.purpose === "balance_history") return withSettings(["accounts", "account_balances", "plaid_accounts", "household_daily_checking_closes"]);
   if (request.scenario || ["paycheck_allocation", "action_plan", "budget_plan", "allocation_choice"].includes(request.purpose ?? "")) return withSettings(analysisProjectionSources);

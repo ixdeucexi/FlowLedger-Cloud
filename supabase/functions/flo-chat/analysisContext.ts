@@ -38,13 +38,17 @@ export async function loadAnalysisEntityCatalog(client: any, householdId: string
     { table: "incomes", fields: ["name"] },
     { table: "category_budgets", fields: ["category"] },
   ];
-  return Object.fromEntries(await Promise.all(catalogs.map(async ({ table, fields }) => {
+  const entries = await Promise.all(catalogs.map(async ({ table, fields }) => {
     try {
-      let query = client.from(table).select(fields.join(",")).eq("household_id", householdId);
+      let query = client.from(table).select(table === "goals" ? "name,goal_type,archived_at" : fields.join(",")).eq("household_id", householdId);
       if (table === "accounts" || table === "plaid_accounts") query = query.eq("is_active", true);
       const { data, error } = await query.order("id").limit(150);
-      return [table, error ? [] : [...new Set((data ?? []).flatMap((row: any) => fields.map(field =>
-        typeof row[field] === "string" ? row[field].slice(0, 100) : "")).filter(Boolean))]];
-    } catch { return [table, []]; }
-  })));
+      const names = error ? [] : [...new Set((data ?? []).flatMap((row: any) => fields.map(field =>
+        typeof row[field] === "string" ? row[field].slice(0, 100) : "")).filter(Boolean))];
+      const result: Array<[string, unknown[]]> = [[table,names]];
+      if (table === "goals") result.push(["spending_buckets", error ? [] : [...new Set((data ?? []).filter((row: any)=>row.goal_type === "planned_expense" && !row.archived_at && typeof row.name === "string").map((row: any)=>row.name.slice(0,100)))]]);
+      return result;
+    } catch { return [[table, []], ...(table === "goals" ? [["spending_buckets", []]] : [])] as Array<[string, unknown[]]>; }
+  }));
+  return Object.fromEntries(entries.flat());
 }

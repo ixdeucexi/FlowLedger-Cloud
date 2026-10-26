@@ -1,7 +1,7 @@
 import Feather from "@expo/vector-icons/Feather";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -59,6 +59,8 @@ import {
   type FloChatState,
 } from "@/lib/floPolicy";
 import { floFailureDisplay, type FloVerifiedFallback } from "@/lib/floStream";
+import { useFloVolatileSession } from "@/context/FloVolatileSessionContext";
+import type { FloVolatileLease, FloVolatileSnapshot } from "@/lib/floVolatileSession";
 import { floV4PreviewEnabled } from "@/lib/floV4Preview";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { buildDecisionHistory } from "@/lib/decisionHistory";
@@ -120,6 +122,8 @@ export default function FloScreen() {
   const floProLocked = isFeatureLocked("flo_account_chat");
   const floV4Preview = floV4PreviewEnabled(isAdmin);
   const floAccessLocked = floProLocked && !floV4Preview;
+  const volatileSession = useFloVolatileSession();
+  const volatileStore = volatileSession.store;
   const [chat, dispatch] = useReducer(reduceFloChat, demoMode ? storeCaptureChat : initialChat);
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
   const decisionHubSettings = DEFAULT_DECISION_HUB_SETTINGS;
@@ -167,6 +171,10 @@ export default function FloScreen() {
   const floDataScopeKeyRef = useRef(floDataScopeKey);
   floDataScopeKeyRef.current = floDataScopeKey;
   const [chatScopeKey, setChatScopeKey] = useState<string | null>(null);
+  const volatileLeaseRef = useRef<FloVolatileLease | null>(null);
+  const [volatileRenderOwner, setVolatileRenderOwner] = useState<number | null>(null);
+  const volatileLatestRef = useRef<{ owner: number | null; snapshot: FloVolatileSnapshot }>({ owner: null, snapshot: { messages: [], sources: {}, followups: {}, grounding: {} } });
+  volatileLatestRef.current = { owner: volatileRenderOwner, snapshot: { messages: chat.messages, handledPromptKey: handledPromptRef.current, sources: sourcesByMessageId, followups: followUpsByMessageId, grounding: groundingByMessageId } };
   const activeConversationIdRef = useRef(activeConversationId);
   activeConversationIdRef.current = activeConversationId;
   const now = useMemo(() => new Date(), []);
@@ -200,25 +208,41 @@ export default function FloScreen() {
     streamAbortRef.current = null;
     activeRequestRef.current = null;
     setChatScopeKey(floDataScopeKey);
+    const claimed = floV4Preview && !demoMode ? volatileStore.claim(volatileSession.scope) : null;
+    volatileLeaseRef.current = claimed?.lease ?? null;
+    setVolatileRenderOwner(claimed?.lease.owner ?? null);
+    const restored = claimed?.snapshot;
+    if (restored?.handledPromptKey) handledPromptRef.current = restored.handledPromptKey;
+    const cleanup = () => {
+      cancelled = true;
+      if (!floV4Preview) return;
+      const lease = volatileLeaseRef.current;
+      if (lease && volatileLatestRef.current.owner === lease.owner) volatileStore.save(lease,volatileLatestRef.current.snapshot);
+      volatileStore.release(lease);
+      requestGenerationRef.current = nextFloRequestGeneration(requestGenerationRef.current);
+      streamAbortRef.current?.abort();
+      streamAbortRef.current = null;
+      activeRequestRef.current = null;
+    };
     retryRequestRef.current = null;
     setRetryAllowed(true);
     setInput("");
     setConversations([]);
     setActiveConversationId(null);
     setLastPrompt("");
-    dispatch({ type: "hydrate", messages: demoMode ? storeCaptureChat.messages : [] });
-    setSourcesByMessageId({});
-    setFollowUpsByMessageId({});
+    dispatch({ type: "hydrate", messages: demoMode ? storeCaptureChat.messages : restored?.messages ?? [] });
+    setSourcesByMessageId(restored?.sources ?? {});
+    setFollowUpsByMessageId(restored?.followups ?? {});
     setProposalByMessageId({});
-    setGroundingByMessageId(demoMode
+    setGroundingByMessageId(restored?.grounding ?? (demoMode
       ? { "store-capture-answer": { dataAsOf: "2026-08-25T01:30:00-05:00", coverage: "Complete for this question" } }
-      : {});
+      : {}));
     setOlderMessageCursor(null);
     setChatError(null);
     if (demoMode || floV4Preview || !user?.id || !activeHousehold?.householdId || floAccessLocked) {
       setConversations([]);
       setActiveConversationId(null);
-      return () => { cancelled = true; };
+      return cleanup;
     }
     void listFloConversations(activeHousehold.householdId).then(next => {
       if (cancelled || loadGeneration !== requestGenerationRef.current) return;
@@ -227,8 +251,37 @@ export default function FloScreen() {
     }).catch(() => {
       if (!cancelled && loadGeneration === requestGenerationRef.current) setChatError("Private Flo history is unavailable right now.");
     });
-    return () => { cancelled = true; };
-  }, [activeHousehold?.householdId, demoMode, floAccessLocked, floV4Preview, user?.id]);
+    return cleanup;
+  }, [activeHousehold?.householdId, demoMode, floAccessLocked, floV4Preview, user?.id, volatileSession.scope, volatileSession.epoch, volatileStore]);
+
+  useFocusEffect(useCallback(() => {
+    if (!floV4Preview || demoMode || volatileStore.isCurrent(volatileLeaseRef.current)) return;
+    const claimed = volatileStore.claim(volatileSession.scope);
+    if (!claimed) return;
+    requestGenerationRef.current = nextFloRequestGeneration(requestGenerationRef.current);
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = null;
+    activeRequestRef.current = null;
+    retryRequestRef.current = null;
+    volatileLeaseRef.current = claimed.lease;
+    setVolatileRenderOwner(claimed.lease.owner);
+    setChatScopeKey(floDataScopeKey);
+    if (claimed.snapshot?.handledPromptKey) handledPromptRef.current = claimed.snapshot.handledPromptKey;
+    dispatch({ type: "hydrate", messages: claimed.snapshot?.messages ?? [] });
+    setSourcesByMessageId(claimed.snapshot?.sources ?? {});
+    setFollowUpsByMessageId(claimed.snapshot?.followups ?? {});
+    setGroundingByMessageId(claimed.snapshot?.grounding ?? {});
+    setProposalByMessageId({});
+    setLastPrompt("");
+    setInput("");
+    setChatError(null);
+    setRetryAllowed(true);
+  }, [floV4Preview, demoMode, volatileStore, volatileSession.scope, volatileSession.epoch, floDataScopeKey]));
+
+  useEffect(() => {
+    const lease = volatileLeaseRef.current;
+    if (floV4Preview && chatScopeKey === floDataScopeKey && lease && volatileRenderOwner === lease.owner) volatileStore.save(lease,volatileLatestRef.current.snapshot);
+  }, [chat.messages, sourcesByMessageId, followUpsByMessageId, groundingByMessageId, chatScopeKey, floDataScopeKey, floV4Preview, volatileRenderOwner, volatileStore]);
 
   useEffect(() => {
     let cancelled = false;
@@ -724,6 +777,11 @@ export default function FloScreen() {
     streamAbortRef.current = null;
     activeRequestRef.current = null;
     setChatScopeKey(floDataScopeKeyRef.current);
+    if (floV4Preview) {
+      const lease = volatileStore.reset(volatileLeaseRef.current);
+      volatileLeaseRef.current = lease;
+      setVolatileRenderOwner(lease?.owner ?? null);
+    }
     setInput("");
     setLastPrompt("");
     setRetryAllowed(true);
@@ -924,6 +982,7 @@ export default function FloScreen() {
     const clean = text.trim();
     if (!clean || chat.sending || activeRequestRef.current !== null || historyMutationRef.current || floAccessLocked || !user?.id || !activeHousehold?.householdId) return;
     if (!aiConsentReady || !preferencesReady || chatScopeKey !== floDataScopeKey) return;
+    if (floV4Preview && !volatileStore.isCurrent(volatileLeaseRef.current)) return;
     if (!aiConsentAccepted && !consentOverride) {
       setAiConsentPrompt(clean);
       return;
@@ -934,7 +993,8 @@ export default function FloScreen() {
     const requestUserId = user.id;
     const requestHouseholdId = activeHousehold.householdId;
     const requestScopeKey = `${requestUserId}:${requestHouseholdId}`;
-    const requestIsCurrent = () => isFloRequestGenerationCurrent(requestGeneration, requestGenerationRef.current) && requestScopeKey === floDataScopeKeyRef.current;
+    const requestLease = volatileLeaseRef.current;
+    const requestIsCurrent = () => isFloRequestGenerationCurrent(requestGeneration, requestGenerationRef.current) && requestScopeKey === floDataScopeKeyRef.current && (!floV4Preview || volatileStore.isCurrent(requestLease));
     setInput("");
     setChatError(null);
     setRetryAllowed(true);
@@ -1072,6 +1132,15 @@ export default function FloScreen() {
     if (!historyEnabled) retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: null };
   };
 
+  const openFloSource = (route: string) => {
+    if (floV4Preview) {
+      if (activeRequestRef.current !== null || chat.sending) stopStreaming();
+      const lease = volatileLeaseRef.current;
+      if (lease && volatileLatestRef.current.owner === lease.owner) volatileStore.save(lease,volatileLatestRef.current.snapshot);
+    }
+    router.push(route as never);
+  };
+
   const acceptAiConsent = async () => {
     if (!user?.id || !aiConsentPrompt) return;
     const prompt = aiConsentPrompt;
@@ -1119,7 +1188,7 @@ export default function FloScreen() {
         <FloLogo size={48} />
         <View style={styles.headerText}>
           <Text style={[styles.title, { color: colors.foreground }]}>Ask Flo</Text>
-          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{activeHousehold?.name ?? "Personal household"} · {floV4Preview ? "v4 preview · Read only · History off" : "Your account assistant"}</Text>
+          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{activeHousehold?.name ?? "Personal household"} · {floV4Preview ? "Read only · Chat not saved" : "Your account assistant"}</Text>
           <DataFreshnessLabel compact />
         </View>
         <Feather name="message-circle" size={24} color={colors.primaryForeground} />
@@ -1148,7 +1217,7 @@ export default function FloScreen() {
         ) : null}
         <View style={[styles.bubble, styles.floBubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.bubbleText, { color: colors.foreground }]}>Hi, I&apos;m Flo. What would you like to know?</Text>
-          <Text style={[styles.trustLine, { color: colors.mutedForeground }]}>{floV4Preview ? "Preview answers use the verified read-only financial analysis pipeline. This chat is not saved and cannot propose or make changes." : "AI explanations use verified records from this household. Flo cannot move money, and important plan changes always require your review and confirmation."}</Text>
+          <Text style={[styles.trustLine, { color: colors.mutedForeground }]}>{floV4Preview ? "I can check your records and explain your plan. This chat is not saved, and I won’t make changes here." : "AI explanations use verified records from this household. Flo cannot move money, and important plan changes always require your review and confirmation."}</Text>
         </View>
 
         {chat.messages.map(message => (
@@ -1164,7 +1233,7 @@ export default function FloScreen() {
           >
             <View style={message.thinking ? styles.thinkingRow : undefined}>
               {message.thinking ? <ActivityIndicator size="small" color={colors.primary} /> : null}
-              {message.role === "flo" && !message.thinking ? <FloGroundedAnswer text={humanizeFloText(message.text)} sources={sourcesByMessageId[message.id] ?? []} dataAsOf={groundingByMessageId[message.id]?.dataAsOf} coverage={groundingByMessageId[message.id]?.coverage} partial={groundingByMessageId[message.id]?.partial} caveat={groundingByMessageId[message.id]?.caveat} followUps={followUpsByMessageId[message.id]} proposal={floV4Preview ? null : proposalByMessageId[message.id]} proposalConfirmed={Boolean(!floV4Preview && (proposalByMessageId[message.id]?.status === "confirmed" || (proposalByMessageId[message.id] && confirmedProposalIds.has(proposalByMessageId[message.id]!.id))))} onOpenSource={route => router.push(route as never)} onFollowUp={question => void send(question)} onReviewProposal={proposal => { if (!floV4Preview) openProposalReview(proposal); }} /> : <Text style={[styles.bubbleText, { color: message.role === "user" ? colors.primaryForeground : colors.mutedForeground }]}>{message.text}</Text>}
+              {message.role === "flo" && !message.thinking ? <FloGroundedAnswer text={humanizeFloText(message.text)} sources={sourcesByMessageId[message.id] ?? []} dataAsOf={groundingByMessageId[message.id]?.dataAsOf} coverage={groundingByMessageId[message.id]?.coverage} partial={groundingByMessageId[message.id]?.partial} caveat={groundingByMessageId[message.id]?.caveat} followUps={followUpsByMessageId[message.id]} proposal={floV4Preview ? null : proposalByMessageId[message.id]} proposalConfirmed={Boolean(!floV4Preview && (proposalByMessageId[message.id]?.status === "confirmed" || (proposalByMessageId[message.id] && confirmedProposalIds.has(proposalByMessageId[message.id]!.id))))} onOpenSource={openFloSource} onFollowUp={question => void send(question)} onReviewProposal={proposal => { if (!floV4Preview) openProposalReview(proposal); }} /> : <Text style={[styles.bubbleText, { color: message.role === "user" ? colors.primaryForeground : colors.mutedForeground }]}>{message.text}</Text>}
             </View>
           </View>
         ))}

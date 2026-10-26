@@ -2,7 +2,7 @@
 
 Plan date: October 26, 2026. The owner authorized a phased upgrade, verification before advancing, and publication of each verified phase. Existing configured OpenAI access is reused; the provider and model override remain unchanged.
 
-**Current status: Phases 1 and 2 are live and verified. Phase 3 investigation has started.**
+**Current status: Phases 1 and 2 are live and verified. Phase 3 backend, privacy, navigation, retention and final main/negative browser checks passed. Final independent release review passed; production deployment/postflight remain pending. Phase 3 is not claimed live.**
 
 ## Phase gates
 
@@ -10,7 +10,7 @@ Plan date: October 26, 2026. The owner authorized a phased upgrade, verification
 | --- | --- | --- | --- |
 | 1 — Account accuracy | Resolve named accounts consistently, preserve ambiguity, and distinguish recorded cash, liabilities and unavailable facts | Source/regression checks; actual configured-model evaluations on fixed fictional records; independent answer review; paired function deployment and postflight | Live; verification passed |
 | 2 — Temporary conversation context | Preserve bounded context within a conversation, with fresh financial reads, household/user cleanup, history-off behavior and a clear new-chat reset | Continuation and reset cases; stale-fact rejection; scope changes; limits and history-off checks; independent review; deployment/postflight | Live; verification passed |
-| 3 — Clearer grounded answers | Explain verified facts more clearly, offer contextual follow-ups and navigate to the relevant source screen | Answer/source agreement; useful follow-ups without invented facts; valid source navigation; regression/independent review; deployment/postflight | Planned |
+| 3 — Clearer grounded answers | Explain verified facts more clearly, offer contextual follow-ups and navigate to the relevant source screen | Answer/source agreement; useful follow-ups without invented facts; valid source navigation; regression/independent review; deployment/postflight | Independent release gate passed; production deployment/postflight pending |
 
 Each phase must pass its own gate before the next begins. A synthetic evaluation does not substitute for deployment postflight or the later conversation/UI checks. This plan does not promise competitor-wide feature parity or autonomous financial actions.
 
@@ -103,10 +103,55 @@ Executed checks passed: **428 Flo tests; 1,272 mobile tests; five serial perform
 
 The temporary evaluator used version 14; all 50 runtime files passed candidate parity and five security probes passed. It was retired to **exact inert version 15 with JWT verification enabled**. Retirement checks observed missing-JWT 401 and anonymous-request 404 responses.
 
-The pre-test rollback points are `rollback/prod-before-flo-phase2-20261026-2019` for web source `12bb` / deployment `dpl_6yWcVNzP7tSAYEh291LQM4pc1CNG`, and `rollback/flo-functions-before-phase2-20261026-2019`, snapshot commit `ab8bb1f8f8180ddb10174bfd9679c65b6881d4ae`, for the prior functions and inert evaluator 13. The fresh immediate pre-production points are `rollback/prod-before-flo-phase2-release-20261026-2044` for that same live web artifact and `rollback/flo-functions-before-phase2-release-20261026-2044`, snapshot commit `1e107fbc509981473fa061e096691f1e519cae45`, retaining Flo 38, v4 5 and exact inert evaluator 15. Actual deployed Phase 2 versions remain to be recorded after postflight.
+The pre-test rollback points are `rollback/prod-before-flo-phase2-20261026-2019` for web source `12bb` / deployment `dpl_6yWcVNzP7tSAYEh291LQM4pc1CNG`, and `rollback/flo-functions-before-phase2-20261026-2019`, snapshot commit `ab8bb1f8f8180ddb10174bfd9679c65b6881d4ae`, for the prior functions and inert evaluator 13. The fresh immediate pre-production points are `rollback/prod-before-flo-phase2-release-20261026-2044` for that same live web artifact and `rollback/flo-functions-before-phase2-release-20261026-2044`, snapshot commit `1e107fbc509981473fa061e096691f1e519cae45`, retaining Flo 38, v4 5 and exact inert evaluator 15. Deployed Phase 2 versions and postflight evidence are recorded below.
 
 Phase 2's backend context parameter is optional. Production `flo-chat` version 39 (`30b093ace8f8fb89142a46e5e7c39a97dba0523b098a35c395bd81d7d72c193a`) and `flo-chat-v4` version 6 (`5c9fa69a9188df944e756e40ff01e28d172f960a96f290537665a5daf17c1277`) are ACTIVE with JWT verification retained. All 48 runtime files returned for each exactly match its reviewed candidate. Both functions passed missing-JWT and public-anonymous-JWT 401 checks.
 
 Web source `0cd70ed4f39e381344b831f111c5fc338da93a4a` is READY in production deployment `dpl_DZ8Lyvp2LKGU2wBAqEM71sAeN5Yp` (`flow-ledger-cloud-bxisql1tr-flow-ledger-s-projects.vercel.app`). The canonical domain, www, project Vercel domain and legacy team domain were each inspected and resolve to this same source/deployment. The legacy team alias was explicitly moved after readiness. Production postflight passed registered routes, clean startup HTML, immutable hashed JavaScript, release UI signatures, no-store worker and guide PDF parity, health and missing-resource behavior. Public login browser checks passed at 390/1200 with no writes, overflow or page errors. These public checks do not claim an authenticated customer-data session.
 
 All 18 Expo Doctor checks passed after using the environment's configured network proxy; dependency audit passed with the same three existing ignored high advisories and no dependency or ignore changes. The only runtime stderr entry in the release window was the pre-existing Node `DEP0169` warning from the successful health check; this is not a claim of zero log entries. Phase 2 release verification is complete and Phase 3 may proceed.
+
+## Phase 3 — Grounded detail, follow-ups and temporary session continuity
+
+**Phase 3 final release review passed. Backend/privacy, navigation/retention and main/negative browser checks passed; production deployment/postflight remain pending. Not yet live.** The candidate adds clearer bucket detail, typed follow-up chips and source navigation. Suggestions ask a grounded question or open an allowed app destination; they do not autonomously move money. Connected-account destinations remain read-only.
+
+Bucket answers use canonical amounts rather than inventing totals from an incomplete history. The fictional reference bucket has **500 planned, 125 recorded spent and 375 remaining**; split-purchase history shows **30 assigned to this bucket from a full 100 bank transaction**. The full transaction amount is not treated as the bucket allocation. The evaluation covers purchase history, closed/overspent states, pending/removed activity, invalid allocations, ambiguous names, missing sources and date/year/period scoping. Account and credit follow-ups retain the earlier phases' separation of cash, liabilities and credit.
+
+The Root session provider retains only volatile conversation state across ordinary app navigation, capped at **60 messages and 256,000 bytes**. This UI retention cap is distinct from Phase 2's smaller request-context limits. Scope, epoch and owner leases prevent stale screens or async completions from publishing into a different session. New chat, logout, user, household, budget and role changes clear the session. This is not permanent memory, saved-history expansion or permission to reuse old assistant amounts as facts. No customer financial-data evaluation or new Plaid capability is introduced.
+
+### Phase 3 evidence
+
+| Run | Passed coverage | Actual provider use | Evidence |
+| --- | --- | --- | --- |
+| Combined final | **66 cases / 78 answers**, including **22 new Phase 3 cases** and the retained earlier-phase corpus | 10 provider-backed answers; remaining paths deterministic/static | [Final receipts](flo-phase3-evaluation-20261026-final.json) |
+| Repeat | **10 requests / 12 answers** | One provider-backed answer; remaining paths deterministic/static | [Repeat receipts](flo-phase3-evaluation-20261026-repeat.json) |
+
+All **90 backend answers** passed the independent answer gate. Provider-backed cases exercised the existing configured model; the other answers are not represented as additional model calls. The sanitized receipts contain fixed fictional questions, records, answers, sources and numeric usage metadata, with no bearer credentials, sessions or evaluator wrapper. This evidence is not a signed-in real-customer end-to-end session or proof of unrestricted conversational accuracy.
+
+Source/privacy review passed. Executed checks passed: **455 Flo tests, 1,283 mobile tests, five serial performance checks, 42 volatile-session focused checks, 91 backend focused checks and nine privacy focused checks**; Deno checks, packaging and web export also passed. All workspace types, **217 API tests**, **37 release-fixture tests**, Expo Doctor **18/18**, mobile configuration, guide and artifact checks passed. The dependency audit retains the same three existing ignored high findings; the lockfile and ignore policy are unchanged. Check groups can overlap and are not an additional combined total.
+
+The initial browser run exposed an off-route Settings history handler writing an empty section onto Flo; repeated account-source navigation could show Settings overview instead of account records. A bounded More route-ownership helper now fixes that defect. The repair passed **43 targeted checks and 25 independent SENTINEL checks**. The actual 1,200-pixel partial-source scenario passed three accounts ↔ `/flo` cycles without empty-section pollution.
+
+The final retention receipt independently passed at **390 and 1,200 pixels** against exported entry `entry-be485a94e4cd39b66062a21485565db8.js`, SHA-256 `a499da404cb689740b5bddb555d127f07ccead589e4aa7f01189d417aa19c4c8`. Returning from a source preserved the answer, sources, chips, caveat and prior successful pair. New chat cleared context; partial/interrupted streams stayed excluded, and late old streams could not clear the new conversation. Away-screen household/user A → B → A changes cleared context. Desktop actual sign-out while away followed by sign-in as A, without a reload, also returned with empty context. No page/console errors, transcript browser storage or history writes were recorded. Browser evidence remains local/mock-backed and contains no real customer financial data.
+
+The final main browser matrix passed at 390/1,200 pixels with **32 v4 POST requests**, against the same exported entry/hash above. Normal flows recorded zero console/page errors, overflow, history writes or unhandled non-local traffic. The connected-account negative case passed: held loading and an injected 500 hid the prior record; Retry showed fictional Beta 333; returning to Alpha showed 700. An unavailable balance was not displayed as zero. This injected-failure case recorded **one expected 500 resource-console entry and zero page errors**; it is not reported as a zero-console run. All browsers and test servers were closed, with no listeners remaining on ports 8126/8127.
+
+SENTINEL independently approved the whole Phase 3 production release after reviewing the final browser evidence, privacy boundaries and all 90 answers. Actual deployed artifacts and production postflight must be recorded before Phase 3 is marked complete; the passed local browser and backend gates do not establish that the release is live.
+
+### Phase 3 rollback provenance
+
+The reviewed backend packages remain frozen. All reported source/browser checks passed; independent release review passed; production deployment/postflight remain pending:
+
+| Function package | SHA-256 |
+| --- | --- |
+| `flo-chat` | `655225a64d49b85bf80a521ccdfaa4c870efaf77ae272bf476e5e3986fe9e24f` |
+| `flo-chat-v4` | `c98cddabb9c7861b6834874e5f2f742b1cfcbc6bb5adf12df0edd97d9712b957` |
+
+The protected synthetic evaluator used version 16 with 55 runtime files matching the reviewed package. Five security probes passed. It was retired to exact inert version **17**, retaining JWT verification; missing-JWT requests returned 401 and a valid public anonymous JWT returned 404. The evaluator source is only a static Not found response. No customer data client was constructed for the evaluation.
+
+Fresh pre-production rollback points were pushed and remotely verified:
+
+- `rollback/prod-before-flo-phase3-release-20261026-2204` captures source `0cd70ed4f39e381344b831f111c5fc338da93a4a`, production deployment `dpl_DZ8Lyvp2LKGU2wBAqEM71sAeN5Yp`.
+- `rollback/flo-functions-before-phase3-release-20261026-2204` captures exact prior function/evaluator source at snapshot commit `06daf56a288905a58b8f34eda96f19c60b673f98`: `flo-chat` 39, `flo-chat-v4` 6 and inert evaluator 17.
+
+These are rollback artifacts, not evidence that Phase 3 is already deployed. Earlier phase provenance above remains historical and unchanged.

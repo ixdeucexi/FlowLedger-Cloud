@@ -43,3 +43,13 @@ export async function restoreSavedSettingsSection<T extends string>({
   try { saved = (await read()).settingsSection; } catch { saved = undefined; }
   if (isCurrent()) apply(isSection(saved) ? saved : overview);
 }
+
+/** More and its dedicated wrappers may stay mounted behind another tab.
+ * Browser traversal must never let their old section listener edit that tab. */
+export function settingsSectionOwnsPathname(pathname: string, initialSection?: string): boolean {
+  const owner = initialSection === "accounts" || initialSection === "review" || initialSection === "reports"
+    ? `/${initialSection}`
+    : "/more";
+  const normalized = pathname.replace(/^\/\(tabs\)(?=\/|$)/, "").replace(/\/+$/, "");
+  return normalized === owner;
+}
