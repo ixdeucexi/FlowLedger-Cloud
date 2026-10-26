@@ -496,7 +496,13 @@ test("close deep link reuses explicit keep/Snowball coordinator with scope, retr
   assert.match(source, /return \(\) => \{ mountedBucketScopeRef.current = null; \}/);
   assert.match(source, /expectedSpent: summary.spent/);
   assert.match(source, /expectedRemainder: bucketSnowballOffer.remainder/);
-  assert.match(source, /onConfirm: \(\) => void closeBucketKeepAvailable/);
+  const confirmation = source.match(/onConfirm: (\(\) => closeBucketKeepAvailable\(\{ goal, fromReview \}\)),/);
+  assert.ok(confirmation, "full-close confirmation must return its persistence promise");
+  const goal = { id: "bucket" }, fromReview = true, completion = Promise.resolve(true);
+  let received: unknown;
+  const onConfirm = new Function("closeBucketKeepAvailable", "goal", "fromReview", `return ${confirmation[1]};`)((prompt: unknown) => { received = prompt; return completion; }, goal, fromReview);
+  assert.equal(onConfirm(), completion);
+  assert.deepEqual(received, { goal, fromReview });
   assert.match(source, /finally \{\s*bucketCloseInFlightRef.current = false;\s*setSaving\(false\)/);
 });
 

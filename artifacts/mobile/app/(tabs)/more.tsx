@@ -545,9 +545,33 @@ export default function MoreScreen({
       });
     }
   }, [activeHousehold, router, settingsRestoreGuard, user]);
-  useBackDismiss(activeSettingsSection !== "overview", () =>
-    openSettingsSection("overview"),
-  );
+  // Keep this section's history listener stable while a bucket editor owns
+  // nested entries. Its UI-driven history.back() must not also leave Settings.
+  const bucketOverlayHistoryRef = useRef({ active: false, layers: new Set<string>() });
+  const onBucketOverlayChange = useCallback((active: boolean) => {
+    const owned = bucketOverlayHistoryRef.current;
+    if (active && !owned.active) owned.layers.clear();
+    owned.active = active;
+    if (Platform.OS !== "web" || typeof window === "undefined") return;
+    const layer: unknown = window.history.state?.flowledgerLayer;
+    if (typeof layer !== "string" || !layer.startsWith("flowledger-editor-")) return;
+    owned.layers.add(layer);
+    if (layer.endsWith("-history")) owned.layers.add(layer.slice(0, -"-history".length));
+  }, []);
+  useBackDismiss(activeSettingsSection !== "overview", (event) => {
+    if (activeSettingsSection === "buckets" || activeSettingsSection === "review") {
+      const owned = bucketOverlayHistoryRef.current;
+      const destination = event ? event.state : Platform.OS === "web" && typeof window !== "undefined" ? window.history.state : undefined;
+      const layer: unknown = destination && typeof destination === "object" && "flowledgerLayer" in destination ? destination.flowledgerLayer : undefined;
+      if (owned.active || (typeof layer === "string" && owned.layers.has(layer))) return;
+    }
+    openSettingsSection("overview");
+  });
+  useEffect(() => {
+    if (activeSettingsSection === "buckets" || activeSettingsSection === "review") return;
+    bucketOverlayHistoryRef.current.active = false;
+    bucketOverlayHistoryRef.current.layers.clear();
+  }, [activeSettingsSection]);
   useEffect(() => {
     if (
       !membershipLoading &&
@@ -4014,6 +4038,7 @@ export default function MoreScreen({
           <ReviewCenter
             key={`${user?.id ?? "demo"}:${activeHousehold?.householdId ?? "personal"}:${activeHousehold?.budgetId ?? "personal"}:buckets`}
             viewMode="buckets"
+            onBucketOverlayChange={onBucketOverlayChange}
             onCloseBucketRequestHandled={consumeBucketCloseRequest}
             closeBucketId={Array.isArray(routeParams.closeBucketId) ? routeParams.closeBucketId[0] : routeParams.closeBucketId}
             closeBucketScope={Array.isArray(routeParams.closeBucketScope) ? routeParams.closeBucketScope[0] : routeParams.closeBucketScope}
@@ -4032,6 +4057,7 @@ export default function MoreScreen({
                 closeBucketId={Array.isArray(routeParams.closeBucketId) ? routeParams.closeBucketId[0] : routeParams.closeBucketId}
                 closeBucketScope={Array.isArray(routeParams.closeBucketScope) ? routeParams.closeBucketScope[0] : routeParams.closeBucketScope}
                 closeBucketRequest={Array.isArray(routeParams.closeBucketAt) ? routeParams.closeBucketAt[0] : routeParams.closeBucketAt}
+                onBucketOverlayChange={onBucketOverlayChange}
                 focusTransactionId={requestedReviewTransactionId}
                 initialFilter={requestedReviewFilter}
                 onManageBuckets={scrollToBucketManager}

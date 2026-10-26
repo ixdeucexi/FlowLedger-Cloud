@@ -1,3 +1,5 @@
+import type { PendingPlanMatch } from "./pendingPlanMatches";
+import { isBucketLinkedManualPurchase } from "./bucketPurchases";
 export interface BillMatchTransaction {
   date: string;
   amount: number;
@@ -30,6 +32,9 @@ export interface ManualActivityMatchCandidate {
   debt_applied_amount?: number | null;
   linked_plan_id?: string | null;
   review_status?: string | null;
+  linked_plan_type?: string | null;
+  review_resolution?: string | null;
+  review_allocations?: { type?: string | null; source?: string | null; targetId?: string | null; amount?: number | null }[] | null;
 }
 
 /**
@@ -42,8 +47,11 @@ export function manualActivityMatchCandidates(
   transactionDate: string,
   excludedTransactionId?: string,
   bills: readonly { id: string; is_debt?: boolean | null }[] = [],
+  includeBucketPurchases = false,
+  pendingMatches: readonly PendingPlanMatch[] = [],
 ): BillMatchCandidate[] {
   const monthPrefix = transactionDate.slice(0, 7);
+  const explicitManualIds = new Set(pendingMatches.filter(match => match.status === "ready_review" && match.target_type === "manual" && match.posted_transaction_id === excludedTransactionId).map(match => match.target_id));
   const debtIds = new Set(bills.filter(bill => bill.is_debt).map(bill => bill.id));
   return transactions
     .filter(transaction =>
@@ -52,13 +60,13 @@ export function manualActivityMatchCandidates(
       && !transaction.import_hash
       && !transaction.transfer_group_id
       && transaction.amount < 0
-      && transaction.date.startsWith(monthPrefix)
+      && (transaction.date.startsWith(monthPrefix) || (includeBucketPurchases && explicitManualIds.has(transaction.id) && isBucketLinkedManualPurchase(transaction)))
       && transaction.pending !== true
       && !transaction.removed_at
       && !transaction.deleted_at
       && (!transaction.linked_bill_id || ((transaction.source == null || transaction.source === "manual") && debtIds.has(transaction.linked_bill_id)))
-      && !transaction.linked_plan_id
-      && transaction.review_status !== "matched"
+      && ((!transaction.linked_plan_id && transaction.review_status !== "matched")
+        || (includeBucketPurchases && isBucketLinkedManualPurchase(transaction)))
       && transaction.category !== "Transfer")
     .map(transaction => ({
       billId: transaction.id,

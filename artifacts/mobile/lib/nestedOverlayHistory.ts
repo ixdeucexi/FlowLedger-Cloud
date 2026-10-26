@@ -1,8 +1,10 @@
+type HistoryPop = { state?: any };
+
 type HistoryHost = {
-  history: { state: any; pushState(data: any, title: string, url?: string): void; back(): void };
+  history: { state: any; pushState(data: any, title: string, url?: string): void; replaceState?(data: any, title: string, url?: string): void; back(): void };
   location: { href: string };
-  addEventListener(type: "popstate", callback: () => void): void;
-  removeEventListener(type: "popstate", callback: () => void): void;
+  addEventListener(type: "popstate", callback: (event?: HistoryPop) => void): void;
+  removeEventListener(type: "popstate", callback: (event?: HistoryPop) => void): void;
 };
 
 // Browser traversal is asynchronous. A reopened editor must wait for a closed
@@ -27,13 +29,21 @@ export function createNestedOverlayHistory(host: HistoryHost, onDismiss: () => v
   const editorToken = `flowledger-editor-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let nestedToken: string | null = null, awaitingOwnedPop = false, wantsNested = false, disposed = false, started = false;
   const push = (token: string) => host.history.pushState({ ...(host.history.state ?? {}), flowledgerLayer: token }, "", host.location.href);
-  const openNested = () => { nestedToken = `${editorToken}-history`; push(nestedToken); };
-  const onPop = () => {
+  const openNested = () => {
+    // Routers may remove our marker after an earlier owned traversal. Repair
+    // only an unmarked current editor entry; never replace another layer.
+    if (host.history.state?.flowledgerLayer == null) host.history.replaceState?.({ ...(host.history.state ?? {}), flowledgerLayer: editorToken }, "", host.location.href);
+    nestedToken = `${editorToken}-history`; push(nestedToken);
+  };
+  const onPop = (event?: HistoryPop) => {
     if (disposed) return;
     if (awaitingOwnedPop) {
       awaitingOwnedPop = false;
       // UI Back owns exactly one entry, not the user's next navigation.
-      if (host.history.state?.flowledgerLayer === editorToken) {
+      // An earlier router listener may replace history.state during dispatch.
+      // The event retains the destination snapshot of this exact traversal.
+      const destination = event ? event.state : host.history.state;
+      if (destination?.flowledgerLayer === editorToken) {
         if (wantsNested) openNested();
         return;
       }

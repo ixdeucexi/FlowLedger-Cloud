@@ -3,7 +3,7 @@ import { Platform } from "react-native";
 import { useOverlayActivity } from "./useOverlayActivity";
 import { createNestedOverlayHistory } from "../lib/nestedOverlayHistory";
 
-export function useBackDismiss(active: boolean, onDismiss: () => void, blocksDailyTip = true, nestedActive?: boolean) {
+export function useBackDismiss(active: boolean, onDismiss: (event?: { state?: unknown }) => void, blocksDailyTip = true, nestedActive?: boolean) {
   useOverlayActivity(active && blocksDailyTip);
   const onDismissRef = useRef(onDismiss);
   const nestedController = useRef<ReturnType<typeof createNestedOverlayHistory> | null>(null);
@@ -27,8 +27,8 @@ export function useBackDismiss(active: boolean, onDismiss: () => void, blocksDai
     const token = `flowledger-layer-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     window.history.pushState({ ...(window.history.state ?? {}), flowledgerLayer: token }, "", window.location.href);
 
-    const onPopState = () => {
-      onDismissRef.current();
+    const onPopState = (event: PopStateEvent) => {
+      onDismissRef.current(event);
     };
 
     window.addEventListener("popstate", onPopState);

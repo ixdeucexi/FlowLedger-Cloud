@@ -1,3 +1,5 @@
+import { BucketDetailModal } from "@/components/BucketDetailModal";
+import { showFormError } from "@/lib/formInputAlert";
 import { MatchTypeFilters } from "@/components/MatchTypeFilters";
 import { matchTargetKindLabels, reviewTargetsForKind, selectedMatchTargetKind, type MatchTargetSelection } from "@/lib/matchTargetFilters";
 import { useAuth } from "@/context/AuthContext";
@@ -95,6 +97,7 @@ type ReviewCenterProps = {
   onCloseBucketRequestHandled?: (bucketId: string, scope: string, request: string) => void;
   initialFilter?: "all" | "expense" | "income";
   onManageBuckets?: () => void;
+  onBucketOverlayChange?: (active: boolean) => void;
   subscriptionBillLinks?: Record<string, string>;
 };
 
@@ -105,7 +108,7 @@ type BucketClosePrompt = {
   fromReview?: boolean;
 };
 
-export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketScope, closeBucketRequest, onCloseBucketRequestHandled, focusTransactionId, initialFilter = "all", onManageBuckets, subscriptionBillLinks = EMPTY_SUBSCRIPTION_BILL_LINKS }: ReviewCenterProps = {}) {
+export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketScope, closeBucketRequest, onCloseBucketRequestHandled, focusTransactionId, initialFilter = "all", onManageBuckets, onBucketOverlayChange, subscriptionBillLinks = EMPTY_SUBSCRIPTION_BILL_LINKS }: ReviewCenterProps = {}) {
   const c = useColors();
   const bucketsOnly = viewMode === "buckets";
   const { user } = useAuth();
@@ -150,6 +153,11 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
   const [creatingBucket, setCreatingBucket] = useState(false);
   const standaloneBucketMode = bucketsOnly || creatingBucket;
   const [editingBucket, setEditingBucket] = useState<Goal | null>(null);
+  const [selectedBucketId, setSelectedBucketId] = useState<string | null>(null);
+  useEffect(() => {
+    onBucketOverlayChange?.(Boolean(selectedBucketId));
+    return () => onBucketOverlayChange?.(false);
+  }, [onBucketOverlayChange, selectedBucketId]);
   const [bucketMessage, setBucketMessage] = useState<string | null>(null);
   const [showArchivedBuckets, setShowArchivedBuckets] = useState(false);
   const [skippedIds, setSkippedIds] = useState<string[]>([]);
@@ -178,6 +186,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
   useEffect(() => {
     setCreatingBucket(false);
     setEditingBucket(null);
+    setSelectedBucketId(null);
     setBucketClosePrompt(null);
     setSpendingBucketVisible(false);
     setShowArchivedBuckets(false);
@@ -282,7 +291,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
       });
       candidates.push(...snowballTargets.values());
       const manualTransactionById = new Map(transactions.map(transaction => [transaction.id, transaction]));
-      manualActivityMatchCandidates(transactions, current.date, current.id, bills)
+      manualActivityMatchCandidates(transactions, current.date, current.id, bills, true, pendingPlanMatches)
         .forEach(target => {
           const transaction = manualTransactionById.get(target.billId);
           candidates.push({
@@ -423,7 +432,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
   }, [bucketClosePrompt, bucketPaymentDate, bucketRouteMode, getDailyBalances, getExtraPayment, getRemainingDebtPlanForMonth, previewDebtSnowball, settings.debtPayoffEnabled, settings.forecast_horizon_months, settings.safety_floor, localDay]);
 
   const closeBucketKeepAvailable = async (prompt: BucketClosePrompt) => {
-    if (saving || bucketCloseInFlightRef.current || !canManageCurrentBuckets()) return;
+    if (saving || bucketCloseInFlightRef.current || !canManageCurrentBuckets()) return false;
     bucketCloseInFlightRef.current = true;
     setSaving(true);
     setBucketMessage(null);
@@ -436,8 +445,10 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
       }
       setBucketMessage(`${prompt.goal.name} closed · ${money(result.released)} kept available`);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      return true;
     } catch (error) {
-      Alert.alert("Couldn’t close bucket", error instanceof Error ? error.message : "Please try again.");
+      showFormError("Couldn’t close bucket", error instanceof Error ? error.message : "Please try again.");
+      return false;
     } finally {
       bucketCloseInFlightRef.current = false;
       setSaving(false);
@@ -468,7 +479,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
       title: `Close ${goal.name}?`,
       message: `${money(spent)} was matched from ${money(goal.target_amount)} planned. There is no money left to release.`,
       confirmText: "Close bucket",
-      onConfirm: () => void closeBucketKeepAvailable({ goal, fromReview }),
+      onConfirm: () => closeBucketKeepAvailable({ goal, fromReview }),
     });
   };
 
@@ -533,7 +544,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
       setBucketMessage(`${goal.name} reopened`);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (error) {
-      Alert.alert("Couldn’t reopen bucket", error instanceof Error ? error.message : "Please try again.");
+      showFormError("Couldn’t reopen bucket", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSaving(false);
     }
@@ -554,7 +565,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
           setBucketMessage(`${goal.name} archived`);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (error) {
-          Alert.alert("Couldn’t archive bucket", error instanceof Error ? error.message : "Please try again.");
+          showFormError("Couldn’t archive bucket", error instanceof Error ? error.message : "Please try again.");
         } finally {
           setSaving(false);
         }
@@ -571,7 +582,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
       setBucketMessage(`${goal.name} restored to completed buckets`);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (error) {
-      Alert.alert("Couldn’t restore bucket", error instanceof Error ? error.message : "Please try again.");
+      showFormError("Couldn’t restore bucket", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSaving(false);
     }
@@ -593,7 +604,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
           setBucketMessage(`${goal.name} deleted`);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (error) {
-          Alert.alert("Couldn’t delete bucket", error instanceof Error ? error.message : "Please try again.");
+          showFormError("Couldn’t delete bucket", error instanceof Error ? error.message : "Please try again.");
         } finally {
           setSaving(false);
         }
@@ -740,7 +751,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
     const choice = variance;
     const goal = goals.find(item => item.id === choice.target.id);
     if (!goal) {
-      Alert.alert("Couldn’t close bucket", "This spending bucket is no longer available.");
+      showFormError("Couldn’t close bucket", "This spending bucket is no longer available.");
       return;
     }
     const completed = await resolveTarget(choice.target, "partial");
@@ -996,13 +1007,14 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
             const routed = routedBucketIds.has(goal.id);
             return (
               <View key={goal.id} style={[styles.bucketRow, index > 0 && { borderTopWidth: 1, borderTopColor: c.border }]}>
-                <View style={styles.optionCopy}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Open ${goal.name} bucket`} disabled={saving} onPress={() => setSelectedBucketId(goal.id)} style={[styles.optionCopy, { minHeight: 44, justifyContent: "center" }]}>
                   <View style={styles.bucketNameRow}>
-                    <Text numberOfLines={1} style={[styles.optionTitle, { color: c.foreground }]}>{goal.name}</Text>
+                    <Text numberOfLines={1} style={[styles.optionTitle, { color: c.foreground, flex: 1 }]}>{goal.name}</Text>
                     {goal.closed_at ? <Text style={[styles.closedBadge, { color: c.success, backgroundColor: c.success + "18" }]}>CLOSED</Text> : null}
+                    <Feather name="chevron-right" size={18} color={c.mutedForeground} />
                   </View>
                   <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Planned {money(summary.planned)} · Spent {money(summary.spent)} · {summary.closed ? `Released ${money(summary.released)}` : `${money(summary.remaining)} left`}</Text>
-                </View>
+                </Pressable>
                 {canEditHousehold ? <View style={styles.bucketActions}>
                   {!routed ? (
                     <Pressable
@@ -1068,10 +1080,10 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
               </Pressable>
               {showArchivedBuckets ? archivedBuckets.map(goal => (
                 <View key={goal.id} style={[styles.archivedRow, { borderTopColor: c.border }]}>
-                  <View style={styles.optionCopy}>
-                    <Text numberOfLines={1} style={[styles.optionTitle, { color: c.foreground }]}>{goal.name}</Text>
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Open ${goal.name} bucket`} disabled={saving} onPress={() => setSelectedBucketId(goal.id)} style={[styles.optionCopy, { minHeight: 44, justifyContent: "center" }]}>
+                    <View style={styles.bucketNameRow}><Text numberOfLines={1} style={[styles.optionTitle, { color: c.foreground, flex: 1 }]}>{goal.name}</Text><Feather name="chevron-right" size={18} color={c.mutedForeground} /></View>
                     <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Completed bucket · history preserved</Text>
-                  </View>
+                  </Pressable>
                   {canEditHousehold ? <View style={styles.bucketActions}>
                     <Pressable
                       accessibilityRole="button"
@@ -1296,6 +1308,18 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
         saveLabel="Save bill and match payment"
       />
 
+      {selectedBucketId ? <BucketDetailModal
+        key={`${bucketMutationScope}:${selectedBucketId}`}
+        bucketId={selectedBucketId}
+        suspended={Boolean(bucketClosePrompt)}
+        busy={saving}
+        routed={routedBucketIds.has(selectedBucketId)}
+        onClose={() => setSelectedBucketId(null)}
+        onCloseBucket={openBucketCloseChoices}
+        onConfirmCloseBucket={goal => closeBucketKeepAvailable({ goal, fromReview: false })}
+        onReopenBucket={reopenBucket}
+      /> : null}
+
       <GoalModal
         visible={canEditHousehold && ((spendingBucketVisible && !!current) || Boolean(editingBucket) || creatingBucket)}
         onClose={() => { setSpendingBucketVisible(false); setEditingBucket(null); setCreatingBucket(false); }}
@@ -1316,7 +1340,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
         initialTargetDate={current?.date}
         title={editingBucket ? undefined : standaloneBucketMode ? "Create spending bucket" : "Create bucket and add transaction"}
         saveLabel={editingBucket ? undefined : standaloneBucketMode ? "Create bucket" : "Create bucket and add transaction"}
-        lockedMode={editingBucket ? undefined : "budget"}
+        lockedMode="budget"
         minimumTargetAmount={editingBucket || !current ? undefined : Math.abs(current.amount)}
         minimumTargetDate={editingBucket ? undefined : current?.date}
         hint={editingBucket || standaloneBucketMode ? undefined : "This purchase has already posted. It will be added to the new bucket now; any amount left stays available for future purchases."}

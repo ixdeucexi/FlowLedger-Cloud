@@ -1,3 +1,4 @@
+import { isBucketLinkedManualPurchase } from "./bucketPurchases";
 import { createPlaidTransactionAccountKindClassifier, isActiveTransaction } from "./billMatching";
 import type { LedgerConnectedAccountLike, LedgerTransactionLike } from "./ledgerEngine";
 import type { PendingPlanMatch } from "./pendingPlanMatches";
@@ -8,6 +9,9 @@ type ReplacementTransaction = LedgerTransactionLike & Scope & {
   transfer_group_id?: string | null;
   linked_plan_id?: string | null;
   linked_bill_id?: string | null;
+  linked_plan_type?: string | null;
+  review_resolution?: string | null;
+  review_allocations?: { type?: string | null; source?: string | null; targetId?: string | null; amount?: number | null }[] | null;
 };
 
 function sameAvailableScope(...rows: Scope[]): boolean {
@@ -66,7 +70,7 @@ export function pendingManualReplacementIds<T extends ReplacementTransaction>(
     if (!Number.isFinite(match.planned_amount) || match.planned_amount <= 0 || Math.abs(Math.abs(manual.amount) - match.planned_amount) > 0.005) continue;
     if (!Number.isFinite(match.pending_amount) || match.pending_amount <= 0) continue;
     if (!validDate(manual.date) || !validDate(posted.date) || !validDate(match.pending_transaction_date) || manual.date !== match.occurrence_date || manual.date.slice(0, 7) !== match.pending_transaction_date.slice(0, 7)) continue;
-    if (manual.source === "plaid" || manual.import_hash || manual.transfer_group_id || manual.linked_plan_id || manual.category === "Transfer" || manual.review_status === "matched" || manual.review_status === "transfer") continue;
+    if (manual.source === "plaid" || manual.import_hash || manual.transfer_group_id || ((!isBucketLinkedManualPurchase(manual)) && (manual.linked_plan_id || manual.review_status === "matched")) || manual.category === "Transfer" || manual.review_status === "transfer") continue;
     if (manual.linked_bill_id && ((manual.source != null && manual.source !== "manual") || !debtIds.has(manual.linked_bill_id))) continue;
     if (posted.source !== "plaid" || posted.review_status !== "needs_review" || classifyAccount(posted) !== "checking") continue;
     if (match.pending_account_id && match.pending_account_id !== posted.plaid_account_id) {

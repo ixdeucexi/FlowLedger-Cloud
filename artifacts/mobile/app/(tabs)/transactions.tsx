@@ -1526,6 +1526,8 @@ export function ActivityScreen() {
       matchTx.date,
       matchTx.id,
       bills,
+      true,
+      pendingPlanMatches,
     );
     return rankBillMatches(
       {
@@ -1536,7 +1538,7 @@ export function ActivityScreen() {
       },
       candidates,
     );
-  }, [matchTx, transactions, bills]);
+  }, [matchTx, transactions, bills, pendingPlanMatches]);
   const pendingManualMatchOptions = useMemo(() => {
     if (!pendingMatchTx || pendingMatchTx.amount >= 0) return [];
     return rankBillMatches(

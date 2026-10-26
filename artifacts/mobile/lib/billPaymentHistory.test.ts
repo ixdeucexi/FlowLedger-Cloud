@@ -278,3 +278,74 @@ test("an editor closed while awaiting an old traversal never mounts its history 
   second.setNested(true); second.dispose(); browser.flush();
   assert.equal(browser.position(), 2); assert.equal(browser.listeners.size, 0);
 });
+
+
+test("owned nested Back uses the pop snapshot when an earlier router listener replaces host state", () => {
+  const stack: any[] = [{ route: "base" }]; let index = 0;
+  const listeners = new Set<(event?: { state?: any }) => void>();
+  const host = {
+    history: {
+      get state() { return stack[index]; },
+      pushState(value: any) { stack.splice(index + 1); stack.push(value); index++; },
+      back() {
+        index--;
+        const event = { state: { ...stack[index] } };
+        // Match the actual Expo Router replaceState observed before the
+        // editor listener: the event snapshot retains its owned marker.
+        stack[index] = { id: "router-state" };
+        [...listeners].forEach(listener => listener(event));
+      },
+    },
+    location: { href: "https://example.test/more?section=buckets" },
+    addEventListener(_type: "popstate", listener: (event?: { state?: any }) => void) { listeners.add(listener); },
+    removeEventListener(_type: "popstate", listener: (event?: { state?: any }) => void) { listeners.delete(listener); },
+  };
+  let dismissals = 0;
+  const controller = createNestedOverlayHistory(host, () => { dismissals++; });
+  controller.setNested(true); controller.setNested(false);
+  assert.equal(dismissals, 0); assert.equal(index, 1);
+  controller.dispose(); assert.equal(listeners.size, 0);
+});
+
+test("an explicit null pop snapshot is a real Back target, not a fallback to stale host ownership", () => {
+  let state: any = {}; const listeners = new Set<(event?: { state?: any }) => void>();
+  const host = {
+    history: { get state() { return state; }, pushState(value: any) { state = value; }, back() { [...listeners].forEach(listener => listener({ state: null })); } },
+    location: { href: "https://example.test/more" },
+    addEventListener(_type: "popstate", listener: (event?: { state?: any }) => void) { listeners.add(listener); },
+    removeEventListener(_type: "popstate", listener: (event?: { state?: any }) => void) { listeners.delete(listener); },
+  };
+  let dismissals = 0;
+  const controller = createNestedOverlayHistory(host, () => { dismissals++; });
+  const editor = state; controller.setNested(true);
+  host.history.back = () => { state = editor; [...listeners].forEach(listener => listener({ state: null })); };
+  controller.setNested(false); assert.equal(dismissals, 1);
+  controller.dispose();
+});
+
+
+test("consecutive UI nested cycles retain ownership after the router strips each destination marker", () => {
+  const stack: any[] = [{ route: "base" }]; let index = 0;
+  const listeners = new Set<(event?: { state?: any }) => void>();
+  const host = {
+    history: {
+      get state() { return stack[index]; },
+      pushState(value: any) { stack.splice(index + 1); stack.push(value); index++; },
+      replaceState(value: any) { stack[index] = value; },
+      back() { index--; const event = { state: { ...stack[index] } }; stack[index] = { id: "router-state", preserved: true }; [...listeners].forEach(listener => listener(event)); },
+    },
+    location: { href: "https://example.test/more?section=buckets" },
+    addEventListener(_type: "popstate", listener: (event?: { state?: any }) => void) { listeners.add(listener); },
+    removeEventListener(_type: "popstate", listener: (event?: { state?: any }) => void) { listeners.delete(listener); },
+  };
+  let dismissals = 0;
+  const controller = createNestedOverlayHistory(host, () => { dismissals++; });
+  for (let cycle = 0; cycle < 3; cycle++) {
+    controller.setNested(true); assert.equal(index, 2);
+    if (cycle) assert.equal(stack[1].preserved, true, "repair preserves router-owned state");
+    controller.setNested(false); assert.equal(index, 1); assert.equal(dismissals, 0);
+  }
+  stack[1] = { flowledgerLayer: "unrelated-editor", preserved: true };
+  controller.setNested(true); assert.equal(stack[1].flowledgerLayer, "unrelated-editor", "never overwrite another existing layer");
+  controller.dispose(); assert.equal(listeners.size, 0);
+});

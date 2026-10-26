@@ -16,6 +16,8 @@
     "lib/billCsv.test.ts",
     "lib/scanPreviewRegression.test.ts",
     "lib/deepScanRegression.test.ts",
+    "lib/bucketPurchaseUi.test.ts",
+    "lib/bucketPurchases.test.ts",
     "lib/matchTargetFilters.ts",
     "lib/matchTargetFilters.test.ts",
     "lib/pendingManualReplacement.ts",

@@ -7,7 +7,7 @@ import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Alert, KeyboardAvoidingView, Modal, Platform,
+  KeyboardAvoidingView, Modal, Platform,
   Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from "react-native";
 
@@ -46,15 +46,16 @@ interface Props {
   minimumTargetDate?: string;
   hint?: string;
   skipAffordabilityCheck?: boolean;
+  hideBucketLifecycle?: boolean;
 }
 
 export function GoalModal({
   visible, onClose, onSave, onDelete, editGoal, initialMode = "savings", initialName = "", initialTargetAmount,
-  initialTargetDate, title, saveLabel, lockedMode, minimumTargetAmount, minimumTargetDate, hint, skipAffordabilityCheck = false,
+  initialTargetDate, title, saveLabel, lockedMode, minimumTargetAmount, minimumTargetDate, hint, skipAffordabilityCheck = false, hideBucketLifecycle = false,
 }: Props) {
   const c = useColors();
   const isDesktop = useDesktopExperience();
-  const { getDailyBalances, settings, goals, canEditHousehold, activeHousehold } = useBudget();
+  const { getDailyBalances, settings, goals, canEditHousehold, activeHousehold, previewBucketBudgetSafetyStop } = useBudget();
   const router = useRouter();
   const { user } = useAuth();
   const closeNavigationRef = useRef(false);
@@ -77,6 +78,7 @@ export function GoalModal({
   const [goalMode, setGoalMode] = useState<"savings" | "budget">("savings");
   const [targetDate, setTargetDate] = useState(""); // YYYY-MM-DD
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<ConfirmActionOptions | null>(null);
   const savingRef = useRef(false);
   const [pendingGoal, setPendingGoal] = useState<Omit<Goal, "id" | "created_at"> | null>(null);
@@ -98,6 +100,7 @@ export function GoalModal({
 
   useEffect(() => {
     closeNavigationRef.current = false;
+    setSaveError(null);
     setConfirmation(null);
     setPendingGoal(null);
     setSafetyStop(null);
@@ -122,13 +125,14 @@ export function GoalModal({
     if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
+    setSaveError(null);
     try {
-      await onSave(payload);
+      await onSave(editGoal ? { ...payload, id: editGoal.id, created_at: editGoal.created_at } : payload);
       setPendingGoal(null);
       setSafetyStop(null);
       onClose();
     } catch (error) {
-      Alert.alert("Couldn’t save", error instanceof Error ? error.message : "Please try again.");
+      setSaveError(error instanceof Error ? error.message : "Couldn’t save. Please try again.");
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -141,11 +145,11 @@ export function GoalModal({
     const savedAmount = current.trim() ? parseMoneyInput(current) : 0;
     if (t === null || t <= 0 || (goalMode === "savings" && savedAmount === null)) { showFormError("Check amounts", "Enter a positive target and a nonnegative saved amount with up to two decimal places."); return; }
     if (!name.trim() || !targetDate) return;
-    if (minimumTargetAmount !== undefined && t + 0.005 < minimumTargetAmount) {
-      Alert.alert(
-        "Bucket amount is too small",
-        `Enter at least $${minimumTargetAmount.toFixed(2)} to include this posted transaction. You can enter more to leave money for future purchases.`,
-      );
+    const minimumBucketAmount = Math.max(minimumTargetAmount ?? 0, editGoal?.goal_type === "planned_expense" ? editGoal.current_amount : 0);
+    if (t + 0.005 < minimumBucketAmount) {
+      showFormError("Bucket amount is too small", editGoal?.goal_type === "planned_expense"
+        ? `The budget must be at least $${minimumBucketAmount.toFixed(2)} to cover purchases already recorded.`
+        : `Enter at least $${minimumBucketAmount.toFixed(2)} to include this posted transaction. You can enter more for future purchases.`);
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -160,6 +164,10 @@ export function GoalModal({
       closed_at: goalMode === "budget" ? editGoal?.closed_at : undefined,
       closed_by: goalMode === "budget" ? editGoal?.closed_by : undefined,
     };
+    if (!skipAffordabilityCheck && editGoal?.goal_type === "planned_expense" && goalMode === "budget" && typeof previewBucketBudgetSafetyStop === "function") {
+      const warning = previewBucketBudgetSafetyStop({ ...editGoal, ...data });
+      if (warning) { setPendingGoal(data); setSafetyStop(warning); return; }
+    }
     if (!skipAffordabilityCheck && !editGoal && goalMode === "budget") {
       const warning = buildBucketSafetyStop({
         name: data.name, amount: data.target_amount, targetDate: data.target_date,
@@ -303,6 +311,7 @@ export function GoalModal({
             </View>
 
             {/* ── Save ── */}
+            {saveError ? <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={{ color: c.destructive, fontFamily: "Inter_600SemiBold", fontSize: 13, lineHeight: 19, marginTop: 14 }}>{saveError}</Text> : null}
             <Pressable
               disabled={saving}
               onPress={handleSave}
@@ -316,7 +325,7 @@ export function GoalModal({
               </Text>
             </Pressable>
 
-            {canCloseBucket ? <>
+            {canCloseBucket && !hideBucketLifecycle ? <>
               <Pressable accessibilityRole="button" accessibilityLabel={`Close ${currentBucket.name} bucket`} disabled={saving} onPress={openCloseBucket} style={[styles.deleteBtn, { borderColor: c.primary, opacity: saving ? 0.5 : 1 }]}>
                 <Feather name="check-circle" size={16} color={c.primary} />
                 <Text style={[styles.deleteBtnText, { color: c.primary }]}>Close bucket</Text>

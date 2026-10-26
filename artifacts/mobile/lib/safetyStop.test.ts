@@ -80,17 +80,18 @@ import { transpileModule, ModuleKind } from "typescript";
 function goalSaveHarness(reject = false) {
   const source = readFileSync("components/GoalModal.tsx", "utf8");
   const body = source.slice(source.indexOf("  const saveGoal ="), source.indexOf("  const handleSave ="));
-  const state = { busy: false, saving: false, pending: { name: "Exact payload" } as object | null, warning: {} as object | null, calls: [] as object[], closes: 0, errors: 0 };
+  const state = { busy: false, saving: false, pending: { name: "Exact payload" } as object | null, warning: {} as object | null, calls: [] as object[], closes: 0, errors: 0, saveError: null as string | null };
   let finish!: () => void;
   const promise = new Promise<void>((resolve, rejectSave) => { finish = () => reject ? rejectSave(new Error("offline")) : resolve(); });
   const bindings = {
+    editGoal: null,
+    setSaveError: (value: string | null) => { state.saveError = value; if (value !== null) state.errors++; },
     savingRef: { get current() { return state.busy; }, set current(value: boolean) { state.busy = value; } },
     setSaving: (value: boolean) => { state.saving = value; },
     setPendingGoal: (value: object | null) => { state.pending = value; },
     setSafetyStop: (value: object | null) => { state.warning = value; },
     onSave: (payload: object) => { state.calls.push(payload); return promise; },
     onClose: () => { state.closes++; },
-    Alert: { alert: () => { state.errors++; } },
   };
   const js = transpileModule(body, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
   const save = new Function(...Object.keys(bindings), `${js}; return saveGoal;`)(...Object.values(bindings));
@@ -120,7 +121,9 @@ test("failed bucket override keeps pending payload and warning for retry", async
   assert.equal(state.pending, payload);
   assert.ok(state.warning);
   assert.equal(state.errors, 1);
+  assert.equal(state.saveError, "offline");
   assert.equal(state.busy, false);
+  assert.equal(state.saving, false);
 });
 
 test("bucket warning lifecycle retains draft, resets on reopen, and owns one nested back listener", () => {
@@ -132,7 +135,9 @@ test("bucket warning lifecycle retains draft, resets on reopen, and owns one nes
   assert.match(source, /if \(safetyStop\) keepEditing\(\)/);
   assert.match(source, /useBackDismiss\(visible, requestClose, true, Boolean\(safetyStop\)\)/);
   assert.match(source, /manageBackHistory=\{false\}/);
-  assert.match(source, /useEffect\(\(\) => \{\s*closeNavigationRef.current = false;\s*setConfirmation\(null\);\s*setPendingGoal\(null\);\s*setSafetyStop\(null\);/);
+  assert.match(source, /useEffect\(\(\) => \{\s*closeNavigationRef.current = false;\s*setSaveError\(null\);\s*setConfirmation\(null\);\s*setPendingGoal\(null\);\s*setSafetyStop\(null\);/);
   assert.match(source, /!skipAffordabilityCheck && !editGoal && goalMode === "budget"/);
+  assert.match(source, /!skipAffordabilityCheck && editGoal\?\.goal_type === "planned_expense" && goalMode === "budget" && typeof previewBucketBudgetSafetyStop === "function"/);
+  assert.match(source, /previewBucketBudgetSafetyStop\(\{ \.\.\.editGoal, \.\.\.data \}\)/);
   assert.doesNotMatch(source, /setTimeout|BucketAffordabilityModal/);
 });

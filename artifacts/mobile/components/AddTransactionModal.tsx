@@ -30,6 +30,7 @@ import { localDateString } from "@/lib/dateLabels";
 import { type SafetyStopWarning } from "@/lib/safetyStop";
 import type { ConfirmActionOptions } from "@/lib/confirmAction";
 import { transactionDebtId } from "@/lib/transactionDebt";
+import { spendingBucketSummary } from "@/lib/spendingBuckets";
 
 interface Props {
   visible: boolean;
@@ -40,14 +41,18 @@ interface Props {
   editTx?: Transaction | null;
   defaultDate?: string;
   initialValues?: Partial<Omit<Transaction, "id">>;
-  creationContext?: "pending_charge";
+  creationContext?: "pending_charge" | "bucket_purchase";
+  bucketId?: string;
 }
 
-export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDeleteTransfer, editTx, defaultDate, initialValues, creationContext }: Props) {
+export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDeleteTransfer, editTx, defaultDate, initialValues, creationContext, bucketId }: Props) {
   const c = useColors();
   const isDesktop = useDesktopExperience();
-  useBackDismiss(visible, onClose);
-  const { categories, accounts, bills, transactions, previewTransactionSafetyStop } = useBudget();
+  const { categories, accounts, bills, transactions, goals, previewTransactionSafetyStop, previewBucketPurchaseSafetyStop } = useBudget();
+  const bucketPurchase = creationContext === "bucket_purchase";
+  const bucket = bucketPurchase ? goals?.find(goal => goal.id === bucketId) : undefined;
+  const bucketName = bucket?.name;
+  const bucketRemaining = bucket ? spendingBucketSummary(bucket).remaining : 0;
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Other");
   const [note, setNote] = useState("");
@@ -58,6 +63,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
   const [transferToAccountId, setTransferToAccountId] = useState<string | undefined>();
   const [linkedBillId, setLinkedBillId] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const savingRef = useRef(false);
   const [confirmation, setConfirmation] = useState<ConfirmActionOptions | null>(null);
   const [safetyStop, setSafetyStop] = useState<SafetyStopWarning | null>(null);
@@ -76,7 +82,15 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
     ? bills.find(bill => bill.id === linkedBillId && bill.is_debt)
     : undefined;
 
+  const requestClose = () => {
+    if (savingRef.current) return;
+    if (safetyStop) { setSafetyStop(null); setPendingStandardTx(null); }
+    else onClose();
+  };
+  useBackDismiss(visible, requestClose, true, Boolean(safetyStop));
+
   useEffect(() => {
+    setSaveError(null);
     setConfirmation(null);
     setPendingStandardTx(null);
     setSafetyStop(null);
@@ -98,7 +112,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
       setCategory(initialValues?.category || "Other");
       setNote(initialValues?.note || "");
       setDate(init);
-      setIsExpense(creationContext === "pending_charge" || !hasInitialAmount || initialAmount < 0);
+      setIsExpense(creationContext === "pending_charge" || bucketPurchase || !hasInitialAmount || initialAmount < 0);
       setIsTransfer(false);
       setAccountId(
         initialValues?.account_id ??
@@ -109,21 +123,23 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
       setTransferToAccountId(accounts.filter(account => account.is_active)[1]?.id);
       setLinkedBillId(undefined);
     }
-  }, [editTx, visible, defaultDate, accounts, transferMate, editDebtId, initialValues?.amount, initialValues?.category, initialValues?.note, initialValues?.date, initialValues?.account_id, creationContext]);
+  }, [editTx, visible, defaultDate, accounts, transferMate, editDebtId, initialValues?.amount, initialValues?.category, initialValues?.note, initialValues?.date, initialValues?.account_id, creationContext, bucketPurchase]);
 
-  const previewSafetyStop = (tx: Omit<Transaction, "id"> | Transaction) => previewTransactionSafetyStop(tx, editTx?.id);
+  const previewSafetyStop = (tx: Omit<Transaction, "id"> | Transaction) => bucketPurchase && bucketId
+    ? previewBucketPurchaseSafetyStop(bucketId, tx) : previewTransactionSafetyStop(tx, editTx?.id);
 
   const saveStandardTransaction = async (payload: Omit<Transaction, "id"> | Transaction) => {
     if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
+    setSaveError(null);
     try {
       await onSave(payload);
       setPendingStandardTx(null);
       setSafetyStop(null);
       onClose();
     } catch (error) {
-      Alert.alert("Could not save transaction", error instanceof Error ? error.message : "Please try again.");
+      setSaveError(error instanceof Error ? error.message : "Could not save this transaction. Please try again.");
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -134,6 +150,10 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
     if (savingRef.current || saving) return;
     const parsed = parseMoneyInput(amount);
     if (parsed === null || parsed <= 0) { showFormError("Check amount", "Enter a positive amount with up to two decimal places. Use commas only for thousands, such as 1,200.50."); return; }
+    if (bucketPurchase && (!bucket || bucket.closed_at || bucket.archived_at || parsed > bucketRemaining + 0.005)) {
+      setSaveError(!bucket || bucket.closed_at || bucket.archived_at ? "Reopen this bucket before adding a purchase." : "This purchase is more than the money left. Adjust the bucket budget first.");
+      return;
+    }
     if (isTransfer && (!accountId || !transferToAccountId || accountId === transferToAccountId)) {
       Alert.alert("Choose two accounts", "Pick a different from and to account for this transfer.");
       return;
@@ -182,12 +202,12 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
       return;
     }
     const data: Omit<Transaction, "id"> = {
-      amount: isExpense ? -parsed : parsed,
+      amount: bucketPurchase || isExpense ? -parsed : parsed,
       category: isExpense ? category : "Income",
       note: note.trim(),
       date,
       account_id: accountId,
-      linked_bill_id: isExpense ? linkedBillId : undefined,
+      linked_bill_id: !bucketPurchase && isExpense ? linkedBillId : undefined,
     };
     const payload = editTx ? { ...editTx, ...data, id: editTx.id } : data;
     const warning = creationContext === "pending_charge" ? null : previewSafetyStop(payload);
@@ -234,18 +254,20 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
       visible={visible}
       animationType={isDesktop ? "fade" : "slide"}
       transparent
-      onRequestClose={() => confirmation ? setConfirmation(null) : onClose()}
+      onRequestClose={() => confirmation ? setConfirmation(null) : requestClose()}
     >
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.overlay, isDesktop && DESKTOP_MODAL_OVERLAY]}>
-        <Pressable accessibilityLabel="Close transaction editor" onPress={onClose} style={StyleSheet.absoluteFillObject} />
+        <Pressable accessibilityLabel="Close transaction editor" onPress={requestClose} disabled={saving} style={StyleSheet.absoluteFillObject} />
         <View style={[styles.container, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_REGULAR]}>
           <View style={styles.header}>
-            <Text style={[styles.title, { color: c.foreground }]}>{editTx ? "Edit Transaction" : creationContext === "pending_charge" ? "Create Transaction" : "Add Transaction"}</Text>
-            <Pressable onPress={onClose} hitSlop={8}><Feather name="x" size={22} color={c.mutedForeground} /></Pressable>
+            <Text style={[styles.title, { color: c.foreground }]}>{editTx ? "Edit Transaction" : bucketPurchase ? "Record purchase" : creationContext === "pending_charge" ? "Create Transaction" : "Add Transaction"}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close transaction editor" disabled={saving} onPress={requestClose} style={{ minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" }}><Feather name="x" size={22} color={c.mutedForeground} /></Pressable>
           </View>
 
           <ScrollView showsVerticalScrollIndicator={isDesktop} keyboardShouldPersistTaps="handled">
-            {creationContext === "pending_charge" ? (
+            {bucketPurchase ? (
+              <View style={[styles.pendingContext, { backgroundColor: c.primary + "12", borderColor: c.primary + "45" }]}><Feather name="shopping-bag" size={18} color={c.primary} /><Text style={[styles.pendingContextText, { color: c.foreground }]}>This purchase uses the money set aside in {bucketName || "this bucket"}. It is recorded once in Activity and added to the bucket.</Text></View>
+            ) : creationContext === "pending_charge" ? (
               <View style={[styles.pendingContext, { backgroundColor: c.primary + "12", borderColor: c.primary + "45" }]}>
                 <Feather name="clock" size={18} color={c.primary} />
                 <Text style={[styles.pendingContextText, { color: c.foreground }]}>This reserves the expected charge now. When it posts, FlowLedger will replace this entry so it is not counted twice.</Text>
@@ -276,6 +298,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
             <Text style={labelStyle}>Amount ($)</Text>
             <TextInput style={inputStyle} value={amount} onChangeText={setAmount} placeholder="0.00" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
 
+            {bucketPurchase ? <Text style={[styles.helpText, { color: c.mutedForeground, marginTop: 7 }]}>${bucketRemaining.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} left in this bucket</Text> : null}
             <DatePickerField label="Date" value={date} onChange={setDate} placeholder="Choose transaction date" />
 
             <Text style={labelStyle}>{!isTransfer && !isExpense ? "Income name" : "Note"}</Text>
@@ -302,7 +325,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
               </View>
             </>}
 
-            {creationContext !== "pending_charge" && !isTransfer && isExpense && (activeDebts.length > 0 || selectedDebt) && <>
+            {!bucketPurchase && creationContext !== "pending_charge" && !isTransfer && isExpense && (activeDebts.length > 0 || selectedDebt) && <>
               <Text style={labelStyle}>Apply Toward Debt (Optional)</Text>
               <Text style={[styles.helpText, { color: c.mutedForeground }]}>Reduces the debt on this date.</Text>
               <View style={styles.categoryGrid}>
@@ -350,12 +373,15 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
               </View>
             </>}
 
+            {saveError ? <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={[styles.helpText, { color: c.destructive, marginTop: 14 }]}>{saveError}</Text> : null}
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={bucketPurchase ? "Save bucket purchase" : undefined}
               disabled={saving}
               onPress={handleSave}
               style={({ pressed }) => [styles.saveBtn, { backgroundColor: c.primary, borderRadius: colors.radius, opacity: saving ? 0.55 : pressed ? 0.85 : 1 }]}
             >
-              <Text style={[styles.saveBtnText, { color: c.primaryForeground }]}>{saving ? "Saving…" : editTx ? "Update" : isTransfer ? "Add Transfer" : creationContext === "pending_charge" ? "Create Transaction" : "Add Transaction"}</Text>
+              <Text style={[styles.saveBtnText, { color: c.primaryForeground }]}>{saving ? "Saving…" : editTx ? "Update" : bucketPurchase ? "Save purchase" : isTransfer ? "Add Transfer" : creationContext === "pending_charge" ? "Create Transaction" : "Add Transaction"}</Text>
             </Pressable>
 
             {editTx && onDelete && (
@@ -370,6 +396,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
           </ScrollView>
         </View>
         <FloSafetyStopModal
+          manageBackHistory={false}
           visible={Boolean(safetyStop)}
           warning={safetyStop}
           onKeepEditing={() => {

@@ -100,7 +100,13 @@ test("Review Center maps manual candidates in linear work while preserving debt 
   }
   const candidates: unknown[] = [];
   const js = transpileModule(body, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
-  new Function("transactions", "manualActivityMatchCandidates", "current", "bills", "candidates", "Map", js)(transactions, () => targets, { date: "2026-10-23", id: "posted" }, [], candidates, CountedMap);
+  const bills: unknown[] = [], pendingPlanMatches = [{ id: "explicit-pending-link" }];
+  const manualCandidates = (...args: unknown[]) => {
+    assert.equal(args[0], transactions); assert.equal(args[1], "2026-10-23"); assert.equal(args[2], "posted");
+    assert.equal(args[3], bills); assert.equal(args[4], true); assert.equal(args[5], pendingPlanMatches);
+    return targets;
+  };
+  new Function("transactions", "manualActivityMatchCandidates", "current", "bills", "pendingPlanMatches", "candidates", "Map", js)(transactions, manualCandidates, { date: "2026-10-23", id: "posted" }, bills, pendingPlanMatches, candidates, CountedMap);
   assert.equal(indexed, 20000); assert.equal(lookups, 1000);
   assert.deepEqual(candidates, targets.map((target, index) => ({ type: "manual", id: target.billId, name: target.name, category: target.category, plannedAmount: 50, occurrenceDate: "2026-10-23", isDebt: Boolean(transactions[19000 + index].linked_bill_id || transactions[19000 + index].debt_applied_bill_id) })));
 });

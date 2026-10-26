@@ -1,3 +1,6 @@
+import { previewBucketPurchase, previewBucketBudget } from "@/lib/bucketPurchasePreview";
+import { bucketPurchaseRpc } from "@/lib/bucketPurchaseApi";
+import { bucketPurchaseAllocation, bucketPurchaseTransaction, isBucketLinkedManualPurchase, type BucketPurchaseIntent } from "@/lib/bucketPurchases";
 import { previewTransactionSafetyStop as previewCanonicalTransactionSafetyStop } from "@/lib/transactionSafetyStop";
 import type { SafetyStopWarning } from "@/lib/safetyStop";
 import type {
@@ -391,6 +394,11 @@ interface BudgetContextType {
   deleteIncome: (id: string) => Promise<void>;
   getMonthlyIncome: (month?: number, year?: number) => number;
   getIncomeOccurrencesInMonth: (month: number, year: number) => { income: IncomeItem; days: number[]; effectiveAmount: number }[];
+
+  addBucketPurchase: (input: BucketPurchaseIntent) => Promise<string>;
+  removeBucketPurchase: (transactionId: string) => Promise<void>;
+  previewBucketPurchaseSafetyStop: (bucketId: string, transaction: Omit<Transaction, "id"> | Transaction) => SafetyStopWarning | null;
+  previewBucketBudgetSafetyStop: (goal: Goal) => SafetyStopWarning | null;
 
   addGoal: (goal: Omit<Goal, "id" | "created_at">) => Promise<string>;
   updateGoal: (goal: Goal) => Promise<void>;
@@ -3268,10 +3276,19 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     () => createFinancialProjectionReader(financialProjectionSnapshot, { now: () => new Date(), timeZone: householdTimeZone }),
     [financialProjectionSnapshot, householdTimeZone],
   );
-  const previewTransactionSafetyStop = useCallback((transaction: Omit<Transaction, "id"> | Transaction, existingId?: string) =>
-    previewCanonicalTransactionSafetyStop({ snapshot: financialProjectionSnapshot, transaction, existingId, now: new Date(), timeZone: householdTimeZone }),
-    [financialProjectionSnapshot, householdTimeZone],
-  );
+  const previewTransactionSafetyStop = useCallback((transaction: Omit<Transaction, "id"> | Transaction, existingId?: string) => {
+    const existing = existingId ? transactions.find(item => item.id === existingId) : undefined;
+    if (existing?.linked_plan_type === "goal" && goals.some(goal => goal.id === existing.linked_plan_id && goal.goal_type === "planned_expense")) {
+      return previewBucketPurchase({ snapshot: financialProjectionSnapshot, bucketId: existing.linked_plan_id!, transaction: { ...transaction, id: existingId! }, now: new Date(), timeZone: householdTimeZone });
+    }
+    return previewCanonicalTransactionSafetyStop({ snapshot: financialProjectionSnapshot, transaction, existingId, now: new Date(), timeZone: householdTimeZone });
+  }, [financialProjectionSnapshot, householdTimeZone, transactions, goals]);
+  const previewBucketPurchaseSafetyStop = useCallback((bucketId: string, transaction: Omit<Transaction, "id"> | Transaction) =>
+    previewBucketPurchase({ snapshot: financialProjectionSnapshot, bucketId, transaction, now: new Date(), timeZone: householdTimeZone }),
+    [financialProjectionSnapshot, householdTimeZone]);
+  const previewBucketBudgetSafetyStop = useCallback((goal: Goal) =>
+    previewBucketBudget({ snapshot: financialProjectionSnapshot, goal, now: new Date(), timeZone: householdTimeZone }),
+    [financialProjectionSnapshot, householdTimeZone]);
   const {
     getOverride,
     getAmount,
@@ -3956,6 +3973,27 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     assertCanEditHousehold("update a transaction");
     const existing = transactions.find(item => item.id === tx.id);
+    const purchaseBucket = goals.find(goal => goal.id === existing?.linked_plan_id && existing?.linked_plan_type === "goal" && goal.goal_type === "planned_expense");
+    if (existing && purchaseBucket) {
+      if (tx.linked_bill_id || tx.transfer_group_id || tx.amount >= 0) throw new Error("Remove this purchase from its bucket before changing its transaction type");
+      const payload = { amount: tx.amount, date: tx.date, category: tx.category, note: tx.note, account_id: tx.account_id ?? null };
+      if (demoMode) {
+        const delta = Math.abs(tx.amount) - bucketPurchaseAllocation(existing, purchaseBucket.id);
+        if (delta > spendingBucketSummary(purchaseBucket).remaining + 0.005) throw new Error("Adjust the bucket budget before increasing this purchase");
+        setTransactions(previous => previous.map(item => item.id === tx.id ? bucketPurchaseTransaction(tx, purchaseBucket) : item));
+        setGoals(previous => previous.map(goal => goal.id === purchaseBucket.id ? { ...goal, current_amount: roundMoney(goal.current_amount + delta) } : goal));
+        return;
+      }
+      const scope = householdScopeRef.current;
+      const persist: () => Promise<void> = () => runTrackedFinancialMutation(async () => {
+        const result = await bucketPurchaseRpc("update_bucket_purchase", { p_transaction_id: tx.id, p_bucket_id: purchaseBucket.id, p_expected_amount: existing.amount, p_transaction: payload }, tx.id, purchaseBucket.id);
+        if (userScopeIdRef.current === user.id && householdScopeRef.current?.householdId === scope?.householdId && householdScopeRef.current?.budgetId === scope?.budgetId) {
+          setTransactions(previous => previous.map(item => item.id === tx.id ? result.transaction : item));
+          setGoals(previous => previous.map(goal => goal.id === result.goal.id ? result.goal : goal));
+        }
+      }, persist);
+      await persist(); return;
+    }
     const editedTransaction: Transaction = { ...tx, user_edited_at: new Date().toISOString() };
     const applyOptimisticEdit = () => {
       setTransactions(prev => prev.map(item => item.id === tx.id ? editedTransaction : item));
@@ -3992,7 +4030,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       }
     }, persist));
     await persist();
-  }, [user, transactions, syncDebtTransactionsAndRefresh, demoMode, assertCanEditHousehold, runTrackedFinancialMutation]);
+  }, [user, transactions, goals, syncDebtTransactionsAndRefresh, demoMode, assertCanEditHousehold, runTrackedFinancialMutation]);
 
   const refreshBillMatchData = useCallback(async () => {
     if (!user || demoMode) return;
@@ -4024,6 +4062,72 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       result: decision.result ?? {},
     })));
   }, [user, demoMode, applyHouseholdSelect, loadAllTransactions]);
+
+  const demoBucketPurchaseRestores = useRef(new Map<string, Transaction>());
+  const demoBucketReplacements = useRef(new Map<string, { manual: Transaction; bank: Transaction }>());
+  const addBucketPurchase = useCallback(async (input: BucketPurchaseIntent): Promise<string> => {
+    if (!user) throw new Error("Sign in to add a purchase");
+    assertCanEditHousehold("add a bucket purchase");
+    const bucket = goals.find(goal => goal.id === input.bucketId && goal.goal_type === "planned_expense");
+    const existing = transactions.find(transaction => transaction.id === input.transactionId);
+    if (!bucket || bucket.closed_at || bucket.archived_at) throw new Error("Choose an open spending bucket");
+    const transaction: Transaction | undefined = input.transaction
+      ? { ...input.transaction, id: input.transactionId, source: "manual" } : existing;
+    if (!transaction || transaction.amount >= 0 || !Number.isFinite(transaction.amount)) throw new Error("Choose a money-out transaction");
+    if (demoMode) {
+      if (existing && bucketPurchaseAllocation(existing, bucket.id) > 0) return existing.id;
+      if (Math.abs(transaction.amount) > spendingBucketSummary(bucket).remaining + 0.005) throw new Error("This purchase exceeds the money left. Adjust the bucket budget first");
+      if (existing?.linked_plan_id || existing?.linked_bill_id || existing?.review_status === "matched") throw new Error("This transaction is already assigned");
+      demoBucketPurchaseRestores.current.set(transaction.id, transaction);
+      setTransactions(previous => [...previous.filter(item => item.id !== transaction.id), bucketPurchaseTransaction(transaction, bucket)]);
+      setGoals(previous => previous.map(goal => goal.id === bucket.id ? { ...goal, current_amount: roundMoney(goal.current_amount + Math.abs(transaction.amount)) } : goal));
+      return transaction.id;
+    }
+    const scope = householdScopeRef.current;
+    const scopeIsCurrent = () => userScopeIdRef.current === user.id && householdScopeRef.current?.householdId === scope?.householdId && householdScopeRef.current?.budgetId === scope?.budgetId;
+    const persist: () => Promise<string> = () => runTrackedFinancialMutation(async () => {
+      const result = await bucketPurchaseRpc("add_bucket_purchase", { p_bucket_id: bucket.id, p_transaction_id: transaction.id,
+        p_expected_amount: Math.abs(transaction.amount), p_expected_date: transaction.date,
+        p_new_transaction: input.transaction ? { ...input.transaction, account_id: input.transaction.account_id ?? null } : null }, transaction.id, bucket.id);
+      if (scopeIsCurrent()) {
+        setTransactions(previous => [...previous.filter(item => item.id !== result.transaction.id), result.transaction]);
+        setGoals(previous => previous.map(goal => goal.id === result.goal.id ? result.goal : goal));
+      }
+      return result.transaction.id;
+    }, persist);
+    return persist();
+  }, [user, goals, transactions, demoMode, assertCanEditHousehold, runTrackedFinancialMutation]);
+  const removeBucketPurchase = useCallback(async (transactionId: string) => {
+    if (!user) throw new Error("Sign in to remove a purchase");
+    assertCanEditHousehold("remove a bucket purchase");
+    const transaction = transactions.find(item => item.id === transactionId);
+    const bucket = goals.find(goal => goal.id === transaction?.linked_plan_id && goal.goal_type === "planned_expense");
+    if (!transaction || !bucket || bucket.closed_at || bucket.archived_at) throw new Error("Reopen the bucket before removing a purchase");
+    if (demoMode) {
+      const replacement = demoBucketReplacements.current.get(transaction.id);
+      if (replacement) {
+        setTransactions(previous => [...previous.filter(item => item.id !== transaction.id && item.id !== replacement.manual.id), replacement.bank, replacement.manual]);
+        const delta = bucketPurchaseAllocation(transaction, bucket.id) - bucketPurchaseAllocation(replacement.manual, bucket.id);
+        setGoals(previous => previous.map(goal => goal.id === bucket.id ? { ...goal, current_amount: roundMoney(Math.max(0, goal.current_amount - delta)) } : goal));
+        demoBucketReplacements.current.delete(transaction.id);
+      } else {
+        const prior = demoBucketPurchaseRestores.current.get(transaction.id);
+        setTransactions(previous => previous.map(item => item.id === transaction.id ? prior ?? { ...item, linked_plan_id: undefined, linked_plan_type: undefined,
+          review_status: item.source === "plaid" ? "needs_review" : "legacy_reviewed", review_resolution: undefined, review_allocations: [], matched_occurrence_date: undefined, match_reason: undefined } : item));
+        setGoals(previous => previous.map(goal => goal.id === bucket.id ? { ...goal, current_amount: roundMoney(Math.max(0, goal.current_amount - bucketPurchaseAllocation(transaction, bucket.id))) } : goal));
+      }
+      return;
+    }
+    const scope = householdScopeRef.current;
+    const persist: () => Promise<void> = () => runTrackedFinancialMutation(async () => {
+      const result = await bucketPurchaseRpc("undo_bucket_purchase", { p_transaction_id: transaction.id, p_bucket_id: bucket.id }, transaction.id, bucket.id);
+      if (userScopeIdRef.current === user.id && householdScopeRef.current?.householdId === scope?.householdId && householdScopeRef.current?.budgetId === scope?.budgetId) {
+        await refreshBillMatchData();
+        setGoals(previous => previous.map(goal => goal.id === result.goal.id ? result.goal : goal));
+      }
+    }, persist);
+    await persist();
+  }, [user, goals, transactions, demoMode, assertCanEditHousehold, runTrackedFinancialMutation, refreshBillMatchData]);
 
   const matchPendingTransactionToPlan = useCallback(async (
     pendingPlaidTransactionId: string,
@@ -4300,9 +4404,35 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }
       : rawInput;
 
+    const bucketManual = input.resolution === "manual"
+      ? transactions.find(item => item.id === input.targetId && isBucketLinkedManualPurchase(item)) : undefined;
+    if (bucketManual) {
+      const bucket = goals.find(goal => goal.id === bucketManual.linked_plan_id && goal.goal_type === "planned_expense");
+      if (!bucket || bucket.closed_at || bucket.archived_at) throw new Error("Reopen the bucket before matching its purchase");
+      if (demoMode) {
+        const oldAllocation = bucketPurchaseAllocation(bucketManual, bucket.id);
+        const amount = Math.abs(transaction.amount);
+        if (amount > spendingBucketSummary(bucket).remaining + oldAllocation + 0.005) throw new Error("The posted amount exceeds the bucket budget. Adjust the budget first");
+        demoBucketReplacements.current.set(transaction.id, { manual: bucketManual, bank: transaction });
+        setTransactions(previous => previous.filter(item => item.id !== bucketManual.id).map(item => item.id === transaction.id ? bucketPurchaseTransaction({ ...item, note: bucketManual.note || item.note, category: bucketManual.category }, bucket) : item));
+        setGoals(previous => previous.map(goal => goal.id === bucket.id ? { ...goal, current_amount: roundMoney(goal.current_amount - oldAllocation + amount) } : goal));
+        return;
+      }
+      const scope = householdScopeRef.current;
+      const persist: () => Promise<void> = () => runTrackedFinancialMutation(async () => {
+        await bucketPurchaseRpc("replace_bucket_purchase", { p_bank_id: transaction.id, p_manual_id: bucketManual.id,
+          p_expected_manual_amount: Math.abs(bucketManual.amount), p_expected_bank_amount: Math.abs(transaction.amount), p_expected_bank_date: transaction.date }, transaction.id, bucket.id);
+        if (userScopeIdRef.current === user.id && householdScopeRef.current?.householdId === scope?.householdId && householdScopeRef.current?.budgetId === scope?.budgetId) {
+          await refreshBillMatchData();
+          setPendingPlanMatches(previous => previous.filter(match => match.posted_transaction_id !== input.transactionId));
+        }
+      }, persist);
+      await persist(); return;
+    }
+
     if (demoMode) {
       const eligibleManualIds = input.resolution === "manual"
-        ? new Set(manualActivityMatchCandidates(transactions, transaction.date, transaction.id, bills).map(item => item.billId))
+        ? new Set(manualActivityMatchCandidates(transactions, transaction.date, transaction.id, bills, true, pendingPlanMatches).map(item => item.billId))
         : undefined;
       const manualTarget = input.resolution === "manual"
         ? transactions.find(item => item.id === input.targetId && eligibleManualIds?.has(item.id))
@@ -4462,7 +4592,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       markSaveFailed(error, () => reconcileTransaction(input), saveOperationId);
       throw error;
     }
-  }, [user, assertCanEditHousehold, transactions, incomes, bills, extraPayments, demoMode, applyHouseholdSelect, refreshBillMatchData, refreshDebtRows, syncDebtTransactionsAndRefresh, markSaveStarted, markSaveCompleted, markSaveFailed]);
+  }, [user, assertCanEditHousehold, transactions, incomes, goals, bills, extraPayments, demoMode, applyHouseholdSelect, refreshBillMatchData, refreshDebtRows, syncDebtTransactionsAndRefresh, markSaveStarted, markSaveCompleted, markSaveFailed, runTrackedFinancialMutation]);
 
   const createSpendingBucketForTransaction = useCallback(async (
     input: CreateSpendingBucketForTransactionInput,
@@ -4636,6 +4766,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!user) throw new Error("Sign in to undo this review");
     assertCanEditHousehold("undo a transaction review");
     const reviewedTransaction = transactions.find(item => item.id === transactionId);
+    if (reviewedTransaction?.linked_plan_type === "goal" && goals.some(goal => goal.id === reviewedTransaction.linked_plan_id && goal.goal_type === "planned_expense")) {
+      await removeBucketPurchase(transactionId); return;
+    }
     const wasDebtMatch = Boolean(reviewedTransaction?.linked_bill_id && bills.some(bill => bill.id === reviewedTransaction.linked_bill_id && bill.is_debt));
     const wasSnowballMatch = reviewedTransaction?.review_resolution === "snowball";
     const wasManualMatch = reviewedTransaction?.review_resolution === "manual";
@@ -4700,7 +4833,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       markSaveFailed(error, () => undoTransactionReconciliation(transactionId), saveOperationId);
       throw error;
     }
-  }, [user, assertCanEditHousehold, transactions, bills, demoMode, refreshBillMatchData, refreshDebtRows, syncDebtTransactionsAndRefresh, markSaveStarted, markSaveCompleted, markSaveFailed]);
+  }, [user, assertCanEditHousehold, transactions, bills, goals, removeBucketPurchase, demoMode, refreshBillMatchData, refreshDebtRows, syncDebtTransactionsAndRefresh, markSaveStarted, markSaveCompleted, markSaveFailed]);
 
   const matchTransactionToBill = useCallback(async (transactionId: string, billId: string, occurrenceDate?: string, plannedAmount?: number) => {
     if (!user) throw new Error("Sign in to match a bill");
@@ -4813,6 +4946,29 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       await deleteTransfer(groupId);
       return;
     }
+    const purchaseBucket = goals.find(goal => goal.id === existing?.linked_plan_id && existing?.linked_plan_type === "goal" && goal.goal_type === "planned_expense");
+    if (existing && purchaseBucket) {
+      if (purchaseBucket.closed_at || purchaseBucket.archived_at) throw new Error("Reopen the bucket before deleting its purchase");
+      if (demoMode) {
+        const replacement = demoBucketReplacements.current.get(existing.id);
+        const allocation = bucketPurchaseAllocation(existing, purchaseBucket.id) - (replacement ? bucketPurchaseAllocation(replacement.manual, purchaseBucket.id) : 0);
+        setGoals(previous => previous.map(goal => goal.id === purchaseBucket.id ? { ...goal, current_amount: roundMoney(Math.max(0, goal.current_amount - allocation)) } : goal));
+        const prior = replacement?.bank ?? demoBucketPurchaseRestores.current.get(existing.id) ?? { ...existing, linked_plan_id: undefined, linked_plan_type: undefined, review_status: "legacy_reviewed" as const, review_resolution: undefined, review_allocations: [] };
+        setTransactions(previous => [...previous.filter(item => item.id !== existing.id && item.id !== replacement?.manual.id), ...(replacement ? [replacement.manual] : [])]);
+        demoBucketReplacements.current.delete(existing.id);
+        setDeletedTransactions(previous => [{ ...prior, deleted_at: new Date().toISOString(), deleted_by: user.id }, ...previous.filter(item => item.id !== existing.id)]);
+        return;
+      }
+      const scope = householdScopeRef.current;
+      const persist: () => Promise<void> = () => runTrackedFinancialMutation(async () => {
+        const result = await bucketPurchaseRpc("delete_bucket_purchase", { p_transaction_id: existing.id, p_bucket_id: purchaseBucket.id }, existing.id, purchaseBucket.id);
+        if (userScopeIdRef.current === user.id && householdScopeRef.current?.householdId === scope?.householdId && householdScopeRef.current?.budgetId === scope?.budgetId) {
+          await refreshBillMatchData();
+          setDeletedTransactions(previous => [result.transaction, ...previous.filter(item => item.id !== existing.id)]);
+        }
+      }, persist);
+      await persist(); return;
+    }
     const deletedAt = new Date().toISOString();
     if (demoMode) {
       if (existing) {
@@ -4871,7 +5027,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setDeletedTransactions(prev => [archived, ...prev.filter(transaction => transaction.id !== id)]);
     }, persist);
     await persist();
-  }, [user, transactions, bills, demoMode, deleteTransfer, assertCanEditHousehold, runTrackedFinancialMutation, refreshBillMatchData, refreshDebtRows, syncDebtTransactionsAndRefresh]);
+  }, [user, transactions, bills, goals, demoMode, deleteTransfer, assertCanEditHousehold, runTrackedFinancialMutation, refreshBillMatchData, refreshDebtRows, syncDebtTransactionsAndRefresh]);
 
   const restoreDeletedTransaction = useCallback(async (id: string) => {
     if (!user) throw new Error("Sign in to restore a transaction");
@@ -5026,6 +5182,21 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     assertCanEditHousehold("update a goal");
     const existing = goals.find(item => item.id === goal.id);
+    if (existing?.goal_type === "planned_expense") {
+      if (goal.goal_type !== "planned_expense") throw new Error("A spending bucket cannot be changed into a savings goal");
+      if (goal.target_amount + 0.005 < existing.current_amount) throw new Error("The budget must cover the purchases already in this bucket");
+      if (demoMode) { setGoals(previous => previous.map(item => item.id === goal.id ? { ...goal, current_amount: item.current_amount } : item)); return; }
+      const scope = householdScopeRef.current;
+      const persist: () => Promise<void> = () => runTrackedFinancialMutation(async () => {
+        const { data, error } = await supabase.rpc("update_bucket_budget", { p_bucket_id: goal.id, p_name: goal.name, p_target_amount: goal.target_amount,
+          p_target_date: goal.target_date, p_expected: { name: existing.name, target_amount: existing.target_amount, target_date: existing.target_date } });
+        if (error) throw new Error(error.message);
+        if (!data?.goal || data.goal.id !== goal.id) throw new Error("The saved bucket budget could not be verified");
+        if (userScopeIdRef.current === user.id && householdScopeRef.current?.householdId === scope?.householdId && householdScopeRef.current?.budgetId === scope?.budgetId)
+          setGoals(previous => previous.map(item => item.id === goal.id ? normalizeGoalRow(data.goal) : item));
+      }, persist);
+      await persist(); return;
+    }
     setGoals(prev => prev.map(g => g.id === goal.id ? goal : g));
     if (demoMode) return;
     const saveOperationId = markSaveStarted();
@@ -5037,7 +5208,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       markSaveFailed(error, () => updateGoal(goal), saveOperationId);
       throw error;
     }
-  }, [user, goals, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, assertCanEditHousehold]);
+  }, [user, goals, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, assertCanEditHousehold, runTrackedFinancialMutation]);
 
   const refreshBucketRoutingData = useCallback(async () => {
     if (!user || demoMode) return;
@@ -6067,6 +6238,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence, getBillDateMovesForMonth,
       getMonthlyBills, getBillOccurrencesInMonth, getBillOccurrenceAmount, getBillMonthlyTotal, getBillEffectiveMonthlyTotal, getDebtMonthSettlements, getDebtSourceCommitment, getDebtPlanForMonth, getRemainingDebtPlanForMonth,
       runSnowball, previewDebtSnowball, applyDebtSnowballPayment, saveExtraPayment, getExtraPayment, deleteExtraPayment, removeDebtSnowballPayment, finalizeBillPayment,
+      addBucketPurchase, removeBucketPurchase, previewBucketPurchaseSafetyStop, previewBucketBudgetSafetyStop,
       addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, matchPendingTransactionToBill, matchPendingTransactionToManual, createTransactionForPendingCharge, removePendingPlanMatch, reconcileTransaction, createSpendingBucketForTransaction, undoTransactionReconciliation, removeReviewSurplusFunding, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome, getIncomeOccurrencesInMonth,
       addGoal, updateGoal, closeSpendingBucket, closeSpendingBucketAndRouteRemainder, reopenSpendingBucket, archiveSpendingBucket, restoreArchivedSpendingBucket, deleteGoal, checkGoalAffordability,

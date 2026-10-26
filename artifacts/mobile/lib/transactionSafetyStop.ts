@@ -15,11 +15,21 @@ export function previewTransactionSafetyStop(input: {
   if (transaction.amount >= 0) return null;
   const previous = existingId ? snapshot.transactions.find(item => item.id === existingId) : undefined;
   const replacement = { ...transaction, id: existingId ?? "transaction-safety-preview", ...(existingId ? { user_edited_at: now.toISOString() } : {}) };
-  const options = { now, timeZone };
-  const before = createFinancialProjection(snapshot, options);
-  const after = createFinancialProjection({ ...snapshot, transactions: [...snapshot.transactions.filter(item => item.id !== existingId), replacement] }, options);
+  const next = { ...snapshot, transactions: [...snapshot.transactions.filter(item => item.id !== existingId), replacement] };
   const start = previous && previous.date < transaction.date ? previous.date : transaction.date;
   const end = previous && previous.date > transaction.date ? previous.date : transaction.date;
+  return previewProjectionChangeSafetyStop({ before: snapshot, after: next, start, end, transaction, now, timeZone });
+}
+
+export function previewProjectionChangeSafetyStop(input: {
+  before: FinancialProjectionSnapshot; after: FinancialProjectionSnapshot;
+  start: string; end?: string; transaction: Pick<Transaction, "amount" | "date" | "note" | "category">;
+  now: Date; timeZone: string;
+}): SafetyStopWarning | null {
+  const { before: snapshot, transaction, start, now, timeZone } = input;
+  const end = input.end ?? start;
+  const before = createFinancialProjection(snapshot, { now, timeZone });
+  const after = createFinancialProjection(input.after, { now, timeZone });
   const [year, month] = start.split("-").map(Number);
   const [endYear, endMonth] = end.split("-").map(Number);
   const count = (endYear - year) * 12 + endMonth - month + Math.max(1, snapshot.settings.forecast_horizon_months || 6);

@@ -34,7 +34,7 @@ test("invalid pasted amounts cannot invoke transaction, income, bucket, or bill 
 test("valid grouped transaction amount persists exactly rather than its numeric prefix", async () => {
   const saved: any[] = [];
   const save = handler("components/AddTransactionModal.tsx", "handleSave", "handleDelete", {
-    saving: false, savingRef: { current: false }, amount: "1,200.50", parseMoneyInput, isTransfer: false, isExpense: true,
+    saving: false, savingRef: { current: false }, bucketPurchase: false, amount: "1,200.50", parseMoneyInput, isTransfer: false, isExpense: true,
     category: "Other", note: "Purchase", date: "2027-01-05", accountId: undefined, linkedBillId: undefined, editTx: null,
     Haptics: { impactAsync: () => {}, ImpactFeedbackStyle: { Medium: "medium" } }, creationContext: undefined,
     previewSafetyStop: () => null, saveStandardTransaction: (tx: unknown) => saved.push(tx),
