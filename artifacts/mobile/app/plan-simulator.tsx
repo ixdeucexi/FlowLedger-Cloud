@@ -3,13 +3,13 @@ import Feather from "@expo/vector-icons/Feather";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { confirmAction } from "@/lib/confirmAction";
 import { useOverlayActivity } from "@/hooks/useOverlayActivity";
 import { createSimulatorEditorHistory } from "@/lib/simulatorEditorHistory";
 import { DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_WIDE } from "@/lib/desktopModal";
 import { useLocalDay } from "@/hooks/useLocalDay";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -23,6 +23,11 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { buildSimulationEditorChange, replaceSimulationChange, simulationEditorFields, type SimulationEditorFields } from "@/lib/planSimulationEditor";
+
+import { ScenarioOptionPicker } from "@/components/ScenarioOptionPicker";
+import { SavedScenarioComparison } from "@/components/SavedScenarioComparison";
+import { compareSavedPlanScenarios, defaultScenarioComparisonHorizon, type SavedComparisonOption } from "@/lib/planSimulationComparison";
+import { scenarioDeviceKeys, emptyScenarioLibrary, loadScenarioDeviceState, persistScenarioLibrary, persistScenarioWorking, putDeviceScenario, deleteDeviceScenario, scenarioDraftFingerprint, type DeviceScenarioLibrary } from "@/lib/planSimulationLibrary";
 
 import { AppText } from "@/components/AppText";
 import { AppLoadingIntro } from "@/components/AppLoadingIntro";
@@ -49,6 +54,7 @@ import {
   type PlanSimulationDefinition,
   type PlanSimulationHorizon,
   type PlanSimulationReferences,
+  type PlanSimulationBaseline,
   type PlanSimulationResult,
 } from "@/lib/planSimulator";
 import {
@@ -164,16 +170,23 @@ function Input({
   placeholder,
   label,
   keyboardType,
+  inputRef,
+  disabled = false,
 }: {
   value: string;
   onChangeText: (value: string) => void;
   placeholder: string;
   label: string;
   keyboardType?: "default" | "decimal-pad";
+  inputRef?: React.RefObject<TextInput | null>;
+  disabled?: boolean;
 }) {
   const c = useColors();
   return (
     <TextInput
+      ref={inputRef}
+      editable={!disabled}
+      accessibilityState={{ disabled }}
       accessibilityLabel={label}
       value={value}
       onChangeText={onChangeText}
@@ -285,7 +298,7 @@ function changeSummary(change: PlanSimulationChange) {
   return ["amount" in change ? money(change.amount) : null, "frequency" in change ? change.frequency[0].toUpperCase() + change.frequency.slice(1) : null, date].filter(Boolean).join(" · ");
 }
 
-function ChangeList({ changes, references, issues, editingId, onEdit, onRemove }: { changes: PlanSimulationChange[]; references: PlanSimulationReferences; issues: PlanSimulationResult["issues"]; editingId: string | null; onEdit: (id: string) => void; onRemove: (id: string) => void }) {
+function ChangeList({ changes, references, issues, editingId, onEdit, onRemove, disabled = false }: { changes: PlanSimulationChange[]; references: PlanSimulationReferences; issues: PlanSimulationResult["issues"]; editingId: string | null; onEdit: (id: string) => void; onRemove: (id: string) => void; disabled?: boolean }) {
   const c = useColors();
   if (!changes.length) return <View style={[styles.emptyCard, { borderColor: c.border }]}><View style={[styles.editorIcon, { backgroundColor: c.primary + "12" }]}><Feather name="git-branch" size={21} color={c.primary} /></View><AppText style={[styles.emptyTitle, { color: c.foreground }]}>Start with one small change</AppText><AppText style={[styles.emptyText, { color: c.mutedForeground }]}>Choose Add change to test income, bills, spending or debt. Your comparison updates as you go.</AppText></View>;
   return <View style={styles.changeList}>{changes.map((change, index) => {
@@ -295,7 +308,7 @@ function ChangeList({ changes, references, issues, editingId, onEdit, onRemove }
     return <View key={change.id} style={[styles.changeRow, { backgroundColor: c.card, borderColor: active ? c.primary : issue ? c.warning : c.border }]}>
       <View style={styles.changeRowTop}><View style={[styles.changeNumber, { backgroundColor: c.primary + "12" }]}><AppText style={{ color: c.primary, fontFamily: "Inter_700Bold" }}>{index + 1}</AppText></View><View style={styles.changeRowCopy}><AppText style={[styles.changeRowTitle, { color: c.foreground }]}>{label}</AppText><AppText style={[styles.changeSummary, { color: c.mutedForeground }]}>{changeSummary(change)}</AppText></View></View>
       {issue ? <AppText style={[styles.changeIssue, { color: c.warning }]}>{issue.message}</AppText> : null}
-      <View style={styles.changeRowActions}><Pressable accessibilityRole="button" accessibilityLabel={`Edit ${label}`} accessibilityState={{ selected: active }} onPress={() => onEdit(change.id)} style={[styles.changeAction, { backgroundColor: c.primary + "12" }]}><Feather name="edit-3" size={15} color={c.primary} /><AppText style={[styles.changeActionText, { color: c.primary }]}>{active ? "Editing" : "Edit"}</AppText></Pressable><Pressable accessibilityRole="button" accessibilityLabel={`Remove ${label}`} onPress={() => onRemove(change.id)} style={styles.changeAction}><Feather name="trash-2" size={15} color={c.mutedForeground} /><AppText style={[styles.changeActionText, { color: c.mutedForeground }]}>Remove</AppText></Pressable></View>
+      <View style={styles.changeRowActions}><Pressable accessibilityRole="button" accessibilityLabel={`Edit ${label}`} accessibilityState={{ selected: active, disabled }} disabled={disabled} onPress={() => onEdit(change.id)} style={[styles.changeAction, { backgroundColor: c.primary + "12" }]}><Feather name="edit-3" size={15} color={c.primary} /><AppText style={[styles.changeActionText, { color: c.primary }]}>{active ? "Editing" : "Edit"}</AppText></Pressable><Pressable accessibilityRole="button" accessibilityLabel={`Remove ${label}`} accessibilityState={{ disabled }} disabled={disabled} onPress={() => onRemove(change.id)} style={styles.changeAction}><Feather name="trash-2" size={15} color={c.mutedForeground} /><AppText style={[styles.changeActionText, { color: c.mutedForeground }]}>Remove</AppText></Pressable></View>
     </View>;
   })}</View>;
 }
@@ -388,11 +401,19 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
   const householdId = activeHousehold?.householdId ?? "local";
   const draftStorageKey = user?.id ? planSimulationStorageKey(user.id, householdId) : null;
   const [scenarios, setScenarios] = useState<PlanSimulationDefinition[]>([]);
+  const [deviceLibrary, setDeviceLibrary] = useState<DeviceScenarioLibrary>(emptyScenarioLibrary);
+  const [deviceReady, setDeviceReady] = useState(false);
+  const [pendingSwitch, setPendingSwitch] = useState<string | null>(null);
+  const [comparisonKeys, setComparisonKeys] = useState<[string, string]>(["", ""]);
+  const [comparisonHorizon, setComparisonHorizon] = useState<PlanSimulationHorizon | null>(null);
+  const deviceKeys = useMemo(() => user?.id ? scenarioDeviceKeys(user.id, householdId, demoMode) : null, [user?.id, householdId, demoMode]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftState>({ name: "Untitled scenario", horizonMonths: defaultHorizon, changes: [] });
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>(() => readCategoryBudgetCache(currentMonth, currentYear, { userId: user?.id, householdId, budgetId: activeHousehold?.budgetId }));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const mutationRef = useRef<object | null>(null);
+  const scenarioNameRef = useRef<TextInput>(null);
   const [message, setMessage] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editorVersion, setEditorVersion] = useState(0);
@@ -413,12 +434,12 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
     }
   }, []);
   const openEditor = useCallback((id: string | null = null) => {
-    if (draft.invalidDefinition || (id && !draft.changes.some(change => change.id === id))) return;
+    if (saving || mutationRef.current || draft.invalidDefinition || (id && !draft.changes.some(change => change.id === id))) return;
     if (Platform.OS === "web" && typeof document !== "undefined") returnFocusRef.current = document.activeElement as HTMLElement | null;
     setEditingId(id);
     setEditorVersion(previous => previous + 1);
     setEditorOpen(true);
-  }, [draft.changes, draft.invalidDefinition]);
+  }, [draft.changes, draft.invalidDefinition, saving]);
   useOverlayActivity(editorOpen);
   useEffect(() => {
     if (!editorOpen || Platform.OS !== "web" || typeof window === "undefined") return;
@@ -432,10 +453,21 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
     window.addEventListener("keydown", onEscape, true);
     return () => { window.removeEventListener("keydown", onEscape, true); history.dispose(); };
   }, [editorOpen, closeEditor]);
-  const selectedScenario = useMemo(() => scenarios.find(item => item.id === selectedId) ?? null, [scenarios, selectedId]);
+  const selectedScenario = useMemo(() => scenarios.find(item => `household:${item.id}` === selectedId) ?? null, [scenarios, selectedId]);
+  const householdWriteEligible = Boolean(selectedScenario && canPersistScenarios && canEditHousehold && !demoMode);
+  const selectedDevice = deviceLibrary.scenarios.find(item => `device:${item.id}` === selectedId) ?? null;
+  const savedOptions = useMemo<SavedComparisonOption[]>(() => [
+    ...deviceLibrary.scenarios.map(item => ({ key: `device:${item.id}`, source: "On this device" as const, draft: { name: item.name, horizonMonths: item.horizonMonths, changes: item.changes } })),
+    ...scenarios.map(item => ({ key: `household:${item.id}`, source: "Household" as const, draft: { name: item.name, horizonMonths: item.horizonMonths, changes: item.changes, invalidDefinition: item.invalidDefinition } })),
+  ], [deviceLibrary, scenarios]);
+  const selectedSaved = savedOptions.find(option => option.key === selectedId);
+  const draftDirty = scenarioDraftFingerprint(draft) !== scenarioDraftFingerprint(selectedSaved?.draft ?? { name: "Untitled scenario", horizonMonths: defaultHorizon, changes: [] });
   const foundingFreeLocalOnly = FOUNDING_FREE_LAUNCH && !canPersistScenarios;
-  const keepsLocalDraft = foundingFreeLocalOnly || !canEditHousehold;
-  const draftLoadScope = JSON.stringify([draftStorageKey, householdId, canPersistScenarios, defaultHorizon, demoMode, keepsLocalDraft]);
+  const keepsLocalDraft = Boolean(user?.id);
+  const draftScopeKey = JSON.stringify([deviceKeys?.library, householdId, canPersistScenarios, defaultHorizon, demoMode, canEditHousehold]);
+  const draftEpochRef = useRef({ key: draftScopeKey, epoch: 0 });
+  if (draftEpochRef.current.key !== draftScopeKey) draftEpochRef.current = { key: draftScopeKey, epoch: draftEpochRef.current.epoch + 1 };
+  const draftLoadScope = `${draftScopeKey}:${draftEpochRef.current.epoch}`;
   const draftLoadScopeRef = useRef(draftLoadScope);
   draftLoadScopeRef.current = draftLoadScope;
   const [loadedDraftScope, setLoadedDraftScope] = useState<string | null>(null);
@@ -450,43 +482,40 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setLoadedDraftScope(null);
-    setMobileView("build");
-    returnFocusRef.current = null;
-    setEditorOpen(false);
-    setEditingId(null);
-    setEditorVersion(previous => previous + 1);
-    setMessage("");
-    setScenarios([]);
-    setSelectedId(null);
+    const isCurrent = () => !cancelled && draftLoadScopeRef.current === draftLoadScope;
+    setLoading(true);setLoadedDraftScope(null);setDeviceReady(false);setDeviceLibrary(emptyScenarioLibrary());setPendingSwitch(null);setComparisonKeys(["", ""]);setComparisonHorizon(null);setSaving(false);mutationRef.current = null;
+    setMobileView("build");returnFocusRef.current = null;setEditorOpen(false);setEditingId(null);setEditorVersion(previous => previous + 1);setMessage("");setScenarios([]);setSelectedId(null);
     setDraft({ name: "Untitled scenario", horizonMonths: defaultHorizon, changes: [] });
     void (async () => {
       try {
-        const [rows, storedDraft] = await Promise.all([
+        const [cloudLoad, deviceLoad] = await Promise.allSettled([
           !canPersistScenarios || demoMode || householdId === "local" ? Promise.resolve([]) : loadPlanSimulations(householdId),
-          keepsLocalDraft && draftStorageKey ? AsyncStorage.getItem(draftStorageKey) : Promise.resolve(null),
+          deviceKeys ? loadScenarioDeviceState(AsyncStorage, deviceKeys, isCurrent, new Date().toISOString(), () => `device-${nextLocalId()}`) : Promise.resolve({ library: emptyScenarioLibrary(), working: null }),
         ]);
-        if (cancelled || draftLoadScopeRef.current !== draftLoadScope) return;
+        if (!isCurrent()) return;
+        const errors: string[] = [];
+        const rows = cloudLoad.status === "fulfilled" ? cloudLoad.value : [];
         setScenarios(rows);
-        if (keepsLocalDraft && storedDraft) {
-          const parsed = JSON.parse(storedDraft) as Partial<DraftState>;
-          const changes = decodePlanSimulationChanges(parsed.changes);
-          if (typeof parsed.name === "string" && isPlanSimulationHorizon(parsed.horizonMonths) && changes) setDraft({ name: parsed.name, horizonMonths: parsed.horizonMonths, changes });
+        if (cloudLoad.status === "rejected") errors.push(cloudLoad.reason instanceof Error ? cloudLoad.reason.message : "Household scenarios could not be loaded.");
+        if (deviceLoad.status === "fulfilled") {
+          const device = deviceLoad.value;setDeviceLibrary(device.library);setDeviceReady(true);
+          if (device.working) { setDraft(device.working.draft);const key = device.working.selectedKey;setSelectedId(key && (device.library.scenarios.some(item => `device:${item.id}` === key) || rows.some(item => `household:${item.id}` === key)) ? key : null); }
+        } else {
+          setDeviceReady(false);
+          errors.push(deviceLoad.reason instanceof Error ? deviceLoad.reason.message : "The device library could not be loaded. Stored data was kept.");
         }
-      } catch (error) {
-        if (!cancelled && draftLoadScopeRef.current === draftLoadScope) setMessage(error instanceof Error ? error.message : "Plan Simulator could not load household scenarios.");
-      } finally {
-        if (!cancelled && draftLoadScopeRef.current === draftLoadScope) { setLoadedDraftScope(draftLoadScope); setLoading(false); }
-      }
+        if (errors.length) setMessage(errors.join(" "));
+      } catch (error) { if (isCurrent()) setMessage(error instanceof Error ? error.message : "The device library could not be loaded. Stored data was kept."); }
+      finally { if (isCurrent()) { setLoadedDraftScope(draftLoadScope);setLoading(false); } }
     })();
     return () => { cancelled = true; };
-  }, [canPersistScenarios, defaultHorizon, demoMode, draftStorageKey, householdId, keepsLocalDraft, draftLoadScope]);
-
+  }, [canPersistScenarios, defaultHorizon, demoMode, deviceKeys, draftLoadScope, householdId]);
   useEffect(() => {
-    if (!keepsLocalDraft || !draftStorageKey || loading || loadedDraftScope !== draftLoadScope) return;
-    void AsyncStorage.setItem(draftStorageKey, JSON.stringify(draft)).catch(() => undefined);
-  }, [draft, draftStorageKey, keepsLocalDraft, loading, loadedDraftScope, draftLoadScope]);
+    if (!keepsLocalDraft || !deviceKeys || !deviceReady || loading || loadedDraftScope !== draftLoadScope) return;
+    const owner = draftLoadScope;
+    void persistScenarioWorking(AsyncStorage, deviceKeys.working, { schemaVersion: 1, selectedKey: selectedId, draft }, () => draftLoadScopeRef.current === owner).catch(error => { if (draftLoadScopeRef.current === owner) setMessage(error instanceof Error ? error.message : "The working draft could not be saved on this device. Your changes are still open."); });
+  }, [deviceKeys, deviceReady, draft, draftLoadScope, keepsLocalDraft, loadedDraftScope, loading, selectedId]);
+  useEffect(() => { setComparisonKeys(previous => previous.map(key => savedOptions.some(option => option.key === key) ? key : "") as [string, string]); }, [savedOptions]);
 
   const baseline = useMemo(() => getPlanSimulationBaseline(draft.horizonMonths, startDate), [draft.horizonMonths, getPlanSimulationBaseline, startDate]);
   const currentMonthBalances = useMemo(() => getDailyBalances(currentMonth, currentYear), [currentMonth, currentYear, getDailyBalances]);
@@ -517,11 +546,11 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
   const livePayoffPreview = useMemo(() => {
     try { return previewDebtSnowball(currentMonth, currentYear, 0); } catch { return null; }
   }, [currentMonth, currentYear, previewDebtSnowball]);
-  const references = useMemo<PlanSimulationReferences>(() => ({
+  const buildReferences = useCallback((sourceBaseline: PlanSimulationBaseline): PlanSimulationReferences => ({
     incomes: incomes.map(income => ({ id: income.id, name: income.name, amount: income.amount })),
     bills: bills.map(bill => {
       const occurrenceCount = getBillOccurrencesInMonth(bill, currentMonth, currentYear).length;
-      const openOccurrenceCount = baseline.days.flatMap(day => day.events).filter(event =>
+      const openOccurrenceCount = sourceBaseline.days.flatMap(day => day.events).filter(event =>
         event.sourceType === "bill"
         && event.sourceId === bill.id
         && event.date.startsWith(`${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`)
@@ -560,7 +589,8 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
       `${month.year}-${String(month.month + 1).padStart(2, "0")}`,
       Math.max(0, month.extraPayment),
     ])),
-  }), [baseline.days, bills, currentMonth, currentYear, getBillEffectiveMonthlyTotal, getBillMonthlyTotal, getBillOccurrencesInMonth, incomes, livePayoffPreview?.months, settings.paymentMethod]);
+  }), [bills, currentMonth, currentYear, getBillEffectiveMonthlyTotal, getBillMonthlyTotal, getBillOccurrencesInMonth, incomes, livePayoffPreview?.months, settings.paymentMethod]);
+  const references = useMemo(() => buildReferences(baseline), [baseline, buildReferences]);
   const metrics = useMemo(() => ({
     flowScore: dashboardModel.algorithmSuite.flowScore.score,
     flowScoreRequiredAmountDue: dashboardModel.algorithmSuite.flowScore.requiredAmountDue,
@@ -580,111 +610,150 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
     definitionIssue: draft.invalidDefinition ? "This scenario uses an unsupported definition. Reset it before continuing." : null,
   }), [baseline, draft.changes, draft.invalidDefinition, metrics, references, settings.safety_floor]);
 
+  const comparisonOptions = comparisonKeys.map(key => savedOptions.find(option => option.key === key));
+  const commonHorizon = comparisonHorizon ?? defaultScenarioComparisonHorizon(comparisonOptions.filter((option): option is SavedComparisonOption => Boolean(option)));
+  const commonBaseline = useMemo(() => getPlanSimulationBaseline(commonHorizon, startDate), [commonHorizon, getPlanSimulationBaseline, startDate]);
+  const commonReferences = useMemo(() => buildReferences(commonBaseline), [buildReferences, commonBaseline]);
+  const savedComparison = useMemo(() => comparisonOptions[0] && comparisonOptions[1] && comparisonKeys[0] !== comparisonKeys[1]
+    ? compareSavedPlanScenarios({ baseline: commonBaseline, options: [comparisonOptions[0], comparisonOptions[1]], references: commonReferences, metrics, safetyFloor: settings.safety_floor }) : null,
+  [commonBaseline, commonReferences, comparisonOptions[0], comparisonOptions[1], comparisonKeys[0], comparisonKeys[1], metrics, settings.safety_floor]);
+
   const scenarioRiskDay = firstNegativeBalanceDay(scenarioResult.days);
 
-  const selectScenario = useCallback((scenario: PlanSimulationDefinition) => {
-    setEditorOpen(false);
-    setEditingId(null);
-    setEditorVersion(previous => previous + 1);
-    setSelectedId(scenario.id);
-    setDraft({ name: scenario.name, horizonMonths: scenario.horizonMonths, changes: scenario.changes, invalidDefinition: scenario.invalidDefinition });
-    setMessage(scenario.invalidDefinition ? "This scenario has an unsupported definition. Choose Reset before continuing." : "");
-  }, []);
+  const applySelection = useCallback((key: string) => {
+    if (saving || mutationRef.current) return;
+    const option = savedOptions.find(item => item.key === key);
+    if (key !== "new-draft" && !option) { setPendingSwitch(null);setMessage("That saved scenario is no longer available. Your working changes were kept.");return; }
+    setEditorOpen(false);setEditingId(null);setEditorVersion(previous => previous + 1);setPendingSwitch(null);
+    setSelectedId(option?.key ?? null);
+    setDraft(option ? { ...option.draft } : { name: "Untitled scenario", horizonMonths: defaultHorizon, changes: [] });
+    setMessage(option?.draft.invalidDefinition ? "This saved option has an unsupported definition. Reset it before continuing." : "");
+  }, [defaultHorizon, savedOptions, saving]);
+  const requestSelection = useCallback((key: string) => {
+    if (saving || mutationRef.current || key === selectedId) return;
+    if (draftDirty) { setPendingSwitch(key);return; }
+    applySelection(key);
+  }, [applySelection, draftDirty, saving, selectedId]);
   const makeLocalDraft = useCallback(() => {
-    if (!canEditHousehold && selectedId) {
+    if (!canEditHousehold && selectedScenario) {
       setSelectedId(null);
-      setDraft(previous => ({ ...previous, name: `${previous.name} local draft` }));
-      setMessage("You are editing an unsaved local draft. The household scenario remains unchanged.");
+      setMessage("You are editing a private working draft. The household scenario remains unchanged. Save a named copy on this device when ready.");
     }
-  }, [canEditHousehold, selectedId]);
-  const addChange = useCallback((change: PlanSimulationChange) => {
-    makeLocalDraft();
-    setDraft(previous => ({ ...previous, changes: [...previous.changes, change] }));
-  }, [makeLocalDraft]);
+  }, [canEditHousehold, selectedScenario]);
+  const addChange = useCallback((change: PlanSimulationChange) => { makeLocalDraft();setDraft(previous => ({ ...previous, changes: [...previous.changes, change] })); }, [makeLocalDraft]);
   const removeChange = useCallback((id: string) => {
-    if (editingId === id) { setEditorOpen(false); setEditingId(null); }
-    makeLocalDraft();
-    setDraft(previous => ({ ...previous, changes: previous.changes.filter(change => change.id !== id) }));
-  }, [editingId, makeLocalDraft]);
+    if (saving || mutationRef.current) return;
+    if (editingId === id) { setEditorOpen(false);setEditingId(null); }
+    makeLocalDraft();setDraft(previous => ({ ...previous, changes: previous.changes.filter(change => change.id !== id) }));
+  }, [editingId, makeLocalDraft, saving]);
   const saveChange = useCallback((change: PlanSimulationChange): string | null => {
+    if (saving || mutationRef.current) return "Wait for the scenario save to finish before changing it.";
     if (draft.invalidDefinition) return "Reset the unsupported scenario definition before changing it.";
     if (editingId) {
-      const next = replaceSimulationChange(draft.changes, editingId, change);
-      if (!next) return "This change is no longer available to edit. Cancel and choose it again.";
-      makeLocalDraft();
-      setDraft(previous => {
-        const replacement = replaceSimulationChange(previous.changes, editingId, change);
-        return replacement ? { ...previous, changes: replacement } : previous;
-      });
+      if (!replaceSimulationChange(draft.changes, editingId, change)) return "This change is no longer available to edit. Cancel and choose it again.";
+      makeLocalDraft();setDraft(previous => { const next = replaceSimulationChange(previous.changes, editingId, change);return next ? { ...previous, changes: next } : previous; });
     } else {
       if (!decodePlanSimulationChanges([...draft.changes, change])) return "A scenario supports up to 50 valid changes. Remove a change before adding another.";
       addChange(change);
     }
-    closeEditor();
-    return null;
-  }, [addChange, closeEditor, draft.changes, draft.invalidDefinition, editingId, makeLocalDraft]);
-  const newDraft = useCallback(() => {
-    setEditorOpen(false);
-    setEditingId(null);
-    setEditorVersion(previous => previous + 1);
-    setSelectedId(null);
-    setDraft({ name: "Untitled scenario", horizonMonths: defaultHorizon, changes: [] });
-    setMessage("");
-  }, [defaultHorizon]);
+    closeEditor();return null;
+  }, [addChange, closeEditor, draft.changes, draft.invalidDefinition, editingId, makeLocalDraft, saving]);
   const resetDraft = useCallback(() => {
-    setEditorOpen(false);
-    setEditingId(null);
-    setEditorVersion(previous => previous + 1);
-    if (selectedScenario?.invalidDefinition) {
-      setDraft({ name: selectedScenario.name, horizonMonths: selectedScenario.horizonMonths, changes: [], invalidDefinition: false });
-      setMessage("Unsupported changes were cleared. Review the empty scenario before continuing.");
-      return;
-    }
-    if (selectedScenario) setDraft({ name: selectedScenario.name, horizonMonths: selectedScenario.horizonMonths, changes: selectedScenario.changes });
-    else setDraft({ name: "Untitled scenario", horizonMonths: defaultHorizon, changes: [] });
-    setMessage("Draft reset.");
-  }, [defaultHorizon, selectedScenario]);
-  const saveDraft = useCallback(async () => {
-    if (editorOpen) { setMessage("Update or cancel this change first."); return; }
-    if (!canPersistScenarios) { setMessage("Founding Free keeps this draft on this device. Household scenario saving is planned for Pro."); return; }
-    if (!canEditHousehold || demoMode) { setMessage(canEditHousehold ? "Demo scenarios stay local and are not saved to a household." : "View-only members can run local drafts but cannot save household scenarios."); return; }
-    if (draft.invalidDefinition) { setMessage("Reset the unsupported saved definition before saving or renaming it."); return; }
-    const name = safePlanSimulationName(draft.name);
-    if (!name) { setMessage("Scenario names must be between 1 and 80 characters."); return; }
-    setSaving(true);
+    if (saving || mutationRef.current) return;
+    setEditorOpen(false);setEditingId(null);setEditorVersion(previous => previous + 1);setPendingSwitch(null);
+    const original = savedOptions.find(option => option.key === selectedId);
+    if (draft.invalidDefinition) { setDraft(previous => ({ ...previous, changes: [], invalidDefinition: false }));setMessage("Unsupported changes were cleared. Review before saving.");return; }
+    setDraft(original ? { ...original.draft } : { name: "Untitled scenario", horizonMonths: defaultHorizon, changes: [] });setMessage("Working draft reset. Saved options were not changed.");
+  }, [defaultHorizon, draft.invalidDefinition, savedOptions, selectedId, saving]);
+  const updateDraftName = useCallback((name: string) => {
+    if (saving || mutationRef.current) return;
+    makeLocalDraft();setDraft(previous => ({ ...previous, name }));
+  }, [makeLocalDraft, saving]);
+  const updateDraftHorizon = useCallback((value: string) => {
+    if (saving || mutationRef.current || !isPlanSimulationHorizon(Number(value))) return;
+    makeLocalDraft();setDraft(previous => ({ ...previous, horizonMonths: Number(value) as PlanSimulationHorizon }));
+  }, [makeLocalDraft, saving]);
+  const saveDevice = useCallback(async (asNew: boolean, duplicate = false): Promise<boolean> => {
+    if (editorOpen || saving || mutationRef.current) { setMessage("Update or cancel this change first.");return false; }
+    if (!deviceReady || !deviceKeys || loadedDraftScope !== draftLoadScope) { setMessage("Load this account’s device library before saving.");return false; }
+    const owner = draftLoadScope;const isCurrent = () => draftLoadScopeRef.current === owner;
+    const operation = {};mutationRef.current = operation;setSaving(true);
     try {
-      const saved = selectedScenario
-        ? await updatePlanSimulation({ scenario: selectedScenario, name, horizonMonths: draft.horizonMonths, changes: draft.changes })
-        : await createPlanSimulation({ householdId, name, horizonMonths: draft.horizonMonths, changes: draft.changes });
-      setScenarios(previous => [saved, ...previous.filter(item => item.id !== saved.id)]);
-      setSelectedId(saved.id);
-      setDraft({ name: saved.name, horizonMonths: saved.horizonMonths, changes: saved.changes });
-      setMessage("Scenario saved. Your real plan was not changed.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Scenario could not be saved."); }
-    finally { setSaving(false); }
-  }, [canEditHousehold, canPersistScenarios, demoMode, draft, editorOpen, householdId, selectedScenario]);
-  const duplicate = useCallback(async () => {
-    if (editorOpen) { setMessage("Update or cancel this change first."); return; }
-    if (!canPersistScenarios) { setMessage("Founding Free uses one private on-device draft. Household scenario copies are planned for Pro."); return; }
-    if (!canEditHousehold || demoMode) { setMessage("Only household editors can duplicate saved scenarios."); return; }
-    if (draft.invalidDefinition) { setMessage("Reset the unsupported saved definition before duplicating it."); return; }
-    setSaving(true);
+      let name = draft.name;
+      if (duplicate) {
+        const used = new Set(deviceLibrary.scenarios.map(item => item.name.toLocaleLowerCase()));let suffix = 1;
+        do { const tail = suffix === 1 ? " copy" : ` copy ${suffix}`;name = `${draft.name.slice(0, 80 - tail.length)}${tail}`;suffix++; } while (used.has(name.toLocaleLowerCase()));
+      }
+      const result = putDeviceScenario(deviceLibrary, { ...draft, name }, new Date().toISOString(), `device-${nextLocalId()}`, !asNew && selectedDevice ? selectedDevice.id : undefined);
+      await persistScenarioLibrary(AsyncStorage, deviceKeys.library, deviceLibrary, result.library, isCurrent);
+      if (!isCurrent()) return false;
+      setDeviceLibrary(result.library);setSelectedId(`device:${result.saved.id}`);setDraft({ name: result.saved.name, horizonMonths: result.saved.horizonMonths, changes: result.saved.changes });
+      setMessage("Saved on this device. Your real plan was not changed.");return true;
+    } catch (error) { if (isCurrent()) setMessage(error instanceof Error ? error.message : "The scenario could not be saved on this device. Your working changes are still open.");return false; }
+    finally { if (mutationRef.current === operation) mutationRef.current = null;if (isCurrent()) setSaving(false); }
+  }, [deviceKeys, deviceLibrary, deviceReady, draft, draftLoadScope, editorOpen, loadedDraftScope, saving, selectedDevice]);
+  const saveDraft = useCallback(async (): Promise<boolean> => {
+    if (!selectedScenario || !canEditHousehold || !canPersistScenarios || demoMode) return saveDevice(false);
+    if (editorOpen || saving || mutationRef.current) { setMessage("Update or cancel this change first.");return false; }
+    if (draft.invalidDefinition || !safePlanSimulationName(draft.name)) { setMessage("Use a valid name and reset unsupported changes before saving.");return false; }
+    const owner = draftLoadScope;const operation = {};mutationRef.current = operation;setSaving(true);
     try {
-      const usedNames = new Set(scenarios.map(item => item.name.toLowerCase()));
-      let suffix = 1;
-      let copyName = `${draft.name} copy`;
-      while (usedNames.has(copyName.toLowerCase())) { suffix += 1; copyName = `${draft.name} copy ${suffix}`; }
-      const saved = await createPlanSimulation({ householdId, name: copyName.slice(0, 80), horizonMonths: draft.horizonMonths, changes: draft.changes });
-      setScenarios(previous => [saved, ...previous]);
-      selectScenario(saved);
-      setMessage("Scenario duplicated. Your real plan was not changed.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Scenario could not be duplicated."); }
-    finally { setSaving(false); }
-  }, [canEditHousehold, canPersistScenarios, demoMode, draft, editorOpen, householdId, scenarios, selectScenario]);
+      const saved = await updatePlanSimulation({ scenario: selectedScenario, name: draft.name, horizonMonths: draft.horizonMonths, changes: draft.changes });
+      if (draftLoadScopeRef.current !== owner) return false;
+      setScenarios(previous => [saved, ...previous.filter(item => item.id !== saved.id)]);setDraft({ name: saved.name, horizonMonths: saved.horizonMonths, changes: saved.changes });setMessage("Household scenario updated. Your real plan was not changed.");return true;
+    } catch (error) { if (draftLoadScopeRef.current === owner) setMessage(error instanceof Error ? error.message : "Scenario could not be saved.");return false; }
+    finally { if (mutationRef.current === operation) mutationRef.current = null;if (draftLoadScopeRef.current === owner) setSaving(false); }
+  }, [canEditHousehold, canPersistScenarios, demoMode, draft, draftLoadScope, editorOpen, saveDevice, saving, selectedScenario]);
+  const saveHouseholdCopy = useCallback(async (duplicate = false) => {
+    if (!canPersistScenarios || !canEditHousehold || demoMode || saving || mutationRef.current || editorOpen || draft.invalidDefinition) return;
+    const owner = draftLoadScope;const operation = {};mutationRef.current = operation;setSaving(true);
+    try {
+      let name = draft.name;
+      if (duplicate) {
+        const used = new Set(scenarios.map(item => item.name.toLocaleLowerCase()));let suffix = 1;
+        do { const tail = suffix === 1 ? " copy" : ` copy ${suffix}`;name = `${draft.name.slice(0, 80 - tail.length)}${tail}`;suffix++; } while (used.has(name.toLocaleLowerCase()));
+      }
+      const saved = await createPlanSimulation({ householdId, name, horizonMonths: draft.horizonMonths, changes: draft.changes });
+      if (draftLoadScopeRef.current !== owner) return;
+      setScenarios(previous => [saved, ...previous]);setSelectedId(`household:${saved.id}`);setDraft({ name: saved.name, horizonMonths: saved.horizonMonths, changes: saved.changes });setMessage("Household copy saved. Your real plan was not changed.");
+    } catch (error) { if (draftLoadScopeRef.current === owner) setMessage(error instanceof Error ? error.message : "Household scenario could not be saved."); }
+    finally { if (mutationRef.current === operation) mutationRef.current = null;if (draftLoadScopeRef.current === owner) setSaving(false); }
+  }, [canEditHousehold, canPersistScenarios, demoMode, draft, draftLoadScope, editorOpen, householdId, saving, scenarios]);
+  const reloadLibraries = useCallback(async () => {
+    if (!deviceKeys || editorOpen || mutationRef.current) return;
+    const owner = draftLoadScope;const operation = {};mutationRef.current = operation;setSaving(true);
+    const isCurrent = () => draftLoadScopeRef.current === owner;
+    try {
+      const [deviceLoad, cloudLoad] = await Promise.allSettled([
+        loadScenarioDeviceState(AsyncStorage, deviceKeys, isCurrent, new Date().toISOString(), () => `device-${nextLocalId()}`),
+        canPersistScenarios && !demoMode && householdId !== "local" ? loadPlanSimulations(householdId) : Promise.resolve(scenarios),
+      ]);
+      if (!isCurrent()) return;
+      const errors: string[] = [];
+      const rows = cloudLoad.status === "fulfilled" ? cloudLoad.value : [];
+      setScenarios(rows);
+      if (cloudLoad.status === "rejected") errors.push(cloudLoad.reason instanceof Error ? cloudLoad.reason.message : "Household scenarios could not be reloaded.");
+      if (deviceLoad.status === "fulfilled") { setDeviceLibrary(deviceLoad.value.library);setDeviceReady(true); }
+      else { setDeviceReady(false);errors.push(deviceLoad.reason instanceof Error ? deviceLoad.reason.message : "The device library could not be reloaded. Stored data was kept."); }
+      setSelectedId(previous => previous && (previous.startsWith("device:") && (deviceLoad.status === "rejected" || deviceLoad.value.library.scenarios.some(item => `device:${item.id}` === previous)) || rows.some(item => `household:${item.id}` === previous)) ? previous : null);
+      setMessage(errors.length ? `${errors.join(" ")} Your unsaved working values were kept.` : "Saved scenarios reloaded. Your unsaved working values were kept.");
+    } catch (error) { if (isCurrent()) setMessage(error instanceof Error ? error.message : "Saved scenarios could not be reloaded. Your working changes were kept."); }
+    finally { if (mutationRef.current === operation) mutationRef.current = null;if (isCurrent()) setSaving(false); }
+  }, [canPersistScenarios, demoMode, deviceKeys, draftLoadScope, editorOpen, householdId, scenarios]);
   const removeScenario = useCallback(() => {
-    if (!canPersistScenarios || !selectedScenario || !canEditHousehold || demoMode) return;
-    Alert.alert("Delete scenario?", `Delete “${selectedScenario.name}”? Your real plan will not change.`, [{ text: "Cancel", style: "cancel" }, { text: "Delete", style: "destructive", onPress: () => { setSaving(true); void deletePlanSimulation(selectedScenario).then(() => { setScenarios(previous => previous.filter(item => item.id !== selectedScenario.id)); newDraft(); setMessage("Scenario deleted. Your real plan was not changed."); }).catch(error => setMessage(error instanceof Error ? error.message : "Scenario could not be deleted.")).finally(() => setSaving(false)); } }]);
-  }, [canEditHousehold, canPersistScenarios, demoMode, newDraft, selectedScenario]);
+    if (saving || mutationRef.current || editorOpen || (!selectedDevice && (!selectedScenario || !canEditHousehold || !canPersistScenarios || demoMode))) return;
+    const owner = draftLoadScope;const selectedKey = selectedId;
+    confirmAction({ title: "Delete saved scenario?", message: `Delete “${selectedDevice?.name ?? selectedScenario?.name}” from ${selectedDevice ? "this device" : "the household"}? Your working copy and real plan will stay unchanged.`, confirmText: "Delete saved scenario", cancelText: "Cancel", destructive: true, onConfirm: async () => {
+      if (draftLoadScopeRef.current !== owner || mutationRef.current) return;
+      const operation = {};mutationRef.current = operation;setSaving(true);
+      try {
+        if (selectedDevice && deviceKeys) { const next = deleteDeviceScenario(deviceLibrary, selectedDevice.id);await persistScenarioLibrary(AsyncStorage, deviceKeys.library, deviceLibrary, next, () => draftLoadScopeRef.current === owner);if (draftLoadScopeRef.current !== owner) return;setDeviceLibrary(next); }
+        else if (selectedScenario) { await deletePlanSimulation(selectedScenario);if (draftLoadScopeRef.current !== owner) return;setScenarios(previous => previous.filter(item => item.id !== selectedScenario.id)); }
+        setSelectedId(null);setComparisonKeys(previous => previous.map(key => key === selectedKey ? "" : key) as [string, string]);setMessage("Saved option deleted. Your working copy is still open.");
+      } catch (error) { if (draftLoadScopeRef.current === owner) setMessage(error instanceof Error ? error.message : "The saved scenario could not be deleted.");throw error; }
+      finally { if (mutationRef.current === operation) mutationRef.current = null;if (draftLoadScopeRef.current === owner) setSaving(false); }
+    } });
+  }, [canEditHousehold, canPersistScenarios, demoMode, deviceKeys, deviceLibrary, draftLoadScope, editorOpen, saving, selectedDevice, selectedId, selectedScenario]);
 
   if (loading) return <AppLoadingIntro phase="simulator" accessibilityLabel="FlowLedger is opening Plan Simulator" />;
 
@@ -695,9 +764,10 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
         <Pressable accessibilityRole="button" accessibilityLabel="Close Plan Simulator" onPress={() => safeClose(router)} style={({ pressed }) => [styles.closeButton, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.66 : 1 }]}><Feather name="x" size={21} color={c.foreground} /></Pressable>
       </View>
       <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, desktop && styles.contentDesktop]} keyboardShouldPersistTaps="handled">
-        <View style={[styles.readOnlyBanner, { backgroundColor: c.primary + "12", borderColor: c.primary + "40" }]}><Feather name="shield" size={18} color={c.primary} /><View style={styles.readOnlyCopy}><AppText style={[styles.readOnlyTitle, { color: c.foreground }]}>{foundingFreeLocalOnly ? "Private on-device draft" : "Simulation only"}</AppText><AppText style={[styles.readOnlyText, { color: c.mutedForeground }]}>{foundingFreeLocalOnly ? "Founding Free keeps this draft on this device and does not sync it to your household. Your financial plan stays unchanged." : "There is no Apply action. Balances, APR, safety floor, goals, bills, debt, and past activity stay unchanged."}</AppText></View></View>
-        {!canEditHousehold && canPersistScenarios ? <View style={[styles.viewerNote, { backgroundColor: c.warning + "12", borderColor: c.warning + "40" }]}><Feather name="eye" size={16} color={c.warning} /><AppText style={[styles.viewerText, { color: c.foreground }]}>View-only access: saved household scenarios are readable. Any changes you try are kept as a private local draft and cannot be saved.</AppText></View> : null}
+        <View style={[styles.readOnlyBanner, { backgroundColor: c.primary + "12", borderColor: c.primary + "40" }]}><Feather name="shield" size={18} color={c.primary} /><View style={styles.readOnlyCopy}><AppText style={[styles.readOnlyTitle, { color: c.foreground }]}>{foundingFreeLocalOnly ? "Private on-device draft" : "Simulation only"}</AppText><AppText style={[styles.readOnlyText, { color: c.mutedForeground }]}>{foundingFreeLocalOnly ? "Named options are saved privately on this device. Household options are labelled separately. Your financial plan stays unchanged." : "There is no Apply action. Balances, APR, safety floor, goals, bills, debt, and past activity stay unchanged."}</AppText></View></View>
+        {!canEditHousehold && canPersistScenarios ? <View style={[styles.viewerNote, { backgroundColor: c.warning + "12", borderColor: c.warning + "40" }]}><Feather name="eye" size={16} color={c.warning} /><AppText style={[styles.viewerText, { color: c.foreground }]}>View-only access: saved household scenarios are readable. You can save private named copies on this device. Household scenarios cannot be updated with view-only access.</AppText></View> : null}
         {message ? <View accessibilityRole="alert" style={[styles.message, { backgroundColor: c.card, borderColor: c.border }]}><AppText style={[styles.messageText, { color: c.foreground }]}>{message}</AppText><Pressable accessibilityRole="button" accessibilityLabel="Dismiss message" onPress={() => setMessage("")} hitSlop={8}><Feather name="x" size={16} color={c.mutedForeground} /></Pressable></View> : null}
+        {pendingSwitch ? <View accessibilityRole="alert" style={[styles.card, { backgroundColor: c.background, borderColor: c.warning }]}><AppText accessibilityRole="header" style={[styles.cardTitle, { color: c.foreground }]}>Save your working changes?</AppText><AppText style={[styles.scopeNote, { color: c.mutedForeground }]}>Save before opening another scenario, discard these working changes, or keep editing. Saved options stay unchanged until you update them.</AppText><View style={styles.actionWrap}><Button label="Save & switch" primary disabled={saving || (!deviceReady && !householdWriteEligible)} onPress={() => void (async () => { const next = pendingSwitch;if (await saveDraft()) applySelection(next); })()} /><Button label="Discard & switch" danger disabled={saving} onPress={() => applySelection(pendingSwitch)} /><Button label="Keep editing" disabled={saving} onPress={() => setPendingSwitch(null)} /></View></View> : null}
         {!desktop ? <View accessibilityRole="tablist" accessibilityLabel="Simulator workspace" style={[styles.workspaceTabs, { backgroundColor: c.card, borderColor: c.border }]}>
           {(["build", "compare"] as const).map(view => <Pressable key={view} accessibilityRole="tab" accessibilityLabel={view === "build" ? "Build" : "Compare"} accessibilityState={{ selected: mobileView === view }} aria-selected={mobileView === view} onPress={() => setMobileView(view)} style={[styles.workspaceTab, { backgroundColor: mobileView === view ? c.primary : "transparent" }]}><Feather name={view === "build" ? "sliders" : "bar-chart-2"} size={16} color={mobileView === view ? c.primaryForeground : c.mutedForeground} /><AppText style={[styles.workspaceTabText, { color: mobileView === view ? c.primaryForeground : c.foreground }]}>{view === "build" ? "Build" : "Compare"}{view === "compare" && (!scenarioResult.complete || scenarioRiskDay) ? " · !" : ""}</AppText></Pressable>)}
         </View> : null}
@@ -705,24 +775,32 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
           {desktop || mobileView === "build" ? <View style={styles.editorColumn}>
             <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
               <AppText accessibilityRole="header" tone="title" style={[styles.cardTitle, { color: c.foreground }]}>Your scenario</AppText>
-              <View style={styles.scenarioBar}>
-                <View style={styles.scenarioSelect}><FieldLabel>Scenario</FieldLabel><ChoiceChips values={[{ id: "draft", label: "Local draft" }, ...scenarios.map(item => ({ id: item.id, label: item.invalidDefinition ? `${item.name} · Ready to adjust` : item.name }))]} selected={selectedId ?? "draft"} onSelect={id => { if (id === (selectedId ?? "draft")) return; if (id === "draft") newDraft(); else { const scenario = scenarios.find(item => item.id === id); if (scenario) selectScenario(scenario); } }} /></View>
-                <Button label={foundingFreeLocalOnly ? "New local draft" : "New"} icon="plus" onPress={newDraft} />
+              <View style={styles.libraryPicker}><ScenarioOptionPicker key={draftLoadScope} label="Open saved scenario" options={[{ key: "new-draft", name: "New working draft", source: "On this device" }, ...savedOptions.map(option => ({ key: option.key, name: option.draft.name, source: option.source }))]} selectedKey={selectedId ?? "new-draft"} onSelect={requestSelection} disabled={saving} /></View>
+              <View style={styles.actionWrap}><Button label="New working draft" icon="plus" onPress={() => requestSelection("new-draft")} disabled={saving} /></View>
+              <AppText style={[styles.scopeNote, { color: draftDirty ? c.warning : c.mutedForeground }]}>{draftDirty ? "Unsaved changes in this working draft" : selectedSaved ? `Saved option · ${selectedSaved.source}` : "Working draft · not a saved option yet"}</AppText>
+              <View style={styles.field}><FieldLabel>Name</FieldLabel><Input inputRef={scenarioNameRef} disabled={saving} label="Scenario name" value={draft.name} onChangeText={updateDraftName} placeholder="Name this scenario" /></View>
+              <View style={styles.field}><FieldLabel>Compare over</FieldLabel>{saving ? <AppText accessibilityLabel="Scenario horizon while saving" style={[styles.scopeNote, { color: c.mutedForeground }]}>{draft.horizonMonths} months · Saving…</AppText> : <ChoiceChips values={PLAN_SIMULATION_HORIZONS.map(value => ({ id: String(value), label: `${value} months` }))} selected={String(draft.horizonMonths)} onSelect={updateDraftHorizon} />}</View>
+              <AppText style={[styles.scopeNote, { color: c.mutedForeground }]}>Named scenarios are saved on this device and kept when you sign back in. They do not sync to another device; clearing app data or deleting your account removes them. Your working draft is separate.</AppText>
+              {editorOpen ? <AppText accessibilityRole="alert" style={[styles.editSemantics, { color: c.primary }]}>Update or cancel this change first.</AppText> : null}
+              <View style={styles.actionWrap}>
+                <Button label="Save as new" icon="save" onPress={() => void saveDevice(true)} disabled={!deviceReady || saving || editorOpen || Boolean(draft.invalidDefinition)} primary />
+                <Button label="Update saved scenario" icon="check" onPress={() => void saveDraft()} disabled={(!selectedDevice && !selectedScenario) || Boolean(selectedDevice && !deviceReady) || saving || editorOpen || Boolean(draft.invalidDefinition) || Boolean(selectedScenario && (!canEditHousehold || !canPersistScenarios || demoMode))} />
+                <Button label="Rename" icon="type" onPress={() => { scenarioNameRef.current?.focus();setMessage("Edit the scenario name, then choose Update saved scenario."); }} disabled={(!selectedDevice && !selectedScenario) || Boolean(selectedDevice && !deviceReady) || saving || editorOpen || Boolean(selectedScenario && (!canEditHousehold || !canPersistScenarios || demoMode))} />
+                <Button label="Duplicate" icon="copy" onPress={() => { if (selectedScenario && canPersistScenarios && canEditHousehold && !demoMode) void saveHouseholdCopy(true);else void saveDevice(true, true); }} disabled={(!deviceReady && !householdWriteEligible) || saving || editorOpen || Boolean(draft.invalidDefinition)} />
+                <Button label={draft.invalidDefinition ? "Reset unsupported changes" : "Reset working draft"} icon="rotate-ccw" onPress={resetDraft} disabled={saving} />
+                <Button label="Delete saved scenario" icon="trash-2" onPress={removeScenario} disabled={(!selectedDevice && !selectedScenario) || Boolean(selectedDevice && !deviceReady) || saving || editorOpen || Boolean(selectedScenario && (!canEditHousehold || !canPersistScenarios || demoMode))} danger />
+                {canPersistScenarios && canEditHousehold && !demoMode ? <Button label="Save household copy" icon="users" onPress={() => void saveHouseholdCopy()} disabled={saving || editorOpen || Boolean(draft.invalidDefinition)} /> : null}
+                <Button label="Reload saved scenarios" icon="refresh-cw" onPress={() => void reloadLibraries()} disabled={saving || editorOpen} />
               </View>
-              <View style={styles.field}><FieldLabel>Name</FieldLabel><Input label="Scenario name" value={draft.name} onChangeText={name => { makeLocalDraft(); setDraft(previous => ({ ...previous, name })); }} placeholder="Name this scenario" /></View>
-              <View style={styles.field}><FieldLabel>Compare over</FieldLabel><ChoiceChips values={PLAN_SIMULATION_HORIZONS.map(value => ({ id: String(value), label: `${value} months` }))} selected={String(draft.horizonMonths)} onSelect={value => { makeLocalDraft(); setDraft(previous => ({ ...previous, horizonMonths: Number(value) as PlanSimulationHorizon })); }} /></View>
-              <AppText style={[styles.scopeNote, { color: c.mutedForeground }]}>{foundingFreeLocalOnly ? "This draft is saved only on this device. Household scenario sync and saved copies are planned for Pro." : "Saved scenarios store only their name and hypothetical changes. Every result is rebuilt from the latest live Forecast."}</AppText>
-              {editorOpen ? <AppText accessibilityRole="alert" style={[styles.editSemantics, { color: c.primary }]}>Update or cancel this change first. Reset or choose another scenario to discard this edit.</AppText> : null}
-              <View style={styles.actionWrap}>{foundingFreeLocalOnly ? <Button label={draft.invalidDefinition ? "Reset unsupported changes" : "Reset local draft"} icon="rotate-ccw" onPress={resetDraft} disabled={saving} /> : <><Button label={selectedScenario ? "Save changes" : "Save"} icon="save" onPress={() => void saveDraft()} disabled={!canEditHousehold || saving || demoMode || Boolean(draft.invalidDefinition) || editorOpen} primary /><Button label="Rename" icon="type" onPress={() => void saveDraft()} disabled={!selectedScenario || !canEditHousehold || saving || demoMode || Boolean(draft.invalidDefinition) || editorOpen} /><Button label="Duplicate" icon="copy" onPress={() => void duplicate()} disabled={!canEditHousehold || saving || demoMode || Boolean(draft.invalidDefinition) || editorOpen} /><Button label={draft.invalidDefinition ? "Reset unsupported changes" : "Reset"} icon="rotate-ccw" onPress={resetDraft} disabled={saving} /><Button label="Delete" icon="trash-2" onPress={removeScenario} disabled={!selectedScenario || !canEditHousehold || saving || demoMode} danger /></>}</View>
-              {saving && canPersistScenarios ? <View style={styles.savingRow}><ActivityIndicator size="small" color={c.primary} /><AppText style={[styles.savingText, { color: c.mutedForeground }]}>Saving scenario…</AppText></View> : null}
+              {saving ? <View style={styles.savingRow}><ActivityIndicator size="small" color={c.primary} /><AppText style={[styles.savingText, { color: c.mutedForeground }]}>Saving scenario…</AppText></View> : null}
             </View>
             {!desktop ? <View style={[styles.buildStatus, { backgroundColor: scenarioResult.complete && !scenarioRiskDay ? c.primary + "0B" : c.warning + "10", borderColor: scenarioResult.complete && !scenarioRiskDay ? c.primary + "35" : c.warning + "55" }]}>
               <View style={styles.changeRowCopy}><AppText style={[styles.buildStatusTitle, { color: c.foreground }]}>{scenarioRiskDay ? "This scenario goes below $0" : !scenarioResult.complete ? "Some changes need attention" : "Your comparison is ready"}</AppText><AppText style={[styles.buildStatusText, { color: c.mutedForeground }]}>{scenarioRiskDay ? `First below zero: ${shortDate(scenarioRiskDay.date)}. Open Compare for the full warning.` : !scenarioResult.complete ? "Review the highlighted changes. Compare shows the limits of this result." : `${draft.changes.length} ${draft.changes.length === 1 ? "change" : "changes"} · ${draft.horizonMonths}-month outlook`}</AppText></View><Button label="View comparison" icon="arrow-right" onPress={() => setMobileView("compare")} />
             </View> : null}
-            <View><View style={styles.changesToolbar}><View style={styles.sectionHeading}><AppText accessibilityRole="header" tone="title" style={[styles.sectionTitle, { color: c.foreground }]}>Your changes</AppText><View style={[styles.countBadge, { backgroundColor: c.primary + "12" }]}><AppText style={{ color: c.primary, fontFamily: "Inter_700Bold", fontSize: 12 }}>{draft.changes.length}</AppText></View></View><View style={!desktop ? styles.mobileAddChange : undefined}><Button label="Add change" icon="plus" onPress={() => openEditor()} disabled={Boolean(draft.invalidDefinition)} primary /></View></View><ChangeList changes={draft.changes} references={references} issues={scenarioResult.issues} editingId={editingId} onEdit={id => openEditor(id)} onRemove={removeChange} /></View>
+            <View><View style={styles.changesToolbar}><View style={styles.sectionHeading}><AppText accessibilityRole="header" tone="title" style={[styles.sectionTitle, { color: c.foreground }]}>Your changes</AppText><View style={[styles.countBadge, { backgroundColor: c.primary + "12" }]}><AppText style={{ color: c.primary, fontFamily: "Inter_700Bold", fontSize: 12 }}>{draft.changes.length}</AppText></View></View><View style={!desktop ? styles.mobileAddChange : undefined}><Button label="Add change" icon="plus" onPress={() => openEditor()} disabled={saving || Boolean(draft.invalidDefinition)} primary /></View></View><ChangeList changes={draft.changes} references={references} issues={scenarioResult.issues} disabled={saving} editingId={editingId} onEdit={id => openEditor(id)} onRemove={removeChange} /></View>
             {draft.invalidDefinition ? <AppText accessibilityRole="alert" style={[styles.editSemantics, { color: c.warning }]}>Reset unsupported changes before adding or editing this scenario.</AppText> : null}
           </View> : null}
-          {desktop || mobileView === "compare" ? <View style={[styles.resultsColumn, desktop && styles.resultsColumnDesktop]}><ResultsPanel baseline={baselineResult} scenario={scenarioResult} safetyFloor={settings.safety_floor} /></View> : null}
+          {desktop || mobileView === "compare" ? <View style={[styles.resultsColumn, desktop && styles.resultsColumnDesktop]}><SavedScenarioComparison key={draftLoadScope} options={savedOptions} selected={comparisonKeys} onSelect={(index, key) => { setComparisonKeys(previous => { const next: [string, string] = [...previous];next[index] = key;return next; });setComparisonHorizon(null); }} horizon={commonHorizon} onHorizon={setComparisonHorizon} comparison={savedComparison} />{!savedComparison ? <ResultsPanel baseline={baselineResult} scenario={scenarioResult} safetyFloor={settings.safety_floor} /> : null}</View> : null}
         </View>
       </ScrollView>
       {editorOpen ? <Modal visible transparent animationType={desktop ? "fade" : "slide"} onRequestClose={closeEditor} onShow={focusEditor}>
@@ -755,8 +833,8 @@ const styles = StyleSheet.create({
   screen: { flex: 1 }, scroll: { flex: 1 }, content: { padding: 16, paddingBottom: 40, gap: 14 }, contentDesktop: { width: "100%", maxWidth: 1480, alignSelf: "center", paddingHorizontal: 28, paddingBottom: 64 },
   header: { minHeight: 88, borderBottomWidth: 1, paddingHorizontal: 18, paddingVertical: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 }, headerCopy: { flex: 1, maxWidth: 820 }, eyebrow: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.9 }, title: { fontSize: 25, fontFamily: "Inter_800ExtraBold", marginTop: 2 }, subtitle: { fontSize: 13, marginTop: 4, lineHeight: 19 }, closeButton: { width: 44, height: 44, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" }, lockedHeader: { height: 60, alignItems: "flex-end", justifyContent: "center", paddingHorizontal: 16 },
   readOnlyBanner: { borderWidth: 1, borderRadius: 18, padding: 14, flexDirection: "row", gap: 12, alignItems: "center" }, readOnlyCopy: { flex: 1 }, readOnlyTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" }, readOnlyText: { fontSize: 12, marginTop: 2, lineHeight: 17 },
-  scenarioBar: { marginTop: 14, flexWrap: "wrap", flexDirection: "row", alignItems: "flex-end", gap: 10 }, scenarioSelect: { flex: 1, minWidth: 0 }, viewerNote: { borderWidth: 1, borderRadius: 16, padding: 12, flexDirection: "row", gap: 10, alignItems: "center" }, viewerText: { flex: 1, fontSize: 12, lineHeight: 17 }, message: { borderWidth: 1, borderRadius: 14, padding: 12, flexDirection: "row", alignItems: "center", gap: 10 }, messageText: { flex: 1, fontSize: 12 },
-  workspace: { gap: 16 }, workspaceDesktop: { flexDirection: "row", alignItems: "flex-start", gap: 20 }, editorColumn: { flex: 1, minWidth: 0, gap: 16 }, resultsColumn: { minWidth: 0 }, resultsColumnDesktop: { width: "42%", maxWidth: 600, position: Platform.OS === "web" ? "sticky" as any : "relative", top: 16 },
+  libraryPicker: { marginTop: 14 }, scenarioBar: { marginTop: 14, flexWrap: "wrap", flexDirection: "row", alignItems: "flex-end", gap: 10 }, scenarioSelect: { flex: 1, minWidth: 0 }, viewerNote: { borderWidth: 1, borderRadius: 16, padding: 12, flexDirection: "row", gap: 10, alignItems: "center" }, viewerText: { flex: 1, fontSize: 12, lineHeight: 17 }, message: { borderWidth: 1, borderRadius: 14, padding: 12, flexDirection: "row", alignItems: "center", gap: 10 }, messageText: { flex: 1, fontSize: 12 },
+  workspace: { gap: 16 }, workspaceDesktop: { flexDirection: "row", alignItems: "flex-start", gap: 20 }, editorColumn: { flex: 1, minWidth: 0, gap: 16 }, resultsColumn: { minWidth: 0, gap: 16 }, resultsColumnDesktop: { width: "42%", maxWidth: 600, position: Platform.OS === "web" ? "sticky" as any : "relative", top: 16 },
   card: { borderWidth: 1, borderRadius: 22, padding: 16 }, cardTitle: { fontSize: 18, fontFamily: "Inter_800ExtraBold" }, cardDescription: { fontSize: 12, marginTop: 4, lineHeight: 18 }, field: { marginTop: 13 }, fieldLabel: { fontSize: 12, fontFamily: "Inter_800ExtraBold", marginBottom: 6 }, input: { width: "100%", minHeight: 44, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, fontSize: 14, fontFamily: "Inter_500Medium" }, scopeNote: { fontSize: 12, lineHeight: 16, marginTop: 12 },
   button: { minHeight: 44, borderWidth: 1, borderRadius: 12, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 }, buttonText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" }, actionWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 14 }, savingRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 }, savingText: { fontSize: 11 },
   workspaceTabs: { flexDirection: "row", borderWidth: 1, borderRadius: 15, padding: 4, gap: 4 }, workspaceTab: { flex: 1, minHeight: 44, borderRadius: 11, flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center" }, workspaceTabText: { fontSize: 14, fontFamily: "Inter_700Bold" },

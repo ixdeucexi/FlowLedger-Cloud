@@ -479,7 +479,7 @@ test("Plan Simulator is a direct Pro route launched only from mobile and desktop
   assert.match(route, /getPlanSimulationBaseline/);
   assert.match(route, /projectPlanSimulation/);
   assert.match(route, /canEditHousehold/);
-  assert.match(route, /planSimulationStorageKey\(user\.id, householdId\)/);
+  assert.match(route, /scenarioDeviceKeys\(user\.id, householdId, demoMode\)/);
   assert.match(route, /Nothing changes your real plan/);
   const chips = readFileSync("components/SimulatorChoiceChips.tsx", "utf8");
   assert.match(chips, /chip:\s*\{ minHeight: 44/);

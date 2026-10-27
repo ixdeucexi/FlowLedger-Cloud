@@ -161,9 +161,9 @@ test("Founding Free Plan Simulator keeps calculations local while admin Pro reta
 
   assert.match(simulator, /canPersistPlanSimulations\(actualPlan\)/);
   assert.match(simulator, /!canPersistScenarios \|\| demoMode \|\| householdId === "local" \? Promise\.resolve\(\[\]\) : loadPlanSimulations/);
-  assert.match(simulator, /keepsLocalDraft && draftStorageKey \? AsyncStorage\.getItem/);
-  assert.match(simulator, /Founding Free keeps this draft on this device and does not sync it to your household/);
-  assert.match(simulator, /foundingFreeLocalOnly \? <Button label=\{draft\.invalidDefinition/);
-  assert.match(simulator, /foundingFreeLocalOnly \? "New local draft" : "New"/);
+  assert.match(simulator, /loadScenarioDeviceState\(AsyncStorage, deviceKeys, isCurrent/);
+  assert.match(simulator, /Named options are saved privately on this device/);
+  assert.match(simulator, /label="Save as new"/);
+  assert.match(simulator, /canPersistScenarios && canEditHousehold && !demoMode \? <Button label="Save household copy"/);
   assert.match(simulator, /foundingFreeLocalOnly \? "Private on-device draft" : "Simulation only"/);
 });

@@ -217,6 +217,8 @@
     ,"lib/planSimulator.ts"
     ,"lib/planSimulator.test.ts"
     ,"lib/planSimulationEditor.test.ts"
+    ,"lib/planSimulationLibrary.test.ts"
+    ,"lib/planSimulationComparison.test.ts"
     ,"lib/simulatorEditorHistory.test.ts"
     ,"lib/floExperience.ts"
     ,"lib/floExperience.test.ts"
