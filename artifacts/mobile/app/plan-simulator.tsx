@@ -3,10 +3,15 @@ import Feather from "@expo/vector-icons/Feather";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useOverlayActivity } from "@/hooks/useOverlayActivity";
+import { createSimulatorEditorHistory } from "@/lib/simulatorEditorHistory";
+import { DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_WIDE } from "@/lib/desktopModal";
 import { useLocalDay } from "@/hooks/useLocalDay";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -232,10 +237,10 @@ function ChangeComposer({
   };
 
   return (
-    <View style={[styles.card, { backgroundColor: c.card, borderColor: editingChange ? c.primary : c.border }]}>
+    <View style={styles.composerBody}>
       <View style={styles.composerHeading}>
         <View style={[styles.editorIcon, { backgroundColor: c.primary + "18" }]}><Feather name={editingChange ? "edit-3" : "sliders"} size={20} color={c.primary} /></View>
-        <View style={styles.changeOptionCopy}><AppText accessibilityRole="header" tone="title" style={[styles.cardTitle, { color: c.foreground }]}>{editingChange ? "Edit scenario change" : "Add a what-if change"}</AppText><AppText style={[styles.cardDescription, { color: c.mutedForeground }]}>{editingChange ? `${option.label} · your original change stays in place until you update it.` : "Choose an area, then set the change you want to compare."}</AppText></View>
+        <View style={styles.changeOptionCopy}><AppText style={[styles.cardDescription, { color: c.mutedForeground }]}>{editingChange ? `${option.label} · your original change stays in place until you update it.` : "Choose an area, then set the change you want to compare."}</AppText></View>
       </View>
       {!editingChange ? <>
         <View accessibilityRole="radiogroup" accessibilityLabel="Change category" style={styles.categoryTabs}>
@@ -261,7 +266,7 @@ function ChangeComposer({
       {error ? <AppText accessibilityRole="alert" style={[styles.errorText, { color: c.destructive }]}>{error}</AppText> : null}
       {type === "income_edit" || type === "bill_edit" ? <AppText style={[styles.editSemantics, { color: c.mutedForeground }]}>The new amount is the full intended occurrence total. Settled amounts stay unchanged; only the remaining Forecast amount is replaced.</AppText> : null}
       {type === "debt_payoff" ? <AppText style={[styles.editSemantics, { color: c.mutedForeground }]}>Flo tests paying that debt’s remaining balance on the selected date. It does not change the real debt or schedule a payment.</AppText> : null}
-      <View style={styles.composerActions}><Button label={editingChange ? "Update change" : "Add to scenario"} icon={editingChange ? "check" : "plus"} onPress={save} primary />{editingChange ? <Button label="Cancel editing" onPress={onCancel} /> : null}</View>
+      <View style={styles.composerActions}><Button label={editingChange ? "Update change" : "Add to scenario"} icon={editingChange ? "check" : "plus"} onPress={save} primary /><Button label={editingChange ? "Cancel editing" : "Cancel"} onPress={onCancel} /></View>
     </View>
   );
 }
@@ -282,7 +287,7 @@ function changeSummary(change: PlanSimulationChange) {
 
 function ChangeList({ changes, references, issues, editingId, onEdit, onRemove }: { changes: PlanSimulationChange[]; references: PlanSimulationReferences; issues: PlanSimulationResult["issues"]; editingId: string | null; onEdit: (id: string) => void; onRemove: (id: string) => void }) {
   const c = useColors();
-  if (!changes.length) return <View style={[styles.emptyCard, { borderColor: c.border }]}><View style={[styles.editorIcon, { backgroundColor: c.primary + "12" }]}><Feather name="git-branch" size={21} color={c.primary} /></View><AppText style={[styles.emptyTitle, { color: c.foreground }]}>Start with one small change</AppText><AppText style={[styles.emptyText, { color: c.mutedForeground }]}>Add income, adjust a bill or test a purchase below. Your comparison updates as you go.</AppText></View>;
+  if (!changes.length) return <View style={[styles.emptyCard, { borderColor: c.border }]}><View style={[styles.editorIcon, { backgroundColor: c.primary + "12" }]}><Feather name="git-branch" size={21} color={c.primary} /></View><AppText style={[styles.emptyTitle, { color: c.foreground }]}>Start with one small change</AppText><AppText style={[styles.emptyText, { color: c.mutedForeground }]}>Choose Add change to test income, bills, spending or debt. Your comparison updates as you go.</AppText></View>;
   return <View style={styles.changeList}>{changes.map((change, index) => {
     const issue = issues.find(item => item.changeId === change.id);
     const label = changeLabel(change, references);
@@ -391,22 +396,42 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
   const [message, setMessage] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editorVersion, setEditorVersion] = useState(0);
-  const [editorRevealVersion, setEditorRevealVersion] = useState(0);
-  const scrollRef = useRef<ScrollView>(null);
-  const editorRef = useRef<View>(null);
-  const workspaceYRef = useRef(0);
-  const editorYRef = useRef(0);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [mobileView, setMobileView] = useState<"build" | "compare">("build");
+  const editorHeadingRef = useRef<View>(null);
+  const returnFocusRef = useRef<{ focus: (options?: { preventScroll: boolean }) => void } | null>(null);
   const editingChange = draft.changes.find(change => change.id === editingId) ?? null;
+  const focusEditor = useCallback(() => {
+    if (Platform.OS === "web") (editorHeadingRef.current as unknown as { focus?: (options: { preventScroll: boolean }) => void })?.focus?.({ preventScroll: true });
+  }, []);
+  const closeEditor = useCallback(() => {
+    setEditorOpen(false);
+    setEditingId(null);
+    if (Platform.OS === "web") {
+      const target = returnFocusRef.current;
+      requestAnimationFrame(() => target?.focus({ preventScroll: true }));
+    }
+  }, []);
+  const openEditor = useCallback((id: string | null = null) => {
+    if (draft.invalidDefinition || (id && !draft.changes.some(change => change.id === id))) return;
+    if (Platform.OS === "web" && typeof document !== "undefined") returnFocusRef.current = document.activeElement as HTMLElement | null;
+    setEditingId(id);
+    setEditorVersion(previous => previous + 1);
+    setEditorOpen(true);
+  }, [draft.changes, draft.invalidDefinition]);
+  useOverlayActivity(editorOpen);
   useEffect(() => {
-    if (!editingId) return;
-    let frame = requestAnimationFrame(() => {
-      frame = requestAnimationFrame(() => {
-        scrollRef.current?.scrollTo({ y: workspaceYRef.current + editorYRef.current - 12, animated: true });
-        if (Platform.OS === "web") (editorRef.current as unknown as { focus?: (options: { preventScroll: boolean }) => void })?.focus?.({ preventScroll: true });
-      });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [editingId, editorRevealVersion]);
+    if (!editorOpen || Platform.OS !== "web" || typeof window === "undefined") return;
+    const history = createSimulatorEditorHistory(window, closeEditor);
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeEditor();
+    };
+    window.addEventListener("keydown", onEscape, true);
+    return () => { window.removeEventListener("keydown", onEscape, true); history.dispose(); };
+  }, [editorOpen, closeEditor]);
   const selectedScenario = useMemo(() => scenarios.find(item => item.id === selectedId) ?? null, [scenarios, selectedId]);
   const foundingFreeLocalOnly = FOUNDING_FREE_LAUNCH && !canPersistScenarios;
   const keepsLocalDraft = foundingFreeLocalOnly || !canEditHousehold;
@@ -427,6 +452,9 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
     let cancelled = false;
     setLoading(true);
     setLoadedDraftScope(null);
+    setMobileView("build");
+    returnFocusRef.current = null;
+    setEditorOpen(false);
     setEditingId(null);
     setEditorVersion(previous => previous + 1);
     setMessage("");
@@ -552,7 +580,10 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
     definitionIssue: draft.invalidDefinition ? "This scenario uses an unsupported definition. Reset it before continuing." : null,
   }), [baseline, draft.changes, draft.invalidDefinition, metrics, references, settings.safety_floor]);
 
+  const scenarioRiskDay = firstNegativeBalanceDay(scenarioResult.days);
+
   const selectScenario = useCallback((scenario: PlanSimulationDefinition) => {
+    setEditorOpen(false);
     setEditingId(null);
     setEditorVersion(previous => previous + 1);
     setSelectedId(scenario.id);
@@ -571,10 +602,10 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
     setDraft(previous => ({ ...previous, changes: [...previous.changes, change] }));
   }, [makeLocalDraft]);
   const removeChange = useCallback((id: string) => {
-    setEditingId(previous => previous === id ? null : previous);
+    if (editingId === id) { setEditorOpen(false); setEditingId(null); }
     makeLocalDraft();
     setDraft(previous => ({ ...previous, changes: previous.changes.filter(change => change.id !== id) }));
-  }, [makeLocalDraft]);
+  }, [editingId, makeLocalDraft]);
   const saveChange = useCallback((change: PlanSimulationChange): string | null => {
     if (draft.invalidDefinition) return "Reset the unsupported scenario definition before changing it.";
     if (editingId) {
@@ -585,15 +616,15 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
         const replacement = replaceSimulationChange(previous.changes, editingId, change);
         return replacement ? { ...previous, changes: replacement } : previous;
       });
-      setEditingId(null);
     } else {
       if (!decodePlanSimulationChanges([...draft.changes, change])) return "A scenario supports up to 50 valid changes. Remove a change before adding another.";
       addChange(change);
     }
+    closeEditor();
     return null;
-  }, [addChange, draft.changes, draft.invalidDefinition, editingId, makeLocalDraft]);
-  const cancelEditing = useCallback(() => { setEditingId(null); setEditorVersion(previous => previous + 1); }, []);
+  }, [addChange, closeEditor, draft.changes, draft.invalidDefinition, editingId, makeLocalDraft]);
   const newDraft = useCallback(() => {
+    setEditorOpen(false);
     setEditingId(null);
     setEditorVersion(previous => previous + 1);
     setSelectedId(null);
@@ -601,6 +632,7 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
     setMessage("");
   }, [defaultHorizon]);
   const resetDraft = useCallback(() => {
+    setEditorOpen(false);
     setEditingId(null);
     setEditorVersion(previous => previous + 1);
     if (selectedScenario?.invalidDefinition) {
@@ -613,7 +645,7 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
     setMessage("Draft reset.");
   }, [defaultHorizon, selectedScenario]);
   const saveDraft = useCallback(async () => {
-    if (editingId) { setMessage("Update or cancel this change first."); return; }
+    if (editorOpen) { setMessage("Update or cancel this change first."); return; }
     if (!canPersistScenarios) { setMessage("Founding Free keeps this draft on this device. Household scenario saving is planned for Pro."); return; }
     if (!canEditHousehold || demoMode) { setMessage(canEditHousehold ? "Demo scenarios stay local and are not saved to a household." : "View-only members can run local drafts but cannot save household scenarios."); return; }
     if (draft.invalidDefinition) { setMessage("Reset the unsupported saved definition before saving or renaming it."); return; }
@@ -630,9 +662,9 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
       setMessage("Scenario saved. Your real plan was not changed.");
     } catch (error) { setMessage(error instanceof Error ? error.message : "Scenario could not be saved."); }
     finally { setSaving(false); }
-  }, [canEditHousehold, canPersistScenarios, demoMode, draft, editingId, householdId, selectedScenario]);
+  }, [canEditHousehold, canPersistScenarios, demoMode, draft, editorOpen, householdId, selectedScenario]);
   const duplicate = useCallback(async () => {
-    if (editingId) { setMessage("Update or cancel this change first."); return; }
+    if (editorOpen) { setMessage("Update or cancel this change first."); return; }
     if (!canPersistScenarios) { setMessage("Founding Free uses one private on-device draft. Household scenario copies are planned for Pro."); return; }
     if (!canEditHousehold || demoMode) { setMessage("Only household editors can duplicate saved scenarios."); return; }
     if (draft.invalidDefinition) { setMessage("Reset the unsupported saved definition before duplicating it."); return; }
@@ -648,7 +680,7 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
       setMessage("Scenario duplicated. Your real plan was not changed.");
     } catch (error) { setMessage(error instanceof Error ? error.message : "Scenario could not be duplicated."); }
     finally { setSaving(false); }
-  }, [canEditHousehold, canPersistScenarios, demoMode, draft, editingId, householdId, scenarios, selectScenario]);
+  }, [canEditHousehold, canPersistScenarios, demoMode, draft, editorOpen, householdId, scenarios, selectScenario]);
   const removeScenario = useCallback(() => {
     if (!canPersistScenarios || !selectedScenario || !canEditHousehold || demoMode) return;
     Alert.alert("Delete scenario?", `Delete “${selectedScenario.name}”? Your real plan will not change.`, [{ text: "Cancel", style: "cancel" }, { text: "Delete", style: "destructive", onPress: () => { setSaving(true); void deletePlanSimulation(selectedScenario).then(() => { setScenarios(previous => previous.filter(item => item.id !== selectedScenario.id)); newDraft(); setMessage("Scenario deleted. Your real plan was not changed."); }).catch(error => setMessage(error instanceof Error ? error.message : "Scenario could not be deleted.")).finally(() => setSaving(false)); } }]);
@@ -659,35 +691,55 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.background }]} edges={["top", "bottom"]}>
       <View style={[styles.header, { borderColor: c.border, backgroundColor: c.background }]}>
-        <View style={styles.headerCopy}><AppText tone="label" style={[styles.eyebrow, { color: c.primary }]}>{foundingFreeLocalOnly ? "FOUNDING FREE PLAN SIMULATOR" : "PRO PLAN SIMULATOR"}</AppText><AppText accessibilityRole="header" tone="title" style={[styles.title, { color: c.foreground }]}>Plan Simulator</AppText><AppText style={[styles.subtitle, { color: c.mutedForeground }]}>{foundingFreeLocalOnly ? "Try a different plan. See the impact before you make a decision. Nothing changes your real plan." : "Explore a what-if scenario alongside your real Forecast."}</AppText><DataFreshnessLabel compact /></View>
+        <View style={styles.headerCopy}><AppText tone="label" style={[styles.eyebrow, { color: c.primary }]}>{foundingFreeLocalOnly ? "FOUNDING FREE PLAN SIMULATOR" : "PRO PLAN SIMULATOR"}</AppText><AppText accessibilityRole="header" tone="title" style={[styles.title, { color: c.foreground }]}>Plan Simulator</AppText><AppText style={[styles.subtitle, { color: c.mutedForeground }]}>{foundingFreeLocalOnly ? "Your private what-if workspace. Nothing changes your real plan." : "Explore possibilities alongside your real Forecast."}</AppText><DataFreshnessLabel compact /></View>
         <Pressable accessibilityRole="button" accessibilityLabel="Close Plan Simulator" onPress={() => safeClose(router)} style={({ pressed }) => [styles.closeButton, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.66 : 1 }]}><Feather name="x" size={21} color={c.foreground} /></Pressable>
       </View>
-      <ScrollView ref={scrollRef} style={styles.scroll} contentContainerStyle={[styles.content, desktop && styles.contentDesktop]} keyboardShouldPersistTaps="handled">
+      <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, desktop && styles.contentDesktop]} keyboardShouldPersistTaps="handled">
         <View style={[styles.readOnlyBanner, { backgroundColor: c.primary + "12", borderColor: c.primary + "40" }]}><Feather name="shield" size={18} color={c.primary} /><View style={styles.readOnlyCopy}><AppText style={[styles.readOnlyTitle, { color: c.foreground }]}>{foundingFreeLocalOnly ? "Private on-device draft" : "Simulation only"}</AppText><AppText style={[styles.readOnlyText, { color: c.mutedForeground }]}>{foundingFreeLocalOnly ? "Founding Free keeps this draft on this device and does not sync it to your household. Your financial plan stays unchanged." : "There is no Apply action. Balances, APR, safety floor, goals, bills, debt, and past activity stay unchanged."}</AppText></View></View>
-        <View style={[styles.scenarioBar, { backgroundColor: c.card, borderColor: c.border }]}>
-          <View style={styles.scenarioSelect}><FieldLabel>Scenario</FieldLabel><ChoiceChips values={[{ id: "draft", label: "Local draft" }, ...scenarios.map(item => ({ id: item.id, label: item.invalidDefinition ? `${item.name} · Ready to adjust` : item.name }))]} selected={selectedId ?? "draft"} onSelect={id => { if (id === "draft") newDraft(); else { const scenario = scenarios.find(item => item.id === id); if (scenario) selectScenario(scenario); } }} /></View>
-          <Button label={foundingFreeLocalOnly ? "New local draft" : "New"} icon="plus" onPress={newDraft} />
-        </View>
         {!canEditHousehold && canPersistScenarios ? <View style={[styles.viewerNote, { backgroundColor: c.warning + "12", borderColor: c.warning + "40" }]}><Feather name="eye" size={16} color={c.warning} /><AppText style={[styles.viewerText, { color: c.foreground }]}>View-only access: saved household scenarios are readable. Any changes you try are kept as a private local draft and cannot be saved.</AppText></View> : null}
         {message ? <View accessibilityRole="alert" style={[styles.message, { backgroundColor: c.card, borderColor: c.border }]}><AppText style={[styles.messageText, { color: c.foreground }]}>{message}</AppText><Pressable accessibilityRole="button" accessibilityLabel="Dismiss message" onPress={() => setMessage("")} hitSlop={8}><Feather name="x" size={16} color={c.mutedForeground} /></Pressable></View> : null}
-        <View onLayout={event => { workspaceYRef.current = event.nativeEvent.layout.y; }} style={[styles.workspace, desktop && styles.workspaceDesktop]}>
-          <View style={styles.editorColumn}>
+        {!desktop ? <View accessibilityRole="tablist" accessibilityLabel="Simulator workspace" style={[styles.workspaceTabs, { backgroundColor: c.card, borderColor: c.border }]}>
+          {(["build", "compare"] as const).map(view => <Pressable key={view} accessibilityRole="tab" accessibilityLabel={view === "build" ? "Build" : "Compare"} accessibilityState={{ selected: mobileView === view }} aria-selected={mobileView === view} onPress={() => setMobileView(view)} style={[styles.workspaceTab, { backgroundColor: mobileView === view ? c.primary : "transparent" }]}><Feather name={view === "build" ? "sliders" : "bar-chart-2"} size={16} color={mobileView === view ? c.primaryForeground : c.mutedForeground} /><AppText style={[styles.workspaceTabText, { color: mobileView === view ? c.primaryForeground : c.foreground }]}>{view === "build" ? "Build" : "Compare"}{view === "compare" && (!scenarioResult.complete || scenarioRiskDay) ? " · !" : ""}</AppText></Pressable>)}
+        </View> : null}
+        <View style={[styles.workspace, desktop && styles.workspaceDesktop]}>
+          {desktop || mobileView === "build" ? <View style={styles.editorColumn}>
             <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
-              <AppText tone="title" style={[styles.cardTitle, { color: c.foreground }]}>Your scenario</AppText>
+              <AppText accessibilityRole="header" tone="title" style={[styles.cardTitle, { color: c.foreground }]}>Your scenario</AppText>
+              <View style={styles.scenarioBar}>
+                <View style={styles.scenarioSelect}><FieldLabel>Scenario</FieldLabel><ChoiceChips values={[{ id: "draft", label: "Local draft" }, ...scenarios.map(item => ({ id: item.id, label: item.invalidDefinition ? `${item.name} · Ready to adjust` : item.name }))]} selected={selectedId ?? "draft"} onSelect={id => { if (id === (selectedId ?? "draft")) return; if (id === "draft") newDraft(); else { const scenario = scenarios.find(item => item.id === id); if (scenario) selectScenario(scenario); } }} /></View>
+                <Button label={foundingFreeLocalOnly ? "New local draft" : "New"} icon="plus" onPress={newDraft} />
+              </View>
               <View style={styles.field}><FieldLabel>Name</FieldLabel><Input label="Scenario name" value={draft.name} onChangeText={name => { makeLocalDraft(); setDraft(previous => ({ ...previous, name })); }} placeholder="Name this scenario" /></View>
               <View style={styles.field}><FieldLabel>Compare over</FieldLabel><ChoiceChips values={PLAN_SIMULATION_HORIZONS.map(value => ({ id: String(value), label: `${value} months` }))} selected={String(draft.horizonMonths)} onSelect={value => { makeLocalDraft(); setDraft(previous => ({ ...previous, horizonMonths: Number(value) as PlanSimulationHorizon })); }} /></View>
               <AppText style={[styles.scopeNote, { color: c.mutedForeground }]}>{foundingFreeLocalOnly ? "This draft is saved only on this device. Household scenario sync and saved copies are planned for Pro." : "Saved scenarios store only their name and hypothetical changes. Every result is rebuilt from the latest live Forecast."}</AppText>
-              {editingId ? <AppText accessibilityRole="alert" style={[styles.editSemantics, { color: c.primary }]}>Update or cancel this change first. Reset or choose another scenario to discard this edit.</AppText> : null}
-              <View style={styles.actionWrap}>{foundingFreeLocalOnly ? <Button label={draft.invalidDefinition ? "Reset unsupported changes" : "Reset local draft"} icon="rotate-ccw" onPress={resetDraft} disabled={saving} /> : <><Button label={selectedScenario ? "Save changes" : "Save"} icon="save" onPress={() => void saveDraft()} disabled={!canEditHousehold || saving || demoMode || Boolean(draft.invalidDefinition) || Boolean(editingId)} primary /><Button label="Rename" icon="type" onPress={() => void saveDraft()} disabled={!selectedScenario || !canEditHousehold || saving || demoMode || Boolean(draft.invalidDefinition) || Boolean(editingId)} /><Button label="Duplicate" icon="copy" onPress={() => void duplicate()} disabled={!canEditHousehold || saving || demoMode || Boolean(draft.invalidDefinition) || Boolean(editingId)} /><Button label={draft.invalidDefinition ? "Reset unsupported changes" : "Reset"} icon="rotate-ccw" onPress={resetDraft} disabled={saving} /><Button label="Delete" icon="trash-2" onPress={removeScenario} disabled={!selectedScenario || !canEditHousehold || saving || demoMode} danger /></>}</View>
+              {editorOpen ? <AppText accessibilityRole="alert" style={[styles.editSemantics, { color: c.primary }]}>Update or cancel this change first. Reset or choose another scenario to discard this edit.</AppText> : null}
+              <View style={styles.actionWrap}>{foundingFreeLocalOnly ? <Button label={draft.invalidDefinition ? "Reset unsupported changes" : "Reset local draft"} icon="rotate-ccw" onPress={resetDraft} disabled={saving} /> : <><Button label={selectedScenario ? "Save changes" : "Save"} icon="save" onPress={() => void saveDraft()} disabled={!canEditHousehold || saving || demoMode || Boolean(draft.invalidDefinition) || editorOpen} primary /><Button label="Rename" icon="type" onPress={() => void saveDraft()} disabled={!selectedScenario || !canEditHousehold || saving || demoMode || Boolean(draft.invalidDefinition) || editorOpen} /><Button label="Duplicate" icon="copy" onPress={() => void duplicate()} disabled={!canEditHousehold || saving || demoMode || Boolean(draft.invalidDefinition) || editorOpen} /><Button label={draft.invalidDefinition ? "Reset unsupported changes" : "Reset"} icon="rotate-ccw" onPress={resetDraft} disabled={saving} /><Button label="Delete" icon="trash-2" onPress={removeScenario} disabled={!selectedScenario || !canEditHousehold || saving || demoMode} danger /></>}</View>
               {saving && canPersistScenarios ? <View style={styles.savingRow}><ActivityIndicator size="small" color={c.primary} /><AppText style={[styles.savingText, { color: c.mutedForeground }]}>Saving scenario…</AppText></View> : null}
             </View>
-            <View><View style={styles.sectionHeading}><AppText accessibilityRole="header" tone="title" style={[styles.sectionTitle, { color: c.foreground }]}>Your changes</AppText><View style={[styles.countBadge, { backgroundColor: c.primary + "12" }]}><AppText style={{ color: c.primary, fontFamily: "Inter_700Bold", fontSize: 12 }}>{draft.changes.length}</AppText></View></View><ChangeList changes={draft.changes} references={references} issues={scenarioResult.issues} editingId={editingId} onEdit={id => { setEditingId(id); setEditorRevealVersion(previous => previous + 1); }} onRemove={removeChange} /></View>
-            {!draft.invalidDefinition ? <View ref={editorRef} focusable tabIndex={-1} accessibilityLabel={editingChange ? `Editing ${changeLabel(editingChange, references)}` : "Add a scenario change"} onLayout={event => { editorYRef.current = event.nativeEvent.layout.y; }}><ChangeComposer key={`${draftStorageKey ?? householdId}:${editorVersion}:${editingId ?? "new"}`} references={references} startDate={startDate} endDate={baseline.endDate} editingChange={editingChange} onSave={saveChange} onCancel={cancelEditing} /></View> : <AppText accessibilityRole="alert" style={[styles.editSemantics, { color: c.warning }]}>Reset unsupported changes before adding or editing this scenario.</AppText>}
-
-          </View>
-          <View style={[styles.resultsColumn, desktop && styles.resultsColumnDesktop]}><ResultsPanel baseline={baselineResult} scenario={scenarioResult} safetyFloor={settings.safety_floor} /></View>
+            {!desktop ? <View style={[styles.buildStatus, { backgroundColor: scenarioResult.complete && !scenarioRiskDay ? c.primary + "0B" : c.warning + "10", borderColor: scenarioResult.complete && !scenarioRiskDay ? c.primary + "35" : c.warning + "55" }]}>
+              <View style={styles.changeRowCopy}><AppText style={[styles.buildStatusTitle, { color: c.foreground }]}>{scenarioRiskDay ? "This scenario goes below $0" : !scenarioResult.complete ? "Some changes need attention" : "Your comparison is ready"}</AppText><AppText style={[styles.buildStatusText, { color: c.mutedForeground }]}>{scenarioRiskDay ? `First below zero: ${shortDate(scenarioRiskDay.date)}. Open Compare for the full warning.` : !scenarioResult.complete ? "Review the highlighted changes. Compare shows the limits of this result." : `${draft.changes.length} ${draft.changes.length === 1 ? "change" : "changes"} · ${draft.horizonMonths}-month outlook`}</AppText></View><Button label="View comparison" icon="arrow-right" onPress={() => setMobileView("compare")} />
+            </View> : null}
+            <View><View style={styles.changesToolbar}><View style={styles.sectionHeading}><AppText accessibilityRole="header" tone="title" style={[styles.sectionTitle, { color: c.foreground }]}>Your changes</AppText><View style={[styles.countBadge, { backgroundColor: c.primary + "12" }]}><AppText style={{ color: c.primary, fontFamily: "Inter_700Bold", fontSize: 12 }}>{draft.changes.length}</AppText></View></View><View style={!desktop ? styles.mobileAddChange : undefined}><Button label="Add change" icon="plus" onPress={() => openEditor()} disabled={Boolean(draft.invalidDefinition)} primary /></View></View><ChangeList changes={draft.changes} references={references} issues={scenarioResult.issues} editingId={editingId} onEdit={id => openEditor(id)} onRemove={removeChange} /></View>
+            {draft.invalidDefinition ? <AppText accessibilityRole="alert" style={[styles.editSemantics, { color: c.warning }]}>Reset unsupported changes before adding or editing this scenario.</AppText> : null}
+          </View> : null}
+          {desktop || mobileView === "compare" ? <View style={[styles.resultsColumn, desktop && styles.resultsColumnDesktop]}><ResultsPanel baseline={baselineResult} scenario={scenarioResult} safetyFloor={settings.safety_floor} /></View> : null}
         </View>
       </ScrollView>
+      {editorOpen ? <Modal visible transparent animationType={desktop ? "fade" : "slide"} onRequestClose={closeEditor} onShow={focusEditor}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.editorOverlay, desktop && DESKTOP_MODAL_OVERLAY]}>
+          <Pressable accessibilityLabel="Dismiss change editor" onPress={closeEditor} style={StyleSheet.absoluteFillObject} />
+          <View accessibilityViewIsModal style={[styles.editorSheet, { backgroundColor: c.background, borderColor: c.border }, desktop && DESKTOP_MODAL_WIDE]}>
+            {!desktop ? <View style={[styles.sheetHandle, { backgroundColor: c.border }]} /> : null}
+            <View style={[styles.editorSheetHeader, { borderColor: c.border }]}>
+              <View ref={editorHeadingRef} focusable tabIndex={-1} accessibilityRole="header" accessibilityLabel={editingChange ? "Edit scenario change" : "Add a what-if change"} style={styles.changeRowCopy}><AppText tone="title" style={[styles.cardTitle, { color: c.foreground }]}>{editingChange ? "Edit scenario change" : "Add a what-if change"}</AppText></View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Close change editor" onPress={closeEditor} style={styles.closeButton}><Feather name="x" size={22} color={c.mutedForeground} /></Pressable>
+            </View>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator contentContainerStyle={styles.editorScrollContent}>
+              <ChangeComposer key={`${draftStorageKey ?? householdId}:${selectedId ?? "local"}:${editorVersion}:${editingId ?? "new"}`} references={references} startDate={startDate} endDate={baseline.endDate} editingChange={editingChange} onSave={saveChange} onCancel={closeEditor} />
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal> : null}
     </SafeAreaView>
   );
 }
@@ -703,14 +755,17 @@ const styles = StyleSheet.create({
   screen: { flex: 1 }, scroll: { flex: 1 }, content: { padding: 16, paddingBottom: 40, gap: 14 }, contentDesktop: { width: "100%", maxWidth: 1480, alignSelf: "center", paddingHorizontal: 28, paddingBottom: 64 },
   header: { minHeight: 88, borderBottomWidth: 1, paddingHorizontal: 18, paddingVertical: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 }, headerCopy: { flex: 1, maxWidth: 820 }, eyebrow: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.9 }, title: { fontSize: 25, fontFamily: "Inter_800ExtraBold", marginTop: 2 }, subtitle: { fontSize: 13, marginTop: 4, lineHeight: 19 }, closeButton: { width: 44, height: 44, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" }, lockedHeader: { height: 60, alignItems: "flex-end", justifyContent: "center", paddingHorizontal: 16 },
   readOnlyBanner: { borderWidth: 1, borderRadius: 18, padding: 14, flexDirection: "row", gap: 12, alignItems: "center" }, readOnlyCopy: { flex: 1 }, readOnlyTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" }, readOnlyText: { fontSize: 12, marginTop: 2, lineHeight: 17 },
-  scenarioBar: { flexWrap: "wrap", borderWidth: 1, borderRadius: 18, padding: 12, flexDirection: "row", alignItems: "flex-end", gap: 10 }, scenarioSelect: { flex: 1, minWidth: 0 }, viewerNote: { borderWidth: 1, borderRadius: 16, padding: 12, flexDirection: "row", gap: 10, alignItems: "center" }, viewerText: { flex: 1, fontSize: 12, lineHeight: 17 }, message: { borderWidth: 1, borderRadius: 14, padding: 12, flexDirection: "row", alignItems: "center", gap: 10 }, messageText: { flex: 1, fontSize: 12 },
+  scenarioBar: { marginTop: 14, flexWrap: "wrap", flexDirection: "row", alignItems: "flex-end", gap: 10 }, scenarioSelect: { flex: 1, minWidth: 0 }, viewerNote: { borderWidth: 1, borderRadius: 16, padding: 12, flexDirection: "row", gap: 10, alignItems: "center" }, viewerText: { flex: 1, fontSize: 12, lineHeight: 17 }, message: { borderWidth: 1, borderRadius: 14, padding: 12, flexDirection: "row", alignItems: "center", gap: 10 }, messageText: { flex: 1, fontSize: 12 },
   workspace: { gap: 16 }, workspaceDesktop: { flexDirection: "row", alignItems: "flex-start", gap: 20 }, editorColumn: { flex: 1, minWidth: 0, gap: 16 }, resultsColumn: { minWidth: 0 }, resultsColumnDesktop: { width: "42%", maxWidth: 600, position: Platform.OS === "web" ? "sticky" as any : "relative", top: 16 },
   card: { borderWidth: 1, borderRadius: 22, padding: 16 }, cardTitle: { fontSize: 18, fontFamily: "Inter_800ExtraBold" }, cardDescription: { fontSize: 12, marginTop: 4, lineHeight: 18 }, field: { marginTop: 13 }, fieldLabel: { fontSize: 12, fontFamily: "Inter_800ExtraBold", marginBottom: 6 }, input: { width: "100%", minHeight: 44, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, fontSize: 14, fontFamily: "Inter_500Medium" }, scopeNote: { fontSize: 12, lineHeight: 16, marginTop: 12 },
   button: { minHeight: 44, borderWidth: 1, borderRadius: 12, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 }, buttonText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" }, actionWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 14 }, savingRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 }, savingText: { fontSize: 11 },
+  workspaceTabs: { flexDirection: "row", borderWidth: 1, borderRadius: 15, padding: 4, gap: 4 }, workspaceTab: { flex: 1, minHeight: 44, borderRadius: 11, flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center" }, workspaceTabText: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  mobileAddChange: { width: "100%" }, changesToolbar: { flexDirection: "row", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between", marginBottom: 12 }, buildStatus: { borderWidth: 1, borderRadius: 17, padding: 13, gap: 12 }, buildStatusTitle: { fontSize: 14, fontFamily: "Inter_700Bold" }, buildStatusText: { fontSize: 12, lineHeight: 18, marginTop: 4 },
+  editorOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(2,6,23,0.7)" }, editorSheet: { maxHeight: "92%", width: "100%", borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, overflow: "hidden" }, sheetHandle: { height: 4, width: 42, borderRadius: 2, alignSelf: "center", marginTop: 10 }, editorSheetHeader: { paddingHorizontal: 18, paddingVertical: 12, flexDirection: "row", alignItems: "center", gap: 12, borderBottomWidth: 1 }, editorScrollContent: { paddingBottom: 24 }, composerBody: { padding: 18 },
   composerHeading: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginBottom: 16 }, editorIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   categoryTabs: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginBottom: 12 }, categoryTab: { minHeight: 44, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, alignItems: "center", justifyContent: "center" }, categoryTabText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   editingBadge: { padding: 11, borderRadius: 12, flexDirection: "row", alignItems: "center", gap: 8 }, editingBadgeText: { fontSize: 13, fontFamily: "Inter_700Bold" }, composerActions: { marginTop: 16, flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  sectionHeading: { flexDirection: "row", alignItems: "center", gap: 9, marginBottom: 12 }, countBadge: { minWidth: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  sectionHeading: { flexDirection: "row", alignItems: "center", gap: 9 }, countBadge: { minWidth: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   changeRowTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 }, changeNumber: { width: 28, height: 28, borderRadius: 9, alignItems: "center", justifyContent: "center" }, changeSummary: { fontSize: 12, lineHeight: 18, marginTop: 4 }, changeRowActions: { flexDirection: "row", gap: 8, flexWrap: "wrap" }, changeAction: { minHeight: 44, paddingHorizontal: 12, borderRadius: 11, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 }, changeActionText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   changeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 }, changeOption: { width: "100%", minHeight: 60, borderWidth: 1, borderRadius: 14, padding: 10, flexDirection: "row", alignItems: "center", gap: 9 }, changeOptionCopy: { flex: 1 }, changeOptionTitle: { fontSize: 12, fontFamily: "Inter_800ExtraBold" }, changeOptionDetail: { fontSize: 12, marginTop: 2, lineHeight: 14 }, errorText: { fontSize: 12, fontFamily: "Inter_600SemiBold", marginVertical: 10 }, editSemantics: { fontSize: 12, lineHeight: 16, marginVertical: 10 },
   sectionTitle: { fontSize: 18, fontFamily: "Inter_800ExtraBold" }, emptyCard: { borderWidth: 1, borderStyle: "dashed", borderRadius: 18, padding: 22, alignItems: "center" }, emptyTitle: { marginTop: 10, fontSize: 15, fontFamily: "Inter_800ExtraBold" }, emptyText: { fontSize: 12, marginTop: 4, textAlign: "center" }, changeList: { gap: 8 }, changeRow: { borderWidth: 1, borderRadius: 18, padding: 14, gap: 10 }, changeRowCopy: { flex: 1 }, changeRowTitle: { fontSize: 14, fontFamily: "Inter_700Bold" }, changeIssue: { fontSize: 12, fontFamily: "Inter_600SemiBold", marginTop: 3 }, changeOkay: { fontSize: 10, fontFamily: "Inter_600SemiBold", marginTop: 3 },

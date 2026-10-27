@@ -80,12 +80,13 @@ test("editing cannot append a removed change, switch its type, change identity o
 
 test("workspace retains local/viewer guards and prevents saving an uncommitted edit", () => {
   const source = readFileSync("app/plan-simulator.tsx", "utf8");
-  const save = source.slice(source.indexOf("  const saveChange ="), source.indexOf("  const cancelEditing ="));
+  const save = source.slice(source.indexOf("  const saveChange ="), source.indexOf("  const newDraft ="));
   assert.match(save, /replaceSimulationChange\(draft.changes, editingId, change\)/);assert.match(save, /makeLocalDraft\(\)/);
-  assert.match(source, /if \(editingId\) \{ setMessage\("Update or cancel this change first/);
-  assert.match(source, /disabled=\{[^}]*Boolean\(editingId\)/);
+  assert.match(source, /if \(editorOpen\) \{ setMessage\("Update or cancel this change first/);
+  assert.match(source, /disabled=\{[^}]*editorOpen/);
   assert.match(source, /const selectType[^]*if \(editingChange\) return;/);
-  assert.match(source, /scrollRef.current\?\.scrollTo/);
+  assert.match(source, /createSimulatorEditorHistory\(window, closeEditor\)/);
+  assert.match(source, /onRequestClose=\{closeEditor\} onShow=\{focusEditor\}/);
   for (const handler of ["selectScenario", "newDraft", "resetDraft"]) assert.match(source.slice(source.indexOf(`  const ${handler} =`)), /setEditingId\(null\)/);
   assert.match(source, /if \(!canEditHousehold && selectedId\)/);assert.match(source, /if \(!canEditHousehold \|\| demoMode\)/);
 });
@@ -109,7 +110,7 @@ test("actual load/autosave effect ordering never writes A's draft into B or a ch
     const pending = new Promise<string>(done => { resolve = done; });
     const bindings: Record<string, any> = {
       useEffect: (fn: () => void) => effects.push(fn), canPersistScenarios: transition !== "user", defaultHorizon: 6, demoMode: false, draftStorageKey: key, householdId: "household", keepsLocalDraft: true, loading: false, draft: a, loadedDraftScope: oldScope, draftLoadScope: scope, draftLoadScopeRef: { current: scope },
-      setLoading: (value: boolean) => { updates.loading = value; }, setLoadedDraftScope: (value: string | null) => { updates.owner = value; }, setEditingId() {}, setEditorVersion() {}, setMessage() {}, setScenarios() {}, setSelectedId() {}, setDraft: (value: any) => { updates.draft = value; },
+      setLoading: (value: boolean) => { updates.loading = value; }, setLoadedDraftScope: (value: string | null) => { updates.owner = value; }, setEditingId() {}, setEditorOpen() {}, setMobileView() {}, returnFocusRef: { current: null }, setEditorVersion() {}, setMessage() {}, setScenarios() {}, setSelectedId() {}, setDraft: (value: any) => { updates.draft = value; },
       loadPlanSimulations: async () => [], decodePlanSimulationChanges: (value: unknown) => value, isPlanSimulationHorizon: (value: number) => value === 6,
       AsyncStorage: { getItem: () => pending, setItem: async (key: string, value: string) => { writes.push({ key, value }); } },
     };
@@ -132,7 +133,7 @@ test("an old scoped load cannot publish a draft or owner after the identity chan
   let resolve!: (value: string) => void;
   const pending = new Promise<string>(done => { resolve = done; });
   const current = { current: "A" };
-  const bindings: Record<string, any> = { useEffect: (fn: () => void) => effects.push(fn), canPersistScenarios: false, defaultHorizon: 6, demoMode: false, draftStorageKey: "A", householdId: "household", keepsLocalDraft: true, loading: true, draft: {}, loadedDraftScope: null, draftLoadScope: "A", draftLoadScopeRef: current, setLoading() {}, setLoadedDraftScope: (owner: unknown) => owners.push(owner), setEditingId() {}, setEditorVersion() {}, setMessage() {}, setScenarios() {}, setSelectedId() {}, setDraft: (value: any) => drafts.push(value), loadPlanSimulations: async () => [], decodePlanSimulationChanges: (value: unknown) => value, isPlanSimulationHorizon: () => true, AsyncStorage: { getItem: () => pending, setItem() { throw new Error("Must not save"); } } };
+  const bindings: Record<string, any> = { useEffect: (fn: () => void) => effects.push(fn), canPersistScenarios: false, defaultHorizon: 6, demoMode: false, draftStorageKey: "A", householdId: "household", keepsLocalDraft: true, loading: true, draft: {}, loadedDraftScope: null, draftLoadScope: "A", draftLoadScopeRef: current, setLoading() {}, setLoadedDraftScope: (owner: unknown) => owners.push(owner), setEditingId() {}, setEditorOpen() {}, setMobileView() {}, returnFocusRef: { current: null }, setEditorVersion() {}, setMessage() {}, setScenarios() {}, setSelectedId() {}, setDraft: (value: any) => drafts.push(value), loadPlanSimulations: async () => [], decodePlanSimulationChanges: (value: unknown) => value, isPlanSimulationHorizon: () => true, AsyncStorage: { getItem: () => pending, setItem() { throw new Error("Must not save"); } } };
   new Function(...Object.keys(bindings), script)(...Object.values(bindings));effects[0]();current.current = "B";
   resolve(JSON.stringify({ name: "Private A", horizonMonths: 6, changes }));await new Promise(done => setImmediate(done));
   assert.deepEqual(owners, [null]);assert.equal(drafts.length, 1);assert.equal(drafts[0].name, "Untitled scenario");
@@ -145,7 +146,7 @@ test("matching malformed or failed loads settle into a recoverable local draft w
   for (const failure of ["malformed JSON", "storage rejection", "saved scenario rejection"]) {
     const effects: Array<() => void> = [], writes: Array<{ key: string; value: string }> = [];
     const updates: any = {};const scope = `B:${failure}`;
-    const bindings: Record<string, any> = { useEffect: (fn: () => void) => effects.push(fn), canPersistScenarios: failure === "saved scenario rejection", defaultHorizon: 6, demoMode: false, draftStorageKey: "B", householdId: "household", keepsLocalDraft: true, loading: false, draft: { name: "Private A", horizonMonths: 6, changes }, loadedDraftScope: "A", draftLoadScope: scope, draftLoadScopeRef: { current: scope }, setLoading: (value: boolean) => { updates.loading = value; }, setLoadedDraftScope: (value: string | null) => { updates.owner = value; }, setEditingId() {}, setEditorVersion() {}, setMessage: (value: string) => { updates.error = value; }, setScenarios() {}, setSelectedId() {}, setDraft: (value: any) => { updates.draft = value; }, loadPlanSimulations: async () => { throw new Error("Unavailable saved scenarios"); }, decodePlanSimulationChanges: (value: unknown) => value, isPlanSimulationHorizon: () => true, AsyncStorage: { getItem: async () => { if (failure === "storage rejection") throw new Error("Unavailable device storage");return "{invalid"; }, setItem: async (key: string, value: string) => { writes.push({ key, value }); } } };
+    const bindings: Record<string, any> = { useEffect: (fn: () => void) => effects.push(fn), canPersistScenarios: failure === "saved scenario rejection", defaultHorizon: 6, demoMode: false, draftStorageKey: "B", householdId: "household", keepsLocalDraft: true, loading: false, draft: { name: "Private A", horizonMonths: 6, changes }, loadedDraftScope: "A", draftLoadScope: scope, draftLoadScopeRef: { current: scope }, setLoading: (value: boolean) => { updates.loading = value; }, setLoadedDraftScope: (value: string | null) => { updates.owner = value; }, setEditingId() {}, setEditorOpen() {}, setMobileView() {}, returnFocusRef: { current: null }, setEditorVersion() {}, setMessage: (value: string) => { updates.error = value; }, setScenarios() {}, setSelectedId() {}, setDraft: (value: any) => { updates.draft = value; }, loadPlanSimulations: async () => { throw new Error("Unavailable saved scenarios"); }, decodePlanSimulationChanges: (value: unknown) => value, isPlanSimulationHorizon: () => true, AsyncStorage: { getItem: async () => { if (failure === "storage rejection") throw new Error("Unavailable device storage");return "{invalid"; }, setItem: async (key: string, value: string) => { writes.push({ key, value }); } } };
     const render = () => { effects.length = 0;new Function(...Object.keys(bindings), script)(...Object.values(bindings)); };
     render();effects[0]();effects[1]();assert.equal(writes.length, 0);
     await new Promise(done => setImmediate(done));
@@ -153,4 +154,30 @@ test("matching malformed or failed loads settle into a recoverable local draft w
     Object.assign(bindings, { draft: { ...updates.draft, name: "Recovered B draft" }, loading: updates.loading, loadedDraftScope: updates.owner });
     render();effects[1]();assert.equal(writes.length, 1);assert.equal(writes[0].key, "B");assert.equal(JSON.parse(writes[0].value).name, "Recovered B draft");assert.doesNotMatch(writes[0].value, /Private A/);
   }
+});
+
+test("closing the focused editor discards only pending fields and returns focus without resetting the scenario", () => {
+  const source = readFileSync("app/plan-simulator.tsx", "utf8");
+  const start = source.indexOf("  const closeEditor =");
+  const script = transpileModule(source.slice(start, source.indexOf("  const openEditor =", start)), { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
+  const state: any = { open: true, id: "1", draft: changes };
+  let focused = 0;
+  const bindings = { useCallback: (fn: any) => fn, setEditorOpen: (value: boolean) => { state.open = value; }, setEditingId: (value: string | null) => { state.id = value; }, Platform: { OS: "web" }, returnFocusRef: { current: { focus: () => { focused++; } } }, requestAnimationFrame: (fn: () => void) => fn() };
+  new Function(...Object.keys(bindings), `${script};closeEditor();`)(...Object.values(bindings));
+  assert.equal(state.open, false);assert.equal(state.id, null);assert.equal(state.draft, changes);assert.equal(focused, 1);
+  assert.equal((source.match(/<ChangeComposer\b/g) ?? []).length, 1, "one editor instance is shared across breakpoints");
+  assert.match(source, /\{editorOpen \? <Modal/);assert.match(source, /keyboardShouldPersistTaps="handled"/);
+});
+
+test("the active editor owns Escape and removes keyboard and history listeners on close", () => {
+  const source = readFileSync("app/plan-simulator.tsx", "utf8");
+  const start = source.indexOf("  useOverlayActivity(editorOpen);");
+  const script = transpileModule(source.slice(start, source.indexOf("  const selectedScenario =", start)), { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
+  const effects: Array<() => (() => void) | void> = [];
+  let keydown: ((event: any) => void) | null = null, closed = 0, disposed = 0, prevented = 0;
+  const bindings = { useOverlayActivity() {}, useEffect: (fn: () => (() => void) | void) => effects.push(fn), editorOpen: true, Platform: { OS: "web" }, closeEditor: () => { closed++; }, createSimulatorEditorHistory: () => ({ dispose: () => { disposed++; } }), window: { addEventListener: (_type: string, fn: (event: any) => void, capture: boolean) => { assert.equal(capture, true);keydown = fn; }, removeEventListener: (_type: string, fn: (event: any) => void, capture: boolean) => { assert.equal(keydown, fn);assert.equal(capture, true);keydown = null; } } };
+  new Function(...Object.keys(bindings), script)(...Object.values(bindings));const cleanup = effects[0]();
+  const press = (key: string) => (keydown as unknown as (event: any) => void)({ key, preventDefault: () => { prevented++; }, stopPropagation() {} });
+  press("Enter");assert.equal(closed, 0);press("Escape");assert.equal(closed, 1);assert.equal(prevented, 1);
+  cleanup?.();assert.equal(keydown, null);assert.equal(disposed, 1);
 });
