@@ -2,7 +2,7 @@ import { SimulatorChoiceChips as ChoiceChips } from "@/components/SimulatorChoic
 import Feather from "@expo/vector-icons/Feather";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalDay } from "@/hooks/useLocalDay";
 import {
   ActivityIndicator,
@@ -16,6 +16,8 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { buildSimulationEditorChange, replaceSimulationChange, simulationEditorFields, type SimulationEditorFields } from "@/lib/planSimulationEditor";
 
 import { AppText } from "@/components/AppText";
 import { AppLoadingIntro } from "@/components/AppLoadingIntro";
@@ -74,6 +76,16 @@ const CHANGE_OPTIONS: Array<{ type: ChangeKind; label: string; detail: string; i
   { type: "debt_payoff", label: "Pay off a debt", detail: "Close one selected balance", icon: "check-circle" },
 ];
 
+const CHANGE_GROUPS = [
+  { id: "income", label: "Income" },
+  { id: "bills", label: "Bills" },
+  { id: "spending", label: "Spending & savings" },
+  { id: "debt", label: "Debt" },
+] as const;
+function changeGroup(type: ChangeKind): typeof CHANGE_GROUPS[number]["id"] {
+  return type.startsWith("income_") ? "income" : type.startsWith("bill_") ? "bills" : type.startsWith("debt_") ? "debt" : "spending";
+}
+
 function money(value: number) {
   return value.toLocaleString(undefined, { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -86,13 +98,6 @@ function shortDate(value: string) {
 function monthLabel(value: string) {
   const [year, month] = value.split("-").map(Number);
   return new Date(year, month - 1, 1).toLocaleDateString(undefined, { month: "short", year: "numeric" });
-}
-
-function parseMoney(value: string): number | null {
-  const trimmed = value.trim();
-  if (!/^\d+(?:\.\d{1,2})?$/.test(trimmed)) return null;
-  const amount = Number(trimmed);
-  return Number.isFinite(amount) && amount > 0.005 ? Math.round(amount * 100) / 100 : null;
 }
 
 function nextLocalId() {
@@ -179,103 +184,84 @@ function ChangeComposer({
   references,
   startDate,
   endDate,
-  onAdd,
+  editingChange,
+  onSave,
+  onCancel,
 }: {
   references: PlanSimulationReferences;
   startDate: string;
   endDate: string;
-  onAdd: (change: PlanSimulationChange) => void;
+  editingChange: PlanSimulationChange | null;
+  onSave: (change: PlanSimulationChange) => string | null;
+  onCancel: () => void;
 }) {
   const c = useColors();
-  const [type, setType] = useState<ChangeKind>("spending_once");
-  const [name, setName] = useState("");
-  const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(startDate);
-  const [newDate, setNewDate] = useState(startDate);
-  const [frequency, setFrequency] = useState("monthly");
-  const [targetId, setTargetId] = useState("");
+  const [fields, setFields] = useState(() => simulationEditorFields(editingChange, startDate));
   const [error, setError] = useState("");
-
+  const { type, name, amount, date, newDate, frequency, targetId } = fields;
+  const setField = <K extends keyof SimulationEditorFields>(key: K, value: SimulationEditorFields[K]) => {
+    setFields(previous => ({ ...previous, [key]: value }));
+    setError("");
+  };
+  const group = changeGroup(type);
+  const option = CHANGE_OPTIONS.find(item => item.type === type)!;
   const needsIncome = type === "income_edit" || type === "income_pause";
   const needsBill = type === "bill_edit" || type === "bill_pause" || type === "bill_move";
   const needsDebt = type === "debt_payoff";
   const needsName = type === "income_add" || type === "income_once" || type === "bill_add" || type === "spending_once" || type === "savings_once";
   const needsAmount = type !== "income_pause" && type !== "bill_pause" && type !== "bill_move" && type !== "debt_payoff";
   const isRecurringAdd = type === "income_add" || type === "bill_add";
-  const billChoices = references.bills.filter(bill => !bill.isDebt).map(bill => ({ id: bill.id, label: bill.name }));
-  const incomeChoices = references.incomes.map(income => ({ id: income.id, label: income.name }));
-  const debtChoices = references.debts
-    .filter(debt => debt.balance > 0.005 && (!debt.endDate || debt.endDate.slice(0, 10) >= startDate))
-    .map(debt => ({ id: debt.id, label: `${debt.name} · ${money(debt.balance)}` }));
-  const targetChoices = needsIncome ? incomeChoices : needsBill ? billChoices : needsDebt ? debtChoices : [];
-  const selectedTarget = needsDebt
-    ? debtChoices.some(debt => debt.id === targetId) ? targetId : ""
-    : targetId || targetChoices[0]?.id || "";
-
-  const add = () => {
-    if (needsDebt && !selectedTarget) { setError("Choose an eligible debt to pay off below."); return; }
-    const parsedAmount = needsAmount ? parseMoney(amount) : null;
-    if (needsAmount && parsedAmount === null) { setError("Enter a valid amount with up to two decimal places."); return; }
-    if (needsName && !safePlanSimulationName(name)) { setError("Enter a name between 1 and 80 characters."); return; }
-    if ((needsIncome || needsBill || needsDebt) && !selectedTarget) { setError(`Add an eligible ${needsIncome ? "income" : needsDebt ? "open debt" : "non-debt bill"} to the live plan first.`); return; }
-    const id = nextLocalId();
-    let candidate: PlanSimulationChange;
-    switch (type) {
-      case "income_add": candidate = { id, type, name: name.trim(), amount: parsedAmount!, frequency: frequency === "weekly" || frequency === "biweekly" ? frequency : "monthly", startDate: date }; break;
-      case "income_edit": candidate = { id, type, incomeId: selectedTarget, amount: parsedAmount!, effectiveDate: date }; break;
-      case "income_pause": candidate = { id, type, incomeId: selectedTarget, effectiveDate: date }; break;
-      case "income_once": candidate = { id, type, name: name.trim(), amount: parsedAmount!, date }; break;
-      case "bill_add": candidate = { id, type, name: name.trim(), amount: parsedAmount!, frequency: frequency === "weekly" || frequency === "biweekly" || frequency === "quarterly" ? frequency : "monthly", startDate: date }; break;
-      case "bill_edit": candidate = { id, type, billId: selectedTarget, amount: parsedAmount!, effectiveDate: date }; break;
-      case "bill_pause": candidate = { id, type, billId: selectedTarget, effectiveDate: date }; break;
-      case "bill_move": candidate = { id, type, billId: selectedTarget, occurrenceDate: date, newDate }; break;
-      case "spending_once": candidate = { id, type, name: name.trim(), amount: parsedAmount!, date }; break;
-      case "savings_once": candidate = { id, type, name: name.trim(), amount: parsedAmount!, date }; break;
-      case "debt_extra": candidate = { id, type, amount: parsedAmount!, date }; break;
-      case "debt_payoff": candidate = { id, type, debtId: selectedTarget, date }; break;
-    }
-    if (!decodePlanSimulationChanges([candidate])) { setError("Check the date and amount, then try again."); return; }
+  const targetChoices = needsIncome
+    ? references.incomes.map(income => ({ id: income.id, label: income.name }))
+    : needsBill ? references.bills.filter(bill => !bill.isDebt).map(bill => ({ id: bill.id, label: bill.name }))
+    : needsDebt ? references.debts.filter(debt => debt.balance > 0.005 && (!debt.endDate || debt.endDate.slice(0, 10) >= startDate)).map(debt => ({ id: debt.id, label: `${debt.name} · ${money(debt.balance)}` })) : [];
+  const missingTarget = Boolean(targetId && !targetChoices.some(item => item.id === targetId));
+  const outsideRange = date < startDate || date > endDate || type === "bill_move" && (newDate < startDate || newDate > endDate);
+  const selectType = (next: ChangeKind) => {
+    if (editingChange) return;
+    setFields({ ...simulationEditorFields(null, startDate), type: next });
     setError("");
-    onAdd(candidate);
-    setAmount("");
-    if (needsName) setName("");
+  };
+  const save = () => {
+    const result = buildSimulationEditorChange(fields, editingChange?.id ?? nextLocalId(), references, startDate, endDate);
+    if (!result.change) { setError(result.error); return; }
+    const failure = onSave(result.change);
+    if (failure) { setError(failure); return; }
+    setError("");
+    if (!editingChange) setFields(previous => ({ ...previous, amount: "", name: "" }));
   };
 
   return (
-    <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
-      <AppText tone="title" style={[styles.cardTitle, { color: c.foreground }]}>Test a change</AppText>
-      <AppText style={[styles.cardDescription, { color: c.mutedForeground }]}>Only future, unsettled plan items can change here.</AppText>
-      <View accessibilityRole="radiogroup" style={styles.changeGrid}>
-        {CHANGE_OPTIONS.map(option => {
-          const active = option.type === type;
-          return (
-            <Pressable
-              key={option.type}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: active }}
-              onPress={() => { setType(option.type); setError(""); setTargetId(""); setFrequency("monthly"); }}
-              style={({ pressed }) => [styles.changeOption, { backgroundColor: active ? c.primary + "18" : c.background, borderColor: active ? c.primary : c.border, opacity: pressed ? 0.72 : 1 }]}
-            >
-              <Feather name={option.icon} size={17} color={active ? c.primary : c.mutedForeground} />
-              <View style={styles.changeOptionCopy}>
-                <AppText style={[styles.changeOptionTitle, { color: c.foreground }]}>{option.label}</AppText>
-                <AppText style={[styles.changeOptionDetail, { color: c.mutedForeground }]}>{option.detail}</AppText>
-              </View>
-            </Pressable>
-          );
-        })}
+    <View style={[styles.card, { backgroundColor: c.card, borderColor: editingChange ? c.primary : c.border }]}>
+      <View style={styles.composerHeading}>
+        <View style={[styles.editorIcon, { backgroundColor: c.primary + "18" }]}><Feather name={editingChange ? "edit-3" : "sliders"} size={20} color={c.primary} /></View>
+        <View style={styles.changeOptionCopy}><AppText accessibilityRole="header" tone="title" style={[styles.cardTitle, { color: c.foreground }]}>{editingChange ? "Edit scenario change" : "Add a what-if change"}</AppText><AppText style={[styles.cardDescription, { color: c.mutedForeground }]}>{editingChange ? `${option.label} · your original change stays in place until you update it.` : "Choose an area, then set the change you want to compare."}</AppText></View>
       </View>
-
-      {targetChoices.length ? <View style={styles.field}><FieldLabel>{needsIncome ? "Income" : needsDebt ? "Debt" : "Bill"}</FieldLabel><ChoiceChips values={targetChoices} selected={selectedTarget} onSelect={id => { setTargetId(id); setError(""); }} desktopDebtNavigation={needsDebt} /></View> : needsDebt ? <AppText style={[styles.editSemantics, { color: c.mutedForeground }]}>No eligible open debts to pay off. Add an open debt to your live plan first.</AppText> : null}
-      {needsName ? <View style={styles.field}><FieldLabel>Name</FieldLabel><Input label="Change name" value={name} onChangeText={setName} placeholder={type === "savings_once" ? "Emergency fund" : "Name"} /></View> : null}
-      {needsAmount ? <View style={styles.field}><FieldLabel>Amount</FieldLabel><Input label="Change amount" value={amount} onChangeText={setAmount} placeholder="0.00" keyboardType="decimal-pad" /></View> : null}
-      {isRecurringAdd ? <View style={styles.field}><FieldLabel>Frequency</FieldLabel><ChoiceChips values={(type === "bill_add" ? ["monthly", "quarterly", "biweekly", "weekly"] : ["monthly", "biweekly", "weekly"]).map(id => ({ id, label: id[0].toUpperCase() + id.slice(1) }))} selected={frequency} onSelect={setFrequency} /></View> : null}
-      <View style={styles.field}><FieldLabel>{type === "bill_move" ? "Occurrence date" : type.endsWith("_pause") || type.endsWith("_edit") ? "Effective date" : "Date"}</FieldLabel><DatePickerField value={date} onChange={setDate} minDate={startDate} maxDate={endDate} placeholder="Choose a date" /></View>
-      {type === "bill_move" ? <View style={styles.field}><FieldLabel>New date</FieldLabel><DatePickerField value={newDate} onChange={setNewDate} minDate={startDate} maxDate={endDate} placeholder="Choose a new date" /></View> : null}
+      {!editingChange ? <>
+        <View accessibilityRole="radiogroup" accessibilityLabel="Change category" style={styles.categoryTabs}>
+          {CHANGE_GROUPS.map(item => <Pressable key={item.id} accessibilityRole="radio" accessibilityLabel={item.label} accessibilityState={{ checked: item.id === group }} aria-checked={item.id === group} onPress={() => selectType(CHANGE_OPTIONS.find(change => changeGroup(change.type) === item.id)!.type)} style={[styles.categoryTab, { borderColor: item.id === group ? c.primary : c.border, backgroundColor: item.id === group ? c.primary : c.background }]}><AppText style={[styles.categoryTabText, { color: item.id === group ? c.primaryForeground : c.foreground }]}>{item.label}</AppText></Pressable>)}
+        </View>
+        <View accessibilityRole="radiogroup" accessibilityLabel="Change type" style={styles.changeGrid}>
+          {CHANGE_OPTIONS.filter(item => changeGroup(item.type) === group).map(item => {
+            const active = item.type === type;
+            return <Pressable key={item.type} accessibilityRole="radio" accessibilityLabel={item.label} accessibilityState={{ checked: active }} aria-checked={active} onPress={() => selectType(item.type)} style={({ pressed }) => [styles.changeOption, { backgroundColor: active ? c.primary + "12" : c.background, borderColor: active ? c.primary : c.border, opacity: pressed ? 0.72 : 1 }]}><Feather name={item.icon} size={18} color={active ? c.primary : c.mutedForeground} /><View style={styles.changeOptionCopy}><AppText style={[styles.changeOptionTitle, { color: c.foreground }]}>{item.label}</AppText><AppText style={[styles.changeOptionDetail, { color: c.mutedForeground }]}>{item.detail}</AppText></View></Pressable>;
+          })}
+        </View>
+      </> : <View style={[styles.editingBadge, { backgroundColor: c.primary + "12" }]}><Feather name={option.icon} size={16} color={c.primary} /><AppText style={[styles.editingBadgeText, { color: c.primary }]}>{option.label}</AppText></View>}
+      {needsIncome || needsBill || needsDebt ? <View style={styles.field}><FieldLabel>{needsIncome ? "Income" : needsDebt ? "Debt" : "Bill"}</FieldLabel>
+        {missingTarget ? <AppText accessibilityRole="alert" style={[styles.errorText, { color: c.warning }]}>The original {needsIncome ? "income" : needsDebt ? "debt" : "bill"} is unavailable. Choose a replacement below.</AppText> : null}
+        {targetChoices.length ? <ChoiceChips values={targetChoices} selected={targetId} onSelect={id => setField("targetId", id)} desktopDebtNavigation={needsDebt} /> : <AppText style={[styles.editSemantics, { color: c.mutedForeground }]}>No eligible {needsIncome ? "incomes" : needsDebt ? "open debts" : "non-debt bills"} are available. Add one to your live plan first.</AppText>}
+      </View> : null}
+      {needsName ? <View style={styles.field}><FieldLabel>Name</FieldLabel><Input label="Change name" value={name} onChangeText={value => setField("name", value)} placeholder={type === "savings_once" ? "Emergency fund" : "Name this change"} /></View> : null}
+      {needsAmount ? <View style={styles.field}><FieldLabel>Amount</FieldLabel><Input label="Change amount" value={amount} onChangeText={value => setField("amount", value)} placeholder="0.00" keyboardType="decimal-pad" /></View> : null}
+      {isRecurringAdd ? <View style={styles.field}><FieldLabel>Frequency</FieldLabel><ChoiceChips values={(type === "bill_add" ? ["monthly", "quarterly", "biweekly", "weekly"] : ["monthly", "biweekly", "weekly"]).map(id => ({ id, label: id[0].toUpperCase() + id.slice(1) }))} selected={frequency} onSelect={value => setField("frequency", value)} /></View> : null}
+      <View style={styles.field}><FieldLabel>{type === "bill_move" ? "Occurrence date" : type.endsWith("_pause") || type.endsWith("_edit") ? "Effective date" : "Date"}</FieldLabel><DatePickerField value={date} onChange={value => setField("date", value)} minDate={startDate} maxDate={endDate} placeholder="Choose a date" /></View>
+      {type === "bill_move" ? <View style={styles.field}><FieldLabel>New date</FieldLabel><DatePickerField value={newDate} onChange={value => setField("newDate", value)} minDate={startDate} maxDate={endDate} placeholder="Choose a new date" /></View> : null}
+      {outsideRange ? <AppText accessibilityRole="alert" style={[styles.errorText, { color: c.warning }]}>This change has a date outside the selected horizon. Choose dates from {shortDate(startDate)} to {shortDate(endDate)}.</AppText> : null}
       {error ? <AppText accessibilityRole="alert" style={[styles.errorText, { color: c.destructive }]}>{error}</AppText> : null}
-      {type === "income_edit" || type === "bill_edit" ? <AppText style={[styles.editSemantics, { color: c.mutedForeground }]}>The new amount is the full intended occurrence total. Any amount already settled stays unchanged; only the remaining Forecast amount is replaced.</AppText> : null}
-      {type === "debt_payoff" ? <AppText style={[styles.editSemantics, { color: c.mutedForeground }]}>The simulator calculates that debt’s remaining balance on the selected date and tests paying it in full. It does not change the real debt or schedule a payment.</AppText> : null}
-      <Button label="Add to scenario" icon="plus" onPress={add} primary />
+      {type === "income_edit" || type === "bill_edit" ? <AppText style={[styles.editSemantics, { color: c.mutedForeground }]}>The new amount is the full intended occurrence total. Settled amounts stay unchanged; only the remaining Forecast amount is replaced.</AppText> : null}
+      {type === "debt_payoff" ? <AppText style={[styles.editSemantics, { color: c.mutedForeground }]}>Flo tests paying that debt’s remaining balance on the selected date. It does not change the real debt or schedule a payment.</AppText> : null}
+      <View style={styles.composerActions}><Button label={editingChange ? "Update change" : "Add to scenario"} icon={editingChange ? "check" : "plus"} onPress={save} primary />{editingChange ? <Button label="Cancel editing" onPress={onCancel} /> : null}</View>
     </View>
   );
 }
@@ -289,36 +275,35 @@ function changeLabel(change: PlanSimulationChange, references: PlanSimulationRef
   return `${option}: ${money(change.amount)}`;
 }
 
-function ChangeList({ changes, references, issues, onRemove }: { changes: PlanSimulationChange[]; references: PlanSimulationReferences; issues: PlanSimulationResult["issues"]; onRemove: (id: string) => void }) {
+function changeSummary(change: PlanSimulationChange) {
+  const date = "effectiveDate" in change ? `From ${shortDate(change.effectiveDate)}` : "startDate" in change ? `From ${shortDate(change.startDate)}` : "occurrenceDate" in change ? `${shortDate(change.occurrenceDate)} → ${shortDate(change.newDate)}` : shortDate(change.date);
+  return ["amount" in change ? money(change.amount) : null, "frequency" in change ? change.frequency[0].toUpperCase() + change.frequency.slice(1) : null, date].filter(Boolean).join(" · ");
+}
+
+function ChangeList({ changes, references, issues, editingId, onEdit, onRemove }: { changes: PlanSimulationChange[]; references: PlanSimulationReferences; issues: PlanSimulationResult["issues"]; editingId: string | null; onEdit: (id: string) => void; onRemove: (id: string) => void }) {
   const c = useColors();
-  if (!changes.length) return <View style={[styles.emptyCard, { borderColor: c.border }]}><AppText style={[styles.emptyTitle, { color: c.foreground }]}>No changes yet</AppText><AppText style={[styles.emptyText, { color: c.mutedForeground }]}>Your result currently matches the real Forecast exactly.</AppText></View>;
-  return (
-    <View style={styles.changeList}>
-      {changes.map(change => {
-        const issue = issues.find(item => item.changeId === change.id);
-        return (
-          <View key={change.id} style={[styles.changeRow, { backgroundColor: c.card, borderColor: issue ? c.warning : c.border }]}>
-            <View style={styles.changeRowCopy}>
-              <AppText style={[styles.changeRowTitle, { color: c.foreground }]}>{changeLabel(change, references)}</AppText>
-              {issue ? <AppText style={[styles.changeIssue, { color: c.warning }]}>Ready to adjust · {issue.message}</AppText> : <AppText style={[styles.changeOkay, { color: c.success }]}>Ready to compare</AppText>}
-            </View>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${changeLabel(change, references)}`} onPress={() => onRemove(change.id)} hitSlop={8} style={({ pressed }) => ({ opacity: pressed ? 0.55 : 1, padding: 8 })}>
-              <Feather name="x" size={18} color={c.mutedForeground} />
-            </Pressable>
-          </View>
-        );
-      })}
-    </View>
-  );
+  if (!changes.length) return <View style={[styles.emptyCard, { borderColor: c.border }]}><View style={[styles.editorIcon, { backgroundColor: c.primary + "12" }]}><Feather name="git-branch" size={21} color={c.primary} /></View><AppText style={[styles.emptyTitle, { color: c.foreground }]}>Start with one small change</AppText><AppText style={[styles.emptyText, { color: c.mutedForeground }]}>Add income, adjust a bill or test a purchase below. Your comparison updates as you go.</AppText></View>;
+  return <View style={styles.changeList}>{changes.map((change, index) => {
+    const issue = issues.find(item => item.changeId === change.id);
+    const label = changeLabel(change, references);
+    const active = editingId === change.id;
+    return <View key={change.id} style={[styles.changeRow, { backgroundColor: c.card, borderColor: active ? c.primary : issue ? c.warning : c.border }]}>
+      <View style={styles.changeRowTop}><View style={[styles.changeNumber, { backgroundColor: c.primary + "12" }]}><AppText style={{ color: c.primary, fontFamily: "Inter_700Bold" }}>{index + 1}</AppText></View><View style={styles.changeRowCopy}><AppText style={[styles.changeRowTitle, { color: c.foreground }]}>{label}</AppText><AppText style={[styles.changeSummary, { color: c.mutedForeground }]}>{changeSummary(change)}</AppText></View></View>
+      {issue ? <AppText style={[styles.changeIssue, { color: c.warning }]}>{issue.message}</AppText> : null}
+      <View style={styles.changeRowActions}><Pressable accessibilityRole="button" accessibilityLabel={`Edit ${label}`} accessibilityState={{ selected: active }} onPress={() => onEdit(change.id)} style={[styles.changeAction, { backgroundColor: c.primary + "12" }]}><Feather name="edit-3" size={15} color={c.primary} /><AppText style={[styles.changeActionText, { color: c.primary }]}>{active ? "Editing" : "Edit"}</AppText></Pressable><Pressable accessibilityRole="button" accessibilityLabel={`Remove ${label}`} onPress={() => onRemove(change.id)} style={styles.changeAction}><Feather name="trash-2" size={15} color={c.mutedForeground} /><AppText style={[styles.changeActionText, { color: c.mutedForeground }]}>Remove</AppText></Pressable></View>
+    </View>;
+  })}</View>;
 }
 
 function Metric({ label, real, scenario, tone }: { label: string; real: string; scenario: string; tone?: "good" | "warn" }) {
   const c = useColors();
+  const { width } = useWindowDimensions();
+  const stacked = width < 600;
   const scenarioColor = tone === "good" ? c.success : tone === "warn" ? c.warning : c.foreground;
   return (
     <View style={[styles.metric, { backgroundColor: c.background, borderColor: c.border }]}>
       <AppText tone="label" style={[styles.metricLabel, { color: c.mutedForeground }]}>{label}</AppText>
-      <View style={styles.metricValues}><View><AppText style={[styles.metricCaption, { color: c.mutedForeground }]}>Real plan</AppText><AppText tone="number" style={[styles.metricValue, { color: c.foreground }]}>{real}</AppText></View><View style={styles.metricScenario}><AppText style={[styles.metricCaption, { color: c.mutedForeground }]}>Scenario</AppText><AppText tone="number" style={[styles.metricValue, { color: scenarioColor }]}>{scenario}</AppText></View></View>
+      <View style={[styles.metricValues, stacked && styles.metricValuesStack]}><View style={styles.metricReal}><AppText style={[styles.metricCaption, { color: c.mutedForeground }]}>Real plan</AppText><AppText tone="number" style={[styles.metricValue, { color: c.foreground }]}>{real}</AppText></View><View style={[styles.metricScenario, stacked && styles.metricScenarioStack]}><AppText style={[styles.metricCaption, { color: c.mutedForeground }]}>Scenario</AppText><AppText tone="number" style={[styles.metricValue, !stacked && styles.metricValueRight, { color: scenarioColor }]}>{scenario}</AppText></View></View>
     </View>
   );
 }
@@ -330,7 +315,7 @@ function ResultsPanel({ baseline, scenario, safetyFloor }: { baseline: PlanSimul
   const scenarioNegativeDay = firstNegativeBalanceDay(scenario.days);
   return (
     <View style={[styles.resultsCard, { backgroundColor: c.card, borderColor: c.border }]}>
-      <View style={styles.resultsHeader}><View><AppText tone="label" style={[styles.eyebrow, { color: c.primary }]}>LIVE COMPARISON</AppText><AppText tone="title" style={[styles.resultsTitle, { color: c.foreground }]}>What could change</AppText></View>{scenario.complete ? <View style={[styles.statusBadge, { backgroundColor: c.success + "18" }]}><Feather name="check" size={12} color={c.success} /><AppText style={[styles.statusText, { color: c.success }]}>Complete</AppText></View> : <View style={[styles.statusBadge, { backgroundColor: c.warning + "18" }]}><Feather name="edit-3" size={12} color={c.warning} /><AppText style={[styles.statusText, { color: c.warning }]}>Ready to adjust</AppText></View>}</View>
+      <View style={styles.resultsHeader}><View><AppText tone="label" style={[styles.eyebrow, { color: c.primary }]}>FORECAST COMPARISON</AppText><AppText tone="title" style={[styles.resultsTitle, { color: c.foreground }]}>See the difference</AppText></View>{scenario.complete ? <View style={[styles.statusBadge, { backgroundColor: c.success + "18" }]}><Feather name="check" size={12} color={c.success} /><AppText style={[styles.statusText, { color: c.success }]}>Complete</AppText></View> : <View style={[styles.statusBadge, { backgroundColor: c.warning + "18" }]}><Feather name="edit-3" size={12} color={c.warning} /><AppText style={[styles.statusText, { color: c.warning }]}>Ready to adjust</AppText></View>}</View>
       <AppText style={[styles.resultsNote, { color: c.mutedForeground }]}>Recalculated from your latest real plan. Nothing here changes Forecast, balances, bills, or debt.</AppText>
       {!scenario.complete ? <View accessibilityRole="alert" style={[styles.attention, { backgroundColor: c.warning + "12", borderColor: c.warning + "45" }]}><AppText style={[styles.attentionTitle, { color: c.warning }]}>Repair or remove stale changes</AppText>{scenario.issues.map(issue => <AppText key={`${issue.changeId}:${issue.message}`} style={[styles.attentionText, { color: c.foreground }]}>• {issue.message}</AppText>)}</View> : null}
       {scenario.complete && (scenarioNegativeDay || baselineNegativeDay) ? <View accessibilityRole="alert" style={[styles.attention, { backgroundColor: c.destructive + "12", borderColor: c.destructive + "55" }]}><View style={styles.negativeHeader}><Feather name="alert-triangle" size={16} color={c.destructive} /><AppText style={[styles.attentionTitle, { color: c.destructive }]}>Below-zero warning</AppText></View>{scenarioNegativeDay ? <AppText style={[styles.attentionText, { color: c.foreground }]}>This scenario first takes the account below $0 on <AppText style={{ color: c.destructive, fontFamily: "Inter_800ExtraBold" }}>{shortDate(scenarioNegativeDay.date)}</AppText>, reaching {money(scenarioNegativeDay.balance)}.</AppText> : <AppText style={[styles.attentionText, { color: c.foreground }]}>This scenario stays above $0 through {shortDate(scenario.days.at(-1)?.date ?? "")}. Your real plan first falls below $0 on <AppText style={{ color: c.destructive, fontFamily: "Inter_800ExtraBold" }}>{shortDate(baselineNegativeDay!.date)}</AppText>, reaching {money(baselineNegativeDay!.balance)}.</AppText>}{scenarioNegativeDay && baselineNegativeDay && scenarioNegativeDay.date !== baselineNegativeDay.date ? <AppText style={[styles.attentionText, { color: c.mutedForeground, marginTop: 5 }]}>Your real plan first falls below $0 on {shortDate(baselineNegativeDay.date)}.</AppText> : null}</View> : null}
@@ -404,9 +389,31 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editorVersion, setEditorVersion] = useState(0);
+  const [editorRevealVersion, setEditorRevealVersion] = useState(0);
+  const scrollRef = useRef<ScrollView>(null);
+  const editorRef = useRef<View>(null);
+  const workspaceYRef = useRef(0);
+  const editorYRef = useRef(0);
+  const editingChange = draft.changes.find(change => change.id === editingId) ?? null;
+  useEffect(() => {
+    if (!editingId) return;
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
+        scrollRef.current?.scrollTo({ y: workspaceYRef.current + editorYRef.current - 12, animated: true });
+        if (Platform.OS === "web") (editorRef.current as unknown as { focus?: (options: { preventScroll: boolean }) => void })?.focus?.({ preventScroll: true });
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [editingId, editorRevealVersion]);
   const selectedScenario = useMemo(() => scenarios.find(item => item.id === selectedId) ?? null, [scenarios, selectedId]);
   const foundingFreeLocalOnly = FOUNDING_FREE_LAUNCH && !canPersistScenarios;
   const keepsLocalDraft = foundingFreeLocalOnly || !canEditHousehold;
+  const draftLoadScope = JSON.stringify([draftStorageKey, householdId, canPersistScenarios, defaultHorizon, demoMode, keepsLocalDraft]);
+  const draftLoadScopeRef = useRef(draftLoadScope);
+  draftLoadScopeRef.current = draftLoadScope;
+  const [loadedDraftScope, setLoadedDraftScope] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -419,6 +426,10 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setLoadedDraftScope(null);
+    setEditingId(null);
+    setEditorVersion(previous => previous + 1);
+    setMessage("");
     setScenarios([]);
     setSelectedId(null);
     setDraft({ name: "Untitled scenario", horizonMonths: defaultHorizon, changes: [] });
@@ -428,7 +439,7 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
           !canPersistScenarios || demoMode || householdId === "local" ? Promise.resolve([]) : loadPlanSimulations(householdId),
           keepsLocalDraft && draftStorageKey ? AsyncStorage.getItem(draftStorageKey) : Promise.resolve(null),
         ]);
-        if (cancelled) return;
+        if (cancelled || draftLoadScopeRef.current !== draftLoadScope) return;
         setScenarios(rows);
         if (keepsLocalDraft && storedDraft) {
           const parsed = JSON.parse(storedDraft) as Partial<DraftState>;
@@ -436,18 +447,18 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
           if (typeof parsed.name === "string" && isPlanSimulationHorizon(parsed.horizonMonths) && changes) setDraft({ name: parsed.name, horizonMonths: parsed.horizonMonths, changes });
         }
       } catch (error) {
-        if (!cancelled) setMessage(error instanceof Error ? error.message : "Plan Simulator could not load household scenarios.");
+        if (!cancelled && draftLoadScopeRef.current === draftLoadScope) setMessage(error instanceof Error ? error.message : "Plan Simulator could not load household scenarios.");
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && draftLoadScopeRef.current === draftLoadScope) { setLoadedDraftScope(draftLoadScope); setLoading(false); }
       }
     })();
     return () => { cancelled = true; };
-  }, [canPersistScenarios, defaultHorizon, demoMode, draftStorageKey, householdId, keepsLocalDraft]);
+  }, [canPersistScenarios, defaultHorizon, demoMode, draftStorageKey, householdId, keepsLocalDraft, draftLoadScope]);
 
   useEffect(() => {
-    if (!keepsLocalDraft || !draftStorageKey || loading) return;
+    if (!keepsLocalDraft || !draftStorageKey || loading || loadedDraftScope !== draftLoadScope) return;
     void AsyncStorage.setItem(draftStorageKey, JSON.stringify(draft)).catch(() => undefined);
-  }, [draft, draftStorageKey, keepsLocalDraft, loading]);
+  }, [draft, draftStorageKey, keepsLocalDraft, loading, loadedDraftScope, draftLoadScope]);
 
   const baseline = useMemo(() => getPlanSimulationBaseline(draft.horizonMonths, startDate), [draft.horizonMonths, getPlanSimulationBaseline, startDate]);
   const currentMonthBalances = useMemo(() => getDailyBalances(currentMonth, currentYear), [currentMonth, currentYear, getDailyBalances]);
@@ -542,6 +553,8 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
   }), [baseline, draft.changes, draft.invalidDefinition, metrics, references, settings.safety_floor]);
 
   const selectScenario = useCallback((scenario: PlanSimulationDefinition) => {
+    setEditingId(null);
+    setEditorVersion(previous => previous + 1);
     setSelectedId(scenario.id);
     setDraft({ name: scenario.name, horizonMonths: scenario.horizonMonths, changes: scenario.changes, invalidDefinition: scenario.invalidDefinition });
     setMessage(scenario.invalidDefinition ? "This scenario has an unsupported definition. Choose Reset before continuing." : "");
@@ -558,15 +571,38 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
     setDraft(previous => ({ ...previous, changes: [...previous.changes, change] }));
   }, [makeLocalDraft]);
   const removeChange = useCallback((id: string) => {
+    setEditingId(previous => previous === id ? null : previous);
     makeLocalDraft();
     setDraft(previous => ({ ...previous, changes: previous.changes.filter(change => change.id !== id) }));
   }, [makeLocalDraft]);
+  const saveChange = useCallback((change: PlanSimulationChange): string | null => {
+    if (draft.invalidDefinition) return "Reset the unsupported scenario definition before changing it.";
+    if (editingId) {
+      const next = replaceSimulationChange(draft.changes, editingId, change);
+      if (!next) return "This change is no longer available to edit. Cancel and choose it again.";
+      makeLocalDraft();
+      setDraft(previous => {
+        const replacement = replaceSimulationChange(previous.changes, editingId, change);
+        return replacement ? { ...previous, changes: replacement } : previous;
+      });
+      setEditingId(null);
+    } else {
+      if (!decodePlanSimulationChanges([...draft.changes, change])) return "A scenario supports up to 50 valid changes. Remove a change before adding another.";
+      addChange(change);
+    }
+    return null;
+  }, [addChange, draft.changes, draft.invalidDefinition, editingId, makeLocalDraft]);
+  const cancelEditing = useCallback(() => { setEditingId(null); setEditorVersion(previous => previous + 1); }, []);
   const newDraft = useCallback(() => {
+    setEditingId(null);
+    setEditorVersion(previous => previous + 1);
     setSelectedId(null);
     setDraft({ name: "Untitled scenario", horizonMonths: defaultHorizon, changes: [] });
     setMessage("");
   }, [defaultHorizon]);
   const resetDraft = useCallback(() => {
+    setEditingId(null);
+    setEditorVersion(previous => previous + 1);
     if (selectedScenario?.invalidDefinition) {
       setDraft({ name: selectedScenario.name, horizonMonths: selectedScenario.horizonMonths, changes: [], invalidDefinition: false });
       setMessage("Unsupported changes were cleared. Review the empty scenario before continuing.");
@@ -577,6 +613,7 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
     setMessage("Draft reset.");
   }, [defaultHorizon, selectedScenario]);
   const saveDraft = useCallback(async () => {
+    if (editingId) { setMessage("Update or cancel this change first."); return; }
     if (!canPersistScenarios) { setMessage("Founding Free keeps this draft on this device. Household scenario saving is planned for Pro."); return; }
     if (!canEditHousehold || demoMode) { setMessage(canEditHousehold ? "Demo scenarios stay local and are not saved to a household." : "View-only members can run local drafts but cannot save household scenarios."); return; }
     if (draft.invalidDefinition) { setMessage("Reset the unsupported saved definition before saving or renaming it."); return; }
@@ -593,8 +630,9 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
       setMessage("Scenario saved. Your real plan was not changed.");
     } catch (error) { setMessage(error instanceof Error ? error.message : "Scenario could not be saved."); }
     finally { setSaving(false); }
-  }, [canEditHousehold, canPersistScenarios, demoMode, draft, householdId, selectedScenario]);
+  }, [canEditHousehold, canPersistScenarios, demoMode, draft, editingId, householdId, selectedScenario]);
   const duplicate = useCallback(async () => {
+    if (editingId) { setMessage("Update or cancel this change first."); return; }
     if (!canPersistScenarios) { setMessage("Founding Free uses one private on-device draft. Household scenario copies are planned for Pro."); return; }
     if (!canEditHousehold || demoMode) { setMessage("Only household editors can duplicate saved scenarios."); return; }
     if (draft.invalidDefinition) { setMessage("Reset the unsupported saved definition before duplicating it."); return; }
@@ -610,7 +648,7 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
       setMessage("Scenario duplicated. Your real plan was not changed.");
     } catch (error) { setMessage(error instanceof Error ? error.message : "Scenario could not be duplicated."); }
     finally { setSaving(false); }
-  }, [canEditHousehold, canPersistScenarios, demoMode, draft, householdId, scenarios, selectScenario]);
+  }, [canEditHousehold, canPersistScenarios, demoMode, draft, editingId, householdId, scenarios, selectScenario]);
   const removeScenario = useCallback(() => {
     if (!canPersistScenarios || !selectedScenario || !canEditHousehold || demoMode) return;
     Alert.alert("Delete scenario?", `Delete “${selectedScenario.name}”? Your real plan will not change.`, [{ text: "Cancel", style: "cancel" }, { text: "Delete", style: "destructive", onPress: () => { setSaving(true); void deletePlanSimulation(selectedScenario).then(() => { setScenarios(previous => previous.filter(item => item.id !== selectedScenario.id)); newDraft(); setMessage("Scenario deleted. Your real plan was not changed."); }).catch(error => setMessage(error instanceof Error ? error.message : "Scenario could not be deleted.")).finally(() => setSaving(false)); } }]);
@@ -621,10 +659,10 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.background }]} edges={["top", "bottom"]}>
       <View style={[styles.header, { borderColor: c.border, backgroundColor: c.background }]}>
-        <View style={styles.headerCopy}><AppText tone="label" style={[styles.eyebrow, { color: c.primary }]}>{foundingFreeLocalOnly ? "FOUNDING FREE PLAN SIMULATOR" : "PRO PLAN SIMULATOR"}</AppText><AppText accessibilityRole="header" tone="title" style={[styles.title, { color: c.foreground }]}>Test a plan without changing it</AppText><AppText style={[styles.subtitle, { color: c.mutedForeground }]}>{foundingFreeLocalOnly ? "Compare your real Forecast with a private draft kept on this device. Nothing changes your real plan." : "Compare your real Forecast with a saved what-if scenario. Nothing changes your real plan."}</AppText><DataFreshnessLabel compact /></View>
+        <View style={styles.headerCopy}><AppText tone="label" style={[styles.eyebrow, { color: c.primary }]}>{foundingFreeLocalOnly ? "FOUNDING FREE PLAN SIMULATOR" : "PRO PLAN SIMULATOR"}</AppText><AppText accessibilityRole="header" tone="title" style={[styles.title, { color: c.foreground }]}>Plan Simulator</AppText><AppText style={[styles.subtitle, { color: c.mutedForeground }]}>{foundingFreeLocalOnly ? "Try a different plan. See the impact before you make a decision. Nothing changes your real plan." : "Explore a what-if scenario alongside your real Forecast."}</AppText><DataFreshnessLabel compact /></View>
         <Pressable accessibilityRole="button" accessibilityLabel="Close Plan Simulator" onPress={() => safeClose(router)} style={({ pressed }) => [styles.closeButton, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.66 : 1 }]}><Feather name="x" size={21} color={c.foreground} /></Pressable>
       </View>
-      <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, desktop && styles.contentDesktop]} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={scrollRef} style={styles.scroll} contentContainerStyle={[styles.content, desktop && styles.contentDesktop]} keyboardShouldPersistTaps="handled">
         <View style={[styles.readOnlyBanner, { backgroundColor: c.primary + "12", borderColor: c.primary + "40" }]}><Feather name="shield" size={18} color={c.primary} /><View style={styles.readOnlyCopy}><AppText style={[styles.readOnlyTitle, { color: c.foreground }]}>{foundingFreeLocalOnly ? "Private on-device draft" : "Simulation only"}</AppText><AppText style={[styles.readOnlyText, { color: c.mutedForeground }]}>{foundingFreeLocalOnly ? "Founding Free keeps this draft on this device and does not sync it to your household. Your financial plan stays unchanged." : "There is no Apply action. Balances, APR, safety floor, goals, bills, debt, and past activity stay unchanged."}</AppText></View></View>
         <View style={[styles.scenarioBar, { backgroundColor: c.card, borderColor: c.border }]}>
           <View style={styles.scenarioSelect}><FieldLabel>Scenario</FieldLabel><ChoiceChips values={[{ id: "draft", label: "Local draft" }, ...scenarios.map(item => ({ id: item.id, label: item.invalidDefinition ? `${item.name} · Ready to adjust` : item.name }))]} selected={selectedId ?? "draft"} onSelect={id => { if (id === "draft") newDraft(); else { const scenario = scenarios.find(item => item.id === id); if (scenario) selectScenario(scenario); } }} /></View>
@@ -632,18 +670,20 @@ function PlanSimulatorWorkspace({ canPersistScenarios }: { canPersistScenarios: 
         </View>
         {!canEditHousehold && canPersistScenarios ? <View style={[styles.viewerNote, { backgroundColor: c.warning + "12", borderColor: c.warning + "40" }]}><Feather name="eye" size={16} color={c.warning} /><AppText style={[styles.viewerText, { color: c.foreground }]}>View-only access: saved household scenarios are readable. Any changes you try are kept as a private local draft and cannot be saved.</AppText></View> : null}
         {message ? <View accessibilityRole="alert" style={[styles.message, { backgroundColor: c.card, borderColor: c.border }]}><AppText style={[styles.messageText, { color: c.foreground }]}>{message}</AppText><Pressable accessibilityRole="button" accessibilityLabel="Dismiss message" onPress={() => setMessage("")} hitSlop={8}><Feather name="x" size={16} color={c.mutedForeground} /></Pressable></View> : null}
-        <View style={[styles.workspace, desktop && styles.workspaceDesktop]}>
+        <View onLayout={event => { workspaceYRef.current = event.nativeEvent.layout.y; }} style={[styles.workspace, desktop && styles.workspaceDesktop]}>
           <View style={styles.editorColumn}>
             <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
-              <AppText tone="title" style={[styles.cardTitle, { color: c.foreground }]}>Scenario details</AppText>
+              <AppText tone="title" style={[styles.cardTitle, { color: c.foreground }]}>Your scenario</AppText>
               <View style={styles.field}><FieldLabel>Name</FieldLabel><Input label="Scenario name" value={draft.name} onChangeText={name => { makeLocalDraft(); setDraft(previous => ({ ...previous, name })); }} placeholder="Name this scenario" /></View>
-              <View style={styles.field}><FieldLabel>Horizon</FieldLabel><ChoiceChips values={PLAN_SIMULATION_HORIZONS.map(value => ({ id: String(value), label: `${value} months` }))} selected={String(draft.horizonMonths)} onSelect={value => { makeLocalDraft(); setDraft(previous => ({ ...previous, horizonMonths: Number(value) as PlanSimulationHorizon })); }} /></View>
+              <View style={styles.field}><FieldLabel>Compare over</FieldLabel><ChoiceChips values={PLAN_SIMULATION_HORIZONS.map(value => ({ id: String(value), label: `${value} months` }))} selected={String(draft.horizonMonths)} onSelect={value => { makeLocalDraft(); setDraft(previous => ({ ...previous, horizonMonths: Number(value) as PlanSimulationHorizon })); }} /></View>
               <AppText style={[styles.scopeNote, { color: c.mutedForeground }]}>{foundingFreeLocalOnly ? "This draft is saved only on this device. Household scenario sync and saved copies are planned for Pro." : "Saved scenarios store only their name and hypothetical changes. Every result is rebuilt from the latest live Forecast."}</AppText>
-              <View style={styles.actionWrap}>{foundingFreeLocalOnly ? <Button label={draft.invalidDefinition ? "Reset unsupported changes" : "Reset local draft"} icon="rotate-ccw" onPress={resetDraft} disabled={saving} /> : <><Button label={selectedScenario ? "Save changes" : "Save"} icon="save" onPress={() => void saveDraft()} disabled={!canEditHousehold || saving || demoMode || Boolean(draft.invalidDefinition)} primary /><Button label="Rename" icon="type" onPress={() => void saveDraft()} disabled={!selectedScenario || !canEditHousehold || saving || demoMode || Boolean(draft.invalidDefinition)} /><Button label="Duplicate" icon="copy" onPress={() => void duplicate()} disabled={!canEditHousehold || saving || demoMode || Boolean(draft.invalidDefinition)} /><Button label={draft.invalidDefinition ? "Reset unsupported changes" : "Reset"} icon="rotate-ccw" onPress={resetDraft} disabled={saving} /><Button label="Delete" icon="trash-2" onPress={removeScenario} disabled={!selectedScenario || !canEditHousehold || saving || demoMode} danger /></>}</View>
+              {editingId ? <AppText accessibilityRole="alert" style={[styles.editSemantics, { color: c.primary }]}>Update or cancel this change first. Reset or choose another scenario to discard this edit.</AppText> : null}
+              <View style={styles.actionWrap}>{foundingFreeLocalOnly ? <Button label={draft.invalidDefinition ? "Reset unsupported changes" : "Reset local draft"} icon="rotate-ccw" onPress={resetDraft} disabled={saving} /> : <><Button label={selectedScenario ? "Save changes" : "Save"} icon="save" onPress={() => void saveDraft()} disabled={!canEditHousehold || saving || demoMode || Boolean(draft.invalidDefinition) || Boolean(editingId)} primary /><Button label="Rename" icon="type" onPress={() => void saveDraft()} disabled={!selectedScenario || !canEditHousehold || saving || demoMode || Boolean(draft.invalidDefinition) || Boolean(editingId)} /><Button label="Duplicate" icon="copy" onPress={() => void duplicate()} disabled={!canEditHousehold || saving || demoMode || Boolean(draft.invalidDefinition) || Boolean(editingId)} /><Button label={draft.invalidDefinition ? "Reset unsupported changes" : "Reset"} icon="rotate-ccw" onPress={resetDraft} disabled={saving} /><Button label="Delete" icon="trash-2" onPress={removeScenario} disabled={!selectedScenario || !canEditHousehold || saving || demoMode} danger /></>}</View>
               {saving && canPersistScenarios ? <View style={styles.savingRow}><ActivityIndicator size="small" color={c.primary} /><AppText style={[styles.savingText, { color: c.mutedForeground }]}>Saving scenario…</AppText></View> : null}
             </View>
-            <ChangeComposer references={references} startDate={startDate} endDate={baseline.endDate} onAdd={addChange} />
-            <View><AppText tone="title" style={[styles.sectionTitle, { color: c.foreground }]}>Scenario changes</AppText><ChangeList changes={draft.changes} references={references} issues={scenarioResult.issues} onRemove={removeChange} /></View>
+            <View><View style={styles.sectionHeading}><AppText accessibilityRole="header" tone="title" style={[styles.sectionTitle, { color: c.foreground }]}>Your changes</AppText><View style={[styles.countBadge, { backgroundColor: c.primary + "12" }]}><AppText style={{ color: c.primary, fontFamily: "Inter_700Bold", fontSize: 12 }}>{draft.changes.length}</AppText></View></View><ChangeList changes={draft.changes} references={references} issues={scenarioResult.issues} editingId={editingId} onEdit={id => { setEditingId(id); setEditorRevealVersion(previous => previous + 1); }} onRemove={removeChange} /></View>
+            {!draft.invalidDefinition ? <View ref={editorRef} focusable tabIndex={-1} accessibilityLabel={editingChange ? `Editing ${changeLabel(editingChange, references)}` : "Add a scenario change"} onLayout={event => { editorYRef.current = event.nativeEvent.layout.y; }}><ChangeComposer key={`${draftStorageKey ?? householdId}:${editorVersion}:${editingId ?? "new"}`} references={references} startDate={startDate} endDate={baseline.endDate} editingChange={editingChange} onSave={saveChange} onCancel={cancelEditing} /></View> : <AppText accessibilityRole="alert" style={[styles.editSemantics, { color: c.warning }]}>Reset unsupported changes before adding or editing this scenario.</AppText>}
+
           </View>
           <View style={[styles.resultsColumn, desktop && styles.resultsColumnDesktop]}><ResultsPanel baseline={baselineResult} scenario={scenarioResult} safetyFloor={settings.safety_floor} /></View>
         </View>
@@ -663,12 +703,17 @@ const styles = StyleSheet.create({
   screen: { flex: 1 }, scroll: { flex: 1 }, content: { padding: 16, paddingBottom: 40, gap: 14 }, contentDesktop: { width: "100%", maxWidth: 1480, alignSelf: "center", paddingHorizontal: 28, paddingBottom: 64 },
   header: { minHeight: 88, borderBottomWidth: 1, paddingHorizontal: 18, paddingVertical: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 }, headerCopy: { flex: 1, maxWidth: 820 }, eyebrow: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.9 }, title: { fontSize: 25, fontFamily: "Inter_800ExtraBold", marginTop: 2 }, subtitle: { fontSize: 13, marginTop: 4, lineHeight: 19 }, closeButton: { width: 44, height: 44, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" }, lockedHeader: { height: 60, alignItems: "flex-end", justifyContent: "center", paddingHorizontal: 16 },
   readOnlyBanner: { borderWidth: 1, borderRadius: 18, padding: 14, flexDirection: "row", gap: 12, alignItems: "center" }, readOnlyCopy: { flex: 1 }, readOnlyTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" }, readOnlyText: { fontSize: 12, marginTop: 2, lineHeight: 17 },
-  scenarioBar: { borderWidth: 1, borderRadius: 18, padding: 12, flexDirection: "row", alignItems: "flex-end", gap: 10 }, scenarioSelect: { flex: 1, minWidth: 0 }, viewerNote: { borderWidth: 1, borderRadius: 16, padding: 12, flexDirection: "row", gap: 10, alignItems: "center" }, viewerText: { flex: 1, fontSize: 12, lineHeight: 17 }, message: { borderWidth: 1, borderRadius: 14, padding: 12, flexDirection: "row", alignItems: "center", gap: 10 }, messageText: { flex: 1, fontSize: 12 },
+  scenarioBar: { flexWrap: "wrap", borderWidth: 1, borderRadius: 18, padding: 12, flexDirection: "row", alignItems: "flex-end", gap: 10 }, scenarioSelect: { flex: 1, minWidth: 0 }, viewerNote: { borderWidth: 1, borderRadius: 16, padding: 12, flexDirection: "row", gap: 10, alignItems: "center" }, viewerText: { flex: 1, fontSize: 12, lineHeight: 17 }, message: { borderWidth: 1, borderRadius: 14, padding: 12, flexDirection: "row", alignItems: "center", gap: 10 }, messageText: { flex: 1, fontSize: 12 },
   workspace: { gap: 16 }, workspaceDesktop: { flexDirection: "row", alignItems: "flex-start", gap: 20 }, editorColumn: { flex: 1, minWidth: 0, gap: 16 }, resultsColumn: { minWidth: 0 }, resultsColumnDesktop: { width: "42%", maxWidth: 600, position: Platform.OS === "web" ? "sticky" as any : "relative", top: 16 },
-  card: { borderWidth: 1, borderRadius: 22, padding: 16 }, cardTitle: { fontSize: 18, fontFamily: "Inter_800ExtraBold" }, cardDescription: { fontSize: 12, marginTop: 4, marginBottom: 12 }, field: { marginTop: 13 }, fieldLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", marginBottom: 6 }, input: { width: "100%", minHeight: 44, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, fontSize: 14, fontFamily: "Inter_500Medium" }, scopeNote: { fontSize: 11, lineHeight: 16, marginTop: 12 },
+  card: { borderWidth: 1, borderRadius: 22, padding: 16 }, cardTitle: { fontSize: 18, fontFamily: "Inter_800ExtraBold" }, cardDescription: { fontSize: 12, marginTop: 4, lineHeight: 18 }, field: { marginTop: 13 }, fieldLabel: { fontSize: 12, fontFamily: "Inter_800ExtraBold", marginBottom: 6 }, input: { width: "100%", minHeight: 44, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, fontSize: 14, fontFamily: "Inter_500Medium" }, scopeNote: { fontSize: 12, lineHeight: 16, marginTop: 12 },
   button: { minHeight: 44, borderWidth: 1, borderRadius: 12, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 }, buttonText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" }, actionWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 14 }, savingRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 }, savingText: { fontSize: 11 },
-  changeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 }, changeOption: { width: "48.5%", minHeight: 62, borderWidth: 1, borderRadius: 14, padding: 10, flexDirection: "row", alignItems: "center", gap: 9 }, changeOptionCopy: { flex: 1 }, changeOptionTitle: { fontSize: 12, fontFamily: "Inter_800ExtraBold" }, changeOptionDetail: { fontSize: 10, marginTop: 2, lineHeight: 14 }, errorText: { fontSize: 12, fontFamily: "Inter_600SemiBold", marginVertical: 10 }, editSemantics: { fontSize: 11, lineHeight: 16, marginVertical: 10 },
-  sectionTitle: { fontSize: 17, fontFamily: "Inter_800ExtraBold", marginBottom: 10 }, emptyCard: { borderWidth: 1, borderStyle: "dashed", borderRadius: 18, padding: 22, alignItems: "center" }, emptyTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" }, emptyText: { fontSize: 12, marginTop: 4, textAlign: "center" }, changeList: { gap: 8 }, changeRow: { minHeight: 60, borderWidth: 1, borderRadius: 14, paddingLeft: 12, paddingRight: 4, paddingVertical: 8, flexDirection: "row", alignItems: "center" }, changeRowCopy: { flex: 1 }, changeRowTitle: { fontSize: 12, fontFamily: "Inter_700Bold" }, changeIssue: { fontSize: 10, fontFamily: "Inter_600SemiBold", marginTop: 3 }, changeOkay: { fontSize: 10, fontFamily: "Inter_600SemiBold", marginTop: 3 },
-  resultsCard: { borderWidth: 1, borderRadius: 24, padding: 17 }, resultsHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }, resultsTitle: { fontSize: 20, fontFamily: "Inter_800ExtraBold", marginTop: 2 }, statusBadge: { minHeight: 30, borderRadius: 999, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 5 }, statusText: { fontSize: 10, fontFamily: "Inter_800ExtraBold" }, resultsNote: { fontSize: 11, lineHeight: 16, marginTop: 8 }, attention: { borderWidth: 1, borderRadius: 14, padding: 11, marginTop: 12 }, negativeHeader: { flexDirection: "row", alignItems: "center", gap: 7 }, attentionTitle: { fontSize: 12, fontFamily: "Inter_800ExtraBold", marginBottom: 4 }, attentionText: { fontSize: 11, lineHeight: 16 }, metricsGrid: { gap: 9, marginTop: 14 }, metric: { borderWidth: 1, borderRadius: 15, padding: 12 }, metricLabel: { fontSize: 9, fontFamily: "Inter_800ExtraBold" }, metricValues: { flexDirection: "row", justifyContent: "space-between", gap: 12, marginTop: 7 }, metricScenario: { alignItems: "flex-end", flex: 1 }, metricCaption: { fontSize: 9 }, metricValue: { fontSize: 16, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
-  safetyRow: { borderTopWidth: 1, borderBottomWidth: 1, marginTop: 14, paddingVertical: 13, flexDirection: "row", justifyContent: "space-between", gap: 12 }, safetyLabel: { fontSize: 10 }, safetyValue: { fontSize: 16, fontFamily: "Inter_800ExtraBold", marginTop: 2 }, debtImpact: { borderWidth: 1, borderRadius: 16, padding: 13, flexDirection: "row", gap: 11, marginTop: 14 }, debtImpactCopy: { flex: 1 }, debtImpactTitle: { fontSize: 11, fontFamily: "Inter_700Bold" }, debtImpactValue: { fontSize: 18, fontFamily: "Inter_800ExtraBold", marginTop: 2 }, debtImpactNote: { fontSize: 10, marginTop: 2 }, monthSection: { marginTop: 18 }, monthSectionTitle: { fontSize: 16, fontFamily: "Inter_800ExtraBold", marginBottom: 7 }, monthRow: { borderTopWidth: 1, paddingVertical: 11 }, monthRowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }, monthName: { fontSize: 12, fontFamily: "Inter_700Bold" }, monthNet: { fontSize: 13, fontFamily: "Inter_800ExtraBold" }, barTrack: { marginTop: 8, gap: 3 }, bar: { height: 4, borderRadius: 2 }, monthDetails: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: 7, gap: 7 }, monthDetail: { fontSize: 9 },
+  composerHeading: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginBottom: 16 }, editorIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  categoryTabs: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginBottom: 12 }, categoryTab: { minHeight: 44, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, alignItems: "center", justifyContent: "center" }, categoryTabText: { fontSize: 12, fontFamily: "Inter_700Bold" },
+  editingBadge: { padding: 11, borderRadius: 12, flexDirection: "row", alignItems: "center", gap: 8 }, editingBadgeText: { fontSize: 13, fontFamily: "Inter_700Bold" }, composerActions: { marginTop: 16, flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  sectionHeading: { flexDirection: "row", alignItems: "center", gap: 9, marginBottom: 12 }, countBadge: { minWidth: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  changeRowTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 }, changeNumber: { width: 28, height: 28, borderRadius: 9, alignItems: "center", justifyContent: "center" }, changeSummary: { fontSize: 12, lineHeight: 18, marginTop: 4 }, changeRowActions: { flexDirection: "row", gap: 8, flexWrap: "wrap" }, changeAction: { minHeight: 44, paddingHorizontal: 12, borderRadius: 11, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 }, changeActionText: { fontSize: 12, fontFamily: "Inter_700Bold" },
+  changeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 }, changeOption: { width: "100%", minHeight: 60, borderWidth: 1, borderRadius: 14, padding: 10, flexDirection: "row", alignItems: "center", gap: 9 }, changeOptionCopy: { flex: 1 }, changeOptionTitle: { fontSize: 12, fontFamily: "Inter_800ExtraBold" }, changeOptionDetail: { fontSize: 12, marginTop: 2, lineHeight: 14 }, errorText: { fontSize: 12, fontFamily: "Inter_600SemiBold", marginVertical: 10 }, editSemantics: { fontSize: 12, lineHeight: 16, marginVertical: 10 },
+  sectionTitle: { fontSize: 18, fontFamily: "Inter_800ExtraBold" }, emptyCard: { borderWidth: 1, borderStyle: "dashed", borderRadius: 18, padding: 22, alignItems: "center" }, emptyTitle: { marginTop: 10, fontSize: 15, fontFamily: "Inter_800ExtraBold" }, emptyText: { fontSize: 12, marginTop: 4, textAlign: "center" }, changeList: { gap: 8 }, changeRow: { borderWidth: 1, borderRadius: 18, padding: 14, gap: 10 }, changeRowCopy: { flex: 1 }, changeRowTitle: { fontSize: 14, fontFamily: "Inter_700Bold" }, changeIssue: { fontSize: 12, fontFamily: "Inter_600SemiBold", marginTop: 3 }, changeOkay: { fontSize: 10, fontFamily: "Inter_600SemiBold", marginTop: 3 },
+  resultsCard: { borderWidth: 1, borderRadius: 24, padding: 17 }, resultsHeader: { flexWrap: "wrap", flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }, resultsTitle: { fontSize: 20, fontFamily: "Inter_800ExtraBold", marginTop: 2 }, statusBadge: { minHeight: 30, borderRadius: 999, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 5 }, statusText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" }, resultsNote: { fontSize: 12, lineHeight: 16, marginTop: 8 }, attention: { borderWidth: 1, borderRadius: 14, padding: 11, marginTop: 12 }, negativeHeader: { flexDirection: "row", alignItems: "center", gap: 7 }, attentionTitle: { fontSize: 12, fontFamily: "Inter_800ExtraBold", marginBottom: 4 }, attentionText: { fontSize: 12, lineHeight: 16 }, metricsGrid: { gap: 9, marginTop: 14 }, metric: { borderWidth: 1, borderRadius: 15, padding: 12 }, metricLabel: { fontSize: 12, fontFamily: "Inter_800ExtraBold" }, metricValues: { flexDirection: "row", justifyContent: "space-between", gap: 12, marginTop: 7 }, metricValuesStack: { flexDirection: "column", gap: 12 }, metricReal: { flex: 1, minWidth: 0 }, metricScenarioStack: { alignItems: "flex-start" }, metricScenario: { alignItems: "flex-end", flex: 1, minWidth: 0 }, metricCaption: { fontSize: 11 }, metricValueRight: { textAlign: "right" }, metricValue: { width: "100%", flexShrink: 1, fontSize: 20, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
+  safetyRow: { borderTopWidth: 1, borderBottomWidth: 1, marginTop: 14, paddingVertical: 13, flexDirection: "row", justifyContent: "space-between", gap: 12 }, safetyLabel: { fontSize: 12 }, safetyValue: { fontSize: 16, fontFamily: "Inter_800ExtraBold", marginTop: 2 }, debtImpact: { borderWidth: 1, borderRadius: 16, padding: 13, flexDirection: "row", gap: 11, marginTop: 14 }, debtImpactCopy: { flex: 1 }, debtImpactTitle: { fontSize: 12, fontFamily: "Inter_700Bold" }, debtImpactValue: { fontSize: 18, fontFamily: "Inter_800ExtraBold", marginTop: 2 }, debtImpactNote: { fontSize: 12, marginTop: 2 }, monthSection: { marginTop: 18 }, monthSectionTitle: { fontSize: 16, fontFamily: "Inter_800ExtraBold", marginBottom: 7 }, monthRow: { borderTopWidth: 1, paddingVertical: 11 }, monthRowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }, monthName: { fontSize: 12, fontFamily: "Inter_700Bold" }, monthNet: { fontSize: 13, fontFamily: "Inter_800ExtraBold" }, barTrack: { marginTop: 8, gap: 3 }, bar: { height: 4, borderRadius: 2 }, monthDetails: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: 7, gap: 7 }, monthDetail: { fontSize: 11 },
 });

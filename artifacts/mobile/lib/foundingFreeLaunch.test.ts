@@ -165,5 +165,5 @@ test("Founding Free Plan Simulator keeps calculations local while admin Pro reta
   assert.match(simulator, /Founding Free keeps this draft on this device and does not sync it to your household/);
   assert.match(simulator, /foundingFreeLocalOnly \? <Button label=\{draft\.invalidDefinition/);
   assert.match(simulator, /foundingFreeLocalOnly \? "New local draft" : "New"/);
-  assert.match(simulator, /foundingFreeLocalOnly \? "Compare your real Forecast with a private draft kept on this device[^:]+: "Compare your real Forecast with a saved what-if scenario/);
+  assert.match(simulator, /foundingFreeLocalOnly \? "Private on-device draft" : "Simulation only"/);
 });

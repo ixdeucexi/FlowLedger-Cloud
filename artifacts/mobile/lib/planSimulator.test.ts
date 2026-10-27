@@ -502,24 +502,20 @@ test("Plan Simulator is a direct Pro route launched only from mobile and desktop
   assert.match(rootLayout, /name="plan-simulator"/);
 });
 
-import { transpileModule, ModuleKind } from "typescript";
+import { buildSimulationEditorChange, simulationEditorFields } from "./planSimulationEditor";
 test("payoff composer requires the explicitly chosen eligible debt and never substitutes another", () => {
-  const source = readFileSync("app/plan-simulator.tsx", "utf8");
-  const selection = source.slice(source.indexOf("  const selectedTarget ="), source.indexOf("  const add ="));
-  const js = transpileModule(selection, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
-  const selected = (targetId: string, debtChoices: { id: string }[]) => new Function("needsDebt", "debtChoices", "targetId", "targetChoices", `${js}; return selectedTarget;`)(true, debtChoices, targetId, []);
-  assert.equal(selected("second", [{ id: "first" }, { id: "second" }]), "second");
-  assert.equal(selected("removed", [{ id: "first" }]), "");
-  assert.equal(selected("", [{ id: "first" }]), "");
-  assert.equal(selected("second", []), "");
-  assert.match(source, /if \(needsDebt && !selectedTarget\) \{ setError\("Choose an eligible debt/);
+  const fields = simulationEditorFields({ id: "selected", type: "debt_payoff", debtId: "concert", date: "2026-08-14" }, "2026-08-12");
+  assert.equal(buildSimulationEditorChange(fields, "selected", references, "2026-08-12", "2026-08-31").change?.type, "debt_payoff");
+  assert.equal((buildSimulationEditorChange(fields, "selected", references, "2026-08-12", "2026-08-31").change as { debtId: string }).debtId, "concert");
+  for (const targetId of ["removed", ""]) assert.match(buildSimulationEditorChange({ ...fields, targetId }, "selected", references, "2026-08-12", "2026-08-31").error!, /Choose an eligible open debt/);
+  assert.match(buildSimulationEditorChange(fields, "selected", { ...references, debts: [] }, "2026-08-12", "2026-08-31").error!, /Choose an eligible open debt/);
 });
 
 test("payoff choices remain conditional with desktop navigation and explicit selection", () => {
   const source = readFileSync("app/plan-simulator.tsx", "utf8");
-  assert.match(source, /needsDebt \? debtChoices : \[\]/);
+  assert.match(source, /needsDebt \? references.debts.filter/);
   assert.match(source, /desktopDebtNavigation=\{needsDebt\}/);
   assert.doesNotMatch(source, /Choose a debt to pay off<\/FieldLabel>|styles.debtChoices/);
-  assert.match(source, /setTargetId\(id\); setError\(""\)/);
+  assert.match(source, /selected=\{targetId\} onSelect=\{id => setField\("targetId", id\)\}/);
   assert.match(source, /debt.balance > 0.005 && \(!debt.endDate \|\| debt.endDate.slice\(0, 10\) >= startDate\)/);
 });
