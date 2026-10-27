@@ -2,7 +2,7 @@
 
 Date: October 27, 2026. The owner requested an app-consistent simulator, editable changes, a stronger layout redesign, and a snapshot before rearranging it. Standing authorization covers publication after verification.
 
-Status: independent whole-release review passed. Source, functional and exact-build visual/physical-action checks passed; production release and postflight pending.
+Status: live and verified. Independent whole-release review, source, functional, exact-build visual/physical-action checks and production postflight passed.
 
 ## Changes
 
@@ -34,4 +34,12 @@ Functional/history evidence used entry `7f7fe7b20e3525d25e33d09dc73c7a60` and th
 
 ## Release
 
-Production deployment and postflight remain pending. Exact reviewed commit, deployment, alias inspection and live checks will be recorded after release.
+Reviewed application source `e0fff627c3fb71f1c690b8cf9e0aa82eae38884e` was committed, pushed and checked clean before publication. Production deployment `dpl_6XqBU8VrVHpfhZy6gDbZS5KvZzwh` is READY at immutable URL `flow-ledger-cloud-mea57a3ah-flow-ledger-s-projects.vercel.app`.
+
+The canonical domain, www, project Vercel domain and legacy team domain were inspected after readiness and all resolve to that exact production source/deployment. The legacy team alias was explicitly moved after readiness. Canonical project/team identity, Node 24 and Production-only metadata scope for all 14 environment records (13 required names) were verified without inspecting plaintext credentials.
+
+Live postflight passed clean-source provenance, registered simulator/public route modules, fresh no-store SPA HTML, executable immutable hashed JavaScript with the redesigned workspace signatures, health 200, missing API/asset 404, exact no-store service worker and unchanged guide-PDF parity. Public browser checks at 390/1,200 pixels verified the simulator's sign-in boundary with no writes, page errors or horizontal overflow. These public checks are distinct from the fictional authenticated editing tests and do not claim a real customer financial session.
+
+Runtime inspection observed the existing Node `DEP0169` `url.parse()` deprecation warning from the successful health check. No new application failure was observed; this is not a claim of zero log entries. No backend function, schema or dependency deployment was performed.
+
+Release verification is complete. This postflight report update is documentation only; the live application remains the exact reviewed commit above. The requested pre-redesign checkpoint and production rollback remain available as recorded above.
