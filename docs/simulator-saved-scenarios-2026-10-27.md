@@ -2,7 +2,7 @@
 
 Date: October 27, 2026. The owner requested separate saved scenarios that users can reopen, edit and weigh against each other. Standing authorization covers publication after verification.
 
-Status: source and browser verification passed; publication and production postflight are pending.
+Status: live and verified. Source, browser and production postflight gates passed.
 
 ## Behavior
 
@@ -34,3 +34,18 @@ SENTINEL approved the whole source/browser release gate, including bounded carry
 Production rollback tag `rollback/prod-before-scenario-library-20261027-1939` was created and remotely verified before publication. It captures live application source `e0fff627c3fb71f1c690b8cf9e0aa82eae38884e` and READY deployment `dpl_6XqBU8VrVHpfhZy6gDbZS5KvZzwh`.
 
 The owner's earlier layout checkpoint remains `checkpoint/simulator-before-redesign-20261027-1905`, commit `56bd49da66caea2d89dfcce9b326d271a5caa6a5`. Its full workspace archive and fictional phone/desktop screenshots remain at `/workspace/artifacts/simulator-before-redesign-2026-10-27/`.
+
+
+## Release
+
+Reviewed application source `44f499820d2b4e97e90c537161ee14f41c745f0d` was committed, pushed and checked clean before publication. Production deployment `dpl_C8REwmuCJtegqjPeSe7bGsrrdEV1` is READY at immutable URL `flow-ledger-cloud-682c4bie1-flow-ledger-s-projects.vercel.app`.
+
+The canonical, www, project Vercel and legacy team domains were inspected after readiness; all four resolve to that same READY production deployment and source. The legacy team alias was explicitly moved after readiness. Canonical project/team identity, Node 24 and the Production-only metadata scope of all 14 environment records (13 required names, no duplicates) were verified without inspecting plaintext credentials. The production request explicitly supplied the repository's build/install/output/root contract.
+
+Live postflight passed clean-source provenance, registered public routes and the simulator module, fresh no-store SPA HTML, executable immutable JavaScript containing the new save/comparison controls, health 200, missing API/asset 404, exact no-store service worker and unchanged guide-PDF parity. Public browser checks at 390/1,200 pixels verified the simulator's sign-in boundary with no writes, page errors or horizontal overflow. These public checks are distinct from the fictional authenticated tests and do not claim a real customer financial session.
+
+The managed workspace became unavailable immediately after deployment readiness. Production verification was completed in a temporary nonpersistent Vercel Sandbox cloned at the exact release SHA. The repository postflight assertions were retained, with authenticated MCP deployment inspections substituted for local Vercel CLI reads and the equivalent GitHub commit metadata field accepted. Extra new-feature bundle signatures and the simulator module registration were checked. The temporary browser installation, browser sessions and sandbox were stopped after successful verification.
+
+Runtime inspection observed the existing Node `DEP0169` `url.parse()` deprecation warning from the successful health check. No new application failure was observed; this is not a claim of zero log entries. No backend function, schema or dependency deployment was performed.
+
+Release verification is complete. This postflight report update is documentation only; the live application remains the reviewed source above. The earlier layout checkpoint and exact production rollback remain as recorded above.
