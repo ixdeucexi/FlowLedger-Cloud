@@ -223,7 +223,7 @@ test("simple intents remain behind auth abuse controls and bypass only model cre
   assert.match(simpleBranch, /weatherProviderConfig/);
   assert.doesNotMatch(simpleBranch, /OPENAI_API_KEY|reserveDailyLimit|runFinancialAnalysis|runFloCreation|create_flo_entity|\.rpc\(|validated\.request\.timezone/);
 
-  const modelGateStart = source.indexOf('if (!simpleIntent || requestedCreation?.mode === "create") {', classify);
+  const modelGateStart = source.indexOf('if (!Object.hasOwn(validated.request, "creationForm") && (!simpleIntent || requestedCreation?.mode === "create")) {', classify);
   const modelGateEnd = source.indexOf("const requestId", classify);
   assert.ok(modelGateStart > classify && modelGateEnd > modelGateStart && modelGateEnd < requestAudit);
   const modelGate = source.slice(modelGateStart, modelGateEnd);

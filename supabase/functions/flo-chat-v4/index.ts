@@ -162,7 +162,7 @@ async function handle(request: Request): Promise<Response> {
   const simpleIntent = classifyFloV4SimpleIntent(validated.request.question);
   let safetySecret: string | null = null;
   let apiKey: string | null = null;
-  if (!simpleIntent || requestedCreation?.mode === "create") {
+  if (!Object.hasOwn(validated.request, "creationForm") && (!simpleIntent || requestedCreation?.mode === "create")) {
     safetySecret = Deno.env.get("FLO_SAFETY_IDENTIFIER_SECRET") ?? null;
     apiKey = Deno.env.get("OPENAI_API_KEY") ?? null;
     if ((!safetySecret || !apiKey) && !requestedCreation) return withCors(jsonError("server_configuration", 503), approvedCors);
@@ -194,7 +194,7 @@ async function handle(request: Request): Promise<Response> {
     let result: any;
     const creationResponse = await runFloCreation({ client: auth.client, userId: auth.userId,
       householdId: validated.request.householdId, commandId: validated.request.commandId ?? "", message: validated.request.question,
-      draft: validated.request.creationDraft, apiKey: apiKey ?? Deno.env.get("OPENAI_API_KEY"), modelId, now, timezone: validated.request.timezone,
+      draft: validated.request.creationDraft, form: validated.request.creationForm, apiKey: apiKey ?? Deno.env.get("OPENAI_API_KEY"), modelId, now, timezone: validated.request.timezone,
     });
     if (creationResponse) {
       result = creationResponse; operation = "creation_capability";

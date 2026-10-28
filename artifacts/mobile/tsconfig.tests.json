@@ -291,5 +291,6 @@
     ,"lib/floAnswerUi.test.ts"
     ,"lib/floCreationUi.test.ts"
     ,"lib/floCreationProtocol.test.ts"
+    ,"lib/floCreationForm.test.ts"
   ]
 }

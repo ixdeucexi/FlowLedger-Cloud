@@ -487,7 +487,7 @@ async function handleV3(
         emitProgress("Checking your FlowLedger records");
 
         const creationResponse = forbiddenRequest.test(message) ? null : await runFloCreation({
-          client, userId, householdId, commandId: userMessageId, message, draft: body.creationDraft,
+          client, userId, householdId, commandId: userMessageId, message, draft: body.creationDraft, form: body.creationForm,
           apiKey: Deno.env.get("OPENAI_API_KEY"), modelId, now, timezone: body.timezone, allowRecurringBillChange: true,
         });
         const capabilityGuidance = floCapabilityGuidance(message);

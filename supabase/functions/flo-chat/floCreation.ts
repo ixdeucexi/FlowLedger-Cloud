@@ -4,7 +4,9 @@ export const FLO_CREATION_KINDS = ["create_bill","create_debt","create_income","
 export type FloCreationKind = typeof FLO_CREATION_KINDS[number];
 export type FloCreationDraft = {kind:FloCreationKind;fields:Record<string,unknown>;evidence:Record<string,string>;authorizationText:string;userText:string;householdId:string;expiresAt:string};
 export type FloCreationReceipt = {commandId:string;householdId:string;kind:FloCreationKind;entityId:string;entityType:"bill"|"income"|"transaction"|"goal";title:string;route:string;createdAt:string};
-export type FloCreationResult = {status:"needs_details"|"ready"|"saved"|"unavailable";kind?:FloCreationKind;prompt:string;missingFields:string[];draft?:FloCreationDraft;commandId?:string;householdId?:string;payload?:Record<string,unknown>;receipt?:FloCreationReceipt};
+export type FloCreationFormInput = { kind: FloCreationKind; fields: Record<string, string | number | boolean> };
+export type FloCreationFormFeedback = { values: Record<string, string | number | boolean>; errors: Record<string, string> };
+export type FloCreationResult = {form?:FloCreationFormFeedback;status:"needs_details"|"ready"|"saved"|"unavailable";kind?:FloCreationKind;prompt:string;missingFields:string[];draft?:FloCreationDraft;commandId?:string;householdId?:string;payload?:Record<string,unknown>;receipt?:FloCreationReceipt};
 export const creationRegistry:Record<FloCreationKind,{label:string;required:string[]}> = {
  create_bill:{label:"bill",required:["name","amount","frequency","first_date"]},
  create_debt:{label:"debt",required:["name","balance","minimum_payment","apr","frequency","first_date"]},
@@ -154,7 +156,12 @@ function ambiguousFirstPaymentDate(kind:FloCreationKind,fields:Record<string,unk
  const startDay=iso?Number(iso[1]):natural?Number(natural[1]):null;
  return startDay===null||startDay!==dueDay;
 }
-export async function runFloCreation(input:{client:any;userId:string;householdId:string;commandId:string;message:string;draft?:unknown;apiKey?:string|null;modelId:string;now:string;timezone?:string;safetyIdentifier?:string;allowRecurringBillChange?:boolean;extract?:(input:any)=>Promise<CreationExtraction>}){
+function creationEnvelope(creation: FloCreationResult) {
+ return ({creation,answer:{answer:creation.prompt,claims:[],caveat:null,evidenceIds:[],followups:[],creation},sources:[],aggregate:{dataAsOf:null,coverage:{complete:true,tools:0,partialTools:0,exclusions:[],reasons:[],dateRanges:[]},partial:false},usage:{inputTokens:0,outputTokens:0}});
+}
+
+export async function runFloCreation(input:{client:any;userId:string;householdId:string;commandId:string;message:string;draft?:unknown;form?:unknown;apiKey?:string|null;modelId:string;now:string;timezone?:string;safetyIdentifier?:string;allowRecurringBillChange?:boolean;extract?:(input:any)=>Promise<CreationExtraction>}){
+ if(input.form !== undefined) return runFloCreationForm(input);
  if(arithmeticRequest.test(input.message.trim()))return null;
  const carriedDraft=parseCreationDraft(input.draft,input.householdId,input.now), declaredIntent=creationIntent(input.message);
  // A new declared creation has its own authorization and facts, including a
@@ -162,7 +169,7 @@ export async function runFloCreation(input:{client:any;userId:string;householdId
  const draft=declaredIntent&&(declaredIntent.kind!==carriedDraft?.kind||declaredIntent.mode==="create")?undefined:carriedDraft;
  const intent=creationIntent(input.message,draft);
  if(input.allowRecurringBillChange&&/^(?:(?:can|could|would) you |please )?(?:edit|update|change)\b/i.test(input.message.trim())&&/\bbill\b/i.test(input.message))return null;
- const response=(creation:FloCreationResult)=>({creation,answer:{answer:creation.prompt,claims:[],caveat:null,evidenceIds:[],followups:[],creation},sources:[],aggregate:{dataAsOf:null,coverage:{complete:true,tools:0,partialTools:0,exclusions:[],reasons:[],dateRanges:[]},partial:false},usage:{inputTokens:0,outputTokens:0}});
+ const response = creationEnvelope;
  if(/^(?:(?:can|could|would) (?:you|flo|she) |please )?(?:edit|update|change|delete|remove|pay|send money|transfer|connect|link (?:a |my )?bank)\b/i.test(input.message.trim()))return response({status:"unavailable",prompt:`${/^(?:(?:can|could|would) (?:you|flo|she) |please )?(?:edit|update|change)\b/i.test(input.message.trim())?"I can’t edit that item here. ":""}I can create bills, debts, income, manual transactions, buckets, and savings goals. I can’t make payments, transfers, bank connections, or deletions.`,missingFields:[]});
  if(/^(?:cancel|stop|never mind|nevermind)\b/i.test(input.message)&&draft)return response({status:"unavailable",prompt:"Cancelled this draft.",missingFields:[]});
  if(!intent){if(readOnlyCreationRequest.test(input.message))return null;if((explicit.test(input.message)||/^(?:what can (?:you|flo)|can (?:you|flo|she) (?:add|create))\b/i.test(input.message))&&!hypothetical.test(input.message))return response({status:"unavailable",prompt:"I can create bills, debts, income, manual transactions, spending buckets, and savings goals. I can’t make payments, transfers, bank connections, or deletions.",missingFields:[]});return null;}
@@ -199,4 +206,138 @@ export async function runFloCreation(input:{client:any;userId:string;householdId
  if(missing.length)return response({status:"needs_details",kind,prompt:`${missing.includes("frequency")&&/\b(?:annual(?:ly)?|yearly|semi.?monthly|twice (?:a|per) month|every (?:two|2) months)\b/i.test(input.message)?`That repeat schedule isn’t supported. Choose ${kind==="create_income"?"monthly, weekly, or biweekly":"monthly, weekly, biweekly, or quarterly"}. `:""}To add this ${registry.label}, send ${missing.map(k=>creationFieldLabel(kind,k)).join(", ")}.`,missingFields:missing,draft:nextDraft});
  const payload=Object.fromEntries(supportedFields(kind).filter(k=>fields[k]!==undefined).map(k=>[k,fields[k]]));
  return response({status:"ready",kind,prompt:`I have the details for ${creationDisplayLabel(String(payload.name??payload.note))}. Adding it after the app’s usual safety check.`,missingFields:[],commandId:input.commandId,householdId:input.householdId,payload});
+}
+
+
+/** Parse the entire user field exactly like regular app money inputs. */
+function parseCreationFormDecimal(value: string | number | boolean, places: number): number | null {
+ if (typeof value === "number") {
+  const factor = 10 ** places;
+  return Number.isFinite(value) && Math.abs(Math.round(value * factor) - value * factor) < 0.00001 ? value : null;
+ }
+ if (typeof value !== "string") return null;
+ const decimal = `(?:\\.\\d{1,${places}})?`;
+ const pattern = new RegExp(`^(?:\\d+|\\d{1,3}(?:,\\d{3})+)${decimal}$|^\\.\\d{1,${places}}$`);
+ if (!pattern.test(value.trim())) return null;
+ const number = Number(value.trim().replace(/,/g, ""));
+ return Number.isFinite(number) ? number : null;
+}
+
+/** Explicit overlay Save is structured user input, never model instructions.
+ * This returns ready data only; the authenticated client still owns the same
+ * canonical safety preview and atomic receipt-backed commit as natural chat. */
+export async function runFloCreationForm(input: {
+ client: any;
+ userId: string;
+ householdId: string;
+ commandId: string;
+ form?: unknown;
+}) {
+ const unavailable = (prompt: string, kind?: FloCreationKind) => creationEnvelope({
+  status: "unavailable", ...(kind ? { kind } : {}), prompt, missingFields: [],
+ });
+ const raw = input.form;
+ if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+  return unavailable("This form is invalid. Open the item’s form again.");
+ }
+ const object = raw as Record<string, unknown>;
+ if (Object.keys(object).some(key => !["kind", "fields"].includes(key))
+  || typeof object.kind !== "string"
+  || !FLO_CREATION_KINDS.includes(object.kind as FloCreationKind)
+  || !object.fields || typeof object.fields !== "object" || Array.isArray(object.fields)) {
+  return unavailable("I can only use forms for bills, debts, income, manual transactions, buckets, and savings goals.");
+ }
+ const kind = object.kind as FloCreationKind;
+ const allowed = new Set(supportedFields(kind));
+ const entries = Object.entries(object.fields);
+ if (entries.length > 20 || entries.some(([key, value]) => !allowed.has(key)
+  || !["string", "number", "boolean"].includes(typeof value)
+  || typeof value === "string" && value.length > 2000
+  || typeof value === "number" && !Number.isFinite(value))
+  || new TextEncoder().encode(JSON.stringify(object.fields)).length > 12000) {
+  return unavailable("This form contains unsupported fields or values. Check the fields and try again.", kind);
+ }
+ if (!uuid(input.userId) || !uuid(input.householdId) || !uuid(input.commandId)) {
+  return unavailable("Sign in and open a new form before adding this item.", kind);
+ }
+ const [{ data: member, error: memberError }, { data: preferences, error: preferenceError }] = await Promise.all([
+  input.client.from("household_members").select("role").eq("household_id", input.householdId).eq("user_id", input.userId).maybeSingle(),
+  input.client.from("user_preferences").select("active_household_id").eq("user_id", input.userId).maybeSingle(),
+ ]);
+ if (memberError || preferenceError || !member || preferences?.active_household_id !== input.householdId) {
+  return unavailable("I couldn’t verify the active household for this form. Choose your household again.", kind);
+ }
+ if (!["owner", "manager", "editor"].includes(member.role)) {
+  return unavailable("You have view-only access, so I can’t add this item to the household.", kind);
+ }
+ const { data: budget, error: budgetError } = await input.client.from("budgets").select("id")
+  .eq("household_id", input.householdId).eq("is_default", true).maybeSingle();
+ if (budgetError || !budget?.id) {
+  return unavailable("I couldn’t verify this household’s active budget. Please retry.", kind);
+ }
+ const values = Object.fromEntries(entries) as Record<string, string | number | boolean>;
+ const payload: Record<string, unknown> = {};
+ const errors: Record<string, string> = {};
+ const numeric = new Set(["amount", "balance", "minimum_payment", "apr", "target_amount", "current_amount"]);
+ const dates = new Set(["first_date", "date", "target_date"]);
+ const required = new Set(creationRegistry[kind].required);
+ for (const key of allowed) {
+  const rawValue = values[key];
+  const blank = rawValue === undefined || typeof rawValue === "string" && !rawValue.trim();
+  if (blank) {
+   if (key === "frequency" && kind === "create_bill" && values.is_recurring === false) {
+    payload.frequency = "monthly";
+   } else if (required.has(key)) {
+    errors[key] = `Enter ${creationFieldLabel(kind, key)}.`;
+   }
+   continue;
+  }
+  if (numeric.has(key)) {
+   const number = parseCreationFormDecimal(rawValue, key === "apr" ? 4 : 2);
+   const zeroAllowed = ["balance", "apr", "current_amount"].includes(key);
+   if (number === null || number >= 1e9 || (zeroAllowed ? number < 0 : number <= 0)
+    || key === "apr" && number > 100) {
+    errors[key] = key === "apr" ? "Enter an APR from 0 to 100 with up to four decimal places."
+     : `Enter a ${zeroAllowed ? "nonnegative" : "positive"} amount with up to two decimal places.`;
+   } else payload[key] = number;
+  } else if (["monthly_last_day", "is_recurring"].includes(key)) {
+   if (typeof rawValue !== "boolean") errors[key] = "Choose yes or no.";
+   else payload[key] = rawValue;
+  } else if (dates.has(key)) {
+   if (!date(rawValue) || String(rawValue).startsWith("0000-")) errors[key] = "Choose a valid date in YYYY-MM-DD format.";
+   else payload[key] = rawValue;
+  } else if (key === "frequency") {
+   if (typeof rawValue !== "string" || !["monthly", "weekly", "biweekly", ...(kind === "create_income" ? [] : ["quarterly"])].includes(rawValue)) {
+    errors[key] = `Choose ${kind === "create_income" ? "monthly, weekly, or biweekly" : "monthly, weekly, biweekly, or quarterly"}.`;
+   } else payload[key] = rawValue;
+  } else if (key === "direction") {
+   if (!["expense", "inflow"].includes(String(rawValue))) errors[key] = "Choose money in or money out.";
+   else payload[key] = rawValue;
+  } else if (typeof rawValue !== "string" || !text(rawValue, key === "note" ? 2000 : 120)) {
+   errors[key] = `Enter ${key === "note" ? "a description of up to 2,000 characters" : "text of up to 120 characters"}.`;
+  } else payload[key] = rawValue.trim();
+ }
+ if (payload.monthly_last_day === true && payload.frequency !== "monthly") {
+  errors.monthly_last_day = "Last-day payday applies only to monthly income.";
+ }
+ if (kind === "create_bill" && payload.is_recurring === false) payload.frequency = "monthly";
+ if (kind === "create_manual_transaction" && !errors.account_id && typeof payload.account_id === "string") {
+  const { data: account, error: accountError } = await input.client.from("accounts").select("id")
+   .eq("id", payload.account_id).eq("household_id", input.householdId).eq("budget_id", budget.id)
+   .eq("is_active", true).in("account_type", ["checking", "savings", "cash"]).maybeSingle();
+  if (accountError) return unavailable("I couldn’t verify the selected account. Please retry.", kind);
+  if (!account) errors.account_id = "Choose an active account in this household’s current budget.";
+ }
+ const missingFields = Object.keys(errors);
+ if (missingFields.length) {
+  return creationEnvelope({
+   status: "needs_details", kind, prompt: `Check the highlighted fields to add this ${creationRegistry[kind].label}.`,
+   missingFields, form: { values, errors },
+  });
+ }
+ return creationEnvelope({
+  status: "ready", kind, commandId: input.commandId, householdId: input.householdId, payload,
+  prompt: `I have the details for ${creationDisplayLabel(String(payload.name ?? payload.note))}. Adding it after the app’s usual safety check.`,
+  missingFields: [],
+ });
 }

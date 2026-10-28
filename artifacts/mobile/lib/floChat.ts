@@ -1,4 +1,4 @@
-import { parseFloCreationResult, type FloCreationDraft, type FloCreationResult } from "./floCreationProtocol";
+import { parseFloCreationResult, type FloCreationDraft, type FloCreationResult, type FloCreationFormInput } from "./floCreationProtocol";
 import { fetch as expoFetch } from "expo/fetch";
 
 import { supabase, supabaseAnonKey, supabaseUrl } from "@/lib/supabase";
@@ -26,6 +26,7 @@ type FloChatRequestInput = {
   historyEnabled?: boolean;
   conversationContext?: FloConversationContext;
   creationDraft?: FloCreationDraft;
+  creationForm?: FloCreationFormInput;
   previewTier?: "free" | "pro" | null;
 };
 
@@ -36,12 +37,14 @@ export function floChatRequestBody(engine: FloEngine, input: FloChatRequestInput
     question: input.text,
     commandId: input.userMessageId,
     ...(input.creationDraft ? { creationDraft: input.creationDraft } : {}),
+    ...(input.creationForm ? { creationForm: input.creationForm } : {}),
     timezone: input.timezone,
     ...(input.conversationContext ? { conversationContext: input.conversationContext } : {}),
   };
   return {
     version: 3,
     ...(input.creationDraft ? { creationDraft: input.creationDraft } : {}),
+    ...(input.creationForm ? { creationForm: input.creationForm } : {}),
     ...(input.conversationId ? { conversationId: input.conversationId } : {}),
     householdId: input.householdId,
     userMessage: { id: input.userMessageId, text: input.text },

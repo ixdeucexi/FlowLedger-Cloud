@@ -5,12 +5,13 @@ import { transpileModule, ModuleKind } from "typescript";
 import { parseFloCreationResult, FLO_CREATION_ROUTES, type FloCreationResult } from "./floCreationProtocol";
 const commandId = "11111111-1111-4111-8111-111111111111", householdId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ready = (kind: "create_income" | "create_bucket" | "create_manual_transaction" = "create_income"): FloCreationResult => ({ status: "ready", kind, commandId, householdId, prompt: "Ready to add.", missingFields: [], payload: kind === "create_bucket" ? { name: "Fictional trip", target_amount: 100, target_date: "2026-11-01" } : kind === "create_manual_transaction" ? { amount: 30, direction: "expense", date: "2026-10-28", category: "Food", note: "Fictional lunch", account_id: "33333333-3333-4333-8333-333333333333" } : { name: "Fictional salary", amount: 1000, frequency: "monthly", first_date: "2026-11-01" } });
-function harness(options: { demo?: boolean; edit?: boolean; text?: string; owner?: string } = {}) {
+function harness(options: { demo?: boolean; edit?: boolean; text?: string; owner?: string; structured?: boolean } = {}) {
   const source = readFileSync("app/(tabs)/flo.tsx", "utf8"), start = source.indexOf("    const seenCreationCommands ="), end = source.indexOf("    const verifiedFallback:", start); assert.ok(start > 0 && end > start);
   const state: any = { current: true, calls: [], refreshes: 0, creations: {}, safety: null, input: "", actions: [], error: null, saving: false, preview: [], warning: null, fail: false, held: null, owner: options.owner ?? "actor:" + householdId + ":budget-a:owner:real:edit", budgets: [] };
   const bindings: Record<string, any> = {
     parseFloCreationResult, requestIsCurrent: () => state.current, requestCreationOwnerKey: state.owner, creationOwnerKeyRef: { get current() { return state.owner; } }, demoMode: options.demo ?? false, canEditHousehold: options.edit ?? true, requestBudgetId: "33333333-3333-4333-8333-333333333333", retryCreationRef: { current: null }, activeRequestRef: { current: 9 }, requestGeneration: 9, requestScopeKey: "actor:" + householdId, requestHouseholdId: householdId, userMessageId: commandId, assistantMessageId: "answer", clean: options.text ?? "Add the fictional record",
-    activeCreationDraftRef: { current: null }, creationOperationRef: { current: null },
+    creationForm: options.structured ? { kind: "create_income", fields: { name: "Salary" } } : undefined, creationFormRef: { current: options.structured ? { owner: state.owner, conversationId: null, creation: { kind: "create_income" } } : null },
+    formFeedbackRevisionRef: { current: 0 }, historyEnabled: false, conversationId: null, activeConversationIdRef: { current: null }, setCreationFormSession: (value: any) => { state.formSession = value; }, setCreationFormBusy: (value: boolean) => { state.formBusy = value; }, activeCreationDraftRef: { current: null }, creationOperationRef: { current: null },
     setCreationByMessageId: (update: any) => { state.creations = update(state.creations); }, setCreationSafety: (value: any) => { state.safety = value; }, setCreationSaving: (value: boolean) => { state.saving = value; },
     commitFloCreation: async (creation: FloCreationResult, expectedBudgetId: string) => { state.budgets.push(expectedBudgetId); state.calls.push(creation); if (state.held) await state.held; if (state.fail) throw new Error("lost response"); return { status: "saved", kind: creation.kind, commandId, householdId, prompt: "Added Fictional record.", missingFields: [], receipt: { commandId, householdId, kind: creation.kind, entityId: "22222222-2222-4222-8222-222222222222", entityType: creation.kind === "create_bucket" ? "goal" : creation.kind === "create_manual_transaction" ? "transaction" : "income", title: "Fictional record", route: FLO_CREATION_ROUTES[creation.kind!], createdAt: "2026-10-28T12:00:00Z" } }; },
     dispatch: (action: any) => state.actions.push(action), retryBudgetLoad: () => { state.refreshes++; }, setChatError: (error: any) => { state.error = error; }, setRetryAllowed() {}, settings: { safety_floor: 200, forecast_horizon_months: 6 }, getDailyBalances: () => [], buildBucketSafetyStop: () => state.warning,
@@ -93,13 +94,13 @@ test("a fields-only retry before any ready event retains its captured collection
   assert.ok(a > 0 && b > a);
   const code = transpileModule(source.slice(a, b), { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
   const draft = { kind: "create_income", householdId, fields: { name: "Fictional salary" }, evidence: { name: "Fictional salary" }, authorizationText: "Add income", userText: "Add income named Fictional salary", expiresAt: "2026-10-28T13:00:00Z" };
-  const bindings: Record<string, any> = { retry: true, clean: "$1000 monthly first date 2026-11-01", creationOwnerKey: "actor:home:budget:owner:real:edit", activeCreationDraftRef: { current: null }, retryRequestRef: { current: { text: "$1000 monthly first date 2026-11-01", creationOwner: "actor:home:budget:owner:real:edit", creationDraft: draft } } };
+  const bindings: Record<string, any> = { submittedForm: undefined, retry: true, clean: "$1000 monthly first date 2026-11-01", creationOwnerKey: "actor:home:budget:owner:real:edit", activeCreationDraftRef: { current: null }, retryRequestRef: { current: { text: "$1000 monthly first date 2026-11-01", creationOwner: "actor:home:budget:owner:real:edit", creationDraft: draft } } };
   const selectDraft = () => new Function(...Object.keys(bindings), `${code};return creationDraft;`)(...Object.values(bindings));
   assert.deepEqual(selectDraft(), draft, "Stop cleared the active draft but the same explicit retry still has its request snapshot");
   bindings.creationOwnerKey += ":new-budget"; assert.equal(selectDraft(), undefined);
   bindings.creationOwnerKey = "actor:home:budget:owner:real:edit"; bindings.clean = "A different question"; assert.equal(selectDraft(), undefined);
   bindings.clean = "$1000 monthly first date 2026-11-01"; bindings.retry = false; assert.equal(selectDraft(), undefined);
-  assert.match(source, /retryRequestRef.current = \{ text: clean, userMessageId, assistantMessageId, conversationId, creationDraft, creationOwner: requestCreationOwnerKey \}/);
+  assert.match(source, /retryRequestRef.current = \{ text: clean, userMessageId, assistantMessageId, conversationId, creationDraft, creationForm, creationOwner: requestCreationOwnerKey \}/);
 });
 
 function observeActionOwnerHarness() {
@@ -137,11 +138,20 @@ test("Cancel draft is unavailable during Send/save and a stale physical click ca
   const code = transpileModule(source.slice(a, b), { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
   const draft = { fields: { name: "Fictional salary" } }, otherDraft = { fields: { name: "Other" } };
   let cards: any = { current: { draft }, old: { draft: otherDraft } };
-  const bindings: Record<string, any> = { activeCreationDraftRef: { current: { scope: "owner:epoch2", draft } }, creationOperationRef: { current: null }, activeRequestRef: { current: 8 }, creationOwnerKeyRef: { current: "owner:epoch2" }, creationByMessageId: cards, setCreationByMessageId: (update: any) => { cards = update(cards); } };
+  const bindings: Record<string, any> = { activeCreationDraftRef: { current: { scope: "owner:epoch2", draft } }, creationOperationRef: { current: null }, activeRequestRef: { current: 8 }, creationOwnerKeyRef: { current: "owner:epoch2" }, creationByMessageId: cards, creationFormRef: { current: null }, activeConversationIdRef: { current: null }, formSubmitRef: { current: null }, setCreationFormSession() {}, setCreationByMessageId: (update: any) => { cards = update(cards); } };
   const cancel = new Function(...Object.keys(bindings), `${code};return cancelCreationDraft;`)(...Object.values(bindings));
   cancel("current"); assert.equal(bindings.activeCreationDraftRef.current.draft, draft); assert.equal(cards.current.draft, draft, "active Send leaves the card intact");
   bindings.activeRequestRef.current = null; bindings.creationOperationRef.current = { submitted: true, settled: false }; cancel("current"); assert.equal(bindings.activeCreationDraftRef.current.draft, draft); assert.ok(cards.current);
   bindings.creationOperationRef.current = null; cancel("old"); assert.equal(bindings.activeCreationDraftRef.current.draft, draft, "an older card cannot cancel a newer draft");
   cancel("current"); assert.equal(bindings.activeCreationDraftRef.current, null); assert.equal(cards.current, undefined);
-  assert.match(source, /status === "needs_details" && !chat.sending && !creationSaving && activeCreationDraftRef.current\?\.draft === creationByMessageId\[message.id\].draft \? \(\) => cancelCreationDraft/);
+  assert.match(source, /status === "needs_details" && !chat.sending && !creationSaving && \(Boolean\(creationByMessageId\[message.id\].draft\) && activeCreationDraftRef.current\?\.draft === creationByMessageId\[message.id\].draft \|\| creationFormSession\?\.id === message.id\) \? \(\) => cancelCreationDraft/);
+});
+
+test("structured form unavailability is visible only to its current owned form and never enters RPC", () => {
+  const result = { status: "unavailable", prompt: "I could not verify active accounts. Please try again.", missingFields: [] };
+  const h = harness({ structured: true }), session = h.bindings.creationFormRef.current; h.run(result);
+  assert.equal(h.state.error, result.prompt); assert.equal(h.bindings.creationFormRef.current, session); assert.deepEqual(h.state.calls, []);
+  const natural = harness(); natural.run(result); assert.equal(natural.state.error, null); assert.deepEqual(natural.state.calls, []);
+  const stale = harness({ structured: true }); stale.state.owner += ":new-epoch"; stale.run(result); assert.equal(stale.state.error, null);
+  const otherChat = harness({ structured: true }); otherChat.bindings.activeConversationIdRef.current = "different-chat"; otherChat.run(result); assert.equal(otherChat.state.error, null);
 });

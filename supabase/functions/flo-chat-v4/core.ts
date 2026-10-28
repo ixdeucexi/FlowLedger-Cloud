@@ -9,6 +9,7 @@ export type FloV4Request = {
   timezone: string;
   commandId?: string;
   creationDraft?: unknown;
+  creationForm?: unknown;
   conversationContext?: Array<{ role: "user" | "assistant"; content: string }>;
 };
 
@@ -22,14 +23,14 @@ export function validateFloV4Request(value: unknown): { request?: FloV4Request; 
   if (!value || typeof value !== "object" || Array.isArray(value)) return { error: "invalid_request" };
   const body = value as Record<string, unknown>;
   if (body.version !== 4) return { error: "flo_v4_required" };
-  const allowed = new Set(["version", "householdId", "question", "timezone", "conversationContext", "commandId", "creationDraft"]);
+  const allowed = new Set(["version", "householdId", "question", "timezone", "conversationContext", "commandId", "creationDraft", "creationForm"]);
   if (Object.keys(body).some(key => !allowed.has(key))) return { error: "invalid_request" };
   const question = typeof body.question === "string" ? body.question.trim() : "";
   const timezone = typeof body.timezone === "string" ? body.timezone.trim() : "";
   if (!isUuid(body.householdId) || !question || question.length > 4000 || !timezone || timezone.length > 80) return { error: "invalid_request" };
   try { new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(); } catch { return { error: "invalid_request" }; }
   if (body.commandId !== undefined && !isUuid(body.commandId)) return { error: "invalid_request" };
-  const creation = { ...(body.commandId ? { commandId: body.commandId as string } : {}), ...(body.creationDraft ? { creationDraft: body.creationDraft } : {}) };
+  const creation = { ...(body.commandId ? { commandId: body.commandId as string } : {}), ...(body.creationDraft ? { creationDraft: body.creationDraft } : {}), ...(Object.hasOwn(body, "creationForm") ? { creationForm: body.creationForm } : {}) };
   if (Object.hasOwn(body, "conversationContext")) {
     const context = body.conversationContext;
     if (!Array.isArray(context) || context.length > 12 || context.some(turn => !turn || typeof turn !== "object" || Array.isArray(turn) || Object.keys(turn).some(key => !["role", "content"].includes(key)) || !["user", "assistant"].includes(turn.role) || typeof turn.content !== "string" || !turn.content.trim() || turn.content.length > 2000) || new TextEncoder().encode(JSON.stringify(context)).byteLength > 24_000) return { error: "invalid_request" };

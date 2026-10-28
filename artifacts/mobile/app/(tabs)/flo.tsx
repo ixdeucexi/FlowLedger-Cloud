@@ -20,10 +20,12 @@ import { useAuth } from "@/context/AuthContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useBudget } from "@/context/BudgetContext";
 import { BasicFlo } from "@/components/BasicFlo";
+import { FloCreationForm } from "@/components/FloCreationForm";
+import { FLO_FORM_TITLES } from "@/lib/floCreationForm";
 import { FloCreationCard } from "@/components/FloCreationCard";
 import { FloSafetyStopModal } from "@/components/FloSafetyStopModal";
 import { buildBucketSafetyStop, type SafetyStopWarning } from "@/lib/safetyStop";
-import { commitFloCreation, readFloCreationReceipt, parseFloCreationResult, type FloCreationResult, type FloCreationDraft } from "@/lib/floCreation";
+import { commitFloCreation, readFloCreationReceipt, parseFloCreationResult, type FloCreationResult, type FloCreationDraft, type FloCreationFormInput } from "@/lib/floCreation";
 import { FloConversationBar } from "@/components/FloConversationBar";
 import { FloGroundedAnswer } from "@/components/FloGroundedAnswer";
 import { FloLogo } from "@/components/FloLogo";
@@ -117,7 +119,7 @@ export default function FloScreen() {
   const isDesktop = useDesktopExperience();
   const { user } = useAuth();
   const { isFeatureLocked, previewTier, isAdmin } = useMembership();
-  const { activeHousehold, bills, billDateMoves, transactions, decisions, settings, forecastConfidence, retryBudgetLoad, getDailyBalances, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getDebtMonthSettlements, getIncomeOccurrencesInMonth, getPaidAmount, getTransactionsForMonth, categories, incomes, goals, demoMode, canEditHousehold, previewTransactionSafetyStop } = useBudget();
+  const { activeHousehold, bills, billDateMoves, transactions, decisions, settings, forecastConfidence, retryBudgetLoad, getDailyBalances, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getDebtMonthSettlements, getIncomeOccurrencesInMonth, getPaidAmount, getTransactionsForMonth, categories, incomes, goals, demoMode, canEditHousehold, accounts, previewTransactionSafetyStop } = useBudget();
   const categoryBudgetScope = useMemo(() => ({
     userId: user?.id,
     householdId: activeHousehold?.householdId,
@@ -138,6 +140,12 @@ export default function FloScreen() {
   const [sourcesByMessageId, setSourcesByMessageId] = useState<Record<string, FloSource[]>>({});
   const [followUpsByMessageId, setFollowUpsByMessageId] = useState<Record<string, string[]>>({});
   const [proposalByMessageId, setProposalByMessageId] = useState<Record<string, FloReviewProposal | null>>({});
+  const [creationFormSession, setCreationFormSession] = useState<{ id: string; revision: number; owner: string; conversationId: string | null; creation: FloCreationResult; open: boolean } | null>(null);
+  const formFeedbackRevisionRef = useRef(0);
+  const [creationFormBusy, setCreationFormBusy] = useState(false);
+  const creationFormRef = useRef(creationFormSession);
+  creationFormRef.current = creationFormSession;
+  const formSubmitRef = useRef<{ owner: string; id: string } | null>(null);
   const [creationSaving, setCreationSaving] = useState(false);
   const [creationByMessageId, setCreationByMessageId] = useState<Record<string, FloCreationResult>>({});
   const retryCreationRef = useRef<{ owner: string; creation: FloCreationResult; expectedBudgetId: string; text: string; userMessageId: string; assistantMessageId: string } | null>(null);
@@ -170,7 +178,7 @@ export default function FloScreen() {
   const inputRef = useRef<TextInput>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
   const skipConversationLoadRef = useRef<string | null>(null);
-  const retryRequestRef = useRef<{ text: string; userMessageId: string; assistantMessageId: string; conversationId: string | null; creationDraft?: FloCreationDraft; creationOwner?: string } | null>(null);
+  const retryRequestRef = useRef<{ text: string; userMessageId: string; assistantMessageId: string; conversationId: string | null; creationDraft?: FloCreationDraft; creationOwner?: string; creationForm?: FloCreationFormInput } | null>(null);
   const requestGenerationRef = useRef(0);
   const activeRequestRef = useRef<number | null>(null);
   const historyMutationRef = useRef(false);
@@ -208,7 +216,7 @@ export default function FloScreen() {
     streamAbortRef.current?.abort(); streamAbortRef.current = null;
     dispatch({ type: "stop" });
     activeCreationDraftRef.current = null; retryCreationRef.current = null; retryRequestRef.current = null; creationOperationRef.current = null;
-    setCreationSafety(null); setCreationSaving(false); setCreationByMessageId({});
+    setCreationSafety(null); setCreationSaving(false); setCreationByMessageId({}); setCreationFormSession(null); setCreationFormBusy(false); formSubmitRef.current = null;
   }, [creationOwnerKey]);
 
   useEffect(() => {
@@ -242,7 +250,7 @@ export default function FloScreen() {
     activeCreationDraftRef.current = null;
     retryCreationRef.current = null;
     creationOperationRef.current = null;
-    setCreationByMessageId({});
+    setCreationByMessageId({}); setCreationFormSession(null); setCreationFormBusy(false); formSubmitRef.current = null;
     setCreationSafety(null);
     setCreationSaving(false);
     const claimed = floV4Preview && !demoMode ? volatileStore.claim(volatileSession.scope) : null;
@@ -304,7 +312,7 @@ export default function FloScreen() {
     activeCreationDraftRef.current = null;
     retryCreationRef.current = null;
     creationOperationRef.current = null;
-    setCreationByMessageId({});
+    setCreationByMessageId({}); setCreationFormSession(null); setCreationFormBusy(false); formSubmitRef.current = null;
     setCreationSafety(null);
     setCreationSaving(false);
     volatileLeaseRef.current = claimed.lease;
@@ -808,11 +816,37 @@ export default function FloScreen() {
     ])).slice(0, 4);
   }, [params.entityType]);
 
+  const closeCreationForm = (id: string) => {
+    const session = creationFormRef.current;
+    if (!session || session.id !== id || session.owner !== creationOwnerKeyRef.current || session.conversationId !== activeConversationIdRef.current || formSubmitRef.current || activeRequestRef.current !== null || (creationOperationRef.current?.submitted && !creationOperationRef.current.settled)) return;
+    setCreationFormSession(previous => previous?.id === id ? { ...previous, open: false } : previous);
+  };
+
+  const reopenCreationForm = (id: string) => {
+    const session = creationFormRef.current;
+    if (!session || session.id !== id || session.owner !== creationOwnerKeyRef.current || session.conversationId !== activeConversationIdRef.current || formSubmitRef.current || activeRequestRef.current !== null || historyMutationRef.current) return;
+    setChatError(null);
+    setCreationFormSession(previous => previous?.id === id ? { ...previous, open: true } : previous);
+  };
+
+  const submitCreationForm = async (id: string, creationForm: FloCreationFormInput) => {
+    const session = creationFormRef.current;
+    if (!session || !session.open || session.id !== id || session.owner !== creationOwnerKeyRef.current || session.conversationId !== activeConversationIdRef.current || session.creation.kind !== creationForm.kind || formSubmitRef.current || activeRequestRef.current !== null || historyMutationRef.current || demoMode || !canEditHousehold) return;
+    const ticket = { owner: session.owner, id };
+    formSubmitRef.current = ticket; setCreationFormBusy(true);
+    try { await send(`Add ${FLO_FORM_TITLES[creationForm.kind]}`, false, false, creationForm); }
+    finally { if (formSubmitRef.current === ticket && ticket.owner === creationOwnerKeyRef.current) { formSubmitRef.current = null; setCreationFormBusy(false); } }
+  };
+
   const cancelCreationDraft = (messageId: string) => {
     const draft = activeCreationDraftRef.current;
     const operation = creationOperationRef.current;
-    if (activeRequestRef.current !== null || (operation?.submitted && !operation.settled) || !draft || draft.scope !== creationOwnerKeyRef.current || draft.draft !== creationByMessageId[messageId]?.draft) return;
-    activeCreationDraftRef.current = null;
+    const session = creationFormRef.current;
+    const ownsForm = session?.id === messageId && session.owner === creationOwnerKeyRef.current && session.conversationId === activeConversationIdRef.current;
+    const ownsDraft = draft?.scope === creationOwnerKeyRef.current && draft.draft === creationByMessageId[messageId]?.draft;
+    if (activeRequestRef.current !== null || formSubmitRef.current || (operation?.submitted && !operation.settled) || (!ownsForm && !ownsDraft)) return;
+    if (ownsDraft) activeCreationDraftRef.current = null;
+    if (ownsForm) setCreationFormSession(null);
     setCreationByMessageId(previous => { const next = { ...previous }; delete next[messageId]; return next; });
   };
 
@@ -821,7 +855,7 @@ export default function FloScreen() {
     activeCreationDraftRef.current = null;
     retryCreationRef.current = null;
     creationOperationRef.current = null;
-    setCreationByMessageId({});
+    setCreationByMessageId({}); setCreationFormSession(null); setCreationFormBusy(false); formSubmitRef.current = null;
     setCreationSafety(null);
     setCreationSaving(false);
     requestGenerationRef.current = nextFloRequestGeneration(requestGenerationRef.current);
@@ -854,7 +888,7 @@ export default function FloScreen() {
     activeCreationDraftRef.current = null;
     retryCreationRef.current = null;
     creationOperationRef.current = null;
-    setCreationByMessageId({});
+    setCreationByMessageId({}); setCreationFormSession(null); setCreationFormBusy(false); formSubmitRef.current = null;
     setCreationSafety(null);
     setCreationSaving(false);
     requestGenerationRef.current = nextFloRequestGeneration(requestGenerationRef.current);
@@ -1056,7 +1090,7 @@ export default function FloScreen() {
     setChatError(savedCreation ? null : saveSubmitted ? "The save may still be processing. Retry to check the same request." : "Response stopped. You can retry the last question.");
   };
 
-  const send = async (text = input, retry = false, consentOverride = false) => {
+  const send = async (text = input, retry = false, consentOverride = false, submittedForm?: FloCreationFormInput) => {
     const clean = text.trim();
     const recovery = retry && retryCreationRef.current?.owner === creationOwnerKey && retryCreationRef.current.text === clean ? retryCreationRef.current : null;
     const pendingSave = creationOperationRef.current;
@@ -1069,7 +1103,9 @@ export default function FloScreen() {
       return;
     }
     const requestDraft = retry && retryRequestRef.current?.text === clean && retryRequestRef.current.creationOwner === creationOwnerKey ? retryRequestRef.current.creationDraft : undefined;
-    const creationDraft = requestDraft ?? (activeCreationDraftRef.current?.scope === creationOwnerKey ? activeCreationDraftRef.current.draft : undefined);
+    const retryForm = retry && retryRequestRef.current?.text === clean && retryRequestRef.current.creationOwner === creationOwnerKey ? retryRequestRef.current.creationForm : undefined;
+    const creationForm = submittedForm ?? retryForm;
+    const creationDraft = creationForm ? undefined : requestDraft ?? (activeCreationDraftRef.current?.scope === creationOwnerKey ? activeCreationDraftRef.current.draft : undefined);
     if (!recovery) retryCreationRef.current = null;
     setCreationSafety(null);
     creationOperationRef.current = null;
@@ -1094,7 +1130,7 @@ export default function FloScreen() {
     dispatch({ type: "submit", id: userMessageId, assistantId: assistantMessageId, text: clean });
     const historyEnabled = !floV4Preview && floPreferences.historyEnabled;
     let conversationId = floConversationForRequest(historyEnabled, priorRequest?.conversationId ?? activeConversationId);
-    retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId, creationDraft, creationOwner: requestCreationOwnerKey };
+    retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId, creationDraft, creationForm, creationOwner: requestCreationOwnerKey };
     let reply = "";
     let completedAnswer = false;
     let creationCommit: Promise<void> | null = null;
@@ -1103,13 +1139,19 @@ export default function FloScreen() {
     const handleCreationEvent = (value: FloCreationResult | null) => {
       const creation = parseFloCreationResult(value);
       if (!creationIsCurrent() || !requestBudgetId || activeRequestRef.current !== requestGeneration) return;
-      if (!creation) { activeCreationDraftRef.current = null; return; }
+      if (!creation) { activeCreationDraftRef.current = null; setCreationFormSession(null); return; }
       if (creation.status === "needs_details") {
         activeCreationDraftRef.current = creation.draft?.householdId === requestHouseholdId ? { scope: requestCreationOwnerKey, draft: creation.draft } : null;
         setCreationByMessageId(previous => ({ ...previous, [assistantMessageId]: creation }));
+        if (creation.kind) { setCreationFormBusy(true); setCreationFormSession({ id: assistantMessageId, revision: ++formFeedbackRevisionRef.current, owner: requestCreationOwnerKey, conversationId: historyEnabled ? conversationId : activeConversationIdRef.current, creation, open: true }); }
         return;
       }
       activeCreationDraftRef.current = null;
+      if (creation.status === "unavailable") {
+        const session = creationFormRef.current;
+        if (creationForm && session?.owner === requestCreationOwnerKey && session.creation.kind === creationForm.kind && session.conversationId === activeConversationIdRef.current) setChatError(creation.prompt || "I couldn’t verify these details. Please try again.");
+        return;
+      }
       if (creation.status !== "ready" || creation.commandId !== userMessageId || creation.householdId !== requestHouseholdId || !creation.kind || !creation.payload || seenCreationCommands.has(creation.commandId)) return;
       seenCreationCommands.add(creation.commandId);
       retryCreationRef.current = { owner: requestCreationOwnerKey, creation: { ...creation, payload: { ...creation.payload } }, expectedBudgetId: requestBudgetId, text: clean, userMessageId, assistantMessageId };
@@ -1119,6 +1161,7 @@ export default function FloScreen() {
       const persist = async () => {
         if (!creationIsCurrent() || creationOperationRef.current !== operation || operation.submitted) return;
         operation.submitted = true;
+        setCreationFormSession(null);
         setCreationSaving(true);
         setCreationSafety(null);
         try {
@@ -1177,7 +1220,7 @@ export default function FloScreen() {
         skipConversationLoadRef.current = created.id;
         setConversations(previous => [created, ...previous]);
         setActiveConversationId(created.id);
-        retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: created.id, creationDraft, creationOwner: requestCreationOwnerKey };
+        retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: created.id, creationDraft, creationForm, creationOwner: requestCreationOwnerKey };
       }
       const controller = new AbortController();
       streamAbortRef.current = controller;
@@ -1191,6 +1234,7 @@ export default function FloScreen() {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
         previewTier,
         creationDraft,
+        creationForm,
         context: {
           route: Array.isArray(params.sourceRoute) ? params.sourceRoute[0] : params.sourceRoute,
           entityType: Array.isArray(params.entityType) ? params.entityType[0] : params.entityType,
@@ -1263,7 +1307,7 @@ export default function FloScreen() {
       ? { "store-capture-answer": { dataAsOf: "2026-08-25T01:30:00-05:00", coverage: "Complete for this question" } }
       : {});
         setChatError("Flo couldn't clear this no-history chat. Local content was cleared; please try again.");
-        retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: null, creationDraft, creationOwner: requestCreationOwnerKey };
+        retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: null, creationDraft, creationForm, creationOwner: requestCreationOwnerKey };
         return;
       }
       const recovery = verifiedFallback.current;
@@ -1295,10 +1339,10 @@ export default function FloScreen() {
         setRetryAllowed(stopped || failure.retryable);
       }
     } finally {
-      if (activeRequestRef.current === requestGeneration) activeRequestRef.current = null;
+      if (activeRequestRef.current === requestGeneration) { activeRequestRef.current = null; setCreationFormBusy(false); }
     }
     if (!requestIsCurrent()) return;
-    if (!historyEnabled) retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: null, creationDraft, creationOwner: requestCreationOwnerKey };
+    if (!historyEnabled) retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: null, creationDraft, creationForm, creationOwner: requestCreationOwnerKey };
   };
 
   const openFloSource = (route: string) => {
@@ -1406,12 +1450,15 @@ export default function FloScreen() {
               {message.thinking ? <ActivityIndicator size="small" color={colors.primary} /> : null}
               {message.role === "flo" && !message.thinking ? <FloGroundedAnswer text={humanizeFloText(message.text)} sources={sourcesByMessageId[message.id] ?? []} dataAsOf={groundingByMessageId[message.id]?.dataAsOf} coverage={groundingByMessageId[message.id]?.coverage} partial={groundingByMessageId[message.id]?.partial} caveat={groundingByMessageId[message.id]?.caveat} followUps={followUpsByMessageId[message.id]} proposal={floV4Preview ? null : proposalByMessageId[message.id]} proposalConfirmed={Boolean(!floV4Preview && (proposalByMessageId[message.id]?.status === "confirmed" || (proposalByMessageId[message.id] && confirmedProposalIds.has(proposalByMessageId[message.id]!.id))))} onOpenSource={openFloSource} onFollowUp={question => void send(question)} onReviewProposal={proposal => { if (!floV4Preview) openProposalReview(proposal); }} /> : <Text style={[styles.bubbleText, { color: message.role === "user" ? colors.primaryForeground : colors.mutedForeground }]}>{message.text}</Text>}
             </View>
-            {message.role === "flo" && creationByMessageId[message.id] ? <FloCreationCard creation={creationByMessageId[message.id]} onOpen={route => openFloSource(creationByMessageId[message.id].receipt?.kind === "create_debt" ? "/(tabs)/bills?view=debt" : route)} onCancel={creationByMessageId[message.id].status === "needs_details" && !chat.sending && !creationSaving && activeCreationDraftRef.current?.draft === creationByMessageId[message.id].draft ? () => cancelCreationDraft(message.id) : undefined} /> : null}
+            {message.role === "flo" && creationByMessageId[message.id] ? <FloCreationCard creation={creationByMessageId[message.id]} onOpen={route => openFloSource(creationByMessageId[message.id].receipt?.kind === "create_debt" ? "/(tabs)/bills?view=debt" : route)} onCancel={creationByMessageId[message.id].status === "needs_details" && !chat.sending && !creationSaving && (Boolean(creationByMessageId[message.id].draft) && activeCreationDraftRef.current?.draft === creationByMessageId[message.id].draft || creationFormSession?.id === message.id) ? () => cancelCreationDraft(message.id) : undefined} /> : null}
+            {message.role === "flo" && creationFormSession?.id === message.id && creationFormSession.owner === creationOwnerKey && !creationFormSession.open ? <Pressable accessibilityRole="button" accessibilityLabel="Complete details" disabled={chat.sending || creationSaving || historyBusy} onPress={() => reopenCreationForm(message.id)} style={[styles.retryButton, { backgroundColor: colors.primary + "18", marginTop: 8 }]}><Feather name="edit-3" size={15} color={colors.primary} /><Text style={[styles.retryText, { color: colors.primary }]}>Complete details</Text></Pressable> : null}
           </View>
         ))}
       </ScrollView>
 
-      <FloSafetyStopModal visible={Boolean(creationSafety)} warning={creationSafety?.warning ?? null} onKeepEditing={() => creationSafety?.cancel()} onScheduleAnyway={() => creationSafety?.proceed()} />
+      {creationFormSession && creationFormSession.owner === creationOwnerKey ? <FloCreationForm key={`${creationFormSession.owner}:${creationFormSession.id}:${creationFormSession.revision}`} creation={creationFormSession.creation} visible={creationFormSession.open} suspended={Boolean(creationSafety)} busy={creationFormBusy || creationSaving || historyBusy} error={chatError} accounts={accounts} onClose={() => closeCreationForm(creationFormSession.id)} onBackFromSafety={() => creationSafety?.cancel()} onSave={value => submitCreationForm(creationFormSession.id, value)} /> : null}
+
+      <FloSafetyStopModal manageBackHistory={!creationFormSession?.open} visible={Boolean(creationSafety)} warning={creationSafety?.warning ?? null} onKeepEditing={() => creationSafety?.cancel()} onScheduleAnyway={() => creationSafety?.proceed()} />
 
       <Modal visible={!floV4Preview && Boolean(reviewProposal)} transparent animationType={isDesktop ? "fade" : "slide"} onRequestClose={() => proposalConfirmState !== "confirming" && setReviewProposal(null)}>
         <Pressable style={[styles.modalOverlay, isDesktop && styles.reviewOverlayDesktop]} onPress={() => proposalConfirmState !== "confirming" && setReviewProposal(null)}>
