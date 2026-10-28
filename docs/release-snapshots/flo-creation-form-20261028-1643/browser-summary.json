@@ -1,0 +1,54 @@
+{
+  "artifact": {
+    "entry": "entry-33226c515acc57a85696eab78ac76f15.js",
+    "sha256": "da2e9248d74b3c6c5eae4bec127c3fcae4e4a3984ac68135a947de0bc05e09ca",
+    "authKey": "sb-imqmhfdquqlqxgtcdbvc-auth-token"
+  },
+  "hashes": [
+    "da2e9248d74b3c6c5eae4bec127c3fcae4e4a3984ac68135a947de0bc05e09ca"
+  ],
+  "passed": 12,
+  "ids": [
+    "launcher-answer-only-390",
+    "launcher-answer-only-1200",
+    "create_bill",
+    "create_debt",
+    "create_income",
+    "create_manual_transaction",
+    "create_bucket",
+    "create_savings_goal",
+    "320-validation-shrink",
+    "account-empty",
+    "safety-browser-back",
+    "unavailable-form-retain-recover"
+  ],
+  "actualMockedSsePosts": 23,
+  "mockedRpcAttempts": 9,
+  "actualFormValidatorReadCount": 34,
+  "noProviderCalls": true,
+  "noLiveFinancialWrites": true,
+  "normalPageAndConsoleErrors": 0,
+  "viewports": [
+    390,
+    1200
+  ],
+  "simulatedKeyboardViewport": {
+    "width": 320,
+    "height": 420,
+    "normalHeight": 568
+  },
+  "ariaCheckedVerified": [
+    "one-time frequency",
+    "selected manual account",
+    "monthly income last-day checkbox"
+  ],
+  "modalHistoryVerified": [
+    "Escape closes form",
+    "Back closes form",
+    "Close/Complete retains values",
+    "Back from Safety Stop returns retained form"
+  ],
+  "unavailableVerified": "Visible inline server-unavailable error with values retained, zero initial RPC, edit amount2000→2100 then one canonical save",
+  "allBrowserAndServerProcessesClosed": true,
+  "sourceAndBuildWrites": false
+}

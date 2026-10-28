@@ -1,0 +1,185 @@
+{
+  "receipts": [
+    {
+      "width": 390,
+      "kind": "create_income",
+      "artifact": {
+        "entry": "entry-33226c515acc57a85696eab78ac76f15.js",
+        "sha256": "da2e9248d74b3c6c5eae4bec127c3fcae4e4a3984ac68135a947de0bc05e09ca",
+        "authKey": "sb-imqmhfdquqlqxgtcdbvc-auth-token"
+      },
+      "photo": "/tmp/flo-form-settled-income-390.png",
+      "ancestors": [
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": "Add income details",
+          "opacity": 1,
+          "background": "rgb(3, 4, 11)"
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null,
+          "opacity": 1,
+          "background": "rgba(2, 6, 23, 0.78)"
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null,
+          "opacity": 1,
+          "background": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null,
+          "opacity": 1,
+          "background": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "tag": "DIV",
+          "role": "dialog",
+          "label": null,
+          "opacity": 1,
+          "background": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null,
+          "opacity": 1,
+          "background": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null,
+          "opacity": 1,
+          "background": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null,
+          "opacity": 1,
+          "background": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "tag": "BODY",
+          "role": null,
+          "label": null,
+          "opacity": 1,
+          "background": "rgb(5, 8, 22)"
+        },
+        {
+          "tag": "HTML",
+          "role": null,
+          "label": null,
+          "opacity": 1,
+          "background": "rgb(5, 8, 22)"
+        }
+      ],
+      "box": {
+        "x": 0,
+        "y": 387,
+        "width": 390,
+        "height": 613
+      },
+      "errors": [],
+      "console": []
+    },
+    {
+      "width": 1200,
+      "kind": "create_debt",
+      "artifact": {
+        "entry": "entry-33226c515acc57a85696eab78ac76f15.js",
+        "sha256": "da2e9248d74b3c6c5eae4bec127c3fcae4e4a3984ac68135a947de0bc05e09ca",
+        "authKey": "sb-imqmhfdquqlqxgtcdbvc-auth-token"
+      },
+      "photo": "/tmp/flo-form-settled-debt-1200.png",
+      "ancestors": [
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": "Add debt details",
+          "opacity": 1,
+          "background": "rgb(3, 4, 11)"
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null,
+          "opacity": 1,
+          "background": "rgba(2, 6, 23, 0.78)"
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null,
+          "opacity": 1,
+          "background": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null,
+          "opacity": 1,
+          "background": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "tag": "DIV",
+          "role": "dialog",
+          "label": null,
+          "opacity": 1,
+          "background": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null,
+          "opacity": 1,
+          "background": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null,
+          "opacity": 1,
+          "background": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null,
+          "opacity": 1,
+          "background": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "tag": "BODY",
+          "role": null,
+          "label": null,
+          "opacity": 1,
+          "background": "rgb(5, 8, 22)"
+        },
+        {
+          "tag": "HTML",
+          "role": null,
+          "label": null,
+          "opacity": 1,
+          "background": "rgb(5, 8, 22)"
+        }
+      ],
+      "box": {
+        "x": 310,
+        "y": 94.078125,
+        "width": 580,
+        "height": 811.828125
+      },
+      "errors": [],
+      "console": []
+    }
+  ],
+  "closed": true
+}

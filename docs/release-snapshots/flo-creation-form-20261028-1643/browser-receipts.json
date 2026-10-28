@@ -1,0 +1,1108 @@
+{
+  "actualDeterministicFormValidation": true,
+  "fictionalMockOnly": true,
+  "receipts": [
+    {
+      "id": "launcher-answer-only-390",
+      "artifact": {
+        "entry": "entry-33226c515acc57a85696eab78ac76f15.js",
+        "sha256": "da2e9248d74b3c6c5eae4bec127c3fcae4e4a3984ac68135a947de0bc05e09ca",
+        "authKey": "sb-imqmhfdquqlqxgtcdbvc-auth-token"
+      },
+      "width": 390,
+      "ai": [
+        {
+          "path": "/functions/v1/flo-chat-v4",
+          "body": {
+            "version": 4,
+            "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "question": "What is my checking balance?",
+            "commandId": "d20f3864-42b2-4d6d-a93d-142e8c1bba98",
+            "timezone": "UTC",
+            "conversationContext": []
+          }
+        }
+      ],
+      "rpc": [],
+      "formReads": [],
+      "errors": [],
+      "console": [],
+      "unknown": []
+    },
+    {
+      "id": "launcher-answer-only-1200",
+      "artifact": {
+        "entry": "entry-33226c515acc57a85696eab78ac76f15.js",
+        "sha256": "da2e9248d74b3c6c5eae4bec127c3fcae4e4a3984ac68135a947de0bc05e09ca",
+        "authKey": "sb-imqmhfdquqlqxgtcdbvc-auth-token"
+      },
+      "width": 1200,
+      "ai": [
+        {
+          "path": "/functions/v1/flo-chat",
+          "body": {
+            "version": 3,
+            "conversationId": "d1c2fd6a-abe1-453a-9679-03f7228ae574",
+            "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "userMessage": {
+              "id": "d6ef3939-7cd7-4ec4-beb1-190177493e65",
+              "text": "What is my checking balance?"
+            },
+            "assistantMessageId": "02394e87-bd67-40c3-ad70-e842fe21072e",
+            "context": {
+              "route": "/transactions",
+              "entityType": "transactions"
+            },
+            "historyEnabled": true,
+            "timezone": "UTC",
+            "previewTier": null
+          }
+        }
+      ],
+      "rpc": [],
+      "formReads": [],
+      "errors": [],
+      "console": [],
+      "unknown": []
+    },
+    {
+      "id": "create_bill",
+      "artifact": {
+        "entry": "entry-33226c515acc57a85696eab78ac76f15.js",
+        "sha256": "da2e9248d74b3c6c5eae4bec127c3fcae4e4a3984ac68135a947de0bc05e09ca",
+        "authKey": "sb-imqmhfdquqlqxgtcdbvc-auth-token"
+      },
+      "width": 390,
+      "ai": [
+        {
+          "path": "/functions/v1/flo-chat-v4",
+          "body": {
+            "version": 4,
+            "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "question": "Create a one-time bill named Fictional Internet for $80.",
+            "commandId": "4c29db51-3338-4ffa-b459-c87de4378241",
+            "timezone": "UTC",
+            "conversationContext": []
+          }
+        },
+        {
+          "path": "/functions/v1/flo-chat-v4",
+          "body": {
+            "version": 4,
+            "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "question": "Add bill",
+            "commandId": "6ed0a653-44d5-4121-aa1f-211b5e823208",
+            "creationForm": {
+              "kind": "create_bill",
+              "fields": {
+                "name": "Fictional Internet",
+                "amount": 80,
+                "frequency": "monthly",
+                "is_recurring": false,
+                "first_date": "2026-10-28"
+              }
+            },
+            "timezone": "UTC",
+            "conversationContext": [
+              {
+                "role": "user",
+                "content": "Create a one-time bill named Fictional Internet for $80."
+              },
+              {
+                "role": "assistant",
+                "content": "Fill in the missing details to add this item."
+              }
+            ]
+          }
+        }
+      ],
+      "rpc": [
+        {
+          "path": "/rest/v1/rpc/create_flo_entity",
+          "body": {
+            "p_command_id": "6ed0a653-44d5-4121-aa1f-211b5e823208",
+            "p_kind": "create_bill",
+            "p_payload": {
+              "name": "Fictional Internet",
+              "amount": 80,
+              "frequency": "monthly",
+              "first_date": "2026-10-28",
+              "is_recurring": false
+            },
+            "p_expected_household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "p_expected_budget_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+          }
+        }
+      ],
+      "formReads": [
+        {
+          "table": "household_members",
+          "filters": {
+            "household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "user_id": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        {
+          "table": "user_preferences",
+          "filters": {
+            "user_id": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        {
+          "table": "budgets",
+          "filters": {
+            "household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "is_default": true
+          }
+        }
+      ],
+      "errors": [],
+      "console": [],
+      "unknown": [],
+      "canonicalPayload": {
+        "name": "Fictional Internet",
+        "amount": 80,
+        "frequency": "monthly",
+        "first_date": "2026-10-28",
+        "is_recurring": false
+      }
+    },
+    {
+      "id": "create_debt",
+      "artifact": {
+        "entry": "entry-33226c515acc57a85696eab78ac76f15.js",
+        "sha256": "da2e9248d74b3c6c5eae4bec127c3fcae4e4a3984ac68135a947de0bc05e09ca",
+        "authKey": "sb-imqmhfdquqlqxgtcdbvc-auth-token"
+      },
+      "width": 1200,
+      "ai": [
+        {
+          "path": "/functions/v1/flo-chat",
+          "body": {
+            "version": 3,
+            "conversationId": "dceba0d4-491f-420c-b62a-aa8db0ce4620",
+            "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "userMessage": {
+              "id": "f28c7304-3367-42d1-91cd-fd3b3bb2f4d5",
+              "text": "Create debt named Fictional Visa at APR 0%."
+            },
+            "assistantMessageId": "38625655-1ab2-4fa8-ba38-f5cf8fb9b4bf",
+            "context": {},
+            "historyEnabled": true,
+            "timezone": "UTC",
+            "previewTier": null
+          }
+        },
+        {
+          "path": "/functions/v1/flo-chat",
+          "body": {
+            "version": 3,
+            "creationForm": {
+              "kind": "create_debt",
+              "fields": {
+                "name": "Fictional Visa",
+                "balance": 1000,
+                "minimum_payment": 50,
+                "apr": 0,
+                "frequency": "monthly",
+                "first_date": "2026-10-28"
+              }
+            },
+            "conversationId": "dceba0d4-491f-420c-b62a-aa8db0ce4620",
+            "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "userMessage": {
+              "id": "966084ea-5818-485b-a739-130cac441139",
+              "text": "Add debt"
+            },
+            "assistantMessageId": "d7f95d32-d495-4aca-bbbe-d34be936ecf0",
+            "context": {},
+            "historyEnabled": true,
+            "timezone": "UTC",
+            "previewTier": null
+          }
+        }
+      ],
+      "rpc": [
+        {
+          "path": "/rest/v1/rpc/create_flo_entity",
+          "body": {
+            "p_command_id": "966084ea-5818-485b-a739-130cac441139",
+            "p_kind": "create_debt",
+            "p_payload": {
+              "name": "Fictional Visa",
+              "balance": 1000,
+              "minimum_payment": 50,
+              "apr": 0,
+              "frequency": "monthly",
+              "first_date": "2026-10-28"
+            },
+            "p_expected_household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "p_expected_budget_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+          }
+        }
+      ],
+      "formReads": [
+        {
+          "table": "household_members",
+          "filters": {
+            "household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "user_id": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        {
+          "table": "user_preferences",
+          "filters": {
+            "user_id": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        {
+          "table": "budgets",
+          "filters": {
+            "household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "is_default": true
+          }
+        }
+      ],
+      "errors": [],
+      "console": [],
+      "unknown": [],
+      "canonicalPayload": {
+        "name": "Fictional Visa",
+        "balance": 1000,
+        "minimum_payment": 50,
+        "apr": 0,
+        "frequency": "monthly",
+        "first_date": "2026-10-28"
+      }
+    },
+    {
+      "id": "create_income",
+      "artifact": {
+        "entry": "entry-33226c515acc57a85696eab78ac76f15.js",
+        "sha256": "da2e9248d74b3c6c5eae4bec127c3fcae4e4a3984ac68135a947de0bc05e09ca",
+        "authKey": "sb-imqmhfdquqlqxgtcdbvc-auth-token"
+      },
+      "width": 390,
+      "ai": [
+        {
+          "path": "/functions/v1/flo-chat-v4",
+          "body": {
+            "version": 4,
+            "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "question": "Add income named Fictional Acme take-home $2000.",
+            "commandId": "04314c53-6648-40a8-88e5-bf3c4919e468",
+            "timezone": "UTC",
+            "conversationContext": []
+          }
+        },
+        {
+          "path": "/functions/v1/flo-chat-v4",
+          "body": {
+            "version": 4,
+            "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "question": "Add income",
+            "commandId": "b8125bac-7528-4da3-8b9d-577c456005c8",
+            "creationForm": {
+              "kind": "create_income",
+              "fields": {
+                "name": "Fictional Acme",
+                "amount": 2000,
+                "frequency": "biweekly",
+                "first_date": "2026-10-28"
+              }
+            },
+            "timezone": "UTC",
+            "conversationContext": [
+              {
+                "role": "user",
+                "content": "Add income named Fictional Acme take-home $2000."
+              },
+              {
+                "role": "assistant",
+                "content": "Fill in the missing details to add this item."
+              }
+            ]
+          }
+        }
+      ],
+      "rpc": [
+        {
+          "path": "/rest/v1/rpc/create_flo_entity",
+          "body": {
+            "p_command_id": "b8125bac-7528-4da3-8b9d-577c456005c8",
+            "p_kind": "create_income",
+            "p_payload": {
+              "name": "Fictional Acme",
+              "amount": 2000,
+              "frequency": "biweekly",
+              "first_date": "2026-10-28"
+            },
+            "p_expected_household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "p_expected_budget_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+          }
+        }
+      ],
+      "formReads": [
+        {
+          "table": "household_members",
+          "filters": {
+            "household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "user_id": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        {
+          "table": "user_preferences",
+          "filters": {
+            "user_id": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        {
+          "table": "budgets",
+          "filters": {
+            "household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "is_default": true
+          }
+        }
+      ],
+      "errors": [],
+      "console": [],
+      "unknown": [],
+      "canonicalPayload": {
+        "name": "Fictional Acme",
+        "amount": 2000,
+        "frequency": "biweekly",
+        "first_date": "2026-10-28"
+      }
+    },
+    {
+      "id": "create_manual_transaction",
+      "artifact": {
+        "entry": "entry-33226c515acc57a85696eab78ac76f15.js",
+        "sha256": "da2e9248d74b3c6c5eae4bec127c3fcae4e4a3984ac68135a947de0bc05e09ca",
+        "authKey": "sb-imqmhfdquqlqxgtcdbvc-auth-token"
+      },
+      "width": 1200,
+      "ai": [
+        {
+          "path": "/functions/v1/flo-chat",
+          "body": {
+            "version": 3,
+            "conversationId": "bc6305bc-6aab-42a3-8795-faa31831d2ef",
+            "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "userMessage": {
+              "id": "727ce442-f05b-4a13-a9b9-c79513d0e4d4",
+              "text": "Record a $45 expense described Fictional Lunch."
+            },
+            "assistantMessageId": "4f1f52ff-6f66-47ef-90e7-370c692d21da",
+            "context": {},
+            "historyEnabled": true,
+            "timezone": "UTC",
+            "previewTier": null
+          }
+        },
+        {
+          "path": "/functions/v1/flo-chat",
+          "body": {
+            "version": 3,
+            "creationForm": {
+              "kind": "create_manual_transaction",
+              "fields": {
+                "note": "Fictional Lunch",
+                "amount": 45,
+                "direction": "expense",
+                "date": "2026-10-28",
+                "category": "Food",
+                "account_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+              }
+            },
+            "conversationId": "bc6305bc-6aab-42a3-8795-faa31831d2ef",
+            "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "userMessage": {
+              "id": "c0cea764-681c-412c-8961-9dcf6312464e",
+              "text": "Add transaction"
+            },
+            "assistantMessageId": "51db458e-c34a-4d47-a8fe-2161b80d04a3",
+            "context": {},
+            "historyEnabled": true,
+            "timezone": "UTC",
+            "previewTier": null
+          }
+        }
+      ],
+      "rpc": [
+        {
+          "path": "/rest/v1/rpc/create_flo_entity",
+          "body": {
+            "p_command_id": "c0cea764-681c-412c-8961-9dcf6312464e",
+            "p_kind": "create_manual_transaction",
+            "p_payload": {
+              "amount": 45,
+              "direction": "expense",
+              "date": "2026-10-28",
+              "category": "Food",
+              "note": "Fictional Lunch",
+              "account_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+            },
+            "p_expected_household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "p_expected_budget_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+          }
+        }
+      ],
+      "formReads": [
+        {
+          "table": "household_members",
+          "filters": {
+            "household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "user_id": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        {
+          "table": "user_preferences",
+          "filters": {
+            "user_id": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        {
+          "table": "budgets",
+          "filters": {
+            "household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "is_default": true
+          }
+        },
+        {
+          "table": "accounts",
+          "filters": {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "budget_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "is_active": true
+          }
+        }
+      ],
+      "errors": [],
+      "console": [],
+      "unknown": [],
+      "canonicalPayload": {
+        "amount": 45,
+        "direction": "expense",
+        "date": "2026-10-28",
+        "category": "Food",
+        "note": "Fictional Lunch",
+        "account_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+      }
+    },
+    {
+      "id": "create_bucket",
+      "artifact": {
+        "entry": "entry-33226c515acc57a85696eab78ac76f15.js",
+        "sha256": "da2e9248d74b3c6c5eae4bec127c3fcae4e4a3984ac68135a947de0bc05e09ca",
+        "authKey": "sb-imqmhfdquqlqxgtcdbvc-auth-token"
+      },
+      "width": 390,
+      "ai": [
+        {
+          "path": "/functions/v1/flo-chat-v4",
+          "body": {
+            "version": 4,
+            "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "question": "Create a bucket named Fictional Vacation.",
+            "commandId": "46267500-9a7b-4f8e-b0ec-c930ca8786e7",
+            "timezone": "UTC",
+            "conversationContext": []
+          }
+        },
+        {
+          "path": "/functions/v1/flo-chat-v4",
+          "body": {
+            "version": 4,
+            "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "question": "Add spending bucket",
+            "commandId": "987c0902-61e1-4820-bf77-92a8f116681c",
+            "creationForm": {
+              "kind": "create_bucket",
+              "fields": {
+                "name": "Fictional Vacation",
+                "target_amount": 500,
+                "target_date": "2026-12-25"
+              }
+            },
+            "timezone": "UTC",
+            "conversationContext": [
+              {
+                "role": "user",
+                "content": "Create a bucket named Fictional Vacation."
+              },
+              {
+                "role": "assistant",
+                "content": "Fill in the missing details to add this item."
+              }
+            ]
+          }
+        }
+      ],
+      "rpc": [
+        {
+          "path": "/rest/v1/rpc/create_flo_entity",
+          "body": {
+            "p_command_id": "987c0902-61e1-4820-bf77-92a8f116681c",
+            "p_kind": "create_bucket",
+            "p_payload": {
+              "name": "Fictional Vacation",
+              "target_amount": 500,
+              "target_date": "2026-12-25"
+            },
+            "p_expected_household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "p_expected_budget_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+          }
+        }
+      ],
+      "formReads": [
+        {
+          "table": "household_members",
+          "filters": {
+            "household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "user_id": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        {
+          "table": "user_preferences",
+          "filters": {
+            "user_id": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        {
+          "table": "budgets",
+          "filters": {
+            "household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "is_default": true
+          }
+        }
+      ],
+      "errors": [],
+      "console": [],
+      "unknown": [],
+      "canonicalPayload": {
+        "name": "Fictional Vacation",
+        "target_amount": 500,
+        "target_date": "2026-12-25"
+      }
+    },
+    {
+      "id": "create_savings_goal",
+      "artifact": {
+        "entry": "entry-33226c515acc57a85696eab78ac76f15.js",
+        "sha256": "da2e9248d74b3c6c5eae4bec127c3fcae4e4a3984ac68135a947de0bc05e09ca",
+        "authKey": "sb-imqmhfdquqlqxgtcdbvc-auth-token"
+      },
+      "width": 1200,
+      "ai": [
+        {
+          "path": "/functions/v1/flo-chat",
+          "body": {
+            "version": 3,
+            "conversationId": "bd8725ba-d9f8-4cc3-a60a-b4df000da2a8",
+            "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "userMessage": {
+              "id": "2be70b5b-689c-45a4-b0a0-f84138c5e6c6",
+              "text": "Create a savings goal Fictional Rainy Day with $0 already saved."
+            },
+            "assistantMessageId": "b1ca96c3-41b2-4f3a-be8d-67b238917197",
+            "context": {},
+            "historyEnabled": true,
+            "timezone": "UTC",
+            "previewTier": null
+          }
+        },
+        {
+          "path": "/functions/v1/flo-chat",
+          "body": {
+            "version": 3,
+            "creationForm": {
+              "kind": "create_savings_goal",
+              "fields": {
+                "name": "Fictional Rainy Day",
+                "target_amount": 1000,
+                "current_amount": 100,
+                "target_date": "2026-12-25"
+              }
+            },
+            "conversationId": "bd8725ba-d9f8-4cc3-a60a-b4df000da2a8",
+            "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "userMessage": {
+              "id": "71087c39-855b-4367-b561-ebd047c055e4",
+              "text": "Add savings goal"
+            },
+            "assistantMessageId": "24d09cff-cc29-42c4-af20-5353470bdcd4",
+            "context": {},
+            "historyEnabled": true,
+            "timezone": "UTC",
+            "previewTier": null
+          }
+        }
+      ],
+      "rpc": [
+        {
+          "path": "/rest/v1/rpc/create_flo_entity",
+          "body": {
+            "p_command_id": "71087c39-855b-4367-b561-ebd047c055e4",
+            "p_kind": "create_savings_goal",
+            "p_payload": {
+              "name": "Fictional Rainy Day",
+              "target_amount": 1000,
+              "target_date": "2026-12-25",
+              "current_amount": 100
+            },
+            "p_expected_household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "p_expected_budget_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+          }
+        }
+      ],
+      "formReads": [
+        {
+          "table": "household_members",
+          "filters": {
+            "household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "user_id": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        {
+          "table": "user_preferences",
+          "filters": {
+            "user_id": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        {
+          "table": "budgets",
+          "filters": {
+            "household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "is_default": true
+          }
+        }
+      ],
+      "errors": [],
+      "console": [],
+      "unknown": [],
+      "canonicalPayload": {
+        "name": "Fictional Rainy Day",
+        "target_amount": 1000,
+        "target_date": "2026-12-25",
+        "current_amount": 100
+      }
+    },
+    {
+      "id": "320-validation-shrink",
+      "artifact": {
+        "entry": "entry-33226c515acc57a85696eab78ac76f15.js",
+        "sha256": "da2e9248d74b3c6c5eae4bec127c3fcae4e4a3984ac68135a947de0bc05e09ca",
+        "authKey": "sb-imqmhfdquqlqxgtcdbvc-auth-token"
+      },
+      "width": 320,
+      "ai": [
+        {
+          "path": "/functions/v1/flo-chat-v4",
+          "body": {
+            "version": 4,
+            "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "question": "Create a bucket named Fictional Vacation.",
+            "commandId": "2af29275-ab83-47f4-a1a7-048744beb3e6",
+            "timezone": "UTC",
+            "conversationContext": []
+          }
+        },
+        {
+          "path": "/functions/v1/flo-chat-v4",
+          "body": {
+            "version": 4,
+            "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "question": "Add spending bucket",
+            "commandId": "c2dec128-cf12-4467-a050-f64c45d69703",
+            "creationForm": {
+              "kind": "create_bucket",
+              "fields": {
+                "name": "Fictional Vacation",
+                "target_amount": 500,
+                "target_date": "2026-12-25"
+              }
+            },
+            "timezone": "UTC",
+            "conversationContext": [
+              {
+                "role": "user",
+                "content": "Create a bucket named Fictional Vacation."
+              },
+              {
+                "role": "assistant",
+                "content": "Fill in the missing details to add this item."
+              }
+            ]
+          }
+        }
+      ],
+      "rpc": [
+        {
+          "path": "/rest/v1/rpc/create_flo_entity",
+          "body": {
+            "p_command_id": "c2dec128-cf12-4467-a050-f64c45d69703",
+            "p_kind": "create_bucket",
+            "p_payload": {
+              "name": "Fictional Vacation",
+              "target_amount": 500,
+              "target_date": "2026-12-25"
+            },
+            "p_expected_household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "p_expected_budget_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+          }
+        }
+      ],
+      "formReads": [
+        {
+          "table": "household_members",
+          "filters": {
+            "household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "user_id": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        {
+          "table": "user_preferences",
+          "filters": {
+            "user_id": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        {
+          "table": "budgets",
+          "filters": {
+            "household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "is_default": true
+          }
+        }
+      ],
+      "errors": [],
+      "console": [],
+      "unknown": []
+    },
+    {
+      "id": "account-empty",
+      "artifact": {
+        "entry": "entry-33226c515acc57a85696eab78ac76f15.js",
+        "sha256": "da2e9248d74b3c6c5eae4bec127c3fcae4e4a3984ac68135a947de0bc05e09ca",
+        "authKey": "sb-imqmhfdquqlqxgtcdbvc-auth-token"
+      },
+      "width": 390,
+      "ai": [
+        {
+          "path": "/functions/v1/flo-chat-v4",
+          "body": {
+            "version": 4,
+            "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "question": "Record a $45 expense described Fictional Lunch.",
+            "commandId": "e64d41da-9fab-4032-8609-41a8b085300d",
+            "timezone": "UTC",
+            "conversationContext": []
+          }
+        }
+      ],
+      "rpc": [],
+      "formReads": [],
+      "errors": [],
+      "console": [],
+      "unknown": []
+    },
+    {
+      "id": "safety-browser-back",
+      "artifact": {
+        "entry": "entry-33226c515acc57a85696eab78ac76f15.js",
+        "sha256": "da2e9248d74b3c6c5eae4bec127c3fcae4e4a3984ac68135a947de0bc05e09ca",
+        "authKey": "sb-imqmhfdquqlqxgtcdbvc-auth-token"
+      },
+      "width": 390,
+      "ai": [
+        {
+          "path": "/functions/v1/flo-chat-v4",
+          "body": {
+            "version": 4,
+            "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "question": "Create a bucket named Fictional Vacation.",
+            "commandId": "41436fec-30f8-497d-bc84-14d176b16cf0",
+            "timezone": "UTC",
+            "conversationContext": []
+          }
+        },
+        {
+          "path": "/functions/v1/flo-chat-v4",
+          "body": {
+            "version": 4,
+            "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "question": "Add spending bucket",
+            "commandId": "8a2e09d9-425f-441b-befe-11ced826fb26",
+            "creationForm": {
+              "kind": "create_bucket",
+              "fields": {
+                "name": "Fictional Vacation",
+                "target_amount": 6000,
+                "target_date": "2026-11-01"
+              }
+            },
+            "timezone": "UTC",
+            "conversationContext": [
+              {
+                "role": "user",
+                "content": "Create a bucket named Fictional Vacation."
+              },
+              {
+                "role": "assistant",
+                "content": "Fill in the missing details to add this item."
+              }
+            ]
+          }
+        },
+        {
+          "path": "/functions/v1/flo-chat-v4",
+          "body": {
+            "version": 4,
+            "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "question": "Add spending bucket",
+            "commandId": "c7148c66-7360-4f75-a73b-ea0058d17651",
+            "creationForm": {
+              "kind": "create_bucket",
+              "fields": {
+                "name": "Fictional Vacation",
+                "target_amount": 100,
+                "target_date": "2026-11-01"
+              }
+            },
+            "timezone": "UTC",
+            "conversationContext": [
+              {
+                "role": "user",
+                "content": "Create a bucket named Fictional Vacation."
+              },
+              {
+                "role": "assistant",
+                "content": "Fill in the missing details to add this item."
+              },
+              {
+                "role": "user",
+                "content": "Add spending bucket"
+              },
+              {
+                "role": "assistant",
+                "content": "Nothing was added. Update the details below when you’re ready."
+              }
+            ]
+          }
+        }
+      ],
+      "rpc": [
+        {
+          "path": "/rest/v1/rpc/create_flo_entity",
+          "body": {
+            "p_command_id": "c7148c66-7360-4f75-a73b-ea0058d17651",
+            "p_kind": "create_bucket",
+            "p_payload": {
+              "name": "Fictional Vacation",
+              "target_amount": 100,
+              "target_date": "2026-11-01"
+            },
+            "p_expected_household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "p_expected_budget_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+          }
+        }
+      ],
+      "formReads": [
+        {
+          "table": "household_members",
+          "filters": {
+            "household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "user_id": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        {
+          "table": "user_preferences",
+          "filters": {
+            "user_id": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        {
+          "table": "budgets",
+          "filters": {
+            "household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "is_default": true
+          }
+        },
+        {
+          "table": "household_members",
+          "filters": {
+            "household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "user_id": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        {
+          "table": "user_preferences",
+          "filters": {
+            "user_id": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        {
+          "table": "budgets",
+          "filters": {
+            "household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "is_default": true
+          }
+        }
+      ],
+      "errors": [],
+      "console": [],
+      "unknown": []
+    },
+    {
+      "id": "unavailable-form-retain-recover",
+      "artifact": {
+        "entry": "entry-33226c515acc57a85696eab78ac76f15.js",
+        "sha256": "da2e9248d74b3c6c5eae4bec127c3fcae4e4a3984ac68135a947de0bc05e09ca",
+        "authKey": "sb-imqmhfdquqlqxgtcdbvc-auth-token"
+      },
+      "width": 390,
+      "ai": [
+        {
+          "path": "/functions/v1/flo-chat-v4",
+          "body": {
+            "version": 4,
+            "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "question": "Add income named Fictional Acme take-home $2000.",
+            "commandId": "0ae1e3d7-9a28-4579-b3fb-08f21c01d7ea",
+            "timezone": "UTC",
+            "conversationContext": []
+          }
+        },
+        {
+          "path": "/functions/v1/flo-chat-v4",
+          "body": {
+            "version": 4,
+            "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "question": "Add income",
+            "commandId": "24622a5b-b8fb-46d4-b46d-fee99a09b6c9",
+            "creationForm": {
+              "kind": "create_income",
+              "fields": {
+                "name": "Fictional Acme",
+                "amount": 2000,
+                "frequency": "biweekly",
+                "first_date": "2026-10-28"
+              }
+            },
+            "timezone": "UTC",
+            "conversationContext": [
+              {
+                "role": "user",
+                "content": "Add income named Fictional Acme take-home $2000."
+              },
+              {
+                "role": "assistant",
+                "content": "Fill in the missing details to add this item."
+              }
+            ]
+          }
+        },
+        {
+          "path": "/functions/v1/flo-chat-v4",
+          "body": {
+            "version": 4,
+            "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "question": "Add income",
+            "commandId": "5f8a3ccd-7468-4a8a-be44-49f6c8e889ea",
+            "creationForm": {
+              "kind": "create_income",
+              "fields": {
+                "name": "Fictional Acme",
+                "amount": 2100,
+                "frequency": "biweekly",
+                "first_date": "2026-10-28"
+              }
+            },
+            "timezone": "UTC",
+            "conversationContext": [
+              {
+                "role": "user",
+                "content": "Add income named Fictional Acme take-home $2000."
+              },
+              {
+                "role": "assistant",
+                "content": "Fill in the missing details to add this item."
+              },
+              {
+                "role": "user",
+                "content": "Add income"
+              },
+              {
+                "role": "assistant",
+                "content": "I couldn’t verify this household’s active budget. Please retry."
+              }
+            ]
+          }
+        }
+      ],
+      "rpc": [
+        {
+          "path": "/rest/v1/rpc/create_flo_entity",
+          "body": {
+            "p_command_id": "5f8a3ccd-7468-4a8a-be44-49f6c8e889ea",
+            "p_kind": "create_income",
+            "p_payload": {
+              "name": "Fictional Acme",
+              "amount": 2100,
+              "frequency": "biweekly",
+              "first_date": "2026-10-28"
+            },
+            "p_expected_household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "p_expected_budget_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+          }
+        }
+      ],
+      "formReads": [
+        {
+          "table": "household_members",
+          "filters": {
+            "household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "user_id": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        {
+          "table": "user_preferences",
+          "filters": {
+            "user_id": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        {
+          "table": "budgets",
+          "filters": {
+            "household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "is_default": true
+          }
+        },
+        {
+          "table": "household_members",
+          "filters": {
+            "household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "user_id": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        {
+          "table": "user_preferences",
+          "filters": {
+            "user_id": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        {
+          "table": "budgets",
+          "filters": {
+            "household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "is_default": true
+          }
+        }
+      ],
+      "errors": [],
+      "console": [],
+      "unknown": []
+    }
+  ]
+}

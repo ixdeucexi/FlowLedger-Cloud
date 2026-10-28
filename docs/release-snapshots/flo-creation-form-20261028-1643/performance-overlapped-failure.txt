@@ -1,0 +1,41 @@
+✔ isolated shared engine preserves 20k preparation and cached month responsiveness (164.060668ms)
+ℹ shared 20k engine cold=21.3ms, repeated-max=25.1ms, cached-months=3.0ms
+✖ isolated 20k provider preparation components stay below one input task (357.149851ms)
+✔ isolated 20k cache-to-live equality stays below one input task (49.56481ms)
+ℹ isolated 20k cache-to-live equality cold=11.6ms, repeated-max=7.0ms
+✔ isolated dense Dashboard stages each stay below one input task (35.20002ms)
+ℹ isolated dense 20k cold/repeated-max: review=1.2/0.7ms, posted=1.3/2.3ms, recent=1.7/6.6ms, publish=5.5/1.2ms
+✔ isolated maximum plan-cache serialization stays below one input task (36.964456ms)
+ℹ isolated maximum plan-cache serialization cold=8.5ms, repeated-max=6.2ms
+ℹ tests 5
+ℹ suites 0
+ℹ pass 4
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 734.918861
+
+✖ failing tests:
+
+test at .test-dist/financialProjectionPerformance.benchmark.js:194:25
+✖ isolated 20k provider preparation components stay below one input task (357.149851ms)
+  AssertionError [ERR_ASSERTION]: transaction ledger took 24.1ms cold/69.9ms repeated
+      at TestContext.<anonymous> (/workspace/FlowLedger-Cloud/artifacts/mobile/.test-dist/financialProjectionPerformance.benchmark.js:235:26)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+/workspace/FlowLedger-Cloud/artifacts/mobile:
+[ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] @workspace/mobile@0.0.0 test: `tsc -p tsconfig.tests.json && node --test .test-dist/*.test.js && node --test --test-concurrency=1 .test-dist/financialProjectionPerformance.benchmark.js`
+Exit status 1
+[ELIFECYCLE] Command failed with exit code 1.

@@ -1,0 +1,22 @@
+[
+  {
+    "slug": "flo-chat",
+    "jwt": false,
+    "status": 401
+  },
+  {
+    "slug": "flo-chat",
+    "jwt": true,
+    "status": 401
+  },
+  {
+    "slug": "flo-chat-v4",
+    "jwt": false,
+    "status": 401
+  },
+  {
+    "slug": "flo-chat-v4",
+    "jwt": true,
+    "status": 401
+  }
+]

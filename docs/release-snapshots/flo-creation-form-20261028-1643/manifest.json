@@ -1,0 +1,96 @@
+{
+  "sourceCommit": "799b6cf4b4d4b60c899674f095faa13220f65eda",
+  "artifact": {
+    "entry": "entry-33226c515acc57a85696eab78ac76f15.js",
+    "sha256": "da2e9248d74b3c6c5eae4bec127c3fcae4e4a3984ac68135a947de0bc05e09ca"
+  },
+  "scope": "Fictional authenticated browser data, actual deterministic form validator with scoped fake database client, intercepted creation RPCs. No customer financial writes or provider requests.",
+  "gates": {
+    "browser": 12,
+    "focusedUI": 63,
+    "mobileFunctional": 1373,
+    "mobileSuites": 14,
+    "edge": 563,
+    "protocol": 11,
+    "performance": "one overlapped run4/5 retained; unchanged isolated run5/5 passed",
+    "mobileTypes": "PASS",
+    "packagedDeno": "both PASS",
+    "independentReview": "WHOLE RELEASE PASS"
+  },
+  "files": [
+    {
+      "name": "browser-receipts.json",
+      "bytes": 34882,
+      "sha256": "6bbe3edb90c47ee3697e7050dcc32e571a74ea63b6f7e634cab841df923ff259"
+    },
+    {
+      "name": "browser-summary.json",
+      "bytes": 1517,
+      "sha256": "c3a80ba1cec722125343eaee06bd3a991bd714484e6a214e73eb38f5c5bde7b3"
+    },
+    {
+      "name": "settled-visuals.json",
+      "bytes": 4351,
+      "sha256": "0742a7e6dfde6f2b5029e32b6117f7952930029582d2db2f7e16d051c2947841"
+    },
+    {
+      "name": "phone-income.png",
+      "bytes": 56084,
+      "sha256": "3f8c8ddf6238bfd48d9a61107480c28a99f1b70331b3d36db245faa94dc602ac"
+    },
+    {
+      "name": "desktop-debt.png",
+      "bytes": 133043,
+      "sha256": "5ab27cbf6c8887ec04934e1dcea7cb19da324010f083ebbe3573aafe5661c519"
+    },
+    {
+      "name": "earlier-aria-failure.txt",
+      "bytes": 2994,
+      "sha256": "8d4cf891b86ce962092b0c41ebf62274b0db447c1bc7bf6221c3d967d643abda"
+    },
+    {
+      "name": "performance-isolated.txt",
+      "bytes": 1064,
+      "sha256": "2b2a52ce52322a6d0db3337f08ee881a775675b69cfad40f96956ddf7900c88d"
+    },
+    {
+      "name": "performance-overlapped-failure.txt",
+      "bytes": 2166,
+      "sha256": "22d662848940bf9e9ee5c6e99cb599e27379e0eb206f4cc1b60e0445b5e6d8ad"
+    },
+    {
+      "name": "production-browser.json",
+      "bytes": 7212,
+      "sha256": "a6ccf4e0f2993785699a376bf7c20de3bde6880c68ee9c34501d1bab12afa20a"
+    },
+    {
+      "name": "production-backend-boundary.json",
+      "bytes": 282,
+      "sha256": "aad8188f6644a7936dcb532c81288e19edcc526483eb974aca29fe9309301515"
+    },
+    {
+      "name": "production-http-postflight.txt",
+      "bytes": 216,
+      "sha256": "b8e6280605338a44973aee1939323b7ee398859c4ffaa336638dd087741b981d"
+    }
+  ],
+  "earlierAriaFailureArtifact": {
+    "entry": "entry-82c0cc0768a2ff99db1eb1036905caac.js",
+    "sha256": "30dfb4bbf20c3f444eff6ab6bed1cf4ab813737a581bde235771115bf4d9c597",
+    "resolution": "Explicit web aria-checked added before the final12-story passing artifact."
+  },
+  "production": {
+    "deployment": "dpl_4R6mfzrqCFckoV3gvD3tzN9YoV8b",
+    "sourceCommit": "799b6cf4b4d4b60c899674f095faa13220f65eda",
+    "aliasesAligned": 4,
+    "http": "PASS; exact tested bundle digest",
+    "signedOutBrowser": "PASS4checks; existing Cloudflare beacon CSP event classified separately",
+    "backend": {
+      "floChat": 42,
+      "floChatV4": 9,
+      "verifyJwt": true,
+      "runtimeSourceParity": "PASS52modules each"
+    },
+    "databaseMigrations": 0
+  }
+}

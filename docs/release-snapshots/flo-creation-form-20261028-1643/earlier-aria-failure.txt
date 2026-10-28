@@ -1,0 +1,46 @@
+PASS launcher-answer-only-390
+PASS launcher-answer-only-1200
+{"body":"Flo\nChat not saved\n\nYou\nCreate a one-time bill named Fictional Internet for $80.\nFlo\nFill in the missing details to add this item.\nYou can ask next\nWhat is my savings balance?\n\nCancel draft\n\nThis chat is not saved. Check important details.\n\n\nDashboard\n\n\nBills\n\n\n\n1\nActivity\n\n\nForecast\nAdd bill\nFill in the details below.\n\nName *\nAmount *\nHow often? *\nOne time\nMonthly\nWeekly\nEvery 2 weeks\nQuarterly\nPayment date *\n\nPick a date\n\n\nEnter date instead\nCategory (optional)\n* Required. Nothing is added until you save.\nCancel\nSave bill","url":"http://127.0.0.1:8126/flo","ai":[{"path":"/functions/v1/flo-chat-v4","body":{"version":4,"householdId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","question":"Create a one-time bill named Fictional Internet for $80.","commandId":"f0bb980b-8291-4521-a61f-d3e7a836c15c","timezone":"UTC","conversationContext":[]}}],"rpc":[],"errors":[],"console":[]}
+A [Error]: expect(locator).toBeChecked() failed
+
+Locator:  getByRole('radio', { name: 'One time', exact: true })
+Expected: checked
+Received: unchecked
+Timeout:  5000ms
+
+Call log:
+  - Expect "to.be.checked" with timeout 5000ms
+  - waiting for getByRole('radio', { name: 'One time', exact: true })
+    9 × locator resolved to <div role="radio" tabindex="0" aria-label="One time" class="css-g5y9jx r-1loqt21 r-1otgn73 r-1mxhqmb r-rs99b7 r-1777fci r-peo1c r-kritb0 r-3o4zer">…</div>
+      - unexpected value "unchecked"
+
+    at Proxy.<anonymous> (/opt/codex/cua_node/lib/node_modules/playwright/lib/matchers/expect.js:224:24)
+    at /tmp/flo-form-browser.cjs:20:484
+    at async run (/tmp/flo-form-browser.cjs:9:66)
+    at async /tmp/flo-form-browser.cjs:20:45 {
+  matcherResult: {
+    message: 'expect(locator).toBeChecked() failed\n' +
+      '\n' +
+      "Locator:  getByRole('radio', { name: 'One time', exact: true })\n" +
+      'Expected: checked\n' +
+      'Received: unchecked\n' +
+      'Timeout:  5000ms\n' +
+      '\n' +
+      'Call log:\n' +
+      '  - Expect "to.be.checked" with timeout 5000ms\n' +
+      "  - waiting for getByRole('radio', { name: 'One time', exact: true })\n" +
+      '    9 × locator resolved to <div role="radio" tabindex="0" aria-label="One time" class="css-g5y9jx r-1loqt21 r-1otgn73 r-1mxhqmb r-rs99b7 r-1777fci r-peo1c r-kritb0 r-3o4zer">…</div>\n' +
+      '      - unexpected value "unchecked"\n',
+    pass: false,
+    actual: 'unchecked',
+    name: 'toBeChecked',
+    expected: 'checked',
+    log: [
+      '  - Expect "to.be.checked" with timeout 5000ms',
+      "  - waiting for getByRole('radio', { name: 'One time', exact: true })",
+      '    9 × locator resolved to <div role="radio" tabindex="0" aria-label="One time" class="css-g5y9jx r-1loqt21 r-1otgn73 r-1mxhqmb r-rs99b7 r-1777fci r-peo1c r-kritb0 r-3o4zer">…</div>',
+      '      - unexpected value "unchecked"'
+    ],
+    timeout: 5000
+  }
+}
