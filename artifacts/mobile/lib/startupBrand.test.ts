@@ -271,7 +271,8 @@ test("scope and user transitions stay shielded, retryable, and remount route-loc
   assert.match(flo, /const floDataScopeKey = `\$\{user\?\.id/);
   assert.match(flo, /requestGeneration === requestGenerationRef\.current/);
   assert.match(flo, /requestScopeKey === floDataScopeKeyRef\.current/);
-  assert.match(flo, /\[activeConversationId, floDataScopeKey, floAccessLocked, floV4Preview\]/);
+  assert.match(flo, /\[activeConversationId, floDataScopeKey, floAccessLocked, floV4Preview, creationOwnerKey, activeHousehold\?\.budgetId, activeHousehold\?\.householdId, demoMode\]/);
+  assert.match(flo, /requestCreationOwner === creationOwnerKeyRef\.current/);
   const olderMessagesStart = flo.indexOf("const loadOlderMessages");
   const olderMessagesEnd = flo.indexOf("const stopStreaming", olderMessagesStart);
   const olderMessages = flo.slice(olderMessagesStart, olderMessagesEnd);
@@ -280,6 +281,7 @@ test("scope and user transitions stay shielded, retryable, and remount route-loc
   assert.match(olderMessages, /requestGeneration === requestGenerationRef\.current/);
   assert.match(olderMessages, /requestScopeKey === floDataScopeKeyRef\.current/);
   assert.match(olderMessages, /requestConversationId === activeConversationIdRef\.current/);
+  assert.match(olderMessages, /requestCreationOwner === creationOwnerKeyRef\.current/);
   assert.match(olderMessages, /if \(!requestIsCurrent\(\)\) return;[\s\S]+dispatch\(\{ type: "prepend"/);
   assert.match(olderMessages, /await Promise\.all[\s\S]+if \(!requestIsCurrent\(\)\) return;[\s\S]+setProposalByMessageId/);
   assert.match(olderMessages, /catch \{[\s\S]+if \(requestIsCurrent\(\)\) setChatError/);

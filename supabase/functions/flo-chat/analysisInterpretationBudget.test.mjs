@@ -300,10 +300,10 @@ test('runtime preserves conversational scope except explicit self-contained curr
   assert.ok(source.indexOf('if(clarification)return recordAnalysis')<source.indexOf('const interpret='));
   assert.match(source,/if\(clarification\)return recordAnalysis\(runtime,\[clarification\],null,\{inputTokens:0,outputTokens:0\}\)/);
   assert.match(source,/loadAnalysisConversation/);
-  assert.ok(source.indexOf('catch {return recordAnalysis')<source.indexOf('const prior='));
-  assert.ok(source.indexOf('catch {return recordAnalysis')<source.indexOf('const interpret='));
+  assert.ok(source.indexOf('if(contextUnavailable && requiresAnalysisConversation')<source.indexOf('const prior='));
   assert.match(source,/Conversation context could not be verified/);
-  assert.ok(source.indexOf('if(error)return recordAnalysis')<source.indexOf('let timeZone='));
+  assert.ok(source.indexOf('plan.requests.some(request=>requiresAnalysisSettings(request,question))')>source.indexOf('const plan='));
+  assert.doesNotMatch(source,/if\(error\)return recordAnalysis/);
   assert.match(source,/Household planning settings could not be verified/);
   assert.match(source,/conversation\.filter\(turn=>turn.role==="user"\)/);
 });

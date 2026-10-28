@@ -11,8 +11,8 @@ test("actual v4 body carries optional bounded temporary context and retains the 
   new Function("exports", "require", js)(exports, () => ({}));
   const input = { householdId: "h", text: "What is its balance?", timezone: "UTC", userMessageId: "u", assistantMessageId: "a", historyEnabled: false };
   const context = [{ role: "user", content: "What is my Cedar balance?" }, { role: "assistant", content: "Recorded balance was checked." }];
-  assert.deepEqual(exports.floChatRequestBody("v4", input), { version: 4, householdId: "h", question: input.text, timezone: "UTC" });
-  assert.deepEqual(exports.floChatRequestBody("v4", { ...input, conversationContext: context }), { version: 4, householdId: "h", question: input.text, timezone: "UTC", conversationContext: context });
+  assert.deepEqual(exports.floChatRequestBody("v4", input), { version: 4, householdId: "h", question: input.text, commandId: "u", timezone: "UTC" });
+  assert.deepEqual(exports.floChatRequestBody("v4", { ...input, conversationContext: context }), { version: 4, householdId: "h", question: input.text, commandId: "u", timezone: "UTC", conversationContext: context });
   assert.equal(exports.floChatRequestBody("v3", input).historyEnabled, false);
 });
 
@@ -45,4 +45,44 @@ test("preview reset and stream callbacks guard generations and user-household sc
   assert.match(source, /chatScopeKey !== floDataScopeKey/);
   assert.match(source, /accessibilityLabel="New chat"/);
   assert.match(source, /completedAnswer && reply.trim\(\)/);
+});
+
+test("opening Flo from the floating shortcut carries context without asking a question", () => {
+  const launcher = readFileSync("components/FloLauncher.tsx", "utf8");
+  const launch = launcher.slice(launcher.indexOf('router.push({'), launcher.indexOf('} as never);', launcher.indexOf('router.push({')));
+  assert.match(launch, /sourceRoute: pathname/);
+  assert.match(launch, /entityType: context.entityType/);
+  assert.doesNotMatch(launch, /prompt\s*:|promptId\s*:|send\(/);
+});
+
+test("explicit route questions only prefill once per scope and prompt and never replace a typed draft", () => {
+  const source = readFileSync("app/(tabs)/flo.tsx", "utf8");
+  const start = source.indexOf("  // Route context can suggest a draft.");
+  const end = source.indexOf("  const composerBottom", start);
+  assert.ok(start > 0 && end > start);
+  const effect = transpileModule(source.slice(start, end), { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
+  let input = "";
+  const bindings: Record<string, any> = {
+    params: { prompt: "Which bills are due next?", promptId: "explicit-1" },
+    user: { id: "actor-a" }, activeHousehold: { householdId: "home-a" },
+    floDataScopeKey: "actor-a:home-a", chatScopeKey: "actor-a:home-a", floAccessLocked: false, historyBusy: false,
+    handledPromptRef: { current: null }, consumedRoutePromptsRef: { current: new Set<string>() },
+    setInput: (next: (current: string) => string) => { input = next(input); },
+    useEffect: (callback: () => void) => callback(),
+    send: () => { throw new Error("A route must never send"); },
+    createFloConversation: () => { throw new Error("A route must never create history"); },
+    setAiConsentPrompt: () => { throw new Error("A route must never request consent"); },
+  };
+  const run = () => new Function(...Object.keys(bindings), effect)(...Object.values(bindings));
+  run(); assert.equal(input, "Which bills are due next?");
+  input = "My own question"; run(); assert.equal(input, "My own question");
+  bindings.params = { prompt: "How is my debt payoff going?", promptId: "explicit-2" };
+  run(); assert.equal(input, "My own question");
+  input = ""; run(); assert.equal(input, "", "a consumed link cannot refill after the user clears it");
+  bindings.params.promptId = "explicit-3"; run(); assert.equal(input, "How is my debt payoff going?");
+  input = ""; bindings.floDataScopeKey = "actor-a:home-b"; run(); assert.equal(input, "", "wait for scope hydration");
+  bindings.chatScopeKey = "actor-a:home-b"; run(); assert.equal(input, "How is my debt payoff going?");
+  input = ""; bindings.floDataScopeKey = "actor-a:home-a"; bindings.chatScopeKey = "actor-a:home-a"; run();
+  assert.equal(input, "", "returning to a scope cannot resurrect the already consumed prompt");
+  assert.doesNotMatch(effect, /\bsend\(|setAiConsentPrompt|createFloConversation/);
 });

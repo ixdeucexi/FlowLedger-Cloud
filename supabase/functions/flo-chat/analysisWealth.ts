@@ -49,6 +49,11 @@ export function wealthAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequ
     lines.push(`Your configured FlowLedger debt-plan balances total ${dollars(total)} across ${raw.length} debts. Connected credit balances are reviewed separately and may not be included here; this is not a verified total of every debt.`);
     if(named.length) lines.push(...named.slice(0,6).map(r=>`${label(r.name)}: ${dollars(Number(r.balance))}; configured payment ${numeric(r.amount)===null ? "unavailable" : dollars(Number(r.amount))}; APR ${numeric(r.interest_rate)===null ? "unavailable" : `${r.interest_rate}%`}.`));
     assumptions.push("Configured payments are your FlowLedger plan, not independently verified lender minimums. Check the latest statement before changing a required payment.");
+    if(!snapshot.sources.household_settings?.complete) {
+      // The stored balances/APRs remain useful without timezone or payoff
+      // settings. Do not add month-relative obligations or a default target.
+      return {text:lines.join("\n\n"),facts,sources:["bills"],assumptions,missing:[...missing,...requireSources(snapshot,["bills"])],scenario:false};
+    }
     if(raw.some(r=>numeric(r.amount)===null || numeric(r.interest_rate)===null || !["monthly",null,undefined].includes(r.frequency))) missing.push("A complete monthly payoff projection needs every debt's APR and monthly payment; nonmonthly debt schedules must be reviewed in the dated planner");
     else if(raw.length) {
       const normalized=projectionInput(snapshot);
@@ -120,7 +125,7 @@ export function wealthAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequ
       const prior=aggregateSpending(activity.rows,priorStart,priorEnd);
       const baselinePresent=[1,2,3].every(offset=>activity.rows.some(r=>r.date>=shiftMonth(snapshot.today,-offset)&&r.date<=monthEnd(shiftMonth(snapshot.today,-offset))));
       if(baselinePresent&&!prior.unresolved&&!activity.missing.length)lines.push(`History-based draft (not saved): ${prior.categories.filter(c=>matches(c.name,request.category)).slice(0,8).map(c=>`${c.name} ${dollars(c.amount/3)}/month`).join("; ") || "not enough spending history"}.`);
-      else missing.push("A budget draft needs classified spending in each of the last three completed months");
+      else { lines.push("Use the recorded category budgets above as a starting point; add everyday-cost estimates before treating this as a complete budget."); missing.push("Everyday-cost estimates are needed for a complete category budget draft"); }
       assumptions.push("Draft divides recorded spending in the previous three completed months by three. Missing transaction history understates the result; check complete coverage before adopting it.");
     }
     if(totals.unresolved) missing.push("Unreviewed transactions are excluded; budget remaining may be overstated");
@@ -144,7 +149,11 @@ export function wealthAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequ
       const expenseCoverage=historicalExpenseCoverage(snapshot,prior.rows,start,end);
       missing.push(...expenseCoverage.missing);
       const baselinePresent=[1,2,3].every(offset=>activity.rows.some(r=>r.date>=monthStart(shiftMonth(snapshot.today,-offset))&&r.date<=monthEnd(shiftMonth(snapshot.today,-offset))));
-      if(!baselinePresent||activity.missing.length||!expenseCoverage.complete||prior.unresolved||prior.unclassifiedDebt||monthly<=0) missing.push("Three complete months of classified expenses and identified loan/card repayments are needed for a reliable emergency-fund target");
+      if(!baselinePresent||activity.missing.length||!expenseCoverage.complete||prior.unresolved||prior.unclassifiedDebt||monthly<=0) {
+        missing.push("A verified monthly living-cost and required-debt-payment estimate is needed for an emergency-fund target");
+        facts.recordedExpenseWindowTotal=round(prior.spending+prior.nonCardRepayments);
+        lines.push(`The checked history contains ${dollars(Number(facts.recordedExpenseWindowTotal))} of consumption and identified loan repayments from ${start} through ${end}, but it does not establish a complete monthly expense estimate. What monthly amount should the emergency fund cover?`);
+      }
       else {
         facts.monthlyExpenseBaseline=monthly; facts.threeMonthTarget=round(monthly*3); facts.sixMonthTarget=round(monthly*6);
         lines.push(`Using ${dollars(monthly)}/month of recorded consumption plus debt repayments, three months is ${dollars(monthly*3)} and six months is ${dollars(monthly*6)}.`);
@@ -165,6 +174,7 @@ export function wealthAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequ
       const current=goal?numeric(goal.current_amount):null;
       const goalTarget=request.amountRole==="target_balance"?request.amount:goal?numeric(goal.target_amount):null;
       const contribution=request.contribution;
+      facts.goalName=goal?label(goal.name):null;facts.goalCurrent=current;facts.goalTarget=goalTarget;
       if(contribution){facts.explicitContribution=contribution.amount;facts.contributionFrequency=contribution.frequency;}
       if(!goal||current===null||goalTarget===null) {
         lines.unshift("I cannot estimate that goal's timeline until one specific goal and its recorded funding and target are known. A total savings balance is not the same as that goal's earmarked funds.");

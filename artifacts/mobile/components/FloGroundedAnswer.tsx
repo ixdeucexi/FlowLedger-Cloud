@@ -30,19 +30,19 @@ export function FloGroundedAnswer({ text, sources, dataAsOf, partial, coverage, 
   return (
     <View>
       <Text style={[styles.answer, { color: c.foreground }]}>{text}</Text>
-      {sources.length || freshnessAsOf || partial || caveat ? (
-        <View style={[styles.grounding, { borderColor: partial ? c.warning : c.border, backgroundColor: partial ? c.warning + "0D" : c.muted + "70" }]}>
-          <Pressable accessibilityRole="button" accessibilityState={{ expanded: evidenceOpen }} accessibilityLabel="Show how Flo got this answer" onPress={() => { setEvidenceOpen(open => !open); setAllSourcesOpen(false); }} style={styles.groundingHeader}>
-            <Feather name={partial ? "alert-triangle" : "shield"} size={14} color={partial ? c.warning : c.success} />
+      {sources.length || freshnessAsOf || partial || coverage || caveat ? (
+        <View style={[styles.grounding, { borderColor: c.border, backgroundColor: c.muted + "50" }]}>
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: evidenceOpen }} accessibilityLabel="Sources and details" onPress={() => { setEvidenceOpen(open => !open); setAllSourcesOpen(false); }} style={styles.groundingHeader}>
+            <Feather name="layers" size={14} color={c.mutedForeground} />
             <View style={styles.groundingCopy}>
-              <Text style={[styles.groundingTitle, { color: c.foreground }]}>{partial ? "Partial answer" : "Sources for this answer"}{sources.length ? ` · ${sources.length}` : ""}</Text>
-              <Text style={[styles.groundingMeta, { color: c.mutedForeground }]}>{sourceDateSummary}{coverage ? ` · ${coverage}` : ""}</Text>
+              <Text style={[styles.groundingTitle, { color: c.foreground }]}>{"Sources & details"}{sources.length ? ` · ${sources.length}` : ""}</Text>
             </View>
             <Feather name={evidenceOpen ? "chevron-up" : "chevron-down"} size={16} color={c.mutedForeground} />
           </Pressable>
-          {caveat ? <Text accessibilityRole="alert" style={[styles.caveatText, { color: c.mutedForeground }]}>{caveat}</Text> : null}
           {evidenceOpen ? (
             <View style={styles.evidenceList}>
+              <Text style={[styles.groundingMeta, { color: c.mutedForeground }]}>{sourceDateSummary}{coverage ? ` · ${coverage}` : ""}</Text>
+              {caveat && !text.toLocaleLowerCase().includes(caveat.trim().toLocaleLowerCase()) ? <Text style={[styles.caveatText, { color: c.mutedForeground }]}>{caveat}</Text> : null}
               {(allSourcesOpen ? sources : sources.slice(0, 3)).map((source, index) => {
                 const route = safeFloSourceRoute(source.route);
                 const key = source.id ?? `${source.type}-${source.recordId ?? source.label}-${index}`;
@@ -72,7 +72,7 @@ export function FloGroundedAnswer({ text, sources, dataAsOf, partial, coverage, 
                 ) : <View key={key} style={[styles.source, { borderColor: c.border }]}>{body}</View>;
               })}
               {sources.length > 3 ? <Pressable accessibilityRole="button" accessibilityState={{ expanded: allSourcesOpen }} onPress={() => setAllSourcesOpen(open => !open)} style={styles.sourceToggle}><Text style={{ color: c.primary, fontFamily: "Inter_600SemiBold", fontSize: 12 }}>{allSourcesOpen ? "Show fewer sources" : `View all ${sources.length} sources`}</Text></Pressable> : null}
-              {!sources.length ? <Text style={[styles.noSources, { color: c.mutedForeground }]}>Flo could not attach record-level sources to this answer.</Text> : null}
+              {!sources.length ? <Text style={[styles.noSources, { color: c.mutedForeground }]}>No linked records for this answer.</Text> : null}
             </View>
           ) : null}
         </View>
@@ -104,13 +104,13 @@ const styles = StyleSheet.create({
   groundingHeader: { minHeight: 50, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", gap: 8 },
   groundingCopy: { flex: 1 },
   groundingTitle: { fontSize: 11, fontFamily: "Inter_700Bold" },
-  groundingMeta: { fontSize: 9, lineHeight: 13, marginTop: 2, fontFamily: "Inter_500Medium" },
+  groundingMeta: { fontSize: 11, lineHeight: 16, marginTop: 2, fontFamily: "Inter_500Medium" },
   evidenceList: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "rgba(148,163,184,0.22)", padding: 8, gap: 6 },
   source: { minHeight: 46, borderWidth: 1, borderRadius: 11, paddingHorizontal: 9, flexDirection: "row", alignItems: "center", gap: 8 },
   sourceIcon: { width: 28, height: 28, borderRadius: 9, alignItems: "center", justifyContent: "center" },
   sourceCopy: { flex: 1 },
-  sourceLabel: { fontSize: 10, fontFamily: "Inter_700Bold" },
-  sourceMeta: { fontSize: 8, marginTop: 2, fontFamily: "Inter_500Medium", textTransform: "capitalize" },
+  sourceLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  sourceMeta: { fontSize: 10, lineHeight: 15, marginTop: 2, fontFamily: "Inter_500Medium", textTransform: "capitalize" },
   noSources: { padding: 7, fontSize: 10, lineHeight: 15, fontFamily: "Inter_500Medium" },
   proposal: { marginTop: 12, borderWidth: 1, borderRadius: 15, padding: 12 },
   proposalEyebrow: { fontSize: 8, letterSpacing: 1, fontFamily: "Inter_800ExtraBold" },
@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
   reviewText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   proposalFootnote: { fontSize: 9, textAlign: "center", marginTop: 7, fontFamily: "Inter_500Medium" },
   followUps: { marginTop: 12, gap: 6 },
-  followUpLabel: { fontSize: 9, letterSpacing: 0.7, textTransform: "uppercase", fontFamily: "Inter_800ExtraBold" },
+  followUpLabel: { fontSize: 11, letterSpacing: 0.3, fontFamily: "Inter_800ExtraBold" },
   followUp: { minHeight: 44, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 8 },
-  followUpText: { flex: 1, fontSize: 10, lineHeight: 14, fontFamily: "Inter_700Bold" },
+  followUpText: { flex: 1, fontSize: 12, lineHeight: 18, fontFamily: "Inter_600SemiBold" },
 });

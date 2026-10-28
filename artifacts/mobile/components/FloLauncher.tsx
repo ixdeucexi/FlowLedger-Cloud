@@ -21,71 +21,58 @@ const UNDO_DURATION_MS = 5000;
 
 const CONTEXT_BY_PATH: Record<
   string,
-  { label: string; prompt: string; entityType: string }
+  { label: string; entityType: string }
 > = {
   "/": {
     label: "Ask about my plan",
-    prompt: "What should I know about my plan today?",
     entityType: "dashboard",
   },
   "/(tabs)": {
     label: "Ask about my plan",
-    prompt: "What should I know about my plan today?",
     entityType: "dashboard",
   },
   "/(tabs)/bills": {
     label: "Ask about debts & bills",
-    prompt: "What should I know about my bills and debts?",
     entityType: "bills",
   },
   "/bills": {
     label: "Ask about debts & bills",
-    prompt: "What should I know about my bills and debts?",
     entityType: "bills",
   },
   "/(tabs)/transactions": {
     label: "Ask about activity",
-    prompt: "What should I know about my recent activity?",
     entityType: "transactions",
   },
   "/transactions": {
     label: "Ask about activity",
-    prompt: "What should I know about my recent activity?",
     entityType: "transactions",
   },
   "/(tabs)/monthly": {
     label: "Ask about my forecast",
-    prompt: "What should I know about my forecast?",
     entityType: "forecast",
   },
   "/monthly": {
     label: "Ask about my forecast",
-    prompt: "What should I know about my forecast?",
     entityType: "forecast",
   },
   "/(tabs)/category-budget": {
     label: "Ask about categories",
-    prompt: "What should I know about my category plan?",
     entityType: "categories",
   },
   "/category-budget": {
     label: "Ask about categories",
-    prompt: "What should I know about my category plan?",
     entityType: "categories",
   },
   "/snowball-plan": {
     label: "Ask about payoff",
-    prompt: "What should I know about my debt payoff plan?",
     entityType: "debt_plan",
   },
   "/planned-debt-payment": {
     label: "Ask about this payment",
-    prompt: "Help me understand this planned debt payment.",
     entityType: "debt_payment",
   },
   "/plan-simulator": {
     label: "Ask about this scenario",
-    prompt: "Help me understand my current simulation.",
     entityType: "simulation",
   },
 };
@@ -120,7 +107,6 @@ export function FloLauncher({ desktop }: { desktop: boolean }) {
     return null;
   const context = CONTEXT_BY_PATH[pathname] ?? {
     label: "Ask Flo",
-    prompt: "What should I know about my account?",
     entityType: "account",
   };
   const saveVisibility = async (enabled: boolean) => {
@@ -214,8 +200,6 @@ export function FloLauncher({ desktop }: { desktop: boolean }) {
             router.push({
               pathname: "/(tabs)/flo",
               params: {
-                prompt: context.prompt,
-                promptId: `context-${Date.now()}`,
                 sourceRoute: pathname,
                 entityType: context.entityType,
               },

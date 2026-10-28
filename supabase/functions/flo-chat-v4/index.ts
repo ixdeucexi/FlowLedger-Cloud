@@ -1,3 +1,4 @@
+import { runFloCreation, creationIntent, parseCreationDraft } from "../flo-chat/floCreation.ts";
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2.108.0";
 import { runFinancialAnalysis } from "../flo-chat/analysisPlanner.ts";
@@ -157,13 +158,14 @@ async function handle(request: Request): Promise<Response> {
   if (forbiddenRequest.test(validated.request.question)) return withCors(jsonError("safety_request_rejected", 400), approvedCors);
 
   const now = new Date().toISOString();
+  const requestedCreation = creationIntent(validated.request.question, parseCreationDraft(validated.request.creationDraft, validated.request.householdId, now));
   const simpleIntent = classifyFloV4SimpleIntent(validated.request.question);
   let safetySecret: string | null = null;
   let apiKey: string | null = null;
-  if (!simpleIntent) {
+  if (!simpleIntent || requestedCreation?.mode === "create") {
     safetySecret = Deno.env.get("FLO_SAFETY_IDENTIFIER_SECRET") ?? null;
     apiKey = Deno.env.get("OPENAI_API_KEY") ?? null;
-    if (!safetySecret || !apiKey) return withCors(jsonError("server_configuration", 503), approvedCors);
+    if ((!safetySecret || !apiKey) && !requestedCreation) return withCors(jsonError("server_configuration", 503), approvedCors);
     let dailyFailure: string | null;
     try {
       dailyFailure = await reserveDailyLimit(server, auth.userId, validated.request.householdId, now);
@@ -190,7 +192,13 @@ async function handle(request: Request): Promise<Response> {
     let rowCount = 0;
     let toolNames: string[] = [];
     let result: any;
-    if (simpleIntent) {
+    const creationResponse = await runFloCreation({ client: auth.client, userId: auth.userId,
+      householdId: validated.request.householdId, commandId: validated.request.commandId ?? "", message: validated.request.question,
+      draft: validated.request.creationDraft, apiKey: apiKey ?? Deno.env.get("OPENAI_API_KEY"), modelId, now, timezone: validated.request.timezone,
+    });
+    if (creationResponse) {
+      result = creationResponse; operation = "creation_capability";
+    } else if (simpleIntent) {
       result = await runFloV4SimpleIntent(simpleIntent, {
         client: auth.client,
         householdId: validated.request.householdId,
@@ -296,11 +304,12 @@ async function handle(request: Request): Promise<Response> {
             coverage: aggregate?.coverage ?? {},
             partial: aggregate?.partial === true,
             historyEnabled: false,
-            readOnly: true,
+            readOnly: !result.creation,
           }),
         );
         controller.enqueue(sse("text-delta", { delta: answer.answer }));
         controller.enqueue(sse("sources", { sources: result.sources ?? [] }));
+        controller.enqueue(sse("creation", { creation: result.creation ?? null }));
         controller.enqueue(sse("followups", { items: answer.followups ?? [] }));
         controller.enqueue(
           sse("done", {

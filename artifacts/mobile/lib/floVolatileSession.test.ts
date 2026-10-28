@@ -51,3 +51,28 @@ test("provider lives below auth budget membership and above routes without a sco
   const provider = readFileSync("context/FloVolatileSessionContext.tsx", "utf8");assert.match(provider, /observeScope\(scope\)/);assert.doesNotMatch(provider, /localStorage|sessionStorage|AsyncStorage|supabase|fetch\(/);
   const screen = readFileSync("app/(tabs)/flo.tsx", "utf8");assert.match(screen, /volatileRenderOwner === lease.owner/);assert.match(screen, /volatileStore.isCurrent\(requestLease\)/);assert.match(screen, /volatileStore.reset\(volatileLeaseRef.current\)/);
 });
+
+test("only validated saved receipts for retained completed messages in this household survive source navigation", () => {
+  const householdId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const receipt = { commandId: "11111111-1111-4111-8111-111111111111", householdId, kind: "create_bucket" as const, entityId: "22222222-2222-4222-8222-222222222222", entityType: "goal" as const, title: "Fictional holiday", route: "/(tabs)/more?section=buckets", createdAt: "2026-10-28T12:00:00Z" };
+  const saved = { status: "saved" as const, kind: receipt.kind, prompt: "Added Fictional holiday.", missingFields: [], commandId: receipt.commandId, householdId, receipt };
+  const store = createFloVolatileSession(); const scope = `actor:${householdId}:budget:owner`; store.observeScope(scope); const first = store.claim(scope)!;
+  const value = snapshot(); value.creations = { a: saved, absent: saved };
+  store.save(first.lease, value); store.release(first.lease);
+  const restored = store.claim(scope)!; assert.deepEqual(restored.snapshot!.creations, { a: saved });
+  assert.equal(typeof restored.snapshot!.creations!.a.receipt!.title, "string");
+  store.observeScope(`actor:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb:budget:owner`); store.observeScope(scope);
+  assert.equal(store.claim(scope)!.snapshot, null);
+  for (const invalid of [
+    { ...saved, status: "ready", payload: { name: "Do not execute" } },
+    { ...saved, status: "needs_details", receipt: undefined },
+    { ...saved, receipt: { ...receipt, householdId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" } },
+    { ...saved, receipt: { ...receipt, route: "https://example.invalid" } },
+    { ...saved, receipt: { ...receipt, token: "must not be retained" } },
+  ]) {
+    const lease = store.claim(scope)!.lease; const candidate = snapshot(); candidate.creations = { a: invalid as any }; store.save(lease, candidate);
+    assert.equal(store.claim(scope)!.snapshot!.creations, undefined);
+  }
+  const incomplete = snapshot(); incomplete.messages[1].contextEligible = false; incomplete.creations = { a: saved };
+  store.save(store.claim(scope)!.lease, incomplete); assert.equal(store.claim(scope)!.snapshot!.creations, undefined);
+});

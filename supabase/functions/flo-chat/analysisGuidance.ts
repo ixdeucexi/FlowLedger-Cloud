@@ -1,4 +1,4 @@
-import { buildAnalysisForecast, projectionInput, projectionSources } from "./analysisProjection.ts";
+import { availablePlanAnalysis, buildAnalysisForecast, projectionInput, projectionSources } from "./analysisProjection.ts";
 import { scheduleAnalysis } from "./analysisSchedule.ts";
 import { analyticTransactions, aggregateSpending } from "./analysisSpending.ts";
 import { dayAdd, dollars, label, monthEnd, monthStart, round, shiftMonth, sum, validDate, type AnalysisRequest, type AnalysisResult, type AnalysisSnapshot } from "./analysisTypes.ts";
@@ -14,9 +14,9 @@ export function guidanceAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
   const normalized=projectionInput(snapshot);
   const assumptions=["Read-only draft: no payments, transfers, budgets or dates were changed. Expected deposits are not guaranteed bank funds.","The cash cushion is a balance reserve, not a monthly expense. Any spare capacity is one shared amount: choose between buffer, extra debt or other goals; do not add independent maxima."];
   if(normalized.missing.length) {
-    if(request.purpose==="allocation_choice")return {text:"I cannot verify spare money for either option yet. Protect required bills, everyday spending and your cash cushion first; update the missing records before choosing debt or savings.",facts:{safeSharedCapacity:null,allocationChoice:"unverified"},sources:projectionSources,assumptions,missing:normalized.missing,scenario:false};
-    const schedules=[scheduleAnalysis(snapshot,{...request,domain:"income",purpose:"general",operation:"summary",startDate:start,endDate:end,dateEvent:"none",entity:null}),scheduleAnalysis(snapshot,{...request,domain:"bills",purpose:"general",operation:"summary",startDate:start,endDate:end,dateEvent:"none",entity:null})];
-    return {text:[`${start}: verify the checking observation, unresolved activity and missing plan inputs before committing money.`,...schedules.filter(r=>!r.missing.length).map(r=>r.text),`${end}: review posted payments and update the plan. A safe allocation cannot be calculated until the missing inputs are resolved.`].join("\n\n"),facts:{startDate:start,endDate:end,safeSharedCapacity:null,planStatus:"needs_review"},sources:projectionSources,assumptions,missing:[...normalized.missing,...schedules.flatMap(r=>r.missing)],scenario:false};
+    const available=availablePlanAnalysis(snapshot,{...request,startDate:start,endDate:end},normalized.missing);
+    if(request.purpose==="allocation_choice")return {...available,facts:{...available.facts,allocationChoice:"unverified"}};
+    return {...available,facts:{...available.facts,planStatus:"needs_review"}};
   }
   const configuredEnd=monthEnd(shiftMonth(snapshot.today,normalized.input.settings.forecast_horizon_months-1));
   if(end>configuredEnd)return {text:`The requested plan extends beyond the configured forecast ending ${configuredEnd}. Extend the forecast or choose a shorter period.`,facts:{safeSharedCapacity:null,startDate:start,endDate:end},sources:projectionSources,assumptions,missing:["The entire requested planning window must be forecastable"],scenario:false};
@@ -25,7 +25,7 @@ export function guidanceAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
   const readEnd=request.purpose==="paycheck_allocation"?[monthEnd(shiftMonth(start,2)),configuredEnd].sort()[0]:end;
   const forecast=buildAnalysisForecast(snapshot,readEnd);
   const missing=[...forecast.missing,...forecast.affordabilityMissing];
-  if(!forecast.historyAvailable)missing.push("A classified three-month living-expense baseline is required before reserving safe spending amounts");
+  if(!forecast.historyAvailable)missing.push("Everyday spending needs an estimate before treating the scheduled remainder as spare cash");
   if(forecast.anchorDate!==snapshot.today)missing.push("Refresh today's checking observation before using a numeric allocation");
   const history=analyticTransactions(snapshot);
   const billNames=new Set(normalized.input.bills.map(b=>b.name.trim().toLowerCase()));
@@ -55,6 +55,12 @@ export function guidanceAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
       const paycheck=sum(allEvents.filter(e=>e.date===payday&&e.kind==="scheduled_income"&&e.amount>0).map(e=>e.amount));
       facts.payday=payday;facts.expectedPaycheck=paycheck;
       lines.push(`For the expected ${dollars(paycheck)} household paycheck on ${payday}${following?`, reserve through ${dayAdd(following,-1)}`:""}. Confirm it posts before allocating it.`);
+      if(following) {
+        const cycleEnd=dayAdd(following,-1);
+        facts.cycleEnd=cycleEnd;
+        facts.cycleRecordedCommitments=-sum(allEvents.filter(e=>e.date>=payday&&e.date<=cycleEnd&&e.amount<0).map(e=>e.amount));
+        if(!verified)lines.push(`${dollars(Number(facts.cycleRecordedCommitments))} in recorded commitments fall before the following paycheck on ${following}; everyday costs are not included.`);
+      }
       if(following&&verified) {
         const cycleEnd=dayAdd(following,-1),cycle=forecast.days.filter(d=>d.date>=payday&&d.date<=cycleEnd);
         const cycleEvents=allEvents.filter(e=>e.date>=payday&&e.date<=cycleEnd);

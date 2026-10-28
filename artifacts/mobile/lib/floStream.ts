@@ -1,3 +1,4 @@
+import type { FloCreationResult } from "./floCreationProtocol";
 import type { FloReviewProposal } from "./floExperience";
 
 // Must remain comfortably above the Edge Function's hard answer deadline so
@@ -66,6 +67,7 @@ export type FloSource = {
 };
 
 export type FloGroundedAnswer = {
+  creation?: FloCreationResult | null;
   answer: string;
   claims?: Array<{ kind: string; label: string; value: string; evidenceIds: string[] }>;
   caveat?: string | null;
@@ -93,6 +95,7 @@ export type FloStreamEvent =
   | { type: "text-delta"; delta: string }
   | { type: "sources"; sources: FloSource[] }
   | { type: "followups"; items: string[] }
+  | { type: "creation"; creation: FloCreationResult | null }
   | { type: "proposal"; proposal: FloReviewProposal | null }
   | { type: "ephemeral-cleanup"; status: "completed" }
   | { type: "done"; messageId: string; text?: string; answer?: FloGroundedAnswer }

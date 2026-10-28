@@ -103,7 +103,7 @@ test("temporary context is only sent with history disabled", () => {
   assert.match(screen, /preferences.historyEnabled !== floPreferences.historyEnabled\) retryRequestRef.current = null/);
 });
 
-test("send and route prompts wait for scoped history preferences and controls lock during a request", () => {
+test("send waits for scoped history preferences while routed prompts only prefill and controls lock during a request", () => {
   const screen = readFileSync("app/(tabs)/flo.tsx", "utf8");
   const bar = readFileSync("components/FloConversationBar.tsx", "utf8");
   const preferences = readFileSync("lib/floPreferences.ts", "utf8");
@@ -111,7 +111,9 @@ test("send and route prompts wait for scoped history preferences and controls lo
   assert.match(send, /if \(!aiConsentReady \|\| !preferencesReady \|\| chatScopeKey !== floDataScopeKey\) return/);
   assert.ok(send.indexOf("!preferencesReady") < send.indexOf("createFloConversation"));
   assert.match(screen, /floPreferencesReadyForScope\(preferencesScopeKey, floDataScopeKey\)/);
-  assert.match(screen, /!aiConsentReady \|\| !preferencesReady \|\| !user\?\.id/);
+  const routeDraft = screen.slice(screen.indexOf("// Route context can suggest a draft."), screen.indexOf("const composerBottom"));
+  assert.match(routeDraft, /chatScopeKey !== floDataScopeKey/);
+  assert.doesNotMatch(routeDraft, /send\(/);
   assert.match(screen, /editable=\{!historyBusy && preferencesReady\}/);
   assert.match(screen, /loadedScope !== floDataScopeKeyRef.current/);
   assert.match(preferences, /catch \{[\s\S]*historyEnabled: false/);

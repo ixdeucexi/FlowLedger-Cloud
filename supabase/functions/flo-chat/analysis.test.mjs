@@ -56,9 +56,9 @@ test("forecast arithmetic uses expected paychecks and scheduled bills",()=>{
 test("missing balance and incomplete source fail closed rather than turn into zero",()=>{
  const s=snapshot();s.sources.household_settings.rows[0].starting_balance=null;
  assert.ok(projectionInput(s).missing.length);
- assert.deepEqual(calculateFinancialAnalysis(s,req()).facts,{});
+ assert.equal(calculateFinancialAnalysis(s,req()).facts.projectedBalance,undefined);assert.equal(calculateFinancialAnalysis(s,req()).facts.safeToSpendUnderPlan,null);
  s.sources.household_settings.rows[0].starting_balance=1000;s.sources.bills.complete=false;
- assert.deepEqual(calculateFinancialAnalysis(s,req()).facts,{});
+ assert.equal(calculateFinancialAnalysis(s,req()).facts.projectedBalance,undefined);assert.equal(calculateFinancialAnalysis(s,req()).facts.safeToSpendUnderPlan,null);
 });
 test("what-if calculations are immutable and conserve a one-time cash change",()=>{
  const s=snapshot();const before=JSON.stringify(s);
@@ -126,9 +126,9 @@ test("bill cancellation and increases start at their effective date, not earlier
  assert.equal(r.facts.scenarioEndBalance-r.facts.baselineEndBalance,expected);
  }
 });
-test("emergency targets require activity in each of three completed months",()=>{
+test("incomplete expenses return retained observations without a fabricated emergency target",()=>{
  const s=snapshot({transactions:[{id:"old",date:"2020-01-01",amount:-100,category:"Food"},{id:"recent",date:"2026-08-01",amount:-300,category:"Food"}]});
- const r=wealthAnalysis(s,req({domain:"emergency"}));assert.ok(r.missing.some(x=>/Three complete months/.test(x)));assert.equal(r.facts.monthsCovered,undefined);assert.equal(r.facts.monthlyExpenseBaseline,undefined);
+ const r=wealthAnalysis(s,req({domain:"emergency"}));assert.ok(r.missing.some(x=>/verified monthly living-cost/.test(x)));assert.equal(r.facts.monthsCovered,undefined);assert.equal(r.facts.monthlyExpenseBaseline,undefined);
 });
 test("pre-payday diagnosis deduplicates same-date paychecks and requires complete closes",()=>{
  const transactions=[6,7,8].flatMap(month=>[{id:`expense${month}`,date:`2026-0${month}-01`,amount:-300,category:"Food"},...Array.from({length:3},(_,i)=>({id:`pay${month}-${i}`,date:`2026-0${month}-10`,amount:50,category:"Income"}))]);

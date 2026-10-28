@@ -282,3 +282,30 @@ export function forecastAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
   }
   return { text: lines.join("\n\n"), facts, sources: projectionSources, assumptions, missing: [...new Set(missing)], scenario: false };
 }
+
+/** Schedule facts survive an unavailable cash-flow anchor. Never infer cash,
+ * an expense baseline, safe capacity or an affordability decision from them. */
+export function availablePlanAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequest, unavailable: string[]): AnalysisResult {
+  const start = request.startDate ?? snapshot.today;
+  const end = request.endDate ?? monthEnd(start);
+  const income = scheduleAnalysis(snapshot, { ...request, purpose: "general", domain: "income", operation: "summary", startDate: start, endDate: end, dateEvent: "none", entity: null, scenario: null });
+  const bills = scheduleAnalysis(snapshot, { ...request, purpose: "general", domain: "bills", operation: "summary", startDate: start, endDate: end, dateEvent: "none", entity: null, scenario: null });
+  const facts: AnalysisResult["facts"] = { startDate: start, endDate: end, recordedPlanOnly: true, safeSharedCapacity: null, safeToSpendUnderPlan: null };
+  const lines: string[] = [];
+  if (!income.missing.length && typeof income.facts.expectedIncome === "number") {
+    facts.expectedIncomeTotal = income.facts.expectedIncome;
+    lines.push(`${dollars(income.facts.expectedIncome)} expected scheduled income`);
+  }
+  if (!bills.missing.length && typeof bills.facts.remainingObligations === "number") {
+    facts.dueAmountTotal = bills.facts.remainingObligations;
+    facts.dueOccurrenceCount = bills.facts.occurrenceCount;
+    lines.push(`${dollars(bills.facts.remainingObligations)} remaining recorded bill/debt commitments`);
+  }
+  const balanceMissing = unavailable.some(reason => /balance|observation|anchor/i.test(reason));
+  return {
+    text: `${lines.length ? `For ${start}–${end}, I can verify ${lines.join(" and ")}. ` : ""}${balanceMissing ? "I need a current dated checking balance before calculating the remaining cash or an affordable allocation." : "I cannot calculate a reliable remaining-cash or affordable-allocation amount until the unverified plan records are checked."}`,
+    facts, sources: [...new Set([...income.sources, ...bills.sources])],
+    assumptions: ["Only the available saved schedules are reported; expected income is not confirmed received, and everyday costs are not assumed to be zero."],
+    missing: [...new Set([...unavailable, ...income.missing, ...bills.missing])], scenario: Boolean(request.scenario),
+  };
+}

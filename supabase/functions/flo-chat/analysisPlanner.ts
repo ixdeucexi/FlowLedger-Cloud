@@ -2,22 +2,22 @@ import { financialAnalysisProviderSchema as schema, parseFinancialAnalysisPlan }
 import { generateText, Output } from "npm:ai@7.0.59";
 import { createOpenAI } from "npm:@ai-sdk/openai@4.0.37";
 import { analysisSourceDependencies, loadAnalysisSnapshot, verifyAnalysisSnapshot } from "./analysisSnapshot.ts";
-import { loadAnalysisConversation, loadAnalysisEntityCatalog } from "./analysisContext.ts";
+import { boundedAnalysisConversation, loadAnalysisConversation, loadAnalysisEntityCatalog, type AnalysisTurn } from "./analysisContext.ts";
 import { explainFinancialAnalysis } from "./analysisExplanation.ts";
-import { forecastAnalysis, projectionInput, projectionSources } from "./analysisProjection.ts";
+import { availablePlanAnalysis, forecastAnalysis, projectionInput, projectionSources } from "./analysisProjection.ts";
 import { spendingAnalysis } from "./analysisSpending.ts";
 import { wealthAnalysis } from "./analysisWealth.ts";
 import { scenarioAnalysis, stabilityAnalysis } from "./analysisStability.ts";
 import { recurringAnalysis } from "./analysisRecurring.ts";
-import { scheduleAnalysis } from "./analysisSchedule.ts";
+import { incomeSourceInventoryAnalysis, scheduleAnalysis } from "./analysisSchedule.ts";
 import { reviewAnalysis } from "./analysisReview.ts";
 import { accountInventoryAnalysis, currentBalanceAnalysis, isCurrentAccountReferenceQuestion, resolvePriorAccountReference, type AccountReferenceProvenance } from "./analysisAccounts.ts";
 import { localDay, validDate, type AnalysisRequest, type AnalysisResult, type AnalysisSnapshot } from "./analysisTypes.ts";
 import { aggregateCoverage, freshness, oldestSourceAsOf, type FloGroundedAnswer, type FloToolEnvelope, type FloSourceRef } from "./contract.ts";
 import type { FloToolRuntime } from "./tools.ts";
-import { analysisInterpreterPrompt, analysisInterpretationError, deterministicAnalysisPlan, explicitUnsupportedForecastScope, interpretAnalysisQuestion, interpretationAttemptMs, isTimelinePurpose, isWholeDebtTotalQuestion, interpretedAccountPhrase, unresolvedContributionClarification, validateRequestSemantics } from "./analysisSemantics.ts";
+import { analysisInterpreterPrompt, analysisInterpretationError, deterministicAnalysisPlan, explicitUnsupportedForecastScope, interpretAnalysisQuestion, interpretationAttemptMs, isTimelinePurpose, incomeArithmeticClarification, isIncomeSourceInventoryQuestion, isWholeDebtTotalQuestion, interpretedAccountPhrase, unresolvedContributionClarification, validateRequestSemantics } from "./analysisSemantics.ts";
 import { guidanceAnalysis, isGuidancePurpose } from "./analysisGuidance.ts";
-import { analysisSourceRoute, analysisTypedFollowups, type AnalysisAnswerScope } from "./analysisPresentation.ts";
+import { analysisSourceRoute, analysisTypedFollowups, presentFinancialAnalysis, wantsAnalysisDetails, type AnalysisAnswerScope } from "./analysisPresentation.ts";
 import { bucketDetailsAnalysis } from "./analysisBuckets.ts";
 import { historyAnalysis } from "./analysisHistory.ts";
 
@@ -48,6 +48,26 @@ export function distinctAnalysisParagraphs(texts:readonly string[]):string[] {
   return [...new Set(texts.flatMap(text=>text.split(/\n\s*\n/).map(part=>part.trim()).filter(Boolean)))];
 }
 
+/** Missing history blocks only genuine references, never a new complete question. */
+export function requiresAnalysisConversation(question: string): boolean {
+  return isCurrentAccountReferenceQuestion(question) || /^(?:(?:and|what about|how about)\s+)?(?:that (?:debt|goal|payment|amount)|the same (?:debt|goal|payment|amount)|it|them|those)[?.!\s]*$/i.test(question.trim());
+}
+/** An acknowledgement alone supplies no question or financial authorization.
+ * Creation drafts are handled by the creation dispatcher before this reader. */
+export function orphanAnalysisAcknowledgement(question: string, conversation: readonly AnalysisTurn[]): AnalysisResult | null {
+  const acknowledgement=(value:string)=>/^(?:yes|yeah|yep|sure|ok(?:ay)?)(?:,?\s+please)?[.!?]*$/i.test(value.trim());
+  if(!acknowledgement(question))return null;
+  const hasPriorQuestion=conversation.some(turn=>turn.role==="user"&&!acknowledgement(turn.content)&&! /^(?:hi|hello|hey|thanks|thank you)[.!?]*$/i.test(turn.content.trim()));
+  if(hasPriorQuestion)return null;
+  return {text:"What would you like me to check or help you add?",facts:{},sources:[],assumptions:[],missing:["A question or specific action is needed; an acknowledgement alone does not supply one"],scenario:false};
+}
+export function requiresAnalysisSettings(request: AnalysisRequest, question=""): boolean {
+  if(request.domain==="income"&&isIncomeSourceInventoryQuestion(question))return false;
+  if (["current_balance", "account_inventory", "bucket_details"].includes(request.purpose ?? "")) return false;
+  if (["credit", "debt"].includes(request.domain) && [undefined, "general"].includes(request.purpose) && !request.scenario && request.dateEvent === "none" && !request.startDate && !request.endDate && !request.comparisonStart && !request.comparisonEnd && ["summary", "detail", "minimum", "maximum"].includes(request.operation)) return false;
+  return true;
+}
+
 const projectionDomains=new Set(["money","forecast","purchase","bills","subscriptions","income","stability","buffer","paycheck","progress","health"]);
 export function calculateFinancialAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequest, question?: string, reference?: AccountReferenceProvenance): AnalysisResult {
   const invalid=validateAnalysisRequest(request,snapshot.today);
@@ -55,6 +75,7 @@ export function calculateFinancialAnalysis(snapshot: AnalysisSnapshot, request: 
   if(isGuidancePurpose(request.purpose))return guidanceAnalysis(snapshot,request);
   if(request.purpose==="bucket_details")return bucketDetailsAnalysis(snapshot,request,question);
   if(request.purpose==="account_inventory")return accountInventoryAnalysis(snapshot,request);
+  if(request.domain==="income"&&request.operation==="detail"&&isIncomeSourceInventoryQuestion(question??""))return incomeSourceInventoryAnalysis(snapshot);
   if(request.purpose==="balance_history")return historyAnalysis(snapshot,request);
   if(request.domain==="money"&&request.operation==="detail"&&!request.scenario&&request.dateEvent==="none")return currentBalanceAnalysis(snapshot,request,question,reference);
   const historicalBills=request.domain==="bills"&&request.endDate!==null&&request.endDate<snapshot.today;
@@ -62,7 +83,11 @@ export function calculateFinancialAnalysis(snapshot: AnalysisSnapshot, request: 
   const scheduleOnly=["bills","subscriptions","income"].includes(request.domain)&&!request.scenario;
   if((projectionDomains.has(request.domain)&&!historicalBills&&!receivedIncome&&!scheduleOnly)||request.scenario) {
     const missing=projectionInput(snapshot).missing;
-    if(missing.length) return {text:isTimelinePurpose(request)?"I cannot estimate when you will reach that target yet: the current plan or balance cannot be verified.":"I cannot reliably calculate that projection from the available records yet.",facts:isTimelinePurpose(request)?{timelineOutcome:"not_estimable"}:{},sources:projectionSources,assumptions:[],missing,scenario:Boolean(request.scenario)};
+    if(missing.length) {
+      const available=availablePlanAnalysis(snapshot,request,missing);
+      if(isTimelinePurpose(request))return {...available,text:`I cannot estimate when you will reach that target yet. ${available.text}`,facts:{...available.facts,timelineOutcome:"not_estimable"}};
+      return available;
+    }
   }
   if(request.scenario && !(request.domain==="debt"&&request.scenario.kind==="extra_debt")) return scenarioAnalysis(snapshot,request);
   if(request.domain==="review")return reviewAnalysis(snapshot,request);
@@ -87,14 +112,27 @@ export function calculateFinancialAnalysis(snapshot: AnalysisSnapshot, request: 
 export async function runFinancialAnalysis(options:{runtime:FloToolRuntime;question:string;apiKey:string;modelId:string;safetyIdentifier:string;conversationId?:string;historyEnabled?:boolean;userMessageId?:string;transientContext?:unknown}) {
   const analysisStartedAt=performance.now();
   const {runtime,question}=options;
-  const {data:settings,error}=await runtime.client.from("household_settings").select("time_zone,payment_method").eq("household_id",runtime.householdId).maybeSingle();
-  if(error)return recordAnalysis(runtime,[{text:"I could not verify your household's planning settings. Please retry before I calculate dates or choose a payoff method; I will not assume a different timezone or debt method.",facts:{},sources:[],assumptions:[],missing:["Household planning settings could not be verified"],scenario:false}],null,{inputTokens:0,outputTokens:0});
+  const incomeArithmetic=incomeArithmeticClarification(question);
+  if(incomeArithmetic)return recordAnalysis(runtime,[incomeArithmetic],null,{inputTokens:0,outputTokens:0});
+  const immediateContext=options.historyEnabled&&options.conversationId?null:options.historyEnabled?[]:boundedAnalysisConversation(options.transientContext);
+  const immediateAcknowledgement=immediateContext===null?null:orphanAnalysisAcknowledgement(question,immediateContext);
+  if(immediateAcknowledgement)return recordAnalysis(runtime,[immediateAcknowledgement],null,{inputTokens:0,outputTokens:0});
+  let settings: Record<string, any> | null = null;
+  let settingsUnavailable = false;
+  try {
+    const result=await runtime.client.from("household_settings").select("time_zone,payment_method").eq("household_id",runtime.householdId).maybeSingle();
+    settings=result.data;settingsUnavailable=Boolean(result.error)||!settings?.time_zone;
+  } catch { settingsUnavailable=true; }
   let timeZone=settings?.time_zone??"UTC";
-  try { localDay(runtime.now,timeZone); } catch {timeZone="UTC";}
+  try { localDay(runtime.now,timeZone); } catch {timeZone="UTC";settingsUnavailable=true;}
   const today=localDay(runtime.now,timeZone);
-  let conversation;
+  let conversation: AnalysisTurn[] = [];
+  let contextUnavailable = false;
   try {conversation=await loadAnalysisConversation({client:runtime.client,householdId:runtime.householdId,conversationId:options.conversationId,historyEnabled:options.historyEnabled,userMessageId:options.userMessageId,transientContext:options.transientContext});}
-  catch {return recordAnalysis(runtime,[{text:"I could not retrieve this conversation's context. Please retry or repeat the full question, including the account, goal or payoff method you mean, so I do not assume a different scope.",facts:{},sources:[],assumptions:[],missing:["Conversation context could not be verified"],scenario:false}],null,{inputTokens:0,outputTokens:0});}
+  catch { contextUnavailable = true; }
+  if(contextUnavailable && requiresAnalysisConversation(question))return recordAnalysis(runtime,[{text:"Which account, goal or payment do you mean? Please include its saved name so I can check it without the earlier conversation.",facts:{},sources:[],assumptions:[],missing:["Conversation context could not be verified for this reference"],scenario:false}],null,{inputTokens:0,outputTokens:0});
+  const acknowledgement=orphanAnalysisAcknowledgement(question,conversation);
+  if(acknowledgement)return recordAnalysis(runtime,[acknowledgement],null,{inputTokens:0,outputTokens:0});
   const prior=conversation.filter(turn=>turn.role==="user").map(turn=>turn.content);
   const unsupportedForecastScope=explicitUnsupportedForecastScope(question);
   if(unsupportedForecastScope)return recordAnalysis(runtime,[{
@@ -116,7 +154,7 @@ export async function runFinancialAnalysis(options:{runtime:FloToolRuntime;quest
   }
   const interpretationStartedAt=performance.now();
   const candidate=deterministicAnalysisPlan(question,today,settings?.payment_method==="avalanche"?"avalanche":"snowball");
-  const directPlan=!prior.length||candidate?.requests.every(r=>r.purpose==="bucket_details"||r.purpose==="account_inventory"||r.purpose==="current_balance")?candidate:null;
+  const directPlan=!prior.length||candidate?.requests.every(r=>r.purpose==="bucket_details"||r.purpose==="account_inventory"||r.purpose==="current_balance")||isIncomeSourceInventoryQuestion(question)?candidate:null;
   const catalog=directPlan?{}:await loadAnalysisEntityCatalog(runtime.client,runtime.householdId);
   const interpret=(correction="")=>generateText({model:createOpenAI({apiKey:options.apiKey}).responses(options.modelId),output:Output.object({schema}),maxRetries:0,abortSignal:AbortSignal.timeout(interpretationAttemptMs(interpretationStartedAt,performance.now(),Boolean(correction))),providerOptions:{openai:{store:false,safetyIdentifier:options.safetyIdentifier,reasoningEffort:"low",textVerbosity:"low"}},
     system:analysisInterpreterPrompt({today,timeZone,debtMethod:settings?.payment_method??"snowball",correction}),prompt:JSON.stringify({question,conversation,availableRecordNames:catalog})});
@@ -129,11 +167,17 @@ export async function runFinancialAnalysis(options:{runtime:FloToolRuntime;quest
   },today);
   if(plan.legacy) return null;
   if(!plan.requests.length) throw new Error("structured_output_invalid");
+  if(settingsUnavailable && plan.requests.some(request=>requiresAnalysisSettings(request,question)))return recordAnalysis(runtime,[{text:"I can check recorded balances, but I need your household timezone and planning settings before calculating this dated plan. Please retry that check.",facts:{},sources:[],assumptions:[],missing:["Household planning settings could not be verified for the requested dated calculation"],scenario:false}],null,usage);
   const requestedSources=[...new Set(plan.requests.flatMap(analysisSourceDependencies))];
   const snapshot=await loadAnalysisSnapshot(runtime.client,runtime.householdId,runtime.now,requestedSources);
   const results:AnalysisResult[]=[];
   for(const request of plan.requests) {
-    try { results.push(requestedDebtCoverage(question,calculateFinancialAnalysis(snapshot,request,question))); }
+    try {
+      const calculationSnapshot=settingsUnavailable&&request.domain==="debt"&&!requiresAnalysisSettings(request,question)
+        ? {...snapshot,sources:{...snapshot.sources,household_settings:{...snapshot.sources.household_settings,complete:false}}}
+        : snapshot;
+      results.push(requestedDebtCoverage(question,calculateFinancialAnalysis(calculationSnapshot,request,question)));
+    }
     catch { results.push({text:"I could not complete the requested calculation safely. Check the requested dates and the forecast horizon.",facts:{},sources:projectionSources,assumptions:[],missing:["The requested calculation could not be verified"],scenario:Boolean(request.scenario)}); }
   }
   if(plan.requests.some(r=>r.purpose==="bucket_details"||r.domain==="review"||(r.purpose!=="account_inventory"&&projectionDomains.has(r.domain)&&!["bills","subscriptions","income"].includes(r.domain))||r.scenario)) {
@@ -145,7 +189,7 @@ export async function runFinancialAnalysis(options:{runtime:FloToolRuntime;quest
   // Explanation is optional and shares the existing answer deadline. The
   // calculator's complete answer survives slow or malformed model synthesis.
   const explanationBudget=Math.min(5000,26000-(performance.now()-analysisStartedAt));
-  const explanation=!directPlan&&explanationBudget>=1500?await explainFinancialAnalysis({question,conversation,results,apiKey:options.apiKey,modelId:options.modelId,safetyIdentifier:options.safetyIdentifier,timeoutMs:explanationBudget}):null;
+  const explanation=wantsAnalysisDetails(question)&&!directPlan&&explanationBudget>=1500?await explainFinancialAnalysis({question,conversation,results,apiKey:options.apiKey,modelId:options.modelId,safetyIdentifier:options.safetyIdentifier,timeoutMs:explanationBudget}):null;
   if(explanation){usage.inputTokens+=explanation.usage.inputTokens;usage.outputTokens+=explanation.usage.outputTokens;}
   return recordAnalysis(runtime,results,snapshot,usage,plan.requests.map(r=>r.domain),explanation,plan.requests,question);
 }
@@ -165,11 +209,7 @@ async function recordAnalysis(runtime:FloToolRuntime,results:AnalysisResult[],sn
     await runtime.onToolResult?.("analyzeFinances",payload,{domainCount:results.length});
     sources.push(evidence);payloads.push(payload);
   }
-  const missing=[...new Set(results.flatMap(r=>r.missing))];
-  const assumptions=[...new Set(results.flatMap(r=>r.assumptions))];
-  const text=distinctAnalysisParagraphs([...results.map(r=>r.text),...(missing.length?[`What I could not verify: ${missing.join("; ")}.`]:[]),...(assumptions.length?[`Assumptions: ${assumptions.join(" ")}`]:[]),...(explanation?.explanation?[explanation.explanation]:[])]).join("\n\n");
-  // The model's output never enters this answer. Only calculator-owned text and
-  // bounded record labels are rendered; tool receipts retain all numeric facts.
-  const answer:FloGroundedAnswer={answer:text,claims:[],caveat:missing.length?missing.join("; "):null,evidenceIds:sources.map(s=>s.id),followups:[...new Set([...analysisTypedFollowups(results,scopes,question),...(explanation?.followups??[])])].slice(0,3)};
+  const presentation=presentFinancialAnalysis(results,scopes,question);
+  const answer:FloGroundedAnswer={answer:presentation.answer,claims:[],caveat:presentation.caveat,evidenceIds:sources.map(s=>s.id),followups:[...new Set([...analysisTypedFollowups(results,scopes,question),...(explanation?.followups??[])])].slice(0,3)};
   return {answer,sources,aggregate:aggregateCoverage(payloads),usage};
 }

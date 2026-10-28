@@ -13,17 +13,17 @@ test("v4 endpoint selection is exclusively controlled by exact admin authority",
 test("Flo client maps v4 to its isolated endpoint and closed request body", () => {
   const source = readFileSync(path.resolve(__dirname, "../lib/floChat.ts"), "utf8");
   assert.match(source, /engine === "v4" \? "flo-chat-v4" : "flo-chat"/);
-  assert.match(source, /if \(engine === "v4"\) return \{\s*version: 4,\s*householdId: input\.householdId,\s*question: input\.text,\s*timezone: input\.timezone,\s*\.\.\.\(input\.conversationContext \? \{ conversationContext: input\.conversationContext \} : \{\}\),\s*\}/s);
+  assert.match(source, /if \(engine === "v4"\) return \{\s*version: 4,\s*householdId: input\.householdId,\s*question: input\.text,\s*commandId: input\.userMessageId,\s*\.\.\.\(input\.creationDraft \? \{ creationDraft: input\.creationDraft \} : \{\}\),\s*timezone: input\.timezone,\s*\.\.\.\(input\.conversationContext \? \{ conversationContext: input\.conversationContext \} : \{\}\),\s*\}/s);
   assert.match(source, /let ephemeralCleaned = engine === "v4" \|\|/);
 });
 
 test("Flo preview UI is visibly history-off and suppresses proposals", () => {
   const source = readFileSync(path.resolve(__dirname, "../app/(tabs)/flo.tsx"), "utf8");
-  assert.match(source, /Read only · Chat not saved/);
+  assert.match(source, /Chat not saved/);
   assert.match(source, /engine: floV4Preview \? "v4" : "v3"/);
   assert.match(source, /historyEnabled = !floV4Preview/);
   assert.match(source, /proposal=\{floV4Preview \? null/);
-  assert.match(source, /!floV4Preview \? \(isDesktop \?/);
+  assert.match(source, /!floV4Preview \? <FloConversationBar[^>]*compact/);
 });
 
 test("activation has no public environment flag that can drift from server authority", () => {

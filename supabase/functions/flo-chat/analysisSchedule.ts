@@ -12,6 +12,17 @@ const exact = (name: unknown, query: string | null) => !query || String(name ?? 
 const dateOf = (month: string, day: number) => `${month.slice(0,7)}-${String(day).padStart(2,"0")}`;
 const unavailable = (sources: string[], missing: string[]): AnalysisResult => ({text:"I cannot reliably resolve that schedule from the available records.", facts:{}, sources, assumptions:[], missing:[...new Set(missing)], scenario:false});
 
+/** A saved source list does not require historical deposits, a checking
+ * anchor or a payment in the current month. Amounts are not inferred here. */
+export function incomeSourceInventoryAnalysis(snapshot: AnalysisSnapshot): AnalysisResult {
+  const sources=["incomes"],missing=requireSources(snapshot,sources);
+  if(missing.length)return {text:"I could not check your saved income sources. Please try again.",facts:{},sources,assumptions:[],missing,scenario:false};
+  const rows=snapshot.sources.incomes.rows;
+  const names=rows.filter(row=>typeof row.name==="string"&&row.name.trim()).map(row=>label(row.name));
+  if(names.length!==rows.length)missing.push("Some saved income sources have an unavailable name");
+  return {text:names.length?`Your recorded income sources: ${names.join("; ")}.${missing.length?" Some source names could not be checked.":""}`:rows.length?"The saved income-source names are unavailable; check those records before relying on this list.":"No income sources are recorded in the checked income list.",facts:{incomeSourceCount:rows.length,incomeSourceNames:names.join("; ")},sources,assumptions:["Lists saved income schedules, including sources whose first payday is in a later month. It does not establish deposits received or cash available."],missing,scenario:false};
+}
+
 /** Schedule-only reads deliberately never request a balance, APR, goals or a cash-flow forecast. */
 export function scheduleAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequest): AnalysisResult {
   const incomeQuestion = request.domain === "income";

@@ -1,3 +1,4 @@
+import { runFloCreation } from "./floCreation.ts";
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2.108.0";
 import { createOpenAI, type OpenAILanguageModelResponsesOptions } from "npm:@ai-sdk/openai@4.0.37";
@@ -392,6 +393,7 @@ async function handleV3(
       controller.enqueue(sse("sources", { sources: existingAssistant.source_refs ?? [] }));
       controller.enqueue(sse("followups", { items: existingAssistant.followups ?? [] }));
       controller.enqueue(sse("proposal", { proposal: existingAssistant.proposal ?? null }));
+      controller.enqueue(sse("creation", { creation: existingAssistant.answer?.creation ?? null }));
       controller.enqueue(sse("done", { messageId: assistantMessageId, text: existingAssistant.content, answer: existingAssistant.answer ?? null }));
       controller.close();
     }});
@@ -484,18 +486,27 @@ async function handleV3(
         emitEvent("meta", { version: 3, conversationId, assistantMessageId, model: modelId, asOf: now, enforcementEnabled });
         emitProgress("Checking your FlowLedger records");
 
+        const creationResponse = forbiddenRequest.test(message) ? null : await runFloCreation({
+          client, userId, householdId, commandId: userMessageId, message, draft: body.creationDraft,
+          apiKey: Deno.env.get("OPENAI_API_KEY"), modelId, now, timezone: body.timezone, allowRecurringBillChange: true,
+        });
         const capabilityGuidance = floCapabilityGuidance(message);
         const existingRoute = deterministicFloRoute(message, now.slice(0, 10));
         const preserveVerifiedShortcut = existingRoute?.intent === "debt_snowball_target" || existingRoute?.intent === "named_debt_payment";
         const appNavigationQuestion = isAppNavigationQuestion(message);
         const analysisApiKey = Deno.env.get("OPENAI_API_KEY");
-        const financialAnalysis = !forbiddenRequest.test(message) && !preserveVerifiedShortcut && !appNavigationQuestion && analysisApiKey
+        const financialAnalysis = !creationResponse && !capabilityGuidance && !forbiddenRequest.test(message) && !preserveVerifiedShortcut && !appNavigationQuestion && analysisApiKey
           ? await withinHardDeadline(runFinancialAnalysis({ runtime: toolRuntime, question: message, apiKey: analysisApiKey, modelId, conversationId:conversationId!,historyEnabled,userMessageId,transientContext:historyEnabled?undefined:body.conversationContext, safetyIdentifier: await stableSafetyIdentifier(userId, Deno.env.get("FLO_SAFETY_IDENTIFIER_SECRET")!) }), hardAnswerDeadlineMs)
           : null;
         if (forbiddenRequest.test(message)) {
           answer = { answer: securityRefusal, claims: [{ kind: "status", label: "Flo access", field: "status", value: "restricted", evidenceIds: ["policy:account-only"] }], caveat: null, evidenceIds: ["policy:account-only"], followups: ["Ask me about your active household plan."] };
           sources = [{ id: "policy:account-only", type: "household", label: "Flo privacy boundary", asOf: now, freshness: "current" }];
           aggregate = { partial: false, dataAsOf: now, coverage: { complete: true, tools: 0, partialTools: 0, exclusions: [], reasons: [], dateRanges: [] } };
+        } else if (creationResponse) {
+          answer = creationResponse.answer;
+          sources = creationResponse.sources;
+          aggregate = creationResponse.aggregate;
+          deterministicIntent = "creation_capability";
         } else if (financialAnalysis) {
           answer = financialAnalysis.answer;
           sources = financialAnalysis.sources;
@@ -614,6 +625,7 @@ async function handleV3(
         emitEvent("sources", { sources });
         emitEvent("followups", { items: answer.followups });
         emitEvent("proposal", { proposal });
+        emitEvent("creation", { creation: creationResponse?.creation ?? null });
         emitEvent("done", { messageId: assistantMessageId, text: answer.answer, answer: answerEnvelope });
         if (ephemeral) emitEvent("ephemeral-cleanup", { status: "completed" });
       } catch (error) {

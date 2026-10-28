@@ -288,5 +288,8 @@
     ,"lib/startupDebtSyncMigration.test.ts"
     ,"lib/supabaseRuntimeConfig.ts"
     ,"lib/supabaseRuntimeConfig.test.ts"
+    ,"lib/floAnswerUi.test.ts"
+    ,"lib/floCreationUi.test.ts"
+    ,"lib/floCreationProtocol.test.ts"
   ]
 }

@@ -1,6 +1,5 @@
 import Feather from "@expo/vector-icons/Feather";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
@@ -21,7 +20,10 @@ import { useAuth } from "@/context/AuthContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useBudget } from "@/context/BudgetContext";
 import { BasicFlo } from "@/components/BasicFlo";
-import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
+import { FloCreationCard } from "@/components/FloCreationCard";
+import { FloSafetyStopModal } from "@/components/FloSafetyStopModal";
+import { buildBucketSafetyStop, type SafetyStopWarning } from "@/lib/safetyStop";
+import { commitFloCreation, readFloCreationReceipt, parseFloCreationResult, type FloCreationResult, type FloCreationDraft } from "@/lib/floCreation";
 import { FloConversationBar } from "@/components/FloConversationBar";
 import { FloGroundedAnswer } from "@/components/FloGroundedAnswer";
 import { FloLogo } from "@/components/FloLogo";
@@ -51,10 +53,10 @@ import {
   streamFloChat,
   updateFloHouseholdMemory,
   type FloConversation,
+  type FloStoredMessage,
   type FloSource,
 } from "@/lib/floChat";
 import {
-  buildFloCategoryQuickPrompts,
   reduceFloChat,
   type FloChatState,
 } from "@/lib/floPolicy";
@@ -72,16 +74,6 @@ import { localDateString } from "@/lib/dateLabels";
 import { buildPaydayReviewPlan } from "@/lib/paydayReview";
 import { buildAlgorithmSuite } from "@/lib/algorithmSuite";
 import { calendarVisibleForecastEvents, groupForecastEvents } from "@/lib/forecastDisplay";
-import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
-import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
-
-const sampleQuestions = [
-  "Ask Flo anything…",
-  "Which bills are due next?",
-  "Which records did you use?",
-  "What account data can I improve?",
-  "How do I add income?",
-];
 
 const initialChat: FloChatState = { messages: [], sending: false };
 const storeCaptureChat: FloChatState = {
@@ -105,6 +97,18 @@ function moneyValue(value: unknown): string {
   return Number.isFinite(amount) ? amount.toLocaleString(undefined, { style: "currency", currency: "USD" }) : "Unavailable";
 }
 
+/** History can check an existing command, but it never executes one. */
+async function readHistoryCreationReceipts(messages: FloStoredMessage[], householdId: string, budgetId: string | null | undefined): Promise<Record<string, FloCreationResult>> {
+  if (!budgetId) return {};
+  const rows = await Promise.all(messages.filter(message => message.role === "flo" && message.creation && (message.creation.status === "ready" || message.creation.status === "saved")).map(async message => {
+    const commandId = message.creation?.commandId ?? message.creation?.receipt?.commandId;
+    if (!commandId) return null;
+    const saved = await readFloCreationReceipt(commandId, householdId, budgetId).catch(() => null);
+    return saved?.status === "saved" ? [message.id, saved] as const : null;
+  }));
+  return Object.fromEntries(rows.filter((row): row is readonly [string, FloCreationResult] => row !== null));
+}
+
 export default function FloScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -113,7 +117,7 @@ export default function FloScreen() {
   const isDesktop = useDesktopExperience();
   const { user } = useAuth();
   const { isFeatureLocked, previewTier, isAdmin } = useMembership();
-  const { activeHousehold, bills, billDateMoves, transactions, decisions, settings, forecastConfidence, retryBudgetLoad, getDailyBalances, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getDebtMonthSettlements, getIncomeOccurrencesInMonth, getPaidAmount, getTransactionsForMonth, categories, incomes, goals, demoMode } = useBudget();
+  const { activeHousehold, bills, billDateMoves, transactions, decisions, settings, forecastConfidence, retryBudgetLoad, getDailyBalances, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getDebtMonthSettlements, getIncomeOccurrencesInMonth, getPaidAmount, getTransactionsForMonth, categories, incomes, goals, demoMode, canEditHousehold, previewTransactionSafetyStop } = useBudget();
   const categoryBudgetScope = useMemo(() => ({
     userId: user?.id,
     householdId: activeHousehold?.householdId,
@@ -127,7 +131,6 @@ export default function FloScreen() {
   const [chat, dispatch] = useReducer(reduceFloChat, demoMode ? storeCaptureChat : initialChat);
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
   const decisionHubSettings = DEFAULT_DECISION_HUB_SETTINGS;
-  const [onboardingPreferences, setOnboardingPreferences] = useState(() => readOnboardingPreferences());
   const [input, setInput] = useState("");
   const [conversations, setConversations] = useState<FloConversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
@@ -135,6 +138,12 @@ export default function FloScreen() {
   const [sourcesByMessageId, setSourcesByMessageId] = useState<Record<string, FloSource[]>>({});
   const [followUpsByMessageId, setFollowUpsByMessageId] = useState<Record<string, string[]>>({});
   const [proposalByMessageId, setProposalByMessageId] = useState<Record<string, FloReviewProposal | null>>({});
+  const [creationSaving, setCreationSaving] = useState(false);
+  const [creationByMessageId, setCreationByMessageId] = useState<Record<string, FloCreationResult>>({});
+  const retryCreationRef = useRef<{ owner: string; creation: FloCreationResult; expectedBudgetId: string; text: string; userMessageId: string; assistantMessageId: string } | null>(null);
+  const activeCreationDraftRef = useRef<{ scope: string; draft: FloCreationDraft } | null>(null);
+  const creationOperationRef = useRef<{ commandId: string; generation: number; scope: string; submitted: boolean; settled: boolean; saved?: FloCreationResult } | null>(null);
+  const [creationSafety, setCreationSafety] = useState<{ warning: SafetyStopWarning; proceed: () => void; cancel: () => void } | null>(null);
   const [confirmedProposalIds, setConfirmedProposalIds] = useState<Set<string>>(new Set());
   const [groundingByMessageId, setGroundingByMessageId] = useState<Record<string, { dataAsOf?: string | null; coverage?: string; partial?: boolean; caveat?: string }>>(
     demoMode
@@ -155,17 +164,30 @@ export default function FloScreen() {
   const [aiConsentAccepted, setAiConsentAccepted] = useState(false);
   const [aiConsentReady, setAiConsentReady] = useState(false);
   const [aiConsentPrompt, setAiConsentPrompt] = useState<string | null>(null);
-  const [sampleIndex, setSampleIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   const handledPromptRef = useRef<string | null>(null);
+  const consumedRoutePromptsRef = useRef(new Set<string>());
+  const inputRef = useRef<TextInput>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
   const skipConversationLoadRef = useRef<string | null>(null);
-  const retryRequestRef = useRef<{ text: string; userMessageId: string; assistantMessageId: string; conversationId: string | null } | null>(null);
+  const retryRequestRef = useRef<{ text: string; userMessageId: string; assistantMessageId: string; conversationId: string | null; creationDraft?: FloCreationDraft; creationOwner?: string } | null>(null);
   const requestGenerationRef = useRef(0);
   const activeRequestRef = useRef<number | null>(null);
   const historyMutationRef = useRef(false);
   const preferenceEditGenerationRef = useRef(0);
   const floDataScopeKey = `${user?.id ?? "anonymous"}:${activeHousehold?.householdId ?? "none"}`;
+  const creationOwnerScopeKey = `${floDataScopeKey}:${activeHousehold?.budgetId ?? "none"}:${activeHousehold?.role ?? "none"}:${demoMode ? "demo" : "real"}:${canEditHousehold ? "edit" : "read"}`;
+  const creationOwnerEpochRef = useRef({ scope: creationOwnerScopeKey, epoch: 0 });
+  if (creationOwnerEpochRef.current.scope !== creationOwnerScopeKey) {
+    creationOwnerEpochRef.current = { scope: creationOwnerScopeKey, epoch: creationOwnerEpochRef.current.epoch + 1 };
+    // Invalidate callbacks synchronously, including A→B→A before effects settle.
+    requestGenerationRef.current = nextFloRequestGeneration(requestGenerationRef.current);
+    activeRequestRef.current = null;
+  }
+  const creationOwnerKey = `${creationOwnerScopeKey}:${creationOwnerEpochRef.current.epoch}`;
+  const creationOwnerKeyRef = useRef(creationOwnerKey);
+  creationOwnerKeyRef.current = creationOwnerKey;
+  const creationResetOwnerRef = useRef(creationOwnerKey);
   const preferencesReady = floPreferencesReadyForScope(preferencesScopeKey, floDataScopeKey);
   const preferencesControlsReady = preferencesReady && floPreferencesReadyForScope(memoryScopeKey, floDataScopeKey);
   const floDataScopeKeyRef = useRef(floDataScopeKey);
@@ -174,11 +196,20 @@ export default function FloScreen() {
   const volatileLeaseRef = useRef<FloVolatileLease | null>(null);
   const [volatileRenderOwner, setVolatileRenderOwner] = useState<number | null>(null);
   const volatileLatestRef = useRef<{ owner: number | null; snapshot: FloVolatileSnapshot }>({ owner: null, snapshot: { messages: [], sources: {}, followups: {}, grounding: {} } });
-  volatileLatestRef.current = { owner: volatileRenderOwner, snapshot: { messages: chat.messages, handledPromptKey: handledPromptRef.current, sources: sourcesByMessageId, followups: followUpsByMessageId, grounding: groundingByMessageId } };
+  volatileLatestRef.current = { owner: volatileRenderOwner, snapshot: { messages: chat.messages, handledPromptKey: handledPromptRef.current, creations: creationByMessageId, sources: sourcesByMessageId, followups: followUpsByMessageId, grounding: groundingByMessageId } };
   const activeConversationIdRef = useRef(activeConversationId);
   activeConversationIdRef.current = activeConversationId;
   const now = useMemo(() => new Date(), []);
   const today = localDateString(now);
+
+  useEffect(() => {
+    if (creationResetOwnerRef.current === creationOwnerKey) return;
+    creationResetOwnerRef.current = creationOwnerKey;
+    streamAbortRef.current?.abort(); streamAbortRef.current = null;
+    dispatch({ type: "stop" });
+    activeCreationDraftRef.current = null; retryCreationRef.current = null; retryRequestRef.current = null; creationOperationRef.current = null;
+    setCreationSafety(null); setCreationSaving(false); setCreationByMessageId({});
+  }, [creationOwnerKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -208,6 +239,12 @@ export default function FloScreen() {
     streamAbortRef.current = null;
     activeRequestRef.current = null;
     setChatScopeKey(floDataScopeKey);
+    activeCreationDraftRef.current = null;
+    retryCreationRef.current = null;
+    creationOperationRef.current = null;
+    setCreationByMessageId({});
+    setCreationSafety(null);
+    setCreationSaving(false);
     const claimed = floV4Preview && !demoMode ? volatileStore.claim(volatileSession.scope) : null;
     volatileLeaseRef.current = claimed?.lease ?? null;
     setVolatileRenderOwner(claimed?.lease.owner ?? null);
@@ -231,6 +268,7 @@ export default function FloScreen() {
     setActiveConversationId(null);
     setLastPrompt("");
     dispatch({ type: "hydrate", messages: demoMode ? storeCaptureChat.messages : restored?.messages ?? [] });
+    setCreationByMessageId(restored?.creations ?? {});
     setSourcesByMessageId(restored?.sources ?? {});
     setFollowUpsByMessageId(restored?.followups ?? {});
     setProposalByMessageId({});
@@ -263,11 +301,18 @@ export default function FloScreen() {
     streamAbortRef.current = null;
     activeRequestRef.current = null;
     retryRequestRef.current = null;
+    activeCreationDraftRef.current = null;
+    retryCreationRef.current = null;
+    creationOperationRef.current = null;
+    setCreationByMessageId({});
+    setCreationSafety(null);
+    setCreationSaving(false);
     volatileLeaseRef.current = claimed.lease;
     setVolatileRenderOwner(claimed.lease.owner);
     setChatScopeKey(floDataScopeKey);
     if (claimed.snapshot?.handledPromptKey) handledPromptRef.current = claimed.snapshot.handledPromptKey;
     dispatch({ type: "hydrate", messages: claimed.snapshot?.messages ?? [] });
+    setCreationByMessageId(claimed.snapshot?.creations ?? {});
     setSourcesByMessageId(claimed.snapshot?.sources ?? {});
     setFollowUpsByMessageId(claimed.snapshot?.followups ?? {});
     setGroundingByMessageId(claimed.snapshot?.grounding ?? {});
@@ -281,7 +326,7 @@ export default function FloScreen() {
   useEffect(() => {
     const lease = volatileLeaseRef.current;
     if (floV4Preview && chatScopeKey === floDataScopeKey && lease && volatileRenderOwner === lease.owner) volatileStore.save(lease,volatileLatestRef.current.snapshot);
-  }, [chat.messages, sourcesByMessageId, followUpsByMessageId, groundingByMessageId, chatScopeKey, floDataScopeKey, floV4Preview, volatileRenderOwner, volatileStore]);
+  }, [chat.messages, creationByMessageId, sourcesByMessageId, followUpsByMessageId, groundingByMessageId, chatScopeKey, floDataScopeKey, floV4Preview, volatileRenderOwner, volatileStore]);
 
   useEffect(() => {
     let cancelled = false;
@@ -317,10 +362,14 @@ export default function FloScreen() {
     let cancelled = false;
     const requestGeneration = requestGenerationRef.current;
     const requestScopeKey = floDataScopeKey;
+    const requestCreationOwner = creationOwnerKey;
+    const requestBudget = activeHousehold?.budgetId;
+    const requestHousehold = activeHousehold?.householdId;
     const requestIsCurrent = () => (
       !cancelled
       && requestGeneration === requestGenerationRef.current
       && requestScopeKey === floDataScopeKeyRef.current
+      && requestCreationOwner === creationOwnerKeyRef.current
     );
     if (floV4Preview || !activeConversationId || floAccessLocked) return () => { cancelled = true; };
     if (skipConversationLoadRef.current === activeConversationId) {
@@ -329,7 +378,16 @@ export default function FloScreen() {
     }
     void listFloMessages(activeConversationId).then(page => {
       if (!requestIsCurrent()) return;
-      dispatch({ type: "hydrate", messages: page.messages.map((message, index) => ({ id: message.id, role: message.role, text: message.text, contextEligible: message.status === "completed" && (message.role === "flo" || page.messages[index + 1]?.role === "flo" && page.messages[index + 1]?.status === "completed") })) });
+      dispatch({ type: "hydrate", messages: page.messages.map((message, index) => ({ id: message.id, role: message.role, text: message.creation?.status === "ready" ? "Checking this request’s saved status…" : message.text, contextEligible: message.creation?.status !== "ready" && message.status === "completed" && (message.role === "flo" || page.messages[index + 1]?.role === "flo" && page.messages[index + 1]?.status === "completed") })) });
+      if (requestHousehold && !demoMode) void readHistoryCreationReceipts(page.messages, requestHousehold, requestBudget).then(saved => {
+        if (!requestIsCurrent()) return;
+        setCreationByMessageId(saved);
+        for (const message of page.messages) {
+          const receipt = saved[message.id];
+          if (receipt) { dispatch({ type: "replace", id: message.id, text: receipt.prompt }); dispatch({ type: "complete", id: message.id, userId: receipt.receipt!.commandId }); }
+          else if (message.creation?.status === "ready") dispatch({ type: "replace", id: message.id, text: "This earlier save is not confirmed. Check your records before adding it again." });
+        }
+      });
       setSourcesByMessageId(Object.fromEntries(page.messages.filter(message => message.sources.length).map(message => [message.id, message.sources])));
       setFollowUpsByMessageId(Object.fromEntries(page.messages.filter(message => message.followUps.length).map(message => [message.id, message.followUps])));
       void Promise.all(page.messages.filter(message => message.proposal?.kind === "recurring_bill_change").map(async message => {
@@ -342,27 +400,13 @@ export default function FloScreen() {
       if (requestIsCurrent()) setChatError("This private chat could not be loaded.");
     });
     return () => { cancelled = true; };
-  }, [activeConversationId, floDataScopeKey, floAccessLocked, floV4Preview]);
+  }, [activeConversationId, floDataScopeKey, floAccessLocked, floV4Preview, creationOwnerKey, activeHousehold?.budgetId, activeHousehold?.householdId, demoMode]);
 
-  useEffect(() => {
-    let cancelled = false;
-    void loadOnboardingPreferences(user?.id).then(next => {
-      if (!cancelled) setOnboardingPreferences(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id]);
 
   useEffect(() => {
     const timer = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
     return () => clearTimeout(timer);
   }, [chat.messages.length, chat.sending]);
-
-  useEffect(() => {
-    const timer = setInterval(() => setSampleIndex(index => (index + 1) % sampleQuestions.length), 2400);
-    return () => clearInterval(timer);
-  }, []);
 
   const baseline = useMemo(() => {
     const output: { date: string; balance: number }[] = [];
@@ -748,30 +792,38 @@ export default function FloScreen() {
     };
   }, [baseline, today, settings.safety_floor, getCashFlow, getDailyBalances, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getDebtMonthSettlements, getPaidAmount, getTransactionsForMonth, transactions, upcoming, decisions, forecastConfidence, categoryPlan, paycheckPlan, billDateMoves, bills, decisionHistory, decisionRiskAlerts, now, incomes, goals, decisionHubSettings]);
 
-  const setupPersonalization = useMemo(
-    () => buildSetupPersonalization(onboardingPreferences),
-    [onboardingPreferences],
-  );
-  const hasSetupAnswers = onboardingPreferences.help.length > 0 || onboardingPreferences.goals.length > 0 || Boolean(onboardingPreferences.savingsGoal);
-
   const quickPrompts = useMemo(() => {
-    if (demoMode) return ["What's safe to spend?", "What bills are next?"];
-    const categoryPrompts = buildFloCategoryQuickPrompts(categoryPlan);
-    const planningPrompts = ["Which bills are due next?", "What account data can I improve?"];
+    const entity = Array.isArray(params.entityType) ? params.entityType[0] : params.entityType;
+    const contextual = entity === "transactions" ? ["What should I review in my recent activity?"]
+      : entity === "bills" ? ["Which bills are due next?"]
+      : entity === "goals" ? ["How are my spending buckets doing?"]
+      : entity === "accounts" || entity === "account" ? ["What are my recorded account balances?"]
+      : entity === "forecast" ? ["What does my forecast look like?"] : [];
     return Array.from(new Set([
-      ...(hasSetupAnswers ? setupPersonalization.quickPrompts : []),
-      ...(decisionHistory.due.length ? ["Which decisions need review?"] : []),
-      ...(decisionRiskAlerts.length ? ["Are any planned decisions no longer safe?"] : []),
-      ...(decisionHistory.upcoming.length ? ["Which planned decisions are coming up?"] : []),
-      ...planningPrompts,
-      ...categoryPrompts,
+      ...contextual,
       "Which bills are due next?",
-      "Which records did you use?",
-    ])).slice(0, 2);
-  }, [categoryPlan, decisionHistory, decisionRiskAlerts, demoMode, hasSetupAnswers, setupPersonalization]);
+      "What are my recorded account balances?",
+      "How is my debt payoff going?",
+      "How do I add a spending bucket?",
+    ])).slice(0, 4);
+  }, [params.entityType]);
+
+  const cancelCreationDraft = (messageId: string) => {
+    const draft = activeCreationDraftRef.current;
+    const operation = creationOperationRef.current;
+    if (activeRequestRef.current !== null || (operation?.submitted && !operation.settled) || !draft || draft.scope !== creationOwnerKeyRef.current || draft.draft !== creationByMessageId[messageId]?.draft) return;
+    activeCreationDraftRef.current = null;
+    setCreationByMessageId(previous => { const next = { ...previous }; delete next[messageId]; return next; });
+  };
 
   const startNewConversation = () => {
-    if (historyMutationRef.current) return;
+    if (historyMutationRef.current || (creationOperationRef.current?.scope === creationOwnerKeyRef.current && creationOperationRef.current.submitted && !creationOperationRef.current.settled)) return;
+    activeCreationDraftRef.current = null;
+    retryCreationRef.current = null;
+    creationOperationRef.current = null;
+    setCreationByMessageId({});
+    setCreationSafety(null);
+    setCreationSaving(false);
     requestGenerationRef.current = nextFloRequestGeneration(requestGenerationRef.current);
     streamAbortRef.current?.abort();
     streamAbortRef.current = null;
@@ -798,7 +850,13 @@ export default function FloScreen() {
   };
 
   const selectConversation = (conversationId: string) => {
-    if (activeRequestRef.current !== null || historyMutationRef.current) return;
+    if (activeRequestRef.current !== null || historyMutationRef.current || (creationOperationRef.current?.scope === creationOwnerKeyRef.current && creationOperationRef.current.submitted && !creationOperationRef.current.settled)) return;
+    activeCreationDraftRef.current = null;
+    retryCreationRef.current = null;
+    creationOperationRef.current = null;
+    setCreationByMessageId({});
+    setCreationSafety(null);
+    setCreationSaving(false);
     requestGenerationRef.current = nextFloRequestGeneration(requestGenerationRef.current);
     streamAbortRef.current?.abort();
     streamAbortRef.current = null;
@@ -936,15 +994,28 @@ export default function FloScreen() {
     const requestCursor = olderMessageCursor;
     const requestGeneration = requestGenerationRef.current;
     const requestScopeKey = floDataScopeKey;
+    const requestCreationOwner = creationOwnerKey;
+    const requestBudget = activeHousehold?.budgetId;
+    const requestHousehold = activeHousehold?.householdId;
     const requestIsCurrent = () => (
       requestGeneration === requestGenerationRef.current
       && requestScopeKey === floDataScopeKeyRef.current
       && requestConversationId === activeConversationIdRef.current
+      && requestCreationOwner === creationOwnerKeyRef.current
     );
     try {
       const page = await listFloMessages(requestConversationId, requestCursor);
       if (!requestIsCurrent()) return;
-      dispatch({ type: "prepend", messages: page.messages.map((message, index) => ({ id: message.id, role: message.role, text: message.text, contextEligible: message.status === "completed" && (message.role === "flo" || page.messages[index + 1]?.role === "flo" && page.messages[index + 1]?.status === "completed") })) });
+      dispatch({ type: "prepend", messages: page.messages.map((message, index) => ({ id: message.id, role: message.role, text: message.creation?.status === "ready" ? "Checking this request’s saved status…" : message.text, contextEligible: message.creation?.status !== "ready" && message.status === "completed" && (message.role === "flo" || page.messages[index + 1]?.role === "flo" && page.messages[index + 1]?.status === "completed") })) });
+      if (requestHousehold && !demoMode) void readHistoryCreationReceipts(page.messages, requestHousehold, requestBudget).then(saved => {
+        if (!requestIsCurrent()) return;
+        setCreationByMessageId(previous => ({ ...previous, ...saved }));
+        for (const message of page.messages) {
+          const receipt = saved[message.id];
+          if (receipt) { dispatch({ type: "replace", id: message.id, text: receipt.prompt }); dispatch({ type: "complete", id: message.id, userId: receipt.receipt!.commandId }); }
+          else if (message.creation?.status === "ready") dispatch({ type: "replace", id: message.id, text: "This earlier save is not confirmed. Check your records before adding it again." });
+        }
+      });
       setSourcesByMessageId(previous => ({ ...previous, ...Object.fromEntries(page.messages.filter(message => message.sources.length).map(message => [message.id, message.sources])) }));
       setFollowUpsByMessageId(previous => ({ ...previous, ...Object.fromEntries(page.messages.filter(message => message.followUps.length).map(message => [message.id, message.followUps])) }));
       setGroundingByMessageId(previous => ({ ...previous, ...Object.fromEntries(page.messages.filter(message => message.dataAsOf || message.partial || message.coverage || message.caveat).map(message => [message.id, { dataAsOf: message.dataAsOf, partial: message.partial, coverage: describeCoverage(message.coverage), caveat: message.caveat }])) }));
@@ -961,25 +1032,35 @@ export default function FloScreen() {
   };
 
   const stopStreaming = () => {
+    const operation = creationOperationRef.current?.scope === creationOwnerKeyRef.current ? creationOperationRef.current : null;
+    const saveSubmitted = operation?.submitted && !operation.settled;
+    const savedCreation = operation?.saved;
+    setCreationSafety(null);
+    setCreationSaving(Boolean(saveSubmitted));
+    activeCreationDraftRef.current = null;
     requestGenerationRef.current = nextFloRequestGeneration(requestGenerationRef.current);
     streamAbortRef.current?.abort();
     streamAbortRef.current = null;
     activeRequestRef.current = null;
     const stoppedId = retryRequestRef.current?.assistantMessageId;
     if (stoppedId) {
-      dispatch({ type: "replace", id: stoppedId, text: "Response stopped before Flo could verify an answer." });
+      dispatch({ type: "replace", id: stoppedId, text: savedCreation?.prompt ?? (saveSubmitted ? "Response stopped. Your requested save may still finish. Retry the same question to check its status." : "Response stopped before Flo could verify an answer.") });
+      setCreationByMessageId(previous => { const next = { ...previous }; if (savedCreation) next[stoppedId] = savedCreation; else delete next[stoppedId]; return next; });
       setSourcesByMessageId(previous => ({ ...previous, [stoppedId]: [] }));
       setFollowUpsByMessageId(previous => ({ ...previous, [stoppedId]: [] }));
       setProposalByMessageId(previous => ({ ...previous, [stoppedId]: null }));
-      setGroundingByMessageId(previous => ({ ...previous, [stoppedId]: { partial: true, coverage: "No verified account data" } }));
+      setGroundingByMessageId(previous => ({ ...previous, [stoppedId]: savedCreation ? {} : { partial: true, coverage: "No verified account data" } }));
     }
     dispatch({ type: "stop" });
     setRetryAllowed(true);
-    setChatError("Response stopped. You can retry the last question.");
+    setChatError(savedCreation ? null : saveSubmitted ? "The save may still be processing. Retry to check the same request." : "Response stopped. You can retry the last question.");
   };
 
   const send = async (text = input, retry = false, consentOverride = false) => {
     const clean = text.trim();
+    const recovery = retry && retryCreationRef.current?.owner === creationOwnerKey && retryCreationRef.current.text === clean ? retryCreationRef.current : null;
+    const pendingSave = creationOperationRef.current;
+    if (pendingSave?.scope === creationOwnerKey && pendingSave.submitted && !pendingSave.settled && !recovery) return;
     if (!clean || chat.sending || activeRequestRef.current !== null || historyMutationRef.current || floAccessLocked || !user?.id || !activeHousehold?.householdId) return;
     if (!aiConsentReady || !preferencesReady || chatScopeKey !== floDataScopeKey) return;
     if (floV4Preview && !volatileStore.isCurrent(volatileLeaseRef.current)) return;
@@ -987,6 +1068,11 @@ export default function FloScreen() {
       setAiConsentPrompt(clean);
       return;
     }
+    const requestDraft = retry && retryRequestRef.current?.text === clean && retryRequestRef.current.creationOwner === creationOwnerKey ? retryRequestRef.current.creationDraft : undefined;
+    const creationDraft = requestDraft ?? (activeCreationDraftRef.current?.scope === creationOwnerKey ? activeCreationDraftRef.current.draft : undefined);
+    if (!recovery) retryCreationRef.current = null;
+    setCreationSafety(null);
+    creationOperationRef.current = null;
     const requestGeneration = nextFloRequestGeneration(requestGenerationRef.current);
     requestGenerationRef.current = requestGeneration;
     activeRequestRef.current = requestGeneration;
@@ -994,23 +1080,96 @@ export default function FloScreen() {
     const requestHouseholdId = activeHousehold.householdId;
     const requestScopeKey = `${requestUserId}:${requestHouseholdId}`;
     const requestLease = volatileLeaseRef.current;
+    const requestCreationOwnerKey = creationOwnerKey;
+    const requestBudgetId = recovery?.expectedBudgetId ?? activeHousehold.budgetId;
     const requestIsCurrent = () => isFloRequestGenerationCurrent(requestGeneration, requestGenerationRef.current) && requestScopeKey === floDataScopeKeyRef.current && (!floV4Preview || volatileStore.isCurrent(requestLease));
+    const creationIsCurrent = () => requestIsCurrent() && requestCreationOwnerKey === creationOwnerKeyRef.current && !demoMode && canEditHousehold && Boolean(requestBudgetId);
     setInput("");
     setChatError(null);
     setRetryAllowed(true);
     setLastPrompt(clean);
     const priorRequest = retry && retryRequestRef.current?.text === clean ? retryRequestRef.current : null;
-    const userMessageId = priorRequest?.userMessageId ?? createFloId();
-    const assistantMessageId = priorRequest?.assistantMessageId ?? createFloId();
+    const userMessageId = recovery?.userMessageId ?? priorRequest?.userMessageId ?? createFloId();
+    const assistantMessageId = recovery?.assistantMessageId ?? priorRequest?.assistantMessageId ?? createFloId();
     dispatch({ type: "submit", id: userMessageId, assistantId: assistantMessageId, text: clean });
     const historyEnabled = !floV4Preview && floPreferences.historyEnabled;
     let conversationId = floConversationForRequest(historyEnabled, priorRequest?.conversationId ?? activeConversationId);
-    retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId };
+    retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId, creationDraft, creationOwner: requestCreationOwnerKey };
     let reply = "";
     let completedAnswer = false;
+    let creationCommit: Promise<void> | null = null;
+    const creationReply: { current: string | null; saved?: FloCreationResult } = { current: null };
+    const seenCreationCommands = new Set<string>();
+    const handleCreationEvent = (value: FloCreationResult | null) => {
+      const creation = parseFloCreationResult(value);
+      if (!creationIsCurrent() || !requestBudgetId || activeRequestRef.current !== requestGeneration) return;
+      if (!creation) { activeCreationDraftRef.current = null; return; }
+      if (creation.status === "needs_details") {
+        activeCreationDraftRef.current = creation.draft?.householdId === requestHouseholdId ? { scope: requestCreationOwnerKey, draft: creation.draft } : null;
+        setCreationByMessageId(previous => ({ ...previous, [assistantMessageId]: creation }));
+        return;
+      }
+      activeCreationDraftRef.current = null;
+      if (creation.status !== "ready" || creation.commandId !== userMessageId || creation.householdId !== requestHouseholdId || !creation.kind || !creation.payload || seenCreationCommands.has(creation.commandId)) return;
+      seenCreationCommands.add(creation.commandId);
+      retryCreationRef.current = { owner: requestCreationOwnerKey, creation: { ...creation, payload: { ...creation.payload } }, expectedBudgetId: requestBudgetId, text: clean, userMessageId, assistantMessageId };
+      setCreationByMessageId(previous => ({ ...previous, [assistantMessageId]: creation }));
+      const operation = { commandId: creation.commandId, generation: requestGeneration, scope: requestCreationOwnerKey, submitted: false, settled: false, saved: undefined as FloCreationResult | undefined };
+      creationOperationRef.current = operation;
+      const persist = async () => {
+        if (!creationIsCurrent() || creationOperationRef.current !== operation || operation.submitted) return;
+        operation.submitted = true;
+        setCreationSaving(true);
+        setCreationSafety(null);
+        try {
+          const saved = await commitFloCreation(creation, requestBudgetId);
+          if (!creationIsCurrent() || creationOperationRef.current !== operation) return;
+          if (saved.status !== "saved" || saved.receipt?.commandId !== userMessageId || saved.receipt.householdId !== requestHouseholdId) throw new Error("creation_receipt_mismatch");
+          operation.saved = saved;
+          creationReply.saved = saved;
+          creationReply.current = saved.prompt;
+          setCreationByMessageId(previous => ({ ...previous, [assistantMessageId]: saved }));
+          dispatch({ type: "replace", id: assistantMessageId, text: saved.prompt });
+          dispatch({ type: "complete", id: assistantMessageId, userId: userMessageId });
+          retryBudgetLoad();
+        } catch {
+          if (!creationIsCurrent() || creationOperationRef.current !== operation) return;
+          creationReply.current = "I couldn’t verify the save. Retry the same question to check it safely.";
+          dispatch({ type: "replace", id: assistantMessageId, text: creationReply.current });
+          setCreationByMessageId(previous => ({ ...previous, [assistantMessageId]: { status: "unavailable", prompt: creationReply.current!, missingFields: [] } }));
+          setChatError("The save could not be verified. Retry checks the same request.");
+          setRetryAllowed(true);
+        } finally {
+          operation.settled = true;
+          if (requestCreationOwnerKey === creationOwnerKeyRef.current && creationOperationRef.current === operation) setCreationSaving(false);
+        }
+      };
+      const payload = creation.payload;
+      const warning = creation.kind === "create_bucket" ? buildBucketSafetyStop({ name: String(payload.name), amount: Number(payload.target_amount), targetDate: String(payload.target_date), safetyFloor: settings.safety_floor, horizonMonths: settings.forecast_horizon_months, getDailyBalances })
+        : creation.kind === "create_manual_transaction" && payload.direction === "expense" ? previewTransactionSafetyStop({ amount: -Number(payload.amount), date: String(payload.date), category: String(payload.category), note: String(payload.note), source: "manual", account_id: String(payload.account_id) }) : null;
+      if (warning) {
+        setCreationSafety({ warning, proceed: () => { if (creationIsCurrent() && creationOperationRef.current === operation) { creationCommit = persist(); void creationCommit; } }, cancel: () => {
+          if (!creationIsCurrent() || creationOperationRef.current !== operation || operation.submitted) return;
+          creationOperationRef.current = null; retryCreationRef.current = null; activeCreationDraftRef.current = null; setCreationSafety(null);
+          setCreationByMessageId(previous => { const next = { ...previous }; delete next[assistantMessageId]; return next; });
+          creationReply.current = "Nothing was added. Update the details below when you’re ready.";
+          dispatch({ type: "replace", id: assistantMessageId, text: creationReply.current });
+          setInput(clean); inputRef.current?.focus();
+        } });
+      } else creationCommit = persist();
+    };
     const verifiedFallback: { current: FloVerifiedFallback | null } = { current: null };
     const streamFailure: { current: { code: string; message: string } | null } = { current: null };
     try {
+      if (recovery) {
+        // Explicit Retry reuses the exact canonical command, never a reinterpreted fragment.
+        handleCreationEvent(recovery.creation);
+        if (creationCommit) await creationCommit;
+        if (!requestIsCurrent()) return;
+        if (creationReply.current) dispatch({ type: "replace", id: assistantMessageId, text: creationReply.current });
+        dispatch({ type: "stop" });
+        return;
+      }
       if (!conversationId && historyEnabled) {
         const created = await createFloConversation(requestUserId, requestHouseholdId, clean);
         if (!requestIsCurrent()) return;
@@ -1018,7 +1177,7 @@ export default function FloScreen() {
         skipConversationLoadRef.current = created.id;
         setConversations(previous => [created, ...previous]);
         setActiveConversationId(created.id);
-        retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: created.id };
+        retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: created.id, creationDraft, creationOwner: requestCreationOwnerKey };
       }
       const controller = new AbortController();
       streamAbortRef.current = controller;
@@ -1031,6 +1190,7 @@ export default function FloScreen() {
         text: clean,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
         previewTier,
+        creationDraft,
         context: {
           route: Array.isArray(params.sourceRoute) ? params.sourceRoute[0] : params.sourceRoute,
           entityType: Array.isArray(params.entityType) ? params.entityType[0] : params.entityType,
@@ -1043,7 +1203,9 @@ export default function FloScreen() {
         signal: controller.signal,
         onEvent: event => {
           if (!requestIsCurrent()) return;
-          if (event.type === "meta") {
+          if (event.type === "creation") {
+            handleCreationEvent(event.creation);
+          } else if (event.type === "meta") {
             setGroundingByMessageId(previous => ({ ...previous, [assistantMessageId]: { dataAsOf: event.dataAsOf, partial: event.partial, coverage: describeCoverage(event.coverage) } }));
           } else if (event.type === "status") {
             dispatch({ type: "status", id: assistantMessageId, text: event.message });
@@ -1051,7 +1213,7 @@ export default function FloScreen() {
             verifiedFallback.current = event.fallback;
           } else if (event.type === "text-delta") {
             reply += event.delta;
-            dispatch({ type: "stream-delta", id: assistantMessageId, delta: event.delta });
+            if (!creationReply.current) dispatch({ type: "stream-delta", id: assistantMessageId, delta: event.delta });
           } else if (event.type === "sources") {
             setSourcesByMessageId(previous => ({ ...previous, [assistantMessageId]: event.sources }));
           } else if (event.type === "followups") {
@@ -1062,7 +1224,7 @@ export default function FloScreen() {
             streamFailure.current = { code: event.code, message: event.message };
           } else if (event.type === "done") {
             completedAnswer = true;
-            reply = event.answer?.answer ?? event.text ?? reply;
+            reply = creationReply.current ?? event.answer?.answer ?? event.text ?? reply;
             dispatch({ type: "replace", id: assistantMessageId, text: reply });
             if (event.answer) setGroundingByMessageId(previous => ({ ...previous, [assistantMessageId]: {
               ...previous[assistantMessageId],
@@ -1074,14 +1236,21 @@ export default function FloScreen() {
           }
         },
       });
+      if (creationCommit) await creationCommit;
       if (!requestIsCurrent()) return;
       streamAbortRef.current = null;
+      if (creationReply.current) reply = creationReply.current;
       if (streamFailure.current) throw new Error(streamFailure.current.code);
       if (completedAnswer && reply.trim()) dispatch({ type: "complete", id: assistantMessageId, userId: userMessageId });
       dispatch({ type: "stop" });
     } catch (error) {
       if (!requestIsCurrent()) return;
       streamAbortRef.current = null;
+      if (creationReply.saved) {
+        dispatch({ type: "replace", id: assistantMessageId, text: creationReply.saved.prompt });
+        dispatch({ type: "complete", id: assistantMessageId, userId: userMessageId });
+        dispatch({ type: "stop" }); setChatError(null); return;
+      }
       const stopped = error instanceof Error && error.name === "AbortError";
       const cleanupFailed = error instanceof Error && error.message.includes("ephemeral_cleanup_failed");
       const failure = floFailureDisplay(streamFailure.current?.code ?? (error instanceof Error ? error.message : null));
@@ -1094,7 +1263,7 @@ export default function FloScreen() {
       ? { "store-capture-answer": { dataAsOf: "2026-08-25T01:30:00-05:00", coverage: "Complete for this question" } }
       : {});
         setChatError("Flo couldn't clear this no-history chat. Local content was cleared; please try again.");
-        retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: null };
+        retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: null, creationDraft, creationOwner: requestCreationOwnerKey };
         return;
       }
       const recovery = verifiedFallback.current;
@@ -1129,7 +1298,7 @@ export default function FloScreen() {
       if (activeRequestRef.current === requestGeneration) activeRequestRef.current = null;
     }
     if (!requestIsCurrent()) return;
-    if (!historyEnabled) retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: null };
+    if (!historyEnabled) retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: null, creationDraft, creationOwner: requestCreationOwnerKey };
   };
 
   const openFloSource = (route: string) => {
@@ -1157,15 +1326,17 @@ export default function FloScreen() {
     }
   };
 
+  // Route context can suggest a draft. Only an explicit Send or question tap asks Flo.
   useEffect(() => {
     const prompt = Array.isArray(params.prompt) ? params.prompt[0] : params.prompt;
     const promptId = Array.isArray(params.promptId) ? params.promptId[0] : params.promptId;
-    const cleanPrompt = typeof prompt === "string" ? prompt.trim() : "";
-    const promptKey = `${promptId || "manual"}:${cleanPrompt}`;
-    if (!aiConsentReady || !preferencesReady || !user?.id || !activeHousehold?.householdId || floAccessLocked || historyBusy || !cleanPrompt || handledPromptRef.current === promptKey || chat.sending) return;
+    const cleanPrompt = typeof prompt === "string" ? prompt.trim().slice(0, 4000) : "";
+    const promptKey = `${floDataScopeKey}:${promptId || "manual"}:${cleanPrompt}`;
+    if (!user?.id || !activeHousehold?.householdId || chatScopeKey !== floDataScopeKey || floAccessLocked || historyBusy || !cleanPrompt || handledPromptRef.current === promptKey || consumedRoutePromptsRef.current.has(promptKey)) return;
+    consumedRoutePromptsRef.current.add(promptKey);
     handledPromptRef.current = promptKey;
-    void send(cleanPrompt);
-  }, [aiConsentReady, preferencesReady, params.prompt, params.promptId, chat.sending, user?.id, activeHousehold?.householdId, floAccessLocked, historyBusy]);
+    setInput(current => current.trim() ? current : cleanPrompt);
+  }, [params.prompt, params.promptId, chatScopeKey, floDataScopeKey, user?.id, activeHousehold?.householdId, floAccessLocked, historyBusy]);
 
   const composerBottom = Platform.OS === "web" ? 88 : Math.max(insets.bottom, 8) + 54;
 
@@ -1178,35 +1349,24 @@ export default function FloScreen() {
       style={[styles.screen, { backgroundColor: colors.background }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <PremiumBackdrop variant="blue" />
-      <LinearGradient
-        colors={["rgba(37,99,235,0.72)", "rgba(8,51,68,0.78)", "rgba(2,6,23,0.78)"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={[styles.header, { paddingTop: Platform.OS === "web" ? 18 : insets.top + 12, borderColor: colors.border }]}
-      >
-        <FloLogo size={48} />
+      <PremiumBackdrop variant="purple" />
+      <View style={[styles.header, { paddingTop: Platform.OS === "web" ? 12 : insets.top + 10, borderColor: colors.border, backgroundColor: colors.background }]}>
+        <FloLogo size={38} />
         <View style={styles.headerText}>
-          <Text style={[styles.title, { color: colors.foreground }]}>Ask Flo</Text>
-          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{activeHousehold?.name ?? "Personal household"} · {floV4Preview ? "Read only · Chat not saved" : "Your account assistant"}</Text>
-          <DataFreshnessLabel compact />
+          <Text accessibilityRole="header" style={[styles.title, { color: colors.foreground }]}>Flo</Text>
+          <Text numberOfLines={1} style={[styles.subtitle, { color: colors.mutedForeground }]}>{floV4Preview ? "Chat not saved" : activeHousehold?.name ?? "Your money assistant"}</Text>
         </View>
-        <Feather name="message-circle" size={24} color={colors.primaryForeground} />
-      </LinearGradient>
-
-      {!floV4Preview ? (isDesktop ? <View style={styles.desktopHistoryLayer}><FloConversationBar desktop conversations={conversations} activeId={activeConversationId} disabled={chat.sending || historyBusy} preferencesDisabled={!preferencesControlsReady} householdName={activeHousehold?.name ?? "Personal household"} preferences={floPreferences} onNew={startNewConversation} onSelect={selectConversation} onRename={renameConversation} onDelete={removeConversation} onDeleteAll={removeAllConversations} onExport={exportConversations} onSearchHistory={searchHistory} onPreferencesChange={updatePreferences} /></View> : <FloConversationBar conversations={conversations} activeId={activeConversationId} disabled={chat.sending || historyBusy} preferencesDisabled={!preferencesControlsReady} householdName={activeHousehold?.name ?? "Personal household"} preferences={floPreferences} onNew={startNewConversation} onSelect={selectConversation} onRename={renameConversation} onDelete={removeConversation} onDeleteAll={removeAllConversations} onExport={exportConversations} onSearchHistory={searchHistory} onPreferencesChange={updatePreferences} />) : null}
-
-      {floV4Preview ? <View style={styles.previewChatTools}>
-        <Pressable accessibilityRole="button" accessibilityLabel="New chat" onPress={startNewConversation} style={[styles.previewNewChat, { borderColor: colors.border, backgroundColor: colors.card }]}>
-          <Feather name="plus" size={16} color={colors.foreground} />
-          <Text style={{ color: colors.foreground, fontFamily: "Inter_600SemiBold" }}>New chat</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="New chat" disabled={creationSaving} onPress={() => { startNewConversation(); inputRef.current?.focus(); }} style={[styles.headerButton, { borderColor: colors.border, backgroundColor: colors.card }]}>
+          <Feather name="edit" size={18} color={colors.foreground} />
+          {isDesktop ? <Text style={[styles.headerButtonText, { color: colors.foreground }]}>New chat</Text> : null}
         </Pressable>
-      </View> : null}
+        {!floV4Preview ? <FloConversationBar key={floDataScopeKey} compact desktop={isDesktop} conversations={conversations} activeId={activeConversationId} disabled={chat.sending || creationSaving || historyBusy} preferencesDisabled={!preferencesControlsReady} householdName={activeHousehold?.name ?? "Personal household"} preferences={floPreferences} onNew={startNewConversation} onSelect={selectConversation} onRename={renameConversation} onDelete={removeConversation} onDeleteAll={removeAllConversations} onExport={exportConversations} onSearchHistory={searchHistory} onPreferencesChange={updatePreferences} /> : null}
+      </View>
 
       <ScrollView
         ref={scrollRef}
-        style={[styles.conversation, isDesktop && !floV4Preview && styles.conversationDesktop]}
-        contentContainerStyle={[styles.conversationContent, isDesktop && styles.conversationContentDesktop]}
+        style={styles.conversation}
+        contentContainerStyle={[styles.conversationContent, isDesktop && styles.conversationContentDesktop, !chat.messages.length && styles.emptyConversation]}
         keyboardShouldPersistTaps="handled"
         onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
       >
@@ -1215,10 +1375,20 @@ export default function FloScreen() {
             <Text style={[styles.loadOlderText, { color: colors.mutedForeground }]}>Load older messages</Text>
           </Pressable>
         ) : null}
-        <View style={[styles.bubble, styles.floBubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.bubbleText, { color: colors.foreground }]}>Hi, I&apos;m Flo. What would you like to know?</Text>
-          <Text style={[styles.trustLine, { color: colors.mutedForeground }]}>{floV4Preview ? "I can check your records and explain your plan. This chat is not saved, and I won’t make changes here." : "AI explanations use verified records from this household. Flo cannot move money, and important plan changes always require your review and confirmation."}</Text>
-        </View>
+        {!chat.messages.length ? (
+          <View style={styles.welcome}>
+            <View style={[styles.welcomeMark, { backgroundColor: colors.primary + "12", borderColor: colors.primary + "25" }]}><FloLogo size={58} /></View>
+            <Text accessibilityRole="header" style={[styles.welcomeTitle, { color: colors.foreground }]}>Let’s make sense of your money.</Text>
+            <Text style={[styles.welcomeSubtitle, { color: colors.mutedForeground }]}>Ask about your bills, balances, or next move.</Text>
+            <View style={[styles.questionGrid, isDesktop && styles.questionGridDesktop]}>
+              {quickPrompts.map((prompt, index) => <Pressable key={prompt} accessibilityRole="button" accessibilityLabel={`Ask Flo: ${prompt}`} disabled={historyBusy || !preferencesReady} onPress={() => void send(prompt)} style={({ pressed }) => [styles.questionCard, isDesktop && styles.questionCardDesktop, { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed || !preferencesReady ? 0.6 : 1 }]}>
+                <Feather name={(["calendar", "credit-card", "trending-down", "help-circle"] as const)[index]} size={18} color={colors.primary} />
+                <Text style={[styles.questionText, { color: colors.foreground }]}>{prompt}</Text>
+                <Feather name="arrow-up-right" size={15} color={colors.mutedForeground} />
+              </Pressable>)}
+            </View>
+          </View>
+        ) : null}
 
         {chat.messages.map(message => (
           <View
@@ -1231,13 +1401,17 @@ export default function FloScreen() {
                 : { backgroundColor: colors.card, borderColor: colors.border },
             ]}
           >
+            <Text style={[styles.messageAuthor, { color: message.role === "user" ? colors.primaryForeground : colors.primary }]}>{message.role === "user" ? "You" : "Flo"}</Text>
             <View style={message.thinking ? styles.thinkingRow : undefined}>
               {message.thinking ? <ActivityIndicator size="small" color={colors.primary} /> : null}
               {message.role === "flo" && !message.thinking ? <FloGroundedAnswer text={humanizeFloText(message.text)} sources={sourcesByMessageId[message.id] ?? []} dataAsOf={groundingByMessageId[message.id]?.dataAsOf} coverage={groundingByMessageId[message.id]?.coverage} partial={groundingByMessageId[message.id]?.partial} caveat={groundingByMessageId[message.id]?.caveat} followUps={followUpsByMessageId[message.id]} proposal={floV4Preview ? null : proposalByMessageId[message.id]} proposalConfirmed={Boolean(!floV4Preview && (proposalByMessageId[message.id]?.status === "confirmed" || (proposalByMessageId[message.id] && confirmedProposalIds.has(proposalByMessageId[message.id]!.id))))} onOpenSource={openFloSource} onFollowUp={question => void send(question)} onReviewProposal={proposal => { if (!floV4Preview) openProposalReview(proposal); }} /> : <Text style={[styles.bubbleText, { color: message.role === "user" ? colors.primaryForeground : colors.mutedForeground }]}>{message.text}</Text>}
             </View>
+            {message.role === "flo" && creationByMessageId[message.id] ? <FloCreationCard creation={creationByMessageId[message.id]} onOpen={route => openFloSource(creationByMessageId[message.id].receipt?.kind === "create_debt" ? "/(tabs)/bills?view=debt" : route)} onCancel={creationByMessageId[message.id].status === "needs_details" && !chat.sending && !creationSaving && activeCreationDraftRef.current?.draft === creationByMessageId[message.id].draft ? () => cancelCreationDraft(message.id) : undefined} /> : null}
           </View>
         ))}
       </ScrollView>
+
+      <FloSafetyStopModal visible={Boolean(creationSafety)} warning={creationSafety?.warning ?? null} onKeepEditing={() => creationSafety?.cancel()} onScheduleAnyway={() => creationSafety?.proceed()} />
 
       <Modal visible={!floV4Preview && Boolean(reviewProposal)} transparent animationType={isDesktop ? "fade" : "slide"} onRequestClose={() => proposalConfirmState !== "confirming" && setReviewProposal(null)}>
         <Pressable style={[styles.modalOverlay, isDesktop && styles.reviewOverlayDesktop]} onPress={() => proposalConfirmState !== "confirming" && setReviewProposal(null)}>
@@ -1290,7 +1464,7 @@ export default function FloScreen() {
         </Pressable>
       </Modal>
 
-      <View style={[styles.composerArea, isDesktop && !floV4Preview && styles.composerAreaDesktop, { backgroundColor: colors.background, borderColor: colors.border, paddingBottom: isDesktop ? 16 : composerBottom }]}>
+      <View style={[styles.composerArea, isDesktop && styles.composerAreaDesktop, { backgroundColor: colors.background, borderColor: colors.border, paddingBottom: isDesktop ? 16 : composerBottom }]}>
         {chatError ? (
           <View style={styles.errorRow}>
             <Text style={[styles.chatError, { color: colors.mutedForeground }]}>{chatError}</Text>
@@ -1302,35 +1476,10 @@ export default function FloScreen() {
             ) : null}
           </View>
         ) : null}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.quickPromptScroller}
-          contentContainerStyle={styles.quickPromptContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          {quickPrompts.map(prompt => (
-            <Pressable
-              key={prompt}
-              accessibilityRole="button"
-              accessibilityLabel={`Ask Flo: ${prompt}`}
-              disabled={chat.sending || historyBusy || !preferencesReady}
-              onPress={() => void send(prompt)}
-              style={({ pressed }) => [
-                styles.quickPromptChip,
-                {
-                  backgroundColor: colors.primary + "14",
-                  borderColor: colors.primary + "40",
-                  opacity: pressed || chat.sending ? 0.65 : 1,
-                },
-              ]}
-            >
-              <Text style={[styles.quickPromptText, { color: colors.primary }]}>{prompt}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
+
         <View style={[styles.composer, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <TextInput
+            ref={inputRef}
             nativeID="guided-tour-flo"
             accessibilityLabel="Ask Flo anything"
             value={input}
@@ -1338,26 +1487,28 @@ export default function FloScreen() {
             maxLength={4000}
             onChangeText={setInput}
             onSubmitEditing={() => void send()}
-            placeholder={preferencesReady ? sampleQuestions[sampleIndex] : "Loading your chat preferences…"}
+            placeholder={preferencesReady ? "Ask Flo…" : "Getting ready…"}
             placeholderTextColor={colors.mutedForeground}
             style={[styles.input, { color: colors.foreground }]}
             returnKeyType="send"
             multiline
-            blurOnSubmit
+            blurOnSubmit={Platform.OS !== "web"}
+            {...(Platform.OS === "web" ? { onKeyPress: (event: { nativeEvent: { key?: string; shiftKey?: boolean; isComposing?: boolean }; preventDefault: () => void }) => { if (event.nativeEvent.key === "Enter" && !event.nativeEvent.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } } } : {})}
           />
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={chat.sending ? "Stop response" : "Send message"}
-            onPress={chat.sending ? stopStreaming : () => void send()}
-            disabled={historyBusy || !preferencesReady || (!chat.sending && !input.trim())}
+            accessibilityLabel={chat.sending || creationSaving ? "Stop response" : "Send message"}
+            onPress={chat.sending || creationSaving ? stopStreaming : () => void send()}
+            disabled={historyBusy || !preferencesReady || (!chat.sending && !creationSaving && !input.trim())}
             style={[
               styles.send,
-              { backgroundColor: chat.sending ? colors.destructive : colors.primary, opacity: !chat.sending && !input.trim() ? 0.45 : 1 },
+              { backgroundColor: chat.sending || creationSaving ? colors.destructive : colors.primary, opacity: !chat.sending && !creationSaving && !input.trim() ? 0.45 : 1 },
             ]}
           >
-            <Text style={styles.sendText}>{chat.sending ? "Stop" : "Send"}</Text>
+            <Feather name={chat.sending || creationSaving ? "square" : "arrow-up"} size={20} color={colors.primaryForeground} />
           </Pressable>
         </View>
+        <Text style={[styles.composerNote, { color: colors.mutedForeground }]}>{floV4Preview || !floPreferences.historyEnabled ? "This chat is not saved." : "Private to you in this household."} Check important details.</Text>
       </View>
     </KeyboardAvoidingView>
   );
@@ -1390,26 +1541,28 @@ function decisionStillHasSource(decision: { status: string; scenario: { type?: s
 }
 
 const styles = StyleSheet.create({
-  previewChatTools: { flexDirection: "row", justifyContent: "flex-end", paddingHorizontal: 16, paddingVertical: 8 },
-  previewNewChat: { minHeight: 44, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderRadius: 12, flexDirection: "row", alignItems: "center", gap: 8 },
-  screen: { flex: 1 },
-  header: {
-    minHeight: 96,
-    paddingHorizontal: 18,
-    paddingBottom: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    borderBottomWidth: 1,
-    gap: 12,
-  },
-  headerText: { flex: 1 },
-  title: { fontSize: 27, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.5 },
-  subtitle: { fontSize: 13, lineHeight: 18, marginTop: 3 },
-  conversation: { flex: 1 },
-  conversationContent: { paddingHorizontal: 18, paddingTop: 20, paddingBottom: 30, gap: 16 },
-  desktopHistoryLayer: { position: "absolute", left: 0, top: 92, bottom: 0, width: 292, zIndex: 4 },
-  conversationDesktop: { marginLeft: 292 },
-  conversationContentDesktop: { width: "100%", maxWidth: 820, alignSelf: "center", paddingHorizontal: 28, paddingTop: 24 },
+  screen: { flex: 1, minHeight: 0 },
+  header: { minHeight: 74, paddingHorizontal: 16, paddingBottom: 12, flexDirection: "row", alignItems: "center", borderBottomWidth: 1, gap: 10 },
+  headerText: { flex: 1, minWidth: 0 },
+  title: { fontSize: 23, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.5 },
+  subtitle: { fontSize: 11, lineHeight: 16, marginTop: 1, fontFamily: "Inter_500Medium" },
+  headerButton: { minHeight: 44, minWidth: 44, borderRadius: 13, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, paddingHorizontal: 12 },
+  headerButtonText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  conversation: { flex: 1, minHeight: 0 },
+  conversationContent: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 24, gap: 18 },
+  conversationContentDesktop: { width: "100%", maxWidth: 860, alignSelf: "center", paddingHorizontal: 28, paddingTop: 28 },
+  emptyConversation: { flexGrow: 1, justifyContent: "center" },
+  welcome: { width: "100%", maxWidth: 640, alignSelf: "center", paddingVertical: 16 },
+  welcomeMark: { width: 78, height: 78, borderRadius: 26, borderWidth: 1, alignSelf: "center", alignItems: "center", justifyContent: "center", marginBottom: 22 },
+  welcomeTitle: { fontSize: 25, lineHeight: 33, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.6, textAlign: "center" },
+  welcomeSubtitle: { fontSize: 13, lineHeight: 20, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: 9, marginBottom: 24 },
+  questionGrid: { gap: 9 },
+  questionGridDesktop: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  questionCard: { minHeight: 60, borderRadius: 17, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 13, flexDirection: "row", alignItems: "center", gap: 12 },
+  questionCardDesktop: { width: "48%", flexGrow: 1, minHeight: 88 },
+  questionText: { flex: 1, minWidth: 0, fontSize: 13, lineHeight: 19, fontFamily: "Inter_600SemiBold" },
+  messageAuthor: { fontSize: 10, fontFamily: "Inter_700Bold", marginBottom: 6 },
+  composerNote: { width: "100%", maxWidth: 820, alignSelf: "center", fontSize: 10, lineHeight: 15, fontFamily: "Inter_400Regular", marginTop: 8, textAlign: "center" },
   loadOlderButton: { alignSelf: "center", minHeight: 36, borderRadius: 999, justifyContent: "center", paddingHorizontal: 14 },
   loadOlderText: { fontSize: 11, fontFamily: "Inter_700Bold" },
   modalOverlay: { flex: 1, backgroundColor: "rgba(2,6,23,0.68)", justifyContent: "flex-end" },
@@ -1429,7 +1582,7 @@ const styles = StyleSheet.create({
   followButton: { flex: 1, minHeight: 46, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   followButtonText: { fontSize: 14, fontFamily: "Inter_700Bold" },
   followPrimaryText: { color: "#fff", fontSize: 14, fontFamily: "Inter_700Bold" },
-  bubble: { maxWidth: "90%", paddingHorizontal: 17, paddingVertical: 16, borderRadius: 20 },
+  bubble: { maxWidth: "94%", minWidth: 80, paddingHorizontal: 16, paddingVertical: 14, borderRadius: 20 },
   floBubble: { alignSelf: "flex-start", borderWidth: 1, borderTopLeftRadius: 6 },
   userBubble: { alignSelf: "flex-end", borderTopRightRadius: 6 },
   thinkingRow: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -1455,11 +1608,11 @@ const styles = StyleSheet.create({
   reductionActions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   reductionButton: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 8 },
   reductionButtonText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
-  composerArea: { borderTopWidth: 1, paddingHorizontal: 14, paddingTop: 12 },
-  composerAreaDesktop: { marginLeft: 292, paddingHorizontal: 28, alignItems: "center" },
+  composerArea: { flexShrink: 0, borderTopWidth: 1, paddingHorizontal: 14, paddingTop: 12 },
+  composerAreaDesktop: { paddingHorizontal: 28, alignItems: "center" },
   errorRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
   chatError: { flex: 1, fontSize: 11, lineHeight: 15, fontFamily: "Inter_500Medium" },
-  retryButton: { minHeight: 34, borderRadius: 999, flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 11 },
+  retryButton: { minHeight: 44, borderRadius: 999, flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 11 },
   retryText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   quickPromptScroller: { marginBottom: 10, maxHeight: 42 },
   quickPromptContent: { gap: 8, paddingRight: 12 },
@@ -1479,8 +1632,8 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     gap: 8,
   },
-  input: { flex: 1, minHeight: 44, maxHeight: 96, paddingTop: 11, paddingBottom: 10, fontSize: 15 },
-  send: { minWidth: 70, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", paddingHorizontal: 15 },
+  input: { flex: 1, minWidth: 0, minHeight: 44, maxHeight: 96, paddingTop: 11, paddingBottom: 10, fontSize: 15 },
+  send: { minWidth: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", paddingHorizontal: 15 },
   sendText: { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold" },
   reviewOverlayDesktop: { justifyContent: "center", alignItems: "center", padding: 24 },
   reviewDialogDesktop: { width: "100%", maxWidth: 520, borderRadius: 24 },

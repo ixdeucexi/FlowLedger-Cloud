@@ -1,3 +1,4 @@
+import { parseFloCreationResult, type FloCreationDraft, type FloCreationResult } from "./floCreationProtocol";
 import { fetch as expoFetch } from "expo/fetch";
 
 import { supabase, supabaseAnonKey, supabaseUrl } from "@/lib/supabase";
@@ -24,6 +25,7 @@ type FloChatRequestInput = {
   context?: { route?: string; entityType?: string; entityId?: string; date?: string; label?: string };
   historyEnabled?: boolean;
   conversationContext?: FloConversationContext;
+  creationDraft?: FloCreationDraft;
   previewTier?: "free" | "pro" | null;
 };
 
@@ -32,11 +34,14 @@ export function floChatRequestBody(engine: FloEngine, input: FloChatRequestInput
     version: 4,
     householdId: input.householdId,
     question: input.text,
+    commandId: input.userMessageId,
+    ...(input.creationDraft ? { creationDraft: input.creationDraft } : {}),
     timezone: input.timezone,
     ...(input.conversationContext ? { conversationContext: input.conversationContext } : {}),
   };
   return {
     version: 3,
+    ...(input.creationDraft ? { creationDraft: input.creationDraft } : {}),
     ...(input.conversationId ? { conversationId: input.conversationId } : {}),
     householdId: input.householdId,
     userMessage: { id: input.userMessageId, text: input.text },
@@ -67,6 +72,7 @@ export interface FloStoredMessage {
   sources: FloSource[];
   followUps: string[];
   proposal: FloReviewProposal | null;
+  creation?: FloCreationResult | null;
   dataAsOf?: string;
   coverage?: Record<string, unknown>;
   partial?: boolean;
@@ -99,6 +105,7 @@ export function mapFloStoredMessage(row: Record<string, any>, now = Date.now()):
     status: staleStream ? "error" : status,
     sources: Array.isArray(row.source_refs) ? row.source_refs as FloSource[] : [],
     followUps: Array.isArray(row.followups) ? row.followups.filter((item: unknown) => typeof item === "string") as string[] : [],
+    creation: parseFloCreationResult(row.answer?.creation),
     proposal: row.proposal && typeof row.proposal === "object" ? row.proposal as FloReviewProposal : null,
     dataAsOf: typeof row.data_as_of === "string" ? row.data_as_of : undefined,
     coverage: row.coverage && typeof row.coverage === "object" ? row.coverage as Record<string, unknown> : undefined,

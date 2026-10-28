@@ -13,6 +13,7 @@ type Props = {
   disabled?: boolean;
   preferencesDisabled?: boolean;
   desktop?: boolean;
+  compact?: boolean;
   householdName: string;
   preferences: FloPreferences;
   onNew: () => void;
@@ -65,7 +66,7 @@ export function FloConversationBar(props: Props) {
 
   const choose = (id: string) => {
     props.onSelect(id);
-    if (!props.desktop) setDrawerOpen(false);
+    if (!props.desktop || props.compact) setDrawerOpen(false);
   };
 
   const runDelete = async () => {
@@ -98,21 +99,21 @@ export function FloConversationBar(props: Props) {
   };
 
   const panel = (
-    <View style={[styles.panel, props.desktop && styles.panelDesktop, { backgroundColor: c.background, borderColor: c.border }]}>
+    <View style={[styles.panel, props.desktop && !props.compact && styles.panelDesktop, { backgroundColor: c.background, borderColor: c.border }]}>
       <View style={styles.panelHeader}>
         <View style={styles.panelTitleWrap}>
-          <Text style={[styles.panelEyebrow, { color: c.primary }]}>PRIVATE HISTORY</Text>
+          <Text style={[styles.panelEyebrow, { color: c.primary }]}>HISTORY & OPTIONS</Text>
           <Text style={[styles.panelTitle, { color: c.foreground }]}>{props.householdName}</Text>
         </View>
-        {!props.desktop ? (
+        {!props.desktop || props.compact ? (
           <Pressable accessibilityRole="button" accessibilityLabel="Close Flo history" onPress={() => setDrawerOpen(false)} style={[styles.iconButton, { backgroundColor: c.muted }]}>
             <Feather name="x" size={18} color={c.foreground} />
           </Pressable>
         ) : null}
       </View>
-      <Pressable accessibilityRole="button" disabled={props.disabled} onPress={() => { props.onNew(); if (!props.desktop) setDrawerOpen(false); }} style={[styles.newButton, { backgroundColor: c.primary, opacity: props.disabled ? 0.5 : 1 }]}>
+      <Pressable accessibilityRole="button" disabled={props.disabled} onPress={() => { props.onNew(); if (!props.desktop || props.compact) setDrawerOpen(false); }} style={[styles.newButton, { backgroundColor: c.primary, opacity: props.disabled ? 0.5 : 1 }]}>
         <Feather name="plus" size={16} color={c.primaryForeground} />
-        <Text style={[styles.newText, { color: c.primaryForeground }]}>New conversation</Text>
+        <Text style={[styles.newText, { color: c.primaryForeground }]}>New chat</Text>
       </Pressable>
       <View style={[styles.searchWrap, { backgroundColor: c.card, borderColor: c.border }]}>
         <Feather name="search" size={15} color={c.mutedForeground} />
@@ -176,7 +177,10 @@ export function FloConversationBar(props: Props) {
 
   return (
     <>
-      {props.desktop ? panel : (
+      {props.compact ? <Pressable accessibilityRole="button" accessibilityLabel="Open Flo history and options" accessibilityState={{ expanded: drawerOpen }} onPress={() => setDrawerOpen(true)} style={[styles.compactOptions, { backgroundColor: c.card, borderColor: c.border }]}>
+        <Feather name="clock" size={18} color={c.foreground} />
+        {props.desktop ? <Text style={[styles.newText, { color: c.foreground }]}>History & options</Text> : null}
+      </Pressable> : props.desktop ? panel : (
         <View style={[styles.mobileBar, { backgroundColor: c.background, borderColor: c.border }]}>
           <Pressable accessibilityRole="button" disabled={props.disabled} onPress={props.onNew} style={[styles.compactNew, { backgroundColor: c.primary, opacity: props.disabled ? 0.5 : 1 }]}>
             <Feather name="plus" size={15} color={c.primaryForeground} /><Text style={[styles.newText, { color: c.primaryForeground }]}>New</Text>
@@ -187,8 +191,8 @@ export function FloConversationBar(props: Props) {
         </View>
       )}
 
-      <Modal visible={!props.desktop && drawerOpen} transparent animationType="slide" onRequestClose={() => setDrawerOpen(false)}>
-        <Pressable style={styles.drawerOverlay} onPress={() => setDrawerOpen(false)}><Pressable style={styles.drawer} onPress={() => undefined}>{panel}</Pressable></Pressable>
+      <Modal visible={(!props.desktop || props.compact) && drawerOpen} transparent animationType="slide" onRequestClose={() => setDrawerOpen(false)}>
+        <Pressable style={[styles.drawerOverlay, props.desktop && styles.drawerOverlayDesktop]} onPress={() => setDrawerOpen(false)}><Pressable accessibilityViewIsModal style={[styles.drawer, props.desktop && styles.drawerDesktop]} onPress={event => event.stopPropagation()}>{panel}</Pressable></Pressable>
       </Modal>
       <ConfirmDialog visible={Boolean(renameTarget)} title="Rename Flo conversation" error={actionError} c={c} onClose={() => setRenameTarget(null)}>
         <TextInput accessibilityLabel="Conversation title" value={title} onChangeText={setTitle} autoFocus maxLength={80} style={[styles.dialogInput, { color: c.foreground, backgroundColor: c.muted, borderColor: c.border }]} />
@@ -210,7 +214,7 @@ function SettingRow({ label, detail, value, onValueChange, disabled }: { label: 
 }
 
 function ConfirmDialog({ visible, title, body, error, c, onClose, children }: { visible: boolean; title: string; body?: string; error: string; c: ReturnType<typeof useColors>; onClose: () => void; children: React.ReactNode }) {
-  return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}><Pressable style={styles.dialogOverlay} onPress={onClose}><Pressable style={[styles.dialog, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => undefined}><Text style={[styles.dialogTitle, { color: c.foreground }]}>{title}</Text>{body ? <Text style={[styles.dialogBody, { color: c.mutedForeground }]}>{body}</Text> : null}{error ? <Text style={[styles.dialogError, { color: c.destructive }]}>{error}</Text> : null}{children}</Pressable></Pressable></Modal>;
+  return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}><Pressable style={styles.dialogOverlay} onPress={onClose}><Pressable style={[styles.dialog, { backgroundColor: c.background, borderColor: c.border }]} onPress={event => event.stopPropagation()}><Text style={[styles.dialogTitle, { color: c.foreground }]}>{title}</Text>{body ? <Text style={[styles.dialogBody, { color: c.mutedForeground }]}>{body}</Text> : null}{error ? <Text style={[styles.dialogError, { color: c.destructive }]}>{error}</Text> : null}{children}</Pressable></Pressable></Modal>;
 }
 
 function DialogButton({ label, primary, destructive, disabled, onPress }: { label: string; primary?: boolean; destructive?: boolean; disabled?: boolean; onPress: () => void }) {
@@ -221,6 +225,9 @@ function DialogButton({ label, primary, destructive, disabled, onPress }: { labe
 }
 
 const styles = StyleSheet.create({
+  compactOptions: { minHeight: 44, minWidth: 44, paddingHorizontal: 12, borderRadius: 13, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
+  drawerOverlayDesktop: { justifyContent: "center", alignItems: "center", padding: 24 },
+  drawerDesktop: { width: "100%", maxWidth: 480, maxHeight: "88%", borderRadius: 24 },
   mobileBar: { minHeight: 58, paddingHorizontal: 12, borderBottomWidth: 1, flexDirection: "row", alignItems: "center", gap: 8 },
   compactNew: { minHeight: 44, borderRadius: 13, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", gap: 5 },
   historyButton: { flex: 1, minHeight: 44, borderWidth: 1, borderRadius: 13, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 11 },
