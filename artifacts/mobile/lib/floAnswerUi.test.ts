@@ -19,26 +19,18 @@ function answerHarness() {
 const flatten = (node: any): any[] => Array.isArray(node) ? node.flatMap(flatten) : node && typeof node === "object" ? [node, ...flatten(node.props?.children)] : [];
 const content = (node: any): string => Array.isArray(node) ? node.map(content).join(" ") : node && typeof node === "object" ? content(node.props?.children) : typeof node === "string" || typeof node === "number" ? String(node) : "";
 
-test("partial metadata has a neutral collapsed details disclosure; specific answer warnings remain visible", () => {
+test("Flo renders only the answer even when source and coverage metadata is present", () => {
   const render = answerHarness();
-  const props = { text: "Recorded balance is $700. This account has an older update date.", partial: true, coverage: "Some details could not be verified", caveat: "The forecast does not include unrecorded spending.", sources: [{ label: "Recorded account balance", route: "/(tabs)/accounts", asOf: "2026-10-28" }], onOpenSource() {}, onFollowUp() {} };
-  let tree = render(props);
-  assert.match(content(tree), /Recorded balance is \$700/);
-  assert.match(content(tree), /older update date/);
-  assert.match(content(tree), /Sources & details/);
-  assert.doesNotMatch(content(tree), /Partial answer|Some details could not be verified|unrecorded spending/);
-  assert.equal(flatten(tree).filter(node => node.props?.accessibilityRole === "alert").length, 0);
-  const disclosure = flatten(tree).find(node => node.props?.accessibilityLabel === "Sources and details");
-  assert.equal(disclosure.props.accessibilityState.expanded, false); disclosure.props.onPress(); tree = render(props);
-  assert.match(content(tree), /Some details could not be verified/);
-  assert.match(content(tree), /unrecorded spending/);
-  const link = flatten(tree).find(node => node.props?.accessibilityRole === "link"); assert.equal(link.props.href, "/accounts");
-  assert.equal(flatten(tree).find(node => node.props?.accessibilityLabel === "Sources and details").props.accessibilityState.expanded, true);
+  const text = "Recorded balance is $700. This account has an older update date.";
+  const tree = render({ text, partial: true, coverage: "Some details could not be verified", caveat: "The forecast does not include unrecorded spending.", dataAsOf: "2026-10-28", sources: [{ label: "Recorded account balance", route: "/(tabs)/accounts", asOf: "2026-10-28" }], onOpenSource() {}, onFollowUp() {} });
+  assert.equal(content(tree).trim(), text);
+  assert.doesNotMatch(content(tree), /Sources|details|Partial answer|Some details could not be verified|unrecorded spending/);
+  assert.equal(flatten(tree).filter(node => ["button", "link", "alert"].includes(node.props?.accessibilityRole)).length, 0);
 });
 
-test("an answer caveat already present in the reply is not repeated in its details", () => {
+test("a warning in the actual answer is preserved without repeating separate metadata", () => {
   const render = answerHarness(), text = "A date is missing. Check the account before making a payment.";
-  const props = { text, caveat: "Check the account before making a payment.", sources: [], onOpenSource() {}, onFollowUp() {} };
-  const tree = render(props); flatten(tree).find(node => node.props?.accessibilityLabel === "Sources and details").props.onPress();
-  assert.equal(content(render(props)).split(props.caveat).length - 1, 1);
+  const tree = render({ text, caveat: "Check the account before making a payment.", sources: [], onOpenSource() {}, onFollowUp() {} });
+  assert.equal(content(tree).trim(), text);
+  assert.equal(content(tree).split("Check the account before making a payment.").length - 1, 1);
 });
