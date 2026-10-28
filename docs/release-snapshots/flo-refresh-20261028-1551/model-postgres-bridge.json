@@ -1,0 +1,182 @@
+{
+  "sourceSha256": "64a59797022158355189b6768cb2957e827e9d6ab74eaa0e052a12434c8c1d6b",
+  "bridgeChecks": 80,
+  "cases": [
+    {
+      "caseId": "focused-bill-iso",
+      "kind": "create_bill",
+      "originalCommandId": "4cfa35f9-1558-4dca-b56d-5d95bca19af0",
+      "providerExtractionsSucceeded": 1,
+      "originalPayload": {
+        "name": "Internet",
+        "amount": 80,
+        "frequency": "monthly",
+        "first_date": "2026-11-01",
+        "is_recurring": true
+      },
+      "fixtureMappings": {
+        "household": {
+          "from": "00000000-0000-4000-8000-000000000001",
+          "to": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        },
+        "budget": {
+          "to": "aaaaaaaa-0000-4000-8000-000000000001"
+        }
+      },
+      "entityType": "bill",
+      "fieldVerification": "PASS",
+      "exactRetry": "PASS"
+    },
+    {
+      "caseId": "focused-debt-iso",
+      "kind": "create_debt",
+      "originalCommandId": "1a250277-ca61-4f03-99b9-34ae9d68792b",
+      "providerExtractionsSucceeded": 1,
+      "originalPayload": {
+        "name": "Visa",
+        "balance": 1000,
+        "minimum_payment": 35,
+        "apr": 18,
+        "frequency": "monthly",
+        "first_date": "2026-11-01"
+      },
+      "fixtureMappings": {
+        "household": {
+          "from": "00000000-0000-4000-8000-000000000001",
+          "to": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        },
+        "budget": {
+          "to": "aaaaaaaa-0000-4000-8000-000000000001"
+        }
+      },
+      "entityType": "bill",
+      "fieldVerification": "PASS",
+      "exactRetry": "PASS"
+    },
+    {
+      "caseId": "focused-income-iso",
+      "kind": "create_income",
+      "originalCommandId": "2f45e3e9-868b-478f-a050-e127563f4774",
+      "providerExtractionsSucceeded": 1,
+      "originalPayload": {
+        "name": "Salary",
+        "amount": 1500,
+        "frequency": "biweekly",
+        "first_date": "2026-11-06"
+      },
+      "fixtureMappings": {
+        "household": {
+          "from": "00000000-0000-4000-8000-000000000001",
+          "to": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        },
+        "budget": {
+          "to": "aaaaaaaa-0000-4000-8000-000000000001"
+        }
+      },
+      "entityType": "income",
+      "fieldVerification": "PASS",
+      "exactRetry": "PASS"
+    },
+    {
+      "caseId": "focused-expense-iso",
+      "kind": "create_manual_transaction",
+      "originalCommandId": "92d67439-f16f-4b63-8b21-3a4492dff360",
+      "providerExtractionsSucceeded": 1,
+      "originalPayload": {
+        "amount": 25,
+        "direction": "expense",
+        "date": "2026-09-10",
+        "category": "Food",
+        "note": "Cafe lunch",
+        "account_id": "manual-checking"
+      },
+      "fixtureMappings": {
+        "household": {
+          "from": "00000000-0000-4000-8000-000000000001",
+          "to": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        },
+        "budget": {
+          "to": "aaaaaaaa-0000-4000-8000-000000000001"
+        },
+        "account": {
+          "from": "manual-checking",
+          "to": "checking"
+        }
+      },
+      "entityType": "transaction",
+      "fieldVerification": "PASS",
+      "exactRetry": "PASS"
+    },
+    {
+      "caseId": "focused-bucket-iso",
+      "kind": "create_bucket",
+      "originalCommandId": "31a83ff2-4858-4d7c-9db8-56d5aaa1fc58",
+      "providerExtractionsSucceeded": 1,
+      "originalPayload": {
+        "name": "Winter gifts",
+        "target_amount": 500,
+        "target_date": "2026-12-25"
+      },
+      "fixtureMappings": {
+        "household": {
+          "from": "00000000-0000-4000-8000-000000000001",
+          "to": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        },
+        "budget": {
+          "to": "aaaaaaaa-0000-4000-8000-000000000001"
+        }
+      },
+      "entityType": "goal",
+      "fieldVerification": "PASS",
+      "exactRetry": "PASS"
+    },
+    {
+      "caseId": "focused-savings-iso",
+      "kind": "create_savings_goal",
+      "originalCommandId": "d9c22e9f-7892-4d78-9498-7e7d1f2417b3",
+      "providerExtractionsSucceeded": 1,
+      "originalPayload": {
+        "name": "Camera",
+        "target_amount": 1000,
+        "target_date": "2026-12-31"
+      },
+      "fixtureMappings": {
+        "household": {
+          "from": "00000000-0000-4000-8000-000000000001",
+          "to": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        },
+        "budget": {
+          "to": "aaaaaaaa-0000-4000-8000-000000000001"
+        }
+      },
+      "entityType": "goal",
+      "fieldVerification": "PASS",
+      "exactRetry": "PASS"
+    },
+    {
+      "caseId": "focused-one-time-iso",
+      "kind": "create_bill",
+      "originalCommandId": "25f24628-61d2-4311-9ce3-f48cbc171471",
+      "providerExtractionsSucceeded": 1,
+      "originalPayload": {
+        "name": "Emergency plumber",
+        "amount": 120,
+        "frequency": "monthly",
+        "first_date": "2026-11-01",
+        "is_recurring": false
+      },
+      "fixtureMappings": {
+        "household": {
+          "from": "00000000-0000-4000-8000-000000000001",
+          "to": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        },
+        "budget": {
+          "to": "aaaaaaaa-0000-4000-8000-000000000001"
+        }
+      },
+      "entityType": "bill",
+      "fieldVerification": "PASS",
+      "exactRetry": "PASS"
+    }
+  ]
+}

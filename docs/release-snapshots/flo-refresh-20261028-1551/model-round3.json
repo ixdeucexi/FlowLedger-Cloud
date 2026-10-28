@@ -1,0 +1,817 @@
+[
+  {
+    "status": 200,
+    "data": {
+      "caseId": "round3-income-window",
+      "turns": [
+        {
+          "question": "Can you show me my scheduled income from September 10 through September 30, 2026?",
+          "answer": {
+            "answer": "$3,000.00 in expected scheduled income for 2026-09-10–2026-09-30. This is scheduled, not confirmed received income.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [
+              "financialAnalysis:2238d9746c7a4a77:0"
+            ],
+            "followups": []
+          },
+          "creation": null,
+          "draft": null,
+          "sources": [
+            {
+              "id": "financialAnalysis:2238d9746c7a4a77:0",
+              "type": "income",
+              "label": "Income calculation",
+              "asOf": "2026-09-10T15:00:00.000Z",
+              "freshness": "stale",
+              "route": "/(tabs)/more?section=money"
+            }
+          ],
+          "aggregate": {
+            "partial": false,
+            "dataAsOf": "2026-09-10T15:00:00.000Z",
+            "coverage": {
+              "complete": true,
+              "tools": 1,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            }
+          },
+          "records": [
+            {
+              "id": "financialAnalysis:2238d9746c7a4a77:0",
+              "expectedIncome": 3000,
+              "expectedPaymentCount": 2,
+              "averageExpectedPayment": 1500,
+              "nextPayday": "2026-09-11",
+              "startDate": "2026-09-10",
+              "endDate": "2026-09-30"
+            }
+          ],
+          "usage": {
+            "inputTokens": 9018,
+            "outputTokens": 468
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 0,
+            "creationExtractionsSucceeded": 0
+          },
+          "extractionDiagnostics": [],
+          "audit": {
+            "reads": [
+              "household_settings",
+              "accounts",
+              "plaid_accounts",
+              "bills",
+              "goals",
+              "incomes",
+              "category_budgets",
+              "household_settings",
+              "incomes"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "maxWords": 130,
+            "noCreation": true,
+            "facts": {
+              "expectedIncome": 3000,
+              "expectedPaymentCount": 2,
+              "averageExpectedPayment": 1500,
+              "nextPayday": "2026-09-11"
+            }
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:50:12.600Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "round3-arithmetic-clarification",
+      "turns": [
+        {
+          "question": "Add up my income for Salary, $500 monthly, first payday 2026-11-01.",
+          "answer": {
+            "answer": "Should I total your saved income for a specific period, or just the amounts in your message?",
+            "claims": [],
+            "caveat": "Clarify the income records or stated amounts and the period to total",
+            "evidenceIds": [
+              "financialAnalysis:clarification:0"
+            ],
+            "followups": []
+          },
+          "creation": null,
+          "draft": null,
+          "sources": [
+            {
+              "id": "financialAnalysis:clarification:0",
+              "type": "help",
+              "label": "Clarification needed",
+              "asOf": null,
+              "freshness": "unknown",
+              "route": "/(tabs)/monthly"
+            }
+          ],
+          "aggregate": {
+            "partial": true,
+            "dataAsOf": null,
+            "coverage": {
+              "complete": false,
+              "tools": 1,
+              "partialTools": 1,
+              "exclusions": [
+                "Clarify the income records or stated amounts and the period to total"
+              ],
+              "reasons": [
+                "analysis_data_incomplete"
+              ],
+              "dateRanges": []
+            }
+          },
+          "records": [
+            {
+              "id": "financialAnalysis:clarification:0"
+            }
+          ],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 0,
+            "creationExtractionsSucceeded": 0
+          },
+          "extractionDiagnostics": [],
+          "audit": {
+            "reads": [],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "maxWords": 100,
+            "noCreation": true,
+            "noProjectionFacts": true,
+            "answerQuestion": true
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:50:12.949Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "round3-ambiguous-debt",
+      "turns": [
+        {
+          "question": "Create a debt named Visa, balance $1000, APR 18%, minimum payment $35 monthly, due on the 20th, starting November 1, 2026.",
+          "answer": {
+            "answer": "To add this debt, send first payment date (YYYY-MM-DD).",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "needs_details",
+              "kind": "create_debt",
+              "prompt": "To add this debt, send first payment date (YYYY-MM-DD).",
+              "missingFields": [
+                "first_date"
+              ],
+              "draft": {
+                "kind": "create_debt",
+                "fields": {
+                  "name": "Visa",
+                  "balance": 1000,
+                  "minimum_payment": 35,
+                  "apr": 18,
+                  "frequency": "monthly"
+                },
+                "evidence": {
+                  "name": "Create a debt named Visa",
+                  "balance": "balance $1000",
+                  "minimum_payment": "minimum payment $35 monthly",
+                  "apr": "APR 18%",
+                  "frequency": "minimum payment $35 monthly"
+                },
+                "authorizationText": "Create a debt named Visa, balance $1000, APR 18%, minimum payment $35 monthly, due on the 20th, starting November 1, 2026.",
+                "userText": "Create a debt named Visa, balance $1000, APR 18%, minimum payment $35 monthly, due on the 20th, starting November 1, 2026.",
+                "householdId": "00000000-0000-4000-8000-000000000001",
+                "expiresAt": "2026-09-10T15:30:00.000Z"
+              }
+            }
+          },
+          "creation": {
+            "status": "needs_details",
+            "kind": "create_debt",
+            "prompt": "To add this debt, send first payment date (YYYY-MM-DD).",
+            "missingFields": [
+              "first_date"
+            ],
+            "draft": {
+              "kind": "create_debt",
+              "fields": {
+                "name": "Visa",
+                "balance": 1000,
+                "minimum_payment": 35,
+                "apr": 18,
+                "frequency": "monthly"
+              },
+              "evidence": {
+                "name": "Create a debt named Visa",
+                "balance": "balance $1000",
+                "minimum_payment": "minimum payment $35 monthly",
+                "apr": "APR 18%",
+                "frequency": "minimum payment $35 monthly"
+              },
+              "authorizationText": "Create a debt named Visa, balance $1000, APR 18%, minimum payment $35 monthly, due on the 20th, starting November 1, 2026.",
+              "userText": "Create a debt named Visa, balance $1000, APR 18%, minimum payment $35 monthly, due on the 20th, starting November 1, 2026.",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "expiresAt": "2026-09-10T15:30:00.000Z"
+            }
+          },
+          "draft": {
+            "kind": "create_debt",
+            "fields": {
+              "name": "Visa",
+              "balance": 1000,
+              "minimum_payment": 35,
+              "apr": 18,
+              "frequency": "monthly"
+            },
+            "evidence": {
+              "name": "Create a debt named Visa",
+              "balance": "balance $1000",
+              "minimum_payment": "minimum payment $35 monthly",
+              "apr": "APR 18%",
+              "frequency": "minimum payment $35 monthly"
+            },
+            "authorizationText": "Create a debt named Visa, balance $1000, APR 18%, minimum payment $35 monthly, due on the 20th, starting November 1, 2026.",
+            "userText": "Create a debt named Visa, balance $1000, APR 18%, minimum payment $35 monthly, due on the 20th, starting November 1, 2026.",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "expiresAt": "2026-09-10T15:30:00.000Z"
+          },
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 1,
+            "creationExtractionsSucceeded": 1
+          },
+          "extractionDiagnostics": [
+            {
+              "kind": "create_debt",
+              "fields": {
+                "name": "Visa",
+                "balance": 1000,
+                "minimum_payment": 35,
+                "apr": 18,
+                "frequency": "monthly",
+                "first_date": "2026-11-01"
+              },
+              "evidence": {
+                "name": "Create a debt named Visa",
+                "balance": "balance $1000",
+                "minimum_payment": "minimum payment $35 monthly",
+                "apr": "APR 18%",
+                "frequency": "minimum payment $35 monthly",
+                "first_date": "starting November 1, 2026."
+              }
+            }
+          ],
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "maxWords": 130,
+            "needsFields": true,
+            "missingFieldsExact": [
+              "first_date"
+            ],
+            "draftFields": {
+              "name": "Visa",
+              "balance": 1000,
+              "apr": 18,
+              "minimum_payment": 35,
+              "frequency": "monthly"
+            }
+          }
+        },
+        {
+          "question": "The first payment is November 20, 2026.",
+          "answer": {
+            "answer": "I have the details for Visa. Adding it after the app’s usual safety check.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "ready",
+              "kind": "create_debt",
+              "prompt": "I have the details for Visa. Adding it after the app’s usual safety check.",
+              "missingFields": [],
+              "commandId": "97343f19-4933-48fc-ba6b-120ed3a0ed41",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "payload": {
+                "name": "Visa",
+                "balance": 1000,
+                "minimum_payment": 35,
+                "apr": 18,
+                "frequency": "monthly",
+                "first_date": "2026-11-20"
+              }
+            }
+          },
+          "creation": {
+            "status": "ready",
+            "kind": "create_debt",
+            "prompt": "I have the details for Visa. Adding it after the app’s usual safety check.",
+            "missingFields": [],
+            "commandId": "97343f19-4933-48fc-ba6b-120ed3a0ed41",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "payload": {
+              "name": "Visa",
+              "balance": 1000,
+              "minimum_payment": 35,
+              "apr": 18,
+              "frequency": "monthly",
+              "first_date": "2026-11-20"
+            }
+          },
+          "draft": null,
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 1,
+            "creationExtractionsSucceeded": 1
+          },
+          "extractionDiagnostics": [
+            {
+              "kind": "create_debt",
+              "fields": {
+                "name": null,
+                "balance": null,
+                "minimum_payment": null,
+                "apr": null,
+                "frequency": null,
+                "first_date": "2026-11-20"
+              },
+              "evidence": {
+                "name": null,
+                "balance": null,
+                "minimum_payment": null,
+                "apr": null,
+                "frequency": null,
+                "first_date": "The first payment is November 20, 2026."
+              }
+            }
+          ],
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "maxWords": 130,
+            "readyKind": "create_debt",
+            "payload": {
+              "name": "Visa",
+              "balance": 1000,
+              "apr": 18,
+              "minimum_payment": 35,
+              "frequency": "monthly",
+              "first_date": "2026-11-20"
+            }
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:50:20.916Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "round3-explicit-debt-iso",
+      "turns": [
+        {
+          "question": "Create a debt named Visa, balance $1000, APR 18%, minimum payment $35 monthly, first payment 2026-11-01.",
+          "answer": {
+            "answer": "I have the details for Visa. Adding it after the app’s usual safety check.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "ready",
+              "kind": "create_debt",
+              "prompt": "I have the details for Visa. Adding it after the app’s usual safety check.",
+              "missingFields": [],
+              "commandId": "4f0d10b4-9450-48e7-b71a-3d55932bd89a",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "payload": {
+                "name": "Visa",
+                "balance": 1000,
+                "minimum_payment": 35,
+                "apr": 18,
+                "frequency": "monthly",
+                "first_date": "2026-11-01"
+              }
+            }
+          },
+          "creation": {
+            "status": "ready",
+            "kind": "create_debt",
+            "prompt": "I have the details for Visa. Adding it after the app’s usual safety check.",
+            "missingFields": [],
+            "commandId": "4f0d10b4-9450-48e7-b71a-3d55932bd89a",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "payload": {
+              "name": "Visa",
+              "balance": 1000,
+              "minimum_payment": 35,
+              "apr": 18,
+              "frequency": "monthly",
+              "first_date": "2026-11-01"
+            }
+          },
+          "draft": null,
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 1,
+            "creationExtractionsSucceeded": 1
+          },
+          "extractionDiagnostics": [
+            {
+              "kind": "create_debt",
+              "fields": {
+                "name": "Visa",
+                "balance": 1000,
+                "minimum_payment": 35,
+                "apr": 18,
+                "frequency": "monthly",
+                "first_date": "2026-11-01"
+              },
+              "evidence": {
+                "name": "named Visa",
+                "balance": "balance $1000",
+                "minimum_payment": "minimum payment $35 monthly",
+                "apr": "APR 18%",
+                "frequency": "monthly",
+                "first_date": "first payment 2026-11-01."
+              }
+            }
+          ],
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "maxWords": 130,
+            "readyKind": "create_debt",
+            "payload": {
+              "name": "Visa",
+              "balance": 1000,
+              "apr": 18,
+              "minimum_payment": 35,
+              "frequency": "monthly",
+              "first_date": "2026-11-01"
+            }
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:50:25.358Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "round3-ambiguous-bill",
+      "turns": [
+        {
+          "question": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026.",
+          "answer": {
+            "answer": "To add this bill, send first payment date (YYYY-MM-DD).",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "needs_details",
+              "kind": "create_bill",
+              "prompt": "To add this bill, send first payment date (YYYY-MM-DD).",
+              "missingFields": [
+                "first_date"
+              ],
+              "draft": {
+                "kind": "create_bill",
+                "fields": {
+                  "name": "Internet",
+                  "amount": 80,
+                  "frequency": "monthly",
+                  "is_recurring": true
+                },
+                "evidence": {
+                  "name": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026.",
+                  "amount": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026.",
+                  "frequency": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026.",
+                  "is_recurring": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026."
+                },
+                "authorizationText": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026.",
+                "userText": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026.",
+                "householdId": "00000000-0000-4000-8000-000000000001",
+                "expiresAt": "2026-09-10T15:30:00.000Z"
+              }
+            }
+          },
+          "creation": {
+            "status": "needs_details",
+            "kind": "create_bill",
+            "prompt": "To add this bill, send first payment date (YYYY-MM-DD).",
+            "missingFields": [
+              "first_date"
+            ],
+            "draft": {
+              "kind": "create_bill",
+              "fields": {
+                "name": "Internet",
+                "amount": 80,
+                "frequency": "monthly",
+                "is_recurring": true
+              },
+              "evidence": {
+                "name": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026.",
+                "amount": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026.",
+                "frequency": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026.",
+                "is_recurring": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026."
+              },
+              "authorizationText": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026.",
+              "userText": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026.",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "expiresAt": "2026-09-10T15:30:00.000Z"
+            }
+          },
+          "draft": {
+            "kind": "create_bill",
+            "fields": {
+              "name": "Internet",
+              "amount": 80,
+              "frequency": "monthly",
+              "is_recurring": true
+            },
+            "evidence": {
+              "name": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026.",
+              "amount": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026.",
+              "frequency": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026.",
+              "is_recurring": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026."
+            },
+            "authorizationText": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026.",
+            "userText": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026.",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "expiresAt": "2026-09-10T15:30:00.000Z"
+          },
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 1,
+            "creationExtractionsSucceeded": 1
+          },
+          "extractionDiagnostics": [
+            {
+              "kind": "create_bill",
+              "fields": {
+                "name": "Internet",
+                "amount": 80,
+                "frequency": "monthly",
+                "first_date": "2026-11-01",
+                "category": null,
+                "is_recurring": true
+              },
+              "evidence": {
+                "name": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026.",
+                "amount": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026.",
+                "frequency": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026.",
+                "first_date": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026.",
+                "category": null,
+                "is_recurring": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026."
+              }
+            }
+          ],
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "maxWords": 130,
+            "needsFields": true,
+            "missingFieldsExact": [
+              "first_date"
+            ],
+            "draftFields": {
+              "name": "Internet",
+              "amount": 80,
+              "frequency": "monthly"
+            }
+          }
+        },
+        {
+          "question": "The first payment is November 5, 2026.",
+          "answer": {
+            "answer": "I have the details for Internet. Adding it after the app’s usual safety check.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "ready",
+              "kind": "create_bill",
+              "prompt": "I have the details for Internet. Adding it after the app’s usual safety check.",
+              "missingFields": [],
+              "commandId": "feeee4b7-29f6-44cc-b743-0b866be6ddf6",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "payload": {
+                "name": "Internet",
+                "amount": 80,
+                "frequency": "monthly",
+                "first_date": "2026-11-05",
+                "is_recurring": true
+              }
+            }
+          },
+          "creation": {
+            "status": "ready",
+            "kind": "create_bill",
+            "prompt": "I have the details for Internet. Adding it after the app’s usual safety check.",
+            "missingFields": [],
+            "commandId": "feeee4b7-29f6-44cc-b743-0b866be6ddf6",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "payload": {
+              "name": "Internet",
+              "amount": 80,
+              "frequency": "monthly",
+              "first_date": "2026-11-05",
+              "is_recurring": true
+            }
+          },
+          "draft": null,
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 1,
+            "creationExtractionsSucceeded": 1
+          },
+          "extractionDiagnostics": [
+            {
+              "kind": "create_bill",
+              "fields": {
+                "name": "Internet",
+                "amount": 80,
+                "frequency": "monthly",
+                "first_date": "2026-11-05",
+                "category": null,
+                "is_recurring": true
+              },
+              "evidence": {
+                "name": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026.",
+                "amount": "$80",
+                "frequency": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026.",
+                "first_date": "The first payment is November 5, 2026.",
+                "category": null,
+                "is_recurring": "Create a monthly bill named Internet for $80, due on the 5th, starting November 1, 2026."
+              }
+            }
+          ],
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "maxWords": 130,
+            "readyKind": "create_bill",
+            "payload": {
+              "name": "Internet",
+              "amount": 80,
+              "frequency": "monthly",
+              "first_date": "2026-11-05"
+            }
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:50:37.558Z"
+  }
+]

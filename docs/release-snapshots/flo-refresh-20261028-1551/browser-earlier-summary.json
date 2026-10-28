@@ -1,0 +1,46 @@
+{
+  "artifact": {
+    "entry": "entry-e59a8ed15bf0847608429dd78d03a127.js",
+    "sha256": "43f39036a8e0201bda866cf46755871c58a7addeaf12fb8617a20b591ba9f66e",
+    "authKey": "sb-imqmhfdquqlqxgtcdbvc-auth-token"
+  },
+  "hashes": [
+    "43f39036a8e0201bda866cf46755871c58a7addeaf12fb8617a20b591ba9f66e"
+  ],
+  "passedRecords": 16,
+  "actualMockedSsePosts": 31,
+  "mockedCreationAndReceiptRpcAttempts": 11,
+  "allExternalIntercepted": true,
+  "liveFinancialWrites": 0,
+  "normalPageOrConsoleErrors": 0,
+  "expectedFaults": [
+    "One intentional RPC500 followed by exact command/payload/budget Retry"
+  ],
+  "viewports": [
+    320,
+    390,
+    1200
+  ],
+  "engines": [
+    "v3 history on",
+    "v3 history off",
+    "admin v4"
+  ],
+  "limitations": [
+    "Demo is intentionally unavailable in a normal production export; source/actual-effect tests cover its guard.",
+    "Budget/scope cross-product is covered by shared callback and PostgreSQL tests, rather than claimed browser coverage.",
+    "Raw pushState+popstate recreated a screen; this is excluded from ordinary prefill API proof. Initial prefill, no autosend, and settled typing passed."
+  ],
+  "logs": [
+    "/tmp/flo-refresh-browser.log",
+    "/tmp/flo-refresh-browser-lifecycle.log",
+    "/tmp/flo-refresh-browser-history.log",
+    "/tmp/flo-refresh-browser-prefill.log"
+  ],
+  "screenshots": [
+    "/tmp/flo-refresh-after-320.png",
+    "/tmp/flo-refresh-after-390.png",
+    "/tmp/flo-refresh-after-1200.png"
+  ],
+  "allBrowserAndServerProcessesClosed": true
+}

@@ -1,0 +1,26 @@
+[
+  {
+    "slug": "flo-chat",
+    "jwt": false,
+    "status": 401,
+    "unauthorized": true
+  },
+  {
+    "slug": "flo-chat",
+    "jwt": true,
+    "status": 401,
+    "unauthorized": false
+  },
+  {
+    "slug": "flo-chat-v4",
+    "jwt": false,
+    "status": 401,
+    "unauthorized": true
+  },
+  {
+    "slug": "flo-chat-v4",
+    "jwt": true,
+    "status": 401,
+    "unauthorized": false
+  }
+]

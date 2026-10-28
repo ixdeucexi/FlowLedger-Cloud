@@ -1,0 +1,44 @@
+{
+  "review": "sole_round2_fixture_window_mismatch",
+  "scope": "Fixed fictional data; this review does not change the preserved automated result or approve production.",
+  "originalReceipts": "/tmp/flo-refresh-eval/receipts-round2.json",
+  "originalReceiptsSha256": "64a59797022158355189b6768cb2957e827e9d6ab74eaa0e052a12434c8c1d6b",
+  "originalAutomatedResult": {
+    "cases": 40,
+    "pass": 39,
+    "fail": 1,
+    "caseId": "readonly-income-question",
+    "checks": [
+      "turn0:fact_expectedIncome"
+    ]
+  },
+  "question": "Can you show me my income?",
+  "actualAnswer": "$3,000.00 in expected scheduled income for 2026-09-10\u20132026-09-30. This is scheduled, not confirmed received income.",
+  "actualFacts": {
+    "id": "financialAnalysis:2238d9746c7a4a77:0",
+    "expectedIncome": 3000,
+    "expectedPaymentCount": 2,
+    "averageExpectedPayment": 1500,
+    "nextPayday": "2026-09-11",
+    "startDate": "2026-09-10",
+    "endDate": "2026-09-30"
+  },
+  "originalFixtureExpectedFacts": {
+    "expectedIncome": 1500,
+    "nextPayday": "2026-09-11"
+  },
+  "semanticConclusion": "Correct scheduled-income answer for the explicitly disclosed remaining-month window; fixture assumed the next single payment for an undated generic question.",
+  "proof": {
+    "window": [
+      "2026-09-10",
+      "2026-09-30"
+    ],
+    "payments": 2,
+    "perPayment": 1500,
+    "calculation": "2 * 1500 = 3000",
+    "nextPayday": "2026-09-11",
+    "creation": null,
+    "writeAttempts": []
+  },
+  "disposition": "Preserve original automated failure. Do not change app calculations to force1500. Focused round3 can use an explicitly stated September window and assert3000/2payments."
+}

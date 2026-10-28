@@ -1,0 +1,3484 @@
+[
+  {
+    "status": 200,
+    "data": {
+      "caseId": "capability-bill",
+      "turns": [
+        {
+          "question": "Can you create a bill for me?",
+          "answer": {
+            "answer": "Yes. Send name, amount, how often it repeats, first payment date (YYYY-MM-DD).",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "needs_details",
+              "kind": "create_bill",
+              "prompt": "Yes. Send name, amount, how often it repeats, first payment date (YYYY-MM-DD).",
+              "missingFields": [
+                "name",
+                "amount",
+                "frequency",
+                "first_date"
+              ],
+              "draft": {
+                "kind": "create_bill",
+                "fields": {},
+                "authorizationText": "Can you create a bill for me?",
+                "userText": "Can you create a bill for me?",
+                "householdId": "00000000-0000-4000-8000-000000000001",
+                "expiresAt": "2026-09-10T15:30:00.000Z"
+              }
+            }
+          },
+          "creation": {
+            "status": "needs_details",
+            "kind": "create_bill",
+            "prompt": "Yes. Send name, amount, how often it repeats, first payment date (YYYY-MM-DD).",
+            "missingFields": [
+              "name",
+              "amount",
+              "frequency",
+              "first_date"
+            ],
+            "draft": {
+              "kind": "create_bill",
+              "fields": {},
+              "authorizationText": "Can you create a bill for me?",
+              "userText": "Can you create a bill for me?",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "expiresAt": "2026-09-10T15:30:00.000Z"
+            }
+          },
+          "draft": {
+            "kind": "create_bill",
+            "fields": {},
+            "authorizationText": "Can you create a bill for me?",
+            "userText": "Can you create a bill for me?",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "expiresAt": "2026-09-10T15:30:00.000Z"
+          },
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 0,
+            "creationExtractionsSucceeded": 0
+          },
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "notCreated": true,
+            "maxWords": 90,
+            "capabilityKind": "create_bill",
+            "needsFields": true
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:11:01.370Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "capability-debt",
+      "turns": [
+        {
+          "question": "Can you create a debt for me?",
+          "answer": {
+            "answer": "Yes. Send name, current balance, minimum payment, APR (say 0% if interest-free), how often it repeats, first payment date (YYYY-MM-DD).",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "needs_details",
+              "kind": "create_debt",
+              "prompt": "Yes. Send name, current balance, minimum payment, APR (say 0% if interest-free), how often it repeats, first payment date (YYYY-MM-DD).",
+              "missingFields": [
+                "name",
+                "balance",
+                "minimum_payment",
+                "apr",
+                "frequency",
+                "first_date"
+              ],
+              "draft": {
+                "kind": "create_debt",
+                "fields": {},
+                "authorizationText": "Can you create a debt for me?",
+                "userText": "Can you create a debt for me?",
+                "householdId": "00000000-0000-4000-8000-000000000001",
+                "expiresAt": "2026-09-10T15:30:00.000Z"
+              }
+            }
+          },
+          "creation": {
+            "status": "needs_details",
+            "kind": "create_debt",
+            "prompt": "Yes. Send name, current balance, minimum payment, APR (say 0% if interest-free), how often it repeats, first payment date (YYYY-MM-DD).",
+            "missingFields": [
+              "name",
+              "balance",
+              "minimum_payment",
+              "apr",
+              "frequency",
+              "first_date"
+            ],
+            "draft": {
+              "kind": "create_debt",
+              "fields": {},
+              "authorizationText": "Can you create a debt for me?",
+              "userText": "Can you create a debt for me?",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "expiresAt": "2026-09-10T15:30:00.000Z"
+            }
+          },
+          "draft": {
+            "kind": "create_debt",
+            "fields": {},
+            "authorizationText": "Can you create a debt for me?",
+            "userText": "Can you create a debt for me?",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "expiresAt": "2026-09-10T15:30:00.000Z"
+          },
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 0,
+            "creationExtractionsSucceeded": 0
+          },
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "notCreated": true,
+            "maxWords": 90,
+            "capabilityKind": "create_debt",
+            "needsFields": true
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:11:02.069Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "capability-income",
+      "turns": [
+        {
+          "question": "Can you create an income source for me?",
+          "answer": {
+            "answer": "Yes. Send income name, take-home amount, pay frequency (monthly, weekly, or biweekly), first payday.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "needs_details",
+              "kind": "create_income",
+              "prompt": "Yes. Send income name, take-home amount, pay frequency (monthly, weekly, or biweekly), first payday.",
+              "missingFields": [
+                "name",
+                "amount",
+                "frequency",
+                "first_date"
+              ],
+              "draft": {
+                "kind": "create_income",
+                "fields": {},
+                "authorizationText": "Can you create an income source for me?",
+                "userText": "Can you create an income source for me?",
+                "householdId": "00000000-0000-4000-8000-000000000001",
+                "expiresAt": "2026-09-10T15:30:00.000Z"
+              }
+            }
+          },
+          "creation": {
+            "status": "needs_details",
+            "kind": "create_income",
+            "prompt": "Yes. Send income name, take-home amount, pay frequency (monthly, weekly, or biweekly), first payday.",
+            "missingFields": [
+              "name",
+              "amount",
+              "frequency",
+              "first_date"
+            ],
+            "draft": {
+              "kind": "create_income",
+              "fields": {},
+              "authorizationText": "Can you create an income source for me?",
+              "userText": "Can you create an income source for me?",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "expiresAt": "2026-09-10T15:30:00.000Z"
+            }
+          },
+          "draft": {
+            "kind": "create_income",
+            "fields": {},
+            "authorizationText": "Can you create an income source for me?",
+            "userText": "Can you create an income source for me?",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "expiresAt": "2026-09-10T15:30:00.000Z"
+          },
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 0,
+            "creationExtractionsSucceeded": 0
+          },
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "notCreated": true,
+            "maxWords": 90,
+            "capabilityKind": "create_income",
+            "needsFields": true
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:11:02.531Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "capability-transaction",
+      "turns": [
+        {
+          "question": "Can you create a manual transaction for me?",
+          "answer": {
+            "answer": "Yes. Send amount, money in or money out, transaction date, category, description, which active account.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "needs_details",
+              "kind": "create_manual_transaction",
+              "prompt": "Yes. Send amount, money in or money out, transaction date, category, description, which active account.",
+              "missingFields": [
+                "amount",
+                "direction",
+                "date",
+                "category",
+                "note",
+                "account_id"
+              ],
+              "draft": {
+                "kind": "create_manual_transaction",
+                "fields": {},
+                "authorizationText": "Can you create a manual transaction for me?",
+                "userText": "Can you create a manual transaction for me?",
+                "householdId": "00000000-0000-4000-8000-000000000001",
+                "expiresAt": "2026-09-10T15:30:00.000Z"
+              }
+            }
+          },
+          "creation": {
+            "status": "needs_details",
+            "kind": "create_manual_transaction",
+            "prompt": "Yes. Send amount, money in or money out, transaction date, category, description, which active account.",
+            "missingFields": [
+              "amount",
+              "direction",
+              "date",
+              "category",
+              "note",
+              "account_id"
+            ],
+            "draft": {
+              "kind": "create_manual_transaction",
+              "fields": {},
+              "authorizationText": "Can you create a manual transaction for me?",
+              "userText": "Can you create a manual transaction for me?",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "expiresAt": "2026-09-10T15:30:00.000Z"
+            }
+          },
+          "draft": {
+            "kind": "create_manual_transaction",
+            "fields": {},
+            "authorizationText": "Can you create a manual transaction for me?",
+            "userText": "Can you create a manual transaction for me?",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "expiresAt": "2026-09-10T15:30:00.000Z"
+          },
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 0,
+            "creationExtractionsSucceeded": 0
+          },
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "notCreated": true,
+            "maxWords": 90,
+            "capabilityKind": "create_manual_transaction",
+            "needsFields": true
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:11:02.836Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "capability-bucket",
+      "turns": [
+        {
+          "question": "Can you create a spending bucket for me?",
+          "answer": {
+            "answer": "Yes. Send name, target amount, target date.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "needs_details",
+              "kind": "create_bucket",
+              "prompt": "Yes. Send name, target amount, target date.",
+              "missingFields": [
+                "name",
+                "target_amount",
+                "target_date"
+              ],
+              "draft": {
+                "kind": "create_bucket",
+                "fields": {},
+                "authorizationText": "Can you create a spending bucket for me?",
+                "userText": "Can you create a spending bucket for me?",
+                "householdId": "00000000-0000-4000-8000-000000000001",
+                "expiresAt": "2026-09-10T15:30:00.000Z"
+              }
+            }
+          },
+          "creation": {
+            "status": "needs_details",
+            "kind": "create_bucket",
+            "prompt": "Yes. Send name, target amount, target date.",
+            "missingFields": [
+              "name",
+              "target_amount",
+              "target_date"
+            ],
+            "draft": {
+              "kind": "create_bucket",
+              "fields": {},
+              "authorizationText": "Can you create a spending bucket for me?",
+              "userText": "Can you create a spending bucket for me?",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "expiresAt": "2026-09-10T15:30:00.000Z"
+            }
+          },
+          "draft": {
+            "kind": "create_bucket",
+            "fields": {},
+            "authorizationText": "Can you create a spending bucket for me?",
+            "userText": "Can you create a spending bucket for me?",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "expiresAt": "2026-09-10T15:30:00.000Z"
+          },
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 0,
+            "creationExtractionsSucceeded": 0
+          },
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "notCreated": true,
+            "maxWords": 90,
+            "capabilityKind": "create_bucket",
+            "needsFields": true
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:11:03.341Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "capability-savings_goal",
+      "turns": [
+        {
+          "question": "Can you create a savings goal for me?",
+          "answer": {
+            "answer": "Yes. Send name, target amount, target date.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "needs_details",
+              "kind": "create_savings_goal",
+              "prompt": "Yes. Send name, target amount, target date.",
+              "missingFields": [
+                "name",
+                "target_amount",
+                "target_date"
+              ],
+              "draft": {
+                "kind": "create_savings_goal",
+                "fields": {},
+                "authorizationText": "Can you create a savings goal for me?",
+                "userText": "Can you create a savings goal for me?",
+                "householdId": "00000000-0000-4000-8000-000000000001",
+                "expiresAt": "2026-09-10T15:30:00.000Z"
+              }
+            }
+          },
+          "creation": {
+            "status": "needs_details",
+            "kind": "create_savings_goal",
+            "prompt": "Yes. Send name, target amount, target date.",
+            "missingFields": [
+              "name",
+              "target_amount",
+              "target_date"
+            ],
+            "draft": {
+              "kind": "create_savings_goal",
+              "fields": {},
+              "authorizationText": "Can you create a savings goal for me?",
+              "userText": "Can you create a savings goal for me?",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "expiresAt": "2026-09-10T15:30:00.000Z"
+            }
+          },
+          "draft": {
+            "kind": "create_savings_goal",
+            "fields": {},
+            "authorizationText": "Can you create a savings goal for me?",
+            "userText": "Can you create a savings goal for me?",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "expiresAt": "2026-09-10T15:30:00.000Z"
+          },
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 0,
+            "creationExtractionsSucceeded": 0
+          },
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "notCreated": true,
+            "maxWords": 90,
+            "capabilityKind": "create_savings_goal",
+            "needsFields": true
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:11:03.753Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "create-bill",
+      "turns": [
+        {
+          "question": "Create a monthly Internet bill for $80, with the first payment on November 1, 2026.",
+          "answer": {
+            "answer": "To add this bill, send name, amount, how often it repeats, first payment date (YYYY-MM-DD).",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "needs_details",
+              "kind": "create_bill",
+              "prompt": "To add this bill, send name, amount, how often it repeats, first payment date (YYYY-MM-DD).",
+              "missingFields": [
+                "name",
+                "amount",
+                "frequency",
+                "first_date"
+              ],
+              "draft": {
+                "kind": "create_bill",
+                "fields": {},
+                "authorizationText": "Create a monthly Internet bill for $80, with the first payment on November 1, 2026.",
+                "userText": "Create a monthly Internet bill for $80, with the first payment on November 1, 2026.",
+                "householdId": "00000000-0000-4000-8000-000000000001",
+                "expiresAt": "2026-09-10T15:30:00.000Z"
+              }
+            }
+          },
+          "creation": {
+            "status": "needs_details",
+            "kind": "create_bill",
+            "prompt": "To add this bill, send name, amount, how often it repeats, first payment date (YYYY-MM-DD).",
+            "missingFields": [
+              "name",
+              "amount",
+              "frequency",
+              "first_date"
+            ],
+            "draft": {
+              "kind": "create_bill",
+              "fields": {},
+              "authorizationText": "Create a monthly Internet bill for $80, with the first payment on November 1, 2026.",
+              "userText": "Create a monthly Internet bill for $80, with the first payment on November 1, 2026.",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "expiresAt": "2026-09-10T15:30:00.000Z"
+            }
+          },
+          "draft": {
+            "kind": "create_bill",
+            "fields": {},
+            "authorizationText": "Create a monthly Internet bill for $80, with the first payment on November 1, 2026.",
+            "userText": "Create a monthly Internet bill for $80, with the first payment on November 1, 2026.",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "expiresAt": "2026-09-10T15:30:00.000Z"
+          },
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 1,
+            "creationExtractionsSucceeded": 1
+          },
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "maxWords": 100,
+            "readyKind": "create_bill",
+            "payload": {
+              "name": "Internet",
+              "amount": 80,
+              "frequency": "monthly",
+              "first_date": "2026-11-01"
+            }
+          }
+        }
+      ]
+    },
+    "checks": [
+      "turn0:payload_name",
+      "turn0:payload_amount",
+      "turn0:payload_frequency",
+      "turn0:payload_first_date",
+      "turn0:creation_not_ready_create_bill"
+    ],
+    "checkedAt": "2026-10-28T15:11:12.246Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "create-debt",
+      "turns": [
+        {
+          "question": "Create a Visa debt with a $1000 balance, 18% annual interest, $35 monthly minimum, due on the 20th starting November 1, 2026.",
+          "answer": {
+            "answer": "I have the details for Visa. Adding it after the app’s usual safety check.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "ready",
+              "kind": "create_debt",
+              "prompt": "I have the details for Visa. Adding it after the app’s usual safety check.",
+              "missingFields": [],
+              "commandId": "7855f2a0-5cf0-4467-ba92-04b9d55529d5",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "payload": {
+                "name": "Visa",
+                "balance": 1000,
+                "minimum_payment": 35,
+                "apr": 18,
+                "frequency": "monthly",
+                "first_date": "2026-11-01"
+              }
+            }
+          },
+          "creation": {
+            "status": "ready",
+            "kind": "create_debt",
+            "prompt": "I have the details for Visa. Adding it after the app’s usual safety check.",
+            "missingFields": [],
+            "commandId": "7855f2a0-5cf0-4467-ba92-04b9d55529d5",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "payload": {
+              "name": "Visa",
+              "balance": 1000,
+              "minimum_payment": 35,
+              "apr": 18,
+              "frequency": "monthly",
+              "first_date": "2026-11-01"
+            }
+          },
+          "draft": null,
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 1,
+            "creationExtractionsSucceeded": 1
+          },
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "maxWords": 100,
+            "readyKind": "create_debt",
+            "payload": {
+              "name": "Visa",
+              "balance": 1000,
+              "minimum_payment": 35,
+              "apr": 18,
+              "frequency": "monthly",
+              "first_date": "2026-11-01"
+            }
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:11:20.559Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "create-income",
+      "turns": [
+        {
+          "question": "Create a Salary income source for $1500 every two weeks starting November 6, 2026.",
+          "answer": {
+            "answer": "I have the details for Salary. Adding it after the app’s usual safety check.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "ready",
+              "kind": "create_income",
+              "prompt": "I have the details for Salary. Adding it after the app’s usual safety check.",
+              "missingFields": [],
+              "commandId": "f27a8135-2bc6-46d4-ae31-35e6be6882a6",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "payload": {
+                "name": "Salary",
+                "amount": 1500,
+                "frequency": "biweekly",
+                "first_date": "2026-11-06"
+              }
+            }
+          },
+          "creation": {
+            "status": "ready",
+            "kind": "create_income",
+            "prompt": "I have the details for Salary. Adding it after the app’s usual safety check.",
+            "missingFields": [],
+            "commandId": "f27a8135-2bc6-46d4-ae31-35e6be6882a6",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "payload": {
+              "name": "Salary",
+              "amount": 1500,
+              "frequency": "biweekly",
+              "first_date": "2026-11-06"
+            }
+          },
+          "draft": null,
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 1,
+            "creationExtractionsSucceeded": 1
+          },
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "maxWords": 100,
+            "readyKind": "create_income",
+            "payload": {
+              "name": "Salary",
+              "amount": 1500,
+              "frequency": "biweekly",
+              "first_date": "2026-11-06"
+            }
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:11:26.841Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "create-transaction",
+      "turns": [
+        {
+          "question": "Record a $25 expense named Cafe lunch on September 10, 2026 in Food, paid from Manual Checking.",
+          "answer": {
+            "answer": "To add this manual transaction, send description.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "needs_details",
+              "kind": "create_manual_transaction",
+              "prompt": "To add this manual transaction, send description.",
+              "missingFields": [
+                "note"
+              ],
+              "draft": {
+                "kind": "create_manual_transaction",
+                "fields": {
+                  "name": "Cafe lunch",
+                  "amount": 25,
+                  "direction": "expense",
+                  "date": "2026-09-10",
+                  "category": "Food",
+                  "account_name": "Manual Checking",
+                  "account_id": "manual-checking"
+                },
+                "authorizationText": "Record a $25 expense named Cafe lunch on September 10, 2026 in Food, paid from Manual Checking.",
+                "userText": "Record a $25 expense named Cafe lunch on September 10, 2026 in Food, paid from Manual Checking.",
+                "householdId": "00000000-0000-4000-8000-000000000001",
+                "expiresAt": "2026-09-10T15:30:00.000Z"
+              }
+            }
+          },
+          "creation": {
+            "status": "needs_details",
+            "kind": "create_manual_transaction",
+            "prompt": "To add this manual transaction, send description.",
+            "missingFields": [
+              "note"
+            ],
+            "draft": {
+              "kind": "create_manual_transaction",
+              "fields": {
+                "name": "Cafe lunch",
+                "amount": 25,
+                "direction": "expense",
+                "date": "2026-09-10",
+                "category": "Food",
+                "account_name": "Manual Checking",
+                "account_id": "manual-checking"
+              },
+              "authorizationText": "Record a $25 expense named Cafe lunch on September 10, 2026 in Food, paid from Manual Checking.",
+              "userText": "Record a $25 expense named Cafe lunch on September 10, 2026 in Food, paid from Manual Checking.",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "expiresAt": "2026-09-10T15:30:00.000Z"
+            }
+          },
+          "draft": {
+            "kind": "create_manual_transaction",
+            "fields": {
+              "name": "Cafe lunch",
+              "amount": 25,
+              "direction": "expense",
+              "date": "2026-09-10",
+              "category": "Food",
+              "account_name": "Manual Checking",
+              "account_id": "manual-checking"
+            },
+            "authorizationText": "Record a $25 expense named Cafe lunch on September 10, 2026 in Food, paid from Manual Checking.",
+            "userText": "Record a $25 expense named Cafe lunch on September 10, 2026 in Food, paid from Manual Checking.",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "expiresAt": "2026-09-10T15:30:00.000Z"
+          },
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 1,
+            "creationExtractionsSucceeded": 1
+          },
+          "audit": {
+            "reads": [
+              "household_members",
+              "budgets",
+              "accounts"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "maxWords": 100,
+            "readyKind": "create_manual_transaction",
+            "payload": {
+              "amount": 25,
+              "direction": "expense",
+              "date": "2026-09-10",
+              "category": "Food",
+              "note": "Cafe lunch",
+              "account_id": "manual-checking"
+            }
+          }
+        }
+      ]
+    },
+    "checks": [
+      "turn0:payload_amount",
+      "turn0:payload_direction",
+      "turn0:payload_date",
+      "turn0:payload_category",
+      "turn0:payload_note",
+      "turn0:payload_account_id",
+      "turn0:creation_not_ready_create_manual_transaction"
+    ],
+    "checkedAt": "2026-10-28T15:11:33.184Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "create-bucket",
+      "turns": [
+        {
+          "question": "Create a spending bucket named Winter gifts with a $500 budget and target date December 25, 2026.",
+          "answer": {
+            "answer": "To add this spending bucket, send target date.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "needs_details",
+              "kind": "create_bucket",
+              "prompt": "To add this spending bucket, send target date.",
+              "missingFields": [
+                "target_date"
+              ],
+              "draft": {
+                "kind": "create_bucket",
+                "fields": {
+                  "name": "Winter gifts",
+                  "target_amount": 500,
+                  "target_date": "December 25, 2026"
+                },
+                "authorizationText": "Create a spending bucket named Winter gifts with a $500 budget and target date December 25, 2026.",
+                "userText": "Create a spending bucket named Winter gifts with a $500 budget and target date December 25, 2026.",
+                "householdId": "00000000-0000-4000-8000-000000000001",
+                "expiresAt": "2026-09-10T15:30:00.000Z"
+              }
+            }
+          },
+          "creation": {
+            "status": "needs_details",
+            "kind": "create_bucket",
+            "prompt": "To add this spending bucket, send target date.",
+            "missingFields": [
+              "target_date"
+            ],
+            "draft": {
+              "kind": "create_bucket",
+              "fields": {
+                "name": "Winter gifts",
+                "target_amount": 500,
+                "target_date": "December 25, 2026"
+              },
+              "authorizationText": "Create a spending bucket named Winter gifts with a $500 budget and target date December 25, 2026.",
+              "userText": "Create a spending bucket named Winter gifts with a $500 budget and target date December 25, 2026.",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "expiresAt": "2026-09-10T15:30:00.000Z"
+            }
+          },
+          "draft": {
+            "kind": "create_bucket",
+            "fields": {
+              "name": "Winter gifts",
+              "target_amount": 500,
+              "target_date": "December 25, 2026"
+            },
+            "authorizationText": "Create a spending bucket named Winter gifts with a $500 budget and target date December 25, 2026.",
+            "userText": "Create a spending bucket named Winter gifts with a $500 budget and target date December 25, 2026.",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "expiresAt": "2026-09-10T15:30:00.000Z"
+          },
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 1,
+            "creationExtractionsSucceeded": 1
+          },
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "maxWords": 100,
+            "readyKind": "create_bucket",
+            "payload": {
+              "name": "Winter gifts",
+              "target_amount": 500,
+              "target_date": "2026-12-25"
+            }
+          }
+        }
+      ]
+    },
+    "checks": [
+      "turn0:payload_name",
+      "turn0:payload_target_amount",
+      "turn0:payload_target_date",
+      "turn0:creation_not_ready_create_bucket"
+    ],
+    "checkedAt": "2026-10-28T15:11:40.013Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "create-savings_goal",
+      "turns": [
+        {
+          "question": "Create a savings goal named Camera with a $1000 target for December 31, 2026.",
+          "answer": {
+            "answer": "To add this savings goal, send name, target amount, target date.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "needs_details",
+              "kind": "create_savings_goal",
+              "prompt": "To add this savings goal, send name, target amount, target date.",
+              "missingFields": [
+                "name",
+                "target_amount",
+                "target_date"
+              ],
+              "draft": {
+                "kind": "create_savings_goal",
+                "fields": {},
+                "authorizationText": "Create a savings goal named Camera with a $1000 target for December 31, 2026.",
+                "userText": "Create a savings goal named Camera with a $1000 target for December 31, 2026.",
+                "householdId": "00000000-0000-4000-8000-000000000001",
+                "expiresAt": "2026-09-10T15:30:00.000Z"
+              }
+            }
+          },
+          "creation": {
+            "status": "needs_details",
+            "kind": "create_savings_goal",
+            "prompt": "To add this savings goal, send name, target amount, target date.",
+            "missingFields": [
+              "name",
+              "target_amount",
+              "target_date"
+            ],
+            "draft": {
+              "kind": "create_savings_goal",
+              "fields": {},
+              "authorizationText": "Create a savings goal named Camera with a $1000 target for December 31, 2026.",
+              "userText": "Create a savings goal named Camera with a $1000 target for December 31, 2026.",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "expiresAt": "2026-09-10T15:30:00.000Z"
+            }
+          },
+          "draft": {
+            "kind": "create_savings_goal",
+            "fields": {},
+            "authorizationText": "Create a savings goal named Camera with a $1000 target for December 31, 2026.",
+            "userText": "Create a savings goal named Camera with a $1000 target for December 31, 2026.",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "expiresAt": "2026-09-10T15:30:00.000Z"
+          },
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 1,
+            "creationExtractionsSucceeded": 1
+          },
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "maxWords": 100,
+            "readyKind": "create_savings_goal",
+            "payload": {
+              "name": "Camera",
+              "target_amount": 1000,
+              "target_date": "2026-12-31"
+            }
+          }
+        }
+      ]
+    },
+    "checks": [
+      "turn0:payload_name",
+      "turn0:payload_target_amount",
+      "turn0:payload_target_date",
+      "turn0:creation_not_ready_create_savings_goal"
+    ],
+    "checkedAt": "2026-10-28T15:11:46.323Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "bill-two-turn",
+      "turns": [
+        {
+          "question": "Create a bill named Internet.",
+          "answer": {
+            "answer": "To add this bill, send amount, how often it repeats, first payment date (YYYY-MM-DD).",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "needs_details",
+              "kind": "create_bill",
+              "prompt": "To add this bill, send amount, how often it repeats, first payment date (YYYY-MM-DD).",
+              "missingFields": [
+                "amount",
+                "frequency",
+                "first_date"
+              ],
+              "draft": {
+                "kind": "create_bill",
+                "fields": {
+                  "name": "Internet"
+                },
+                "authorizationText": "Create a bill named Internet.",
+                "userText": "Create a bill named Internet.",
+                "householdId": "00000000-0000-4000-8000-000000000001",
+                "expiresAt": "2026-09-10T15:30:00.000Z"
+              }
+            }
+          },
+          "creation": {
+            "status": "needs_details",
+            "kind": "create_bill",
+            "prompt": "To add this bill, send amount, how often it repeats, first payment date (YYYY-MM-DD).",
+            "missingFields": [
+              "amount",
+              "frequency",
+              "first_date"
+            ],
+            "draft": {
+              "kind": "create_bill",
+              "fields": {
+                "name": "Internet"
+              },
+              "authorizationText": "Create a bill named Internet.",
+              "userText": "Create a bill named Internet.",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "expiresAt": "2026-09-10T15:30:00.000Z"
+            }
+          },
+          "draft": {
+            "kind": "create_bill",
+            "fields": {
+              "name": "Internet"
+            },
+            "authorizationText": "Create a bill named Internet.",
+            "userText": "Create a bill named Internet.",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "expiresAt": "2026-09-10T15:30:00.000Z"
+          },
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 1,
+            "creationExtractionsSucceeded": 1
+          },
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "needsFields": true,
+            "maxWords": 100
+          }
+        },
+        {
+          "question": "It is $80 monthly, with the first payment on November 1, 2026.",
+          "answer": {
+            "answer": "To add this bill, send name, amount, how often it repeats, first payment date (YYYY-MM-DD).",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "needs_details",
+              "kind": "create_bill",
+              "prompt": "To add this bill, send name, amount, how often it repeats, first payment date (YYYY-MM-DD).",
+              "missingFields": [
+                "name",
+                "amount",
+                "frequency",
+                "first_date"
+              ],
+              "draft": {
+                "kind": "create_bill",
+                "fields": {},
+                "authorizationText": "Create a bill named Internet.",
+                "userText": "Create a bill named Internet.\nIt is $80 monthly, with the first payment on November 1, 2026.",
+                "householdId": "00000000-0000-4000-8000-000000000001",
+                "expiresAt": "2026-09-10T15:30:00.000Z"
+              }
+            }
+          },
+          "creation": {
+            "status": "needs_details",
+            "kind": "create_bill",
+            "prompt": "To add this bill, send name, amount, how often it repeats, first payment date (YYYY-MM-DD).",
+            "missingFields": [
+              "name",
+              "amount",
+              "frequency",
+              "first_date"
+            ],
+            "draft": {
+              "kind": "create_bill",
+              "fields": {},
+              "authorizationText": "Create a bill named Internet.",
+              "userText": "Create a bill named Internet.\nIt is $80 monthly, with the first payment on November 1, 2026.",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "expiresAt": "2026-09-10T15:30:00.000Z"
+            }
+          },
+          "draft": {
+            "kind": "create_bill",
+            "fields": {},
+            "authorizationText": "Create a bill named Internet.",
+            "userText": "Create a bill named Internet.\nIt is $80 monthly, with the first payment on November 1, 2026.",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "expiresAt": "2026-09-10T15:30:00.000Z"
+          },
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 1,
+            "creationExtractionsSucceeded": 1
+          },
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "maxWords": 100,
+            "readyKind": "create_bill",
+            "payload": {
+              "name": "Internet",
+              "amount": 80,
+              "frequency": "monthly",
+              "first_date": "2026-11-01"
+            }
+          }
+        }
+      ]
+    },
+    "checks": [
+      "turn1:payload_name",
+      "turn1:payload_amount",
+      "turn1:payload_frequency",
+      "turn1:payload_first_date",
+      "turn1:creation_not_ready_create_bill"
+    ],
+    "checkedAt": "2026-10-28T15:12:01.559Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "expense-account-clarify",
+      "turns": [
+        {
+          "question": "Record a $25 Food expense named Cafe lunch on September 10, 2026.",
+          "answer": {
+            "answer": "To add this manual transaction, send description, which active account.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "needs_details",
+              "kind": "create_manual_transaction",
+              "prompt": "To add this manual transaction, send description, which active account.",
+              "missingFields": [
+                "note",
+                "account_id"
+              ],
+              "draft": {
+                "kind": "create_manual_transaction",
+                "fields": {
+                  "name": "Cafe lunch",
+                  "amount": 25,
+                  "direction": "expense",
+                  "date": "2026-09-10",
+                  "category": "Food"
+                },
+                "authorizationText": "Record a $25 Food expense named Cafe lunch on September 10, 2026.",
+                "userText": "Record a $25 Food expense named Cafe lunch on September 10, 2026.",
+                "householdId": "00000000-0000-4000-8000-000000000001",
+                "expiresAt": "2026-09-10T15:30:00.000Z"
+              }
+            }
+          },
+          "creation": {
+            "status": "needs_details",
+            "kind": "create_manual_transaction",
+            "prompt": "To add this manual transaction, send description, which active account.",
+            "missingFields": [
+              "note",
+              "account_id"
+            ],
+            "draft": {
+              "kind": "create_manual_transaction",
+              "fields": {
+                "name": "Cafe lunch",
+                "amount": 25,
+                "direction": "expense",
+                "date": "2026-09-10",
+                "category": "Food"
+              },
+              "authorizationText": "Record a $25 Food expense named Cafe lunch on September 10, 2026.",
+              "userText": "Record a $25 Food expense named Cafe lunch on September 10, 2026.",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "expiresAt": "2026-09-10T15:30:00.000Z"
+            }
+          },
+          "draft": {
+            "kind": "create_manual_transaction",
+            "fields": {
+              "name": "Cafe lunch",
+              "amount": 25,
+              "direction": "expense",
+              "date": "2026-09-10",
+              "category": "Food"
+            },
+            "authorizationText": "Record a $25 Food expense named Cafe lunch on September 10, 2026.",
+            "userText": "Record a $25 Food expense named Cafe lunch on September 10, 2026.",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "expiresAt": "2026-09-10T15:30:00.000Z"
+          },
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 1,
+            "creationExtractionsSucceeded": 1
+          },
+          "audit": {
+            "reads": [
+              "household_members",
+              "budgets",
+              "accounts"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "needsFields": true,
+            "maxWords": 100
+          }
+        },
+        {
+          "question": "Use Manual Checking.",
+          "answer": {
+            "answer": "To add this manual transaction, send amount, money in or money out, transaction date, category, description, which active account.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "needs_details",
+              "kind": "create_manual_transaction",
+              "prompt": "To add this manual transaction, send amount, money in or money out, transaction date, category, description, which active account.",
+              "missingFields": [
+                "amount",
+                "direction",
+                "date",
+                "category",
+                "note",
+                "account_id"
+              ],
+              "draft": {
+                "kind": "create_manual_transaction",
+                "fields": {},
+                "authorizationText": "Record a $25 Food expense named Cafe lunch on September 10, 2026.",
+                "userText": "Record a $25 Food expense named Cafe lunch on September 10, 2026.\nUse Manual Checking.",
+                "householdId": "00000000-0000-4000-8000-000000000001",
+                "expiresAt": "2026-09-10T15:30:00.000Z"
+              }
+            }
+          },
+          "creation": {
+            "status": "needs_details",
+            "kind": "create_manual_transaction",
+            "prompt": "To add this manual transaction, send amount, money in or money out, transaction date, category, description, which active account.",
+            "missingFields": [
+              "amount",
+              "direction",
+              "date",
+              "category",
+              "note",
+              "account_id"
+            ],
+            "draft": {
+              "kind": "create_manual_transaction",
+              "fields": {},
+              "authorizationText": "Record a $25 Food expense named Cafe lunch on September 10, 2026.",
+              "userText": "Record a $25 Food expense named Cafe lunch on September 10, 2026.\nUse Manual Checking.",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "expiresAt": "2026-09-10T15:30:00.000Z"
+            }
+          },
+          "draft": {
+            "kind": "create_manual_transaction",
+            "fields": {},
+            "authorizationText": "Record a $25 Food expense named Cafe lunch on September 10, 2026.",
+            "userText": "Record a $25 Food expense named Cafe lunch on September 10, 2026.\nUse Manual Checking.",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "expiresAt": "2026-09-10T15:30:00.000Z"
+          },
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 1,
+            "creationExtractionsSucceeded": 1
+          },
+          "audit": {
+            "reads": [
+              "household_members",
+              "budgets",
+              "accounts"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "maxWords": 100,
+            "readyKind": "create_manual_transaction",
+            "payload": {
+              "amount": 25,
+              "direction": "expense",
+              "date": "2026-09-10",
+              "category": "Food",
+              "note": "Cafe lunch",
+              "account_id": "manual-checking"
+            }
+          }
+        }
+      ]
+    },
+    "checks": [
+      "turn1:payload_amount",
+      "turn1:payload_direction",
+      "turn1:payload_date",
+      "turn1:payload_category",
+      "turn1:payload_note",
+      "turn1:payload_account_id",
+      "turn1:creation_not_ready_create_manual_transaction"
+    ],
+    "checkedAt": "2026-10-28T15:12:19.183Z"
+  },
+  {
+    "status": 502,
+    "data": {
+      "caseId": "no-bare-yes",
+      "error": "evaluation_failed"
+    },
+    "checks": [
+      "http_502"
+    ],
+    "checkedAt": "2026-10-28T15:12:22.170Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "no-hypothetical",
+      "turns": [
+        {
+          "question": "What if I create a monthly Internet bill for $80 starting November 1?",
+          "answer": {
+            "answer": "I could not safely calculate that scenario from the available records.",
+            "claims": [],
+            "caveat": "The scenario must identify exactly one scheduled bill",
+            "evidenceIds": [
+              "financialAnalysis:1dd830e9a7c3c486:0"
+            ],
+            "followups": []
+          },
+          "creation": null,
+          "draft": null,
+          "sources": [
+            {
+              "id": "financialAnalysis:1dd830e9a7c3c486:0",
+              "type": "forecast",
+              "label": "Read-only financial scenario",
+              "asOf": "2026-09-09T15:00:00.000Z",
+              "freshness": "stale",
+              "route": "/(tabs)/monthly"
+            }
+          ],
+          "aggregate": {
+            "partial": true,
+            "dataAsOf": "2026-09-09T15:00:00.000Z",
+            "coverage": {
+              "complete": false,
+              "tools": 1,
+              "partialTools": 1,
+              "exclusions": [
+                "The scenario must identify exactly one scheduled bill"
+              ],
+              "reasons": [
+                "analysis_data_incomplete"
+              ],
+              "dateRanges": []
+            }
+          },
+          "records": [
+            {
+              "id": "financialAnalysis:1dd830e9a7c3c486:0"
+            }
+          ],
+          "usage": {
+            "inputTokens": 8972,
+            "outputTokens": 703
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 0,
+            "creationExtractionsSucceeded": 0
+          },
+          "audit": {
+            "reads": [
+              "household_settings",
+              "accounts",
+              "plaid_accounts",
+              "bills",
+              "goals",
+              "incomes",
+              "category_budgets",
+              "household_settings",
+              "bills",
+              "monthly_overrides",
+              "bill_date_moves",
+              "transactions",
+              "accounts",
+              "plaid_accounts",
+              "plaid_transactions",
+              "pending_plan_matches",
+              "incomes",
+              "goals",
+              "extra_payments",
+              "decisions",
+              "household_settings",
+              "bills",
+              "monthly_overrides",
+              "bill_date_moves",
+              "transactions",
+              "accounts",
+              "plaid_accounts",
+              "plaid_transactions",
+              "pending_plan_matches",
+              "incomes",
+              "goals",
+              "extra_payments",
+              "decisions"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "notCreated": true,
+            "maxWords": 100
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:12:31.178Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "no-negated-command",
+      "turns": [
+        {
+          "question": "Do not create an Internet bill for $80.",
+          "answer": {
+            "answer": "I couldn’t verify that request yet. I can help you check recorded balances, bills, income, debt, spending, and buckets, or show you where to find things in the app.",
+            "claims": [],
+            "caveat": "No account or plan changes were made.",
+            "evidenceIds": [],
+            "followups": []
+          },
+          "creation": null,
+          "draft": null,
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": false,
+              "reasons": [
+                "unsupported_by_v4_analysis"
+              ]
+            },
+            "partial": true
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 0,
+            "creationExtractionsSucceeded": 0
+          },
+          "audit": {
+            "reads": [
+              "household_settings",
+              "accounts",
+              "plaid_accounts",
+              "bills",
+              "goals",
+              "incomes",
+              "category_budgets"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "notCreated": true,
+            "maxWords": 100
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:12:34.863Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "unsupported-delete",
+      "turns": [
+        {
+          "question": "Delete my Rent bill.",
+          "answer": {
+            "answer": "I can create bills, debts, income, manual transactions, buckets, and savings goals. I can’t make payments, transfers, bank connections, or deletions.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "unavailable",
+              "prompt": "I can create bills, debts, income, manual transactions, buckets, and savings goals. I can’t make payments, transfers, bank connections, or deletions.",
+              "missingFields": []
+            }
+          },
+          "creation": {
+            "status": "unavailable",
+            "prompt": "I can create bills, debts, income, manual transactions, buckets, and savings goals. I can’t make payments, transfers, bank connections, or deletions.",
+            "missingFields": []
+          },
+          "draft": null,
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 0,
+            "creationExtractionsSucceeded": 0
+          },
+          "audit": {
+            "reads": [],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "notCreated": true,
+            "maxWords": 100
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:12:35.375Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "unsupported-transfer",
+      "turns": [
+        {
+          "question": "Transfer $100 from checking to savings.",
+          "answer": {
+            "answer": "I can create bills, debts, income, manual transactions, buckets, and savings goals. I can’t make payments, transfers, bank connections, or deletions.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "unavailable",
+              "prompt": "I can create bills, debts, income, manual transactions, buckets, and savings goals. I can’t make payments, transfers, bank connections, or deletions.",
+              "missingFields": []
+            }
+          },
+          "creation": {
+            "status": "unavailable",
+            "prompt": "I can create bills, debts, income, manual transactions, buckets, and savings goals. I can’t make payments, transfers, bank connections, or deletions.",
+            "missingFields": []
+          },
+          "draft": null,
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 0,
+            "creationExtractionsSucceeded": 0
+          },
+          "audit": {
+            "reads": [],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "notCreated": true,
+            "maxWords": 100
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:12:35.779Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "invalid-negative-bill",
+      "turns": [
+        {
+          "question": "Create an Internet bill for minus $80 every month with the first payment on November 1, 2026.",
+          "answer": {
+            "answer": "I have the details for Internet bill. Adding it after the app’s usual safety check.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "ready",
+              "kind": "create_bill",
+              "prompt": "I have the details for Internet bill. Adding it after the app’s usual safety check.",
+              "missingFields": [],
+              "commandId": "a719f363-718d-4616-b5a4-e734629d8860",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "payload": {
+                "name": "Internet bill",
+                "amount": 80,
+                "frequency": "monthly",
+                "first_date": "2026-11-01"
+              }
+            }
+          },
+          "creation": {
+            "status": "ready",
+            "kind": "create_bill",
+            "prompt": "I have the details for Internet bill. Adding it after the app’s usual safety check.",
+            "missingFields": [],
+            "commandId": "a719f363-718d-4616-b5a4-e734629d8860",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "payload": {
+              "name": "Internet bill",
+              "amount": 80,
+              "frequency": "monthly",
+              "first_date": "2026-11-01"
+            }
+          },
+          "draft": null,
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 1,
+            "creationExtractionsSucceeded": 1
+          },
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "notCreated": true,
+            "maxWords": 100
+          }
+        }
+      ]
+    },
+    "checks": [
+      "turn0:unintended_ready"
+    ],
+    "checkedAt": "2026-10-28T15:12:45.388Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "balance-no-forecast",
+      "turns": [
+        {
+          "question": "What is my Cedar Daily Checking balance?",
+          "answer": {
+            "answer": "Cedar Daily Checking: $700.00 recorded as of 2026-09-10.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [
+              "financialAnalysis:eadb519f0c0f727c:0"
+            ],
+            "followups": [
+              "What bills are due before my next paycheck?",
+              "How much can I safely spend?"
+            ]
+          },
+          "creation": null,
+          "draft": null,
+          "sources": [
+            {
+              "id": "financialAnalysis:eadb519f0c0f727c:0",
+              "type": "money",
+              "label": "Recorded account balance",
+              "asOf": "2026-09-09T15:00:00.000Z",
+              "freshness": "stale",
+              "route": "/(tabs)/accounts"
+            }
+          ],
+          "aggregate": {
+            "partial": false,
+            "dataAsOf": "2026-09-09T15:00:00.000Z",
+            "coverage": {
+              "complete": true,
+              "tools": 1,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            }
+          },
+          "records": [
+            {
+              "id": "financialAnalysis:eadb519f0c0f727c:0",
+              "recordedBalance": 700,
+              "accountCount": 1,
+              "accountName": "Cedar Daily Checking",
+              "accountType": "checking",
+              "balanceAsOf": "2026-09-10",
+              "oldestObservationDate": "2026-09-10",
+              "newestObservationDate": "2026-09-10",
+              "safeToSpend": null
+            }
+          ],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 0,
+            "creationExtractionsSucceeded": 0
+          },
+          "audit": {
+            "reads": [
+              "household_settings",
+              "household_settings",
+              "accounts",
+              "plaid_accounts",
+              "bills",
+              "household_settings",
+              "accounts",
+              "plaid_accounts",
+              "bills"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "facts": {
+              "recordedBalance": 700
+            },
+            "maxWords": 110
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:12:45.832Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "income-no-history",
+      "turns": [
+        {
+          "question": "What income sources do I have?",
+          "answer": {
+            "answer": "Your active recorded accounts:\n\nManual Card Account — manual credit_card: $75.00 recorded liability balance as of 2026-09-10. This is recorded debt owed, not cash available to spend. Credit liability; excluded from cash planning totals.\n\nManual Checking — manual checking: $500.00 recorded balance as of 2026-09-10. Excluded from the checking/cash planning balance because connected accounts take precedence.\n\nReserve 1 — manual savings: $110.00 recorded balance as of 2026-09-10. Used as a savings planning balance source.\n\nReserve 2 — manual savings: $220.00 recorded balance as of 2026-09-10. Used as a savings planning balance source.\n\nTravel Wallet — manual cash: $40.00 recorded balance as of 2026-09-10. Excluded from the checking/cash planning balance because connected accounts take precedence.\n\nCedar Daily Checking — connected checking: $700.00 recorded balance as of 2026-09-10. Used as a checking/cash planning balance source.\n\nMain Card — connected credit: $400.00 recorded liability balance as of 2026-09-10. This is recorded debt owed, not cash available to spend. Credit liability; excluded from cash planning totals.\n\nNo combined cash-and-debt total is calculated.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [
+              "financialAnalysis:7e4f48614faea446:0"
+            ],
+            "followups": [
+              "What is my checking balance?",
+              "What is my savings balance?"
+            ]
+          },
+          "creation": null,
+          "draft": null,
+          "sources": [
+            {
+              "id": "financialAnalysis:7e4f48614faea446:0",
+              "type": "money",
+              "label": "Recorded accounts",
+              "asOf": "2026-09-09T15:00:00.000Z",
+              "freshness": "stale",
+              "route": "/(tabs)/accounts"
+            }
+          ],
+          "aggregate": {
+            "partial": false,
+            "dataAsOf": "2026-09-09T15:00:00.000Z",
+            "coverage": {
+              "complete": true,
+              "tools": 1,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            }
+          },
+          "records": [
+            {
+              "id": "financialAnalysis:7e4f48614faea446:0",
+              "accountCount": 7,
+              "inventoryComplete": true,
+              "safeToSpend": null,
+              "account1Id": "manual-card",
+              "account1Name": "Manual Card Account",
+              "account1Type": "credit_card",
+              "account1Source": "manual",
+              "account1RecordedBalance": 75,
+              "account1BalanceAsOf": "2026-09-10",
+              "account1Planning": "Credit liability; excluded from cash planning totals",
+              "account1LiabilityStatus": "amount_owed",
+              "account1AmountOwed": 75,
+              "account1AccountCredit": 0,
+              "account2Id": "manual-checking",
+              "account2Name": "Manual Checking",
+              "account2Type": "checking",
+              "account2Source": "manual",
+              "account2RecordedBalance": 500,
+              "account2BalanceAsOf": "2026-09-10",
+              "account2Planning": "Excluded from the checking/cash planning balance because connected accounts take precedence",
+              "account3Id": "reserve-1",
+              "account3Name": "Reserve 1",
+              "account3Type": "savings",
+              "account3Source": "manual",
+              "account3RecordedBalance": 110,
+              "account3BalanceAsOf": "2026-09-10",
+              "account3Planning": "Used as a savings planning balance source",
+              "account4Id": "reserve-2",
+              "account4Name": "Reserve 2",
+              "account4Type": "savings",
+              "account4Source": "manual",
+              "account4RecordedBalance": 220,
+              "account4BalanceAsOf": "2026-09-10",
+              "account4Planning": "Used as a savings planning balance source",
+              "account5Id": "wallet",
+              "account5Name": "Travel Wallet",
+              "account5Type": "cash",
+              "account5Source": "manual",
+              "account5RecordedBalance": 40,
+              "account5BalanceAsOf": "2026-09-10",
+              "account5Planning": "Excluded from the checking/cash planning balance because connected accounts take precedence",
+              "account6Id": "bank-checking",
+              "account6Name": "Cedar Daily Checking",
+              "account6Type": "checking",
+              "account6Source": "connected",
+              "account6RecordedBalance": 700,
+              "account6BalanceAsOf": "2026-09-10",
+              "account6Planning": "Used as a checking/cash planning balance source",
+              "account7Id": "main-card",
+              "account7Name": "Main Card",
+              "account7Type": "credit",
+              "account7Source": "connected",
+              "account7RecordedBalance": 400,
+              "account7BalanceAsOf": "2026-09-10",
+              "account7Planning": "Credit liability; excluded from cash planning totals",
+              "account7LiabilityStatus": "amount_owed",
+              "account7AmountOwed": 400,
+              "account7AccountCredit": 0
+            }
+          ],
+          "usage": {
+            "inputTokens": 8963,
+            "outputTokens": 382
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 0,
+            "creationExtractionsSucceeded": 0
+          },
+          "audit": {
+            "reads": [
+              "household_settings",
+              "accounts",
+              "plaid_accounts",
+              "bills",
+              "goals",
+              "incomes",
+              "category_budgets",
+              "household_settings",
+              "accounts",
+              "plaid_accounts"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "answerIncludes": [
+              "Salary"
+            ],
+            "maxWords": 130
+          }
+        }
+      ]
+    },
+    "checks": [
+      "turn0:not_concise",
+      "turn0:missing_text_Salary"
+    ],
+    "checkedAt": "2026-10-28T15:12:50.313Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "spending-no-three-months",
+      "turns": [
+        {
+          "question": "How much did I spend this month?",
+          "answer": {
+            "answer": "$35.00 in recorded consumption spending for 2026-09-01–2026-09-10. Transfers and identified debt repayments are excluded.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [
+              "financialAnalysis:628b2770756de681:0"
+            ],
+            "followups": []
+          },
+          "creation": null,
+          "draft": null,
+          "sources": [
+            {
+              "id": "financialAnalysis:628b2770756de681:0",
+              "type": "spending",
+              "label": "Spending calculation",
+              "asOf": "2026-09-09T15:00:00.000Z",
+              "freshness": "stale",
+              "route": "/(tabs)/transactions"
+            }
+          ],
+          "aggregate": {
+            "partial": false,
+            "dataAsOf": "2026-09-09T15:00:00.000Z",
+            "coverage": {
+              "complete": true,
+              "tools": 1,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            }
+          },
+          "records": [
+            {
+              "id": "financialAnalysis:628b2770756de681:0",
+              "spending": 35,
+              "income": 0,
+              "debtRepayments": 0,
+              "startDate": "2026-09-01",
+              "endDate": "2026-09-10"
+            }
+          ],
+          "usage": {
+            "inputTokens": 8964,
+            "outputTokens": 506
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 0,
+            "creationExtractionsSucceeded": 0
+          },
+          "audit": {
+            "reads": [
+              "household_settings",
+              "accounts",
+              "plaid_accounts",
+              "bills",
+              "goals",
+              "incomes",
+              "category_budgets",
+              "household_settings",
+              "transactions",
+              "plaid_transactions",
+              "plaid_accounts",
+              "accounts",
+              "bills",
+              "goals"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "facts": {
+              "spending": 35
+            },
+            "maxWords": 130
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:12:57.390Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "balance-stale-observation",
+      "turns": [
+        {
+          "question": "What is my Cedar Daily Checking balance?",
+          "answer": {
+            "answer": "Cedar Daily Checking: $700.00 recorded as of 2026-09-01.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [
+              "financialAnalysis:a774eb77c33be953:0"
+            ],
+            "followups": [
+              "What bills are due before my next paycheck?",
+              "How much can I safely spend?"
+            ]
+          },
+          "creation": null,
+          "draft": null,
+          "sources": [
+            {
+              "id": "financialAnalysis:a774eb77c33be953:0",
+              "type": "money",
+              "label": "Recorded account balance",
+              "asOf": "2026-08-31T15:00:00.000Z",
+              "freshness": "stale",
+              "route": "/(tabs)/accounts"
+            }
+          ],
+          "aggregate": {
+            "partial": false,
+            "dataAsOf": "2026-08-31T15:00:00.000Z",
+            "coverage": {
+              "complete": true,
+              "tools": 1,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            }
+          },
+          "records": [
+            {
+              "id": "financialAnalysis:a774eb77c33be953:0",
+              "recordedBalance": 700,
+              "accountCount": 1,
+              "accountName": "Cedar Daily Checking",
+              "accountType": "checking",
+              "balanceAsOf": "2026-09-01",
+              "oldestObservationDate": "2026-09-01",
+              "newestObservationDate": "2026-09-01",
+              "safeToSpend": null
+            }
+          ],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 0,
+            "creationExtractionsSucceeded": 0
+          },
+          "audit": {
+            "reads": [
+              "household_settings",
+              "household_settings",
+              "accounts",
+              "plaid_accounts",
+              "bills",
+              "household_settings",
+              "accounts",
+              "plaid_accounts",
+              "bills"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "facts": {
+              "recordedBalance": 700
+            },
+            "maxWords": 110
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:12:57.658Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "unknown-balance-not-zero",
+      "turns": [
+        {
+          "question": "What is my Cedar Daily Checking balance?",
+          "answer": {
+            "answer": "A selected account has a missing or invalid balance. I cannot treat it as zero or return a partial total.",
+            "claims": [],
+            "caveat": "A selected account has a missing or invalid balance. I cannot treat it as zero or return a partial total.",
+            "evidenceIds": [
+              "financialAnalysis:b9d6925922f6491f:0"
+            ],
+            "followups": []
+          },
+          "creation": null,
+          "draft": null,
+          "sources": [
+            {
+              "id": "financialAnalysis:b9d6925922f6491f:0",
+              "type": "money",
+              "label": "Recorded account balance",
+              "asOf": "2026-09-09T15:00:00.000Z",
+              "freshness": "stale",
+              "route": "/(tabs)/accounts"
+            }
+          ],
+          "aggregate": {
+            "partial": true,
+            "dataAsOf": "2026-09-09T15:00:00.000Z",
+            "coverage": {
+              "complete": false,
+              "tools": 1,
+              "partialTools": 1,
+              "exclusions": [
+                "A selected account has a missing or invalid balance. I cannot treat it as zero or return a partial total."
+              ],
+              "reasons": [
+                "analysis_data_incomplete"
+              ],
+              "dateRanges": []
+            }
+          },
+          "records": [
+            {
+              "id": "financialAnalysis:b9d6925922f6491f:0"
+            }
+          ],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 0,
+            "creationExtractionsSucceeded": 0
+          },
+          "audit": {
+            "reads": [
+              "household_settings",
+              "household_settings",
+              "accounts",
+              "plaid_accounts",
+              "bills",
+              "household_settings",
+              "accounts",
+              "plaid_accounts",
+              "bills"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "noPickedBalance": true,
+            "maxWords": 100
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:12:58.169Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "direct-command-retry",
+      "turns": [
+        {
+          "question": "Create a monthly Internet bill for $80, with the first payment on November 1, 2026.",
+          "answer": {
+            "answer": "I have the details for Internet bill. Adding it after the app’s usual safety check.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "ready",
+              "kind": "create_bill",
+              "prompt": "I have the details for Internet bill. Adding it after the app’s usual safety check.",
+              "missingFields": [],
+              "commandId": "c02f425a-6220-4b9d-974b-f495c45bf352",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "payload": {
+                "name": "Internet bill",
+                "amount": 80,
+                "frequency": "monthly",
+                "first_date": "2026-11-01"
+              }
+            }
+          },
+          "creation": {
+            "status": "ready",
+            "kind": "create_bill",
+            "prompt": "I have the details for Internet bill. Adding it after the app’s usual safety check.",
+            "missingFields": [],
+            "commandId": "c02f425a-6220-4b9d-974b-f495c45bf352",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "payload": {
+              "name": "Internet bill",
+              "amount": 80,
+              "frequency": "monthly",
+              "first_date": "2026-11-01"
+            }
+          },
+          "draft": null,
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 1,
+            "creationExtractionsSucceeded": 1
+          },
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "maxWords": 100,
+            "readyKind": "create_bill",
+            "payload": {
+              "name": "Internet",
+              "amount": 80,
+              "frequency": "monthly",
+              "first_date": "2026-11-01"
+            }
+          }
+        },
+        {
+          "question": "Create a monthly Internet bill for $80, with the first payment on November 1, 2026.",
+          "answer": {
+            "answer": "To add this bill, send name, amount, how often it repeats, first payment date (YYYY-MM-DD).",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "needs_details",
+              "kind": "create_bill",
+              "prompt": "To add this bill, send name, amount, how often it repeats, first payment date (YYYY-MM-DD).",
+              "missingFields": [
+                "name",
+                "amount",
+                "frequency",
+                "first_date"
+              ],
+              "draft": {
+                "kind": "create_bill",
+                "fields": {},
+                "authorizationText": "Create a monthly Internet bill for $80, with the first payment on November 1, 2026.",
+                "userText": "Create a monthly Internet bill for $80, with the first payment on November 1, 2026.",
+                "householdId": "00000000-0000-4000-8000-000000000001",
+                "expiresAt": "2026-09-10T15:30:00.000Z"
+              }
+            }
+          },
+          "creation": {
+            "status": "needs_details",
+            "kind": "create_bill",
+            "prompt": "To add this bill, send name, amount, how often it repeats, first payment date (YYYY-MM-DD).",
+            "missingFields": [
+              "name",
+              "amount",
+              "frequency",
+              "first_date"
+            ],
+            "draft": {
+              "kind": "create_bill",
+              "fields": {},
+              "authorizationText": "Create a monthly Internet bill for $80, with the first payment on November 1, 2026.",
+              "userText": "Create a monthly Internet bill for $80, with the first payment on November 1, 2026.",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "expiresAt": "2026-09-10T15:30:00.000Z"
+            }
+          },
+          "draft": {
+            "kind": "create_bill",
+            "fields": {},
+            "authorizationText": "Create a monthly Internet bill for $80, with the first payment on November 1, 2026.",
+            "userText": "Create a monthly Internet bill for $80, with the first payment on November 1, 2026.",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "expiresAt": "2026-09-10T15:30:00.000Z"
+          },
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 1,
+            "creationExtractionsSucceeded": 1
+          },
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "maxWords": 100,
+            "readyKind": "create_bill",
+            "payload": {
+              "name": "Internet",
+              "amount": 80,
+              "frequency": "monthly",
+              "first_date": "2026-11-01"
+            }
+          }
+        }
+      ]
+    },
+    "checks": [
+      "turn0:payload_name",
+      "turn1:payload_name",
+      "turn1:payload_amount",
+      "turn1:payload_frequency",
+      "turn1:payload_first_date",
+      "turn1:creation_not_ready_create_bill"
+    ],
+    "checkedAt": "2026-10-28T15:13:24.245Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "cancel-draft",
+      "turns": [
+        {
+          "question": "Create a bill named Internet.",
+          "answer": {
+            "answer": "To add this bill, send amount, how often it repeats, first payment date (YYYY-MM-DD).",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "needs_details",
+              "kind": "create_bill",
+              "prompt": "To add this bill, send amount, how often it repeats, first payment date (YYYY-MM-DD).",
+              "missingFields": [
+                "amount",
+                "frequency",
+                "first_date"
+              ],
+              "draft": {
+                "kind": "create_bill",
+                "fields": {
+                  "name": "Internet"
+                },
+                "authorizationText": "Create a bill named Internet.",
+                "userText": "Create a bill named Internet.",
+                "householdId": "00000000-0000-4000-8000-000000000001",
+                "expiresAt": "2026-09-10T15:30:00.000Z"
+              }
+            }
+          },
+          "creation": {
+            "status": "needs_details",
+            "kind": "create_bill",
+            "prompt": "To add this bill, send amount, how often it repeats, first payment date (YYYY-MM-DD).",
+            "missingFields": [
+              "amount",
+              "frequency",
+              "first_date"
+            ],
+            "draft": {
+              "kind": "create_bill",
+              "fields": {
+                "name": "Internet"
+              },
+              "authorizationText": "Create a bill named Internet.",
+              "userText": "Create a bill named Internet.",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "expiresAt": "2026-09-10T15:30:00.000Z"
+            }
+          },
+          "draft": {
+            "kind": "create_bill",
+            "fields": {
+              "name": "Internet"
+            },
+            "authorizationText": "Create a bill named Internet.",
+            "userText": "Create a bill named Internet.",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "expiresAt": "2026-09-10T15:30:00.000Z"
+          },
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 1,
+            "creationExtractionsSucceeded": 1
+          },
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "needsFields": true,
+            "maxWords": 100
+          }
+        },
+        {
+          "question": "Cancel that.",
+          "answer": {
+            "answer": "Cancelled this draft.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "unavailable",
+              "prompt": "Cancelled this draft.",
+              "missingFields": []
+            }
+          },
+          "creation": {
+            "status": "unavailable",
+            "prompt": "Cancelled this draft.",
+            "missingFields": []
+          },
+          "draft": null,
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 0,
+            "creationExtractionsSucceeded": 0
+          },
+          "audit": {
+            "reads": [],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "notCreated": true,
+            "clearDraft": true,
+            "maxWords": 100
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:13:28.207Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "create-one-time-bill",
+      "turns": [
+        {
+          "question": "Create a one-time bill named Emergency plumber for $120, only on November 1, 2026.",
+          "answer": {
+            "answer": "To add this bill, send first payment date (YYYY-MM-DD).",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "needs_details",
+              "kind": "create_bill",
+              "prompt": "To add this bill, send first payment date (YYYY-MM-DD).",
+              "missingFields": [
+                "first_date"
+              ],
+              "draft": {
+                "kind": "create_bill",
+                "fields": {
+                  "name": "Emergency plumber",
+                  "amount": 120,
+                  "date": "2026-11-01",
+                  "is_recurring": false,
+                  "frequency": "monthly"
+                },
+                "authorizationText": "Create a one-time bill named Emergency plumber for $120, only on November 1, 2026.",
+                "userText": "Create a one-time bill named Emergency plumber for $120, only on November 1, 2026.",
+                "householdId": "00000000-0000-4000-8000-000000000001",
+                "expiresAt": "2026-09-10T15:30:00.000Z"
+              }
+            }
+          },
+          "creation": {
+            "status": "needs_details",
+            "kind": "create_bill",
+            "prompt": "To add this bill, send first payment date (YYYY-MM-DD).",
+            "missingFields": [
+              "first_date"
+            ],
+            "draft": {
+              "kind": "create_bill",
+              "fields": {
+                "name": "Emergency plumber",
+                "amount": 120,
+                "date": "2026-11-01",
+                "is_recurring": false,
+                "frequency": "monthly"
+              },
+              "authorizationText": "Create a one-time bill named Emergency plumber for $120, only on November 1, 2026.",
+              "userText": "Create a one-time bill named Emergency plumber for $120, only on November 1, 2026.",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "expiresAt": "2026-09-10T15:30:00.000Z"
+            }
+          },
+          "draft": {
+            "kind": "create_bill",
+            "fields": {
+              "name": "Emergency plumber",
+              "amount": 120,
+              "date": "2026-11-01",
+              "is_recurring": false,
+              "frequency": "monthly"
+            },
+            "authorizationText": "Create a one-time bill named Emergency plumber for $120, only on November 1, 2026.",
+            "userText": "Create a one-time bill named Emergency plumber for $120, only on November 1, 2026.",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "expiresAt": "2026-09-10T15:30:00.000Z"
+          },
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 1,
+            "creationExtractionsSucceeded": 1
+          },
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "readyKind": "create_bill",
+            "maxWords": 100,
+            "payload": {
+              "name": "Emergency plumber",
+              "amount": 120,
+              "first_date": "2026-11-01",
+              "is_recurring": false
+            }
+          }
+        }
+      ]
+    },
+    "checks": [
+      "turn0:payload_name",
+      "turn0:payload_amount",
+      "turn0:payload_first_date",
+      "turn0:payload_is_recurring",
+      "turn0:creation_not_ready_create_bill"
+    ],
+    "checkedAt": "2026-10-28T15:13:34.267Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "readonly-income-question",
+      "turns": [
+        {
+          "question": "Can you show me my income?",
+          "answer": {
+            "answer": "$1,500.00 in expected scheduled income on 2026-09-11. This is scheduled, not confirmed received income.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [
+              "financialAnalysis:2238d9746c7a4a77:0"
+            ],
+            "followups": []
+          },
+          "creation": null,
+          "draft": null,
+          "sources": [
+            {
+              "id": "financialAnalysis:2238d9746c7a4a77:0",
+              "type": "income",
+              "label": "Income calculation",
+              "asOf": "2026-09-10T15:00:00.000Z",
+              "freshness": "stale",
+              "route": "/(tabs)/more?section=money"
+            }
+          ],
+          "aggregate": {
+            "partial": false,
+            "dataAsOf": "2026-09-10T15:00:00.000Z",
+            "coverage": {
+              "complete": true,
+              "tools": 1,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            }
+          },
+          "records": [
+            {
+              "id": "financialAnalysis:2238d9746c7a4a77:0",
+              "nextPayday": "2026-09-11",
+              "expectedIncome": 1500,
+              "targetDate": "2026-09-11"
+            }
+          ],
+          "usage": {
+            "inputTokens": 8963,
+            "outputTokens": 337
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 0,
+            "creationExtractionsSucceeded": 0
+          },
+          "audit": {
+            "reads": [
+              "household_settings",
+              "accounts",
+              "plaid_accounts",
+              "bills",
+              "goals",
+              "incomes",
+              "category_budgets",
+              "household_settings",
+              "incomes"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "noCreation": true,
+            "answerIncludes": [
+              "Salary"
+            ],
+            "maxWords": 130
+          }
+        }
+      ]
+    },
+    "checks": [
+      "turn0:missing_text_Salary"
+    ],
+    "checkedAt": "2026-10-28T15:13:38.425Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "readonly-debt-explanation",
+      "turns": [
+        {
+          "question": "Can you explain my debt?",
+          "answer": {
+            "answer": "Your configured FlowLedger debt-plan balances total $1,000.00 across 1 debts. Connected credit balances are reviewed separately and may not be included here; this is not a verified total of every debt.\n\nTest Card: $1,000.00; configured payment $35.00; APR 18%.\n\nSmallest-balance eligible target: Test Card. This month's recorded required obligations total $35.00, with $35.00 remaining. Preserve that required remainder before adding extra.\n\nAt today's balances and recorded APRs, one month's simple interest estimate is $15.00. Actual statements may use daily balances and additional fees.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [
+              "financialAnalysis:1dd830e9a7c3c486:0"
+            ],
+            "followups": [
+              "How much extra can I safely pay toward debt?",
+              "Show me my debt payoff plan."
+            ]
+          },
+          "creation": null,
+          "draft": null,
+          "sources": [
+            {
+              "id": "financialAnalysis:1dd830e9a7c3c486:0",
+              "type": "debt",
+              "label": "Debt calculation",
+              "asOf": "2026-09-10T15:00:00.000Z",
+              "freshness": "stale",
+              "route": "/snowball-plan"
+            }
+          ],
+          "aggregate": {
+            "partial": false,
+            "dataAsOf": "2026-09-10T15:00:00.000Z",
+            "coverage": {
+              "complete": true,
+              "tools": 1,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            }
+          },
+          "records": [
+            {
+              "id": "financialAnalysis:1dd830e9a7c3c486:0",
+              "totalDebt": 1000,
+              "debtCount": 1,
+              "debtScope": "configured_plan_only",
+              "nextDebt": "Test Card",
+              "minimumPayments": 35,
+              "minimumRemaining": 35,
+              "configuredOngoingPayments": 35,
+              "monthlyInterestEstimate": 15
+            }
+          ],
+          "usage": {
+            "inputTokens": 10017,
+            "outputTokens": 761
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 0,
+            "creationExtractionsSucceeded": 0
+          },
+          "audit": {
+            "reads": [
+              "household_settings",
+              "accounts",
+              "plaid_accounts",
+              "bills",
+              "goals",
+              "incomes",
+              "category_budgets",
+              "household_settings",
+              "bills",
+              "monthly_overrides",
+              "bill_date_moves",
+              "transactions",
+              "accounts",
+              "plaid_accounts",
+              "plaid_transactions",
+              "pending_plan_matches",
+              "incomes",
+              "goals",
+              "extra_payments",
+              "decisions"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "noCreation": true,
+            "facts": {
+              "totalDebt": 1000
+            },
+            "maxWords": 140
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:13:52.935Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "capability-she-income",
+      "turns": [
+        {
+          "question": "Can she add income?",
+          "answer": {
+            "answer": "Yes. Send income name, take-home amount, pay frequency (monthly, weekly, or biweekly), first payday.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [],
+            "followups": [],
+            "creation": {
+              "status": "needs_details",
+              "kind": "create_income",
+              "prompt": "Yes. Send income name, take-home amount, pay frequency (monthly, weekly, or biweekly), first payday.",
+              "missingFields": [
+                "name",
+                "amount",
+                "frequency",
+                "first_date"
+              ],
+              "draft": {
+                "kind": "create_income",
+                "fields": {},
+                "authorizationText": "Can she add income?",
+                "userText": "Can she add income?",
+                "householdId": "00000000-0000-4000-8000-000000000001",
+                "expiresAt": "2026-09-10T15:30:00.000Z"
+              }
+            }
+          },
+          "creation": {
+            "status": "needs_details",
+            "kind": "create_income",
+            "prompt": "Yes. Send income name, take-home amount, pay frequency (monthly, weekly, or biweekly), first payday.",
+            "missingFields": [
+              "name",
+              "amount",
+              "frequency",
+              "first_date"
+            ],
+            "draft": {
+              "kind": "create_income",
+              "fields": {},
+              "authorizationText": "Can she add income?",
+              "userText": "Can she add income?",
+              "householdId": "00000000-0000-4000-8000-000000000001",
+              "expiresAt": "2026-09-10T15:30:00.000Z"
+            }
+          },
+          "draft": {
+            "kind": "create_income",
+            "fields": {},
+            "authorizationText": "Can she add income?",
+            "userText": "Can she add income?",
+            "householdId": "00000000-0000-4000-8000-000000000001",
+            "expiresAt": "2026-09-10T15:30:00.000Z"
+          },
+          "sources": [],
+          "aggregate": {
+            "dataAsOf": null,
+            "coverage": {
+              "complete": true,
+              "tools": 0,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            },
+            "partial": false
+          },
+          "records": [],
+          "usage": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 0,
+            "creationExtractionsSucceeded": 0
+          },
+          "audit": {
+            "reads": [
+              "household_members"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "capabilityKind": "create_income",
+            "needsFields": true,
+            "notCreated": true,
+            "maxWords": 90
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:13:53.273Z"
+  },
+  {
+    "status": 200,
+    "data": {
+      "caseId": "readonly-add-up-income",
+      "turns": [
+        {
+          "question": "Add up my income for Salary, $500 monthly, first payday 2026-11-01.",
+          "answer": {
+            "answer": "Read-only scenario: the end balance would be $8,420.48 versus $7,420.48 in the baseline. Through 2026-12-31, its low is $700.00 on 2026-09-10; this remains a projection, not guaranteed available funds. Nothing was changed.",
+            "claims": [],
+            "caveat": null,
+            "evidenceIds": [
+              "financialAnalysis:1dd830e9a7c3c486:0"
+            ],
+            "followups": []
+          },
+          "creation": null,
+          "draft": null,
+          "sources": [
+            {
+              "id": "financialAnalysis:1dd830e9a7c3c486:0",
+              "type": "income",
+              "label": "Read-only financial scenario",
+              "asOf": "2026-09-09T15:00:00.000Z",
+              "freshness": "stale",
+              "route": "/(tabs)/more?section=money"
+            }
+          ],
+          "aggregate": {
+            "partial": false,
+            "dataAsOf": "2026-09-09T15:00:00.000Z",
+            "coverage": {
+              "complete": true,
+              "tools": 1,
+              "partialTools": 0,
+              "exclusions": [],
+              "reasons": [],
+              "dateRanges": []
+            }
+          },
+          "records": [
+            {
+              "id": "financialAnalysis:1dd830e9a7c3c486:0",
+              "scenarioEndBalance": 8420.48,
+              "baselineEndBalance": 7420.48,
+              "cashCushion": 200,
+              "affordabilityVerified": true,
+              "everydaySpendingEstimated": true,
+              "scenarioLow": 700,
+              "scenarioLowDate": "2026-09-10",
+              "assessmentEndDate": "2026-12-31"
+            }
+          ],
+          "usage": {
+            "inputTokens": 8976,
+            "outputTokens": 635
+          },
+          "providerEvidence": {
+            "creationExtractionAttempts": 0,
+            "creationExtractionsSucceeded": 0
+          },
+          "audit": {
+            "reads": [
+              "household_settings",
+              "accounts",
+              "plaid_accounts",
+              "bills",
+              "goals",
+              "incomes",
+              "category_budgets",
+              "household_settings",
+              "bills",
+              "monthly_overrides",
+              "bill_date_moves",
+              "transactions",
+              "accounts",
+              "plaid_accounts",
+              "plaid_transactions",
+              "pending_plan_matches",
+              "incomes",
+              "goals",
+              "extra_payments",
+              "decisions",
+              "household_settings",
+              "bills",
+              "monthly_overrides",
+              "bill_date_moves",
+              "transactions",
+              "accounts",
+              "plaid_accounts",
+              "plaid_transactions",
+              "pending_plan_matches",
+              "incomes",
+              "goals",
+              "extra_payments",
+              "decisions"
+            ],
+            "writes": []
+          },
+          "expected": {
+            "writeCalls": 0,
+            "noCreation": true,
+            "maxWords": 140
+          }
+        }
+      ]
+    },
+    "checks": [
+      "pass"
+    ],
+    "checkedAt": "2026-10-28T15:14:01.962Z"
+  }
+]

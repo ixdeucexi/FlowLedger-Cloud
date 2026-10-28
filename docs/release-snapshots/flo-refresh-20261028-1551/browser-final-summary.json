@@ -1,0 +1,92 @@
+{
+  "frozenArtifact": {
+    "entry": "entry-3f13f477c91c983cf14cd28d38d11f4d.js",
+    "sha256": "b1732628dffd92e751996c497ea2aa5bf5a7eba12f4244fe27d1c7fda285483d",
+    "authKey": "sb-imqmhfdquqlqxgtcdbvc-auth-token"
+  },
+  "hashes": [
+    "b1732628dffd92e751996c497ea2aa5bf5a7eba12f4244fe27d1c7fda285483d"
+  ],
+  "passed": 6,
+  "aiPosts": 10,
+  "rpcAttempts": 3,
+  "viewports": [
+    320,
+    390,
+    1200
+  ],
+  "noteCase": {
+    "id": "long-note-exact-retry-retained-bounded-display",
+    "artifact": {
+      "entry": "entry-3f13f477c91c983cf14cd28d38d11f4d.js",
+      "sha256": "b1732628dffd92e751996c497ea2aa5bf5a7eba12f4244fe27d1c7fda285483d",
+      "authKey": "sb-imqmhfdquqlqxgtcdbvc-auth-token"
+    },
+    "width": 1200,
+    "ai": [
+      {
+        "path": "/functions/v1/flo-chat-v4",
+        "body": {
+          "version": 4,
+          "householdId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "question": "Record an expense $45 on 2026-10-28 category Food description Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purcha from Checking.",
+          "commandId": "400d1090-0731-4b55-b2d7-5abf873134dd",
+          "timezone": "UTC",
+          "conversationContext": []
+        }
+      }
+    ],
+    "rpc": [
+      {
+        "path": "/rest/v1/rpc/create_flo_entity",
+        "body": {
+          "p_command_id": "400d1090-0731-4b55-b2d7-5abf873134dd",
+          "p_kind": "create_manual_transaction",
+          "p_payload": {
+            "amount": 45,
+            "direction": "expense",
+            "date": "2026-10-28",
+            "category": "Food",
+            "note": "Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purcha",
+            "account_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+          },
+          "p_expected_household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "p_expected_budget_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        }
+      },
+      {
+        "path": "/rest/v1/rpc/create_flo_entity",
+        "body": {
+          "p_command_id": "400d1090-0731-4b55-b2d7-5abf873134dd",
+          "p_kind": "create_manual_transaction",
+          "p_payload": {
+            "amount": 45,
+            "direction": "expense",
+            "date": "2026-10-28",
+            "category": "Food",
+            "note": "Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purchase detail. Fictional long manual purcha",
+            "account_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+          },
+          "p_expected_household_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "p_expected_budget_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        }
+      }
+    ],
+    "errors": [],
+    "console": [
+      "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+    ],
+    "unknown": [],
+    "noteLength": 1900,
+    "displayLength": 107,
+    "intentionalRpc500": true
+  },
+  "normalPageOrConsoleErrors": 0,
+  "intentionalFault": "One RPC500 followed by exact Retry",
+  "allBrowserAndServerProcessesClosed": true,
+  "noSourceOrBuildWrites": true,
+  "carryforward": "16-case e59a8ed matrix, bounded source changes independently reviewed",
+  "limitations": [
+    "Budget/demo/ABA cross-product remains actual-effect and PostgreSQL coverage, not claimed browser coverage."
+  ]
+}

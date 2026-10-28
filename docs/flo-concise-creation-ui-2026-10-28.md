@@ -2,7 +2,7 @@
 
 Date: October 28, 2026. The owner requested clearer, shorter answers and reliable creation through Flo. Standing authorization covers publication after verification.
 
-Status: candidate verification and the applied production migration are recorded below. Backend deployment, web deployment and postflight remain pending. This document does not claim the candidate is live.
+Status: live at https://flowledger-algo.com on October 28, 2026. Backend, migration, web provenance, HTTP postflight and signed-out production browser checks passed.
 
 ## Changes
 
@@ -22,7 +22,7 @@ Recorded candidate gates:
 
 - Mobile: 1,361 tests in 14 suites plus five separate performance checks passed (`/tmp/flo-refresh-mobile-full.log`).
 - API: 217 passed; edge: 539 passed (`/tmp/flo-refresh-api.log`, `/tmp/flo-refresh-edge-full.log`).
-- Workspace/mobile and edge typechecks passed (`/tmp/flo-refresh-workspace-types.log`, `/tmp/flo-refresh-edge-types.log`). Earlier failed checks are not counted as passing runs.
+- Workspace/mobile typechecks and both final packaged Deno 2.9.6 checks passed (`/tmp/flo-refresh-workspace-types.log`, `/tmp/flo-refresh-edge-v3-final-deno.log`, `/tmp/flo-refresh-edge-v4-final-deno.log`). Earlier failed checks are not counted as passing runs.
 - Release fixtures: 37 passed. Mobile configuration, current user-guide PDF and web export passed; Expo Doctor passed 18/18 (`/tmp/flo-refresh-release-fixtures.log`, `/tmp/flo-refresh-config.log`, `/tmp/flo-refresh-guide.log`, `/tmp/flo-refresh-export.log`, `/tmp/flo-refresh-doctor.log`).
 - Actual isolated PostgreSQL 17: 169 assertions passed, independently rerun by SENTINEL. Coverage includes all six kinds, explicit one-time bills, exact/concurrent/altered retries, viewer/revoked access, household/account/budget scope, changed defaults, dates/precision, rollback, edited/deleted entities, receipt recovery and lifecycle cleanup. Command: `node scripts/test-flo-creation.cjs`.
 - Real-model-to-PostgreSQL bridge: seven unchanged provider-derived READY payloads across all six kinds plus a one-time bill created seven correctly typed records; seven exact retries created no duplicates. Eighty additional assertions passed. Only opaque household/budget/account fixture IDs were remapped. Command: `node scripts/test-flo-creation.cjs --model-receipts /tmp/flo-refresh-eval/receipts-round2.json`; evidence: `/tmp/flo-creation-model-postgres-bridge.json`.
@@ -43,6 +43,8 @@ Round 2: 39 of 40 automated cases passed. Preserve that result unchanged. The re
 
 Round 3: all five cases across seven turns passed. Security gates passed; the temporary evaluation endpoint was restored to its inert 401/404 state. The release coordinator confirmed these results; original receipts remain at `/tmp/flo-refresh-eval/receipts-round3.json`. SENTINEL returned final whole-change PASS.
 
+The model receipts (including the failed first run and unchanged round-two result), separate window review, real-model PostgreSQL bridge and browser summaries are archived under [release evidence](release-snapshots/flo-refresh-20261028-1551/manifest.json). Its manifest records their SHA-256 hashes. All model records are fictional; no credential values are included.
+
 ## Rollback
 
 - Web tag: `rollback/prod-before-flo-refresh-20261028-1422`, source `93143d52f10d5cdec95f5ff6d8de5e8f492a953e`, previous READY deployment `dpl_6w95qHbXTPZQz4u3D4jBHff6AYCD`.
@@ -53,9 +55,10 @@ The creation migration is additive. If rollback is needed, restore clients/funct
 
 ## Production release record
 
-- Reviewed source commit: **pending**.
+- Reviewed source commit: `7b63ff67020fc82b2cfbdff6132d1c72a4020672`, clean and pushed on `dev` before deployment.
 - Production migration: applied as `20261028155138_create_flo_entity.sql`; SQL SHA-256 `c4982b5e8955ea5f6a55cad135d61554a1d4f978c3037fb62551a05dfca079ef`. Hosted metadata confirms the five-argument creation RPC and three-argument reader, public invoker/private definer boundaries, empty search paths and authenticated-only execution. The private ledger has RLS enabled and postgres-only direct ACLs. Advisors returned zero WARN/ERROR findings; the intended private no-policy ledger adds one INFO entry (12 to 13 such tables).
-- Deployed backend versions and exact source verification: **pending**.
-- Web deployment, immutable URL and alias/source parity: **pending**.
-- Production HTTP, schema/grants and signed-out browser postflight: **pending**. Creation evidence combines real-model fictional payloads, actual local PostgreSQL writes and intercepted authenticated UI flows; it does not claim customer-record production writes.
-- Final release recommendation and remaining limitations: **pending coordinator entry**.
+- Backend: `flo-chat` v41, JWT verification enabled, deployed bundle SHA-256 `1077fde418ed29c7c629a9be6e2d49f27e1c5d4c99b07b09bc8269dfdc575e9a`; `flo-chat-v4` v8, JWT verification enabled, SHA-256 `9a35fa281a1c9a3b6c2f82e824b1d18ccaafbb2778eb061c8b1489abdd27a9f3`. Every deployed runtime file matches the reviewed package. Deno omits the type-only projection interfaces from both and the unreachable v3 tools module from v4; independent runtime-graph verification confirmed 52 complete modules in each. Missing/anonymous JWT requests return 401 for both functions. The temporary evaluator is inert v23 and returns 401/404.
+- Web: READY production deployment `dpl_HqK35nQA7bJRzEvGQ77hSXnWdiQX`, immutable https://flow-ledger-cloud-def9zh19r-flow-ledger-s-projects.vercel.app, exact reviewed source. All four production aliases were freshly inspected and aligned; the legacy project alias required reassignment. The duplicate non-production build of the same SHA was canceled. The live JavaScript SHA-256 exactly matches the final browser-tested `b1732628…d285483d` candidate above.
+- Production HTTP postflight passed against source `7b63ff6`: startup shell, registered Flo/Activity/public routes, current bundle signatures, fresh `/flo` HTML, exact candidate bundle SHA, health JSON, worker and guide parity, immutable JavaScript, no-store HTML/worker/guide and missing-resource 404/410 behavior. Vercel provenance came from actual MCP deployment inspections; the repository CLI-oriented postflight was adapted only to read those inspections and the exposed Git SHA metadata. Hosted privileges confirm authenticated private-schema access and wrapper execution, while anonymous/service-role execution and direct authenticated/service-role ledger access are denied.
+- Signed-out production browser postflight passed: fresh Chromium contexts on `/` and `/flo` at widths 390 and 1,200 reached the visible login boundary with zero Flo requests, app/page crashes, unexpected console errors, same-origin HTTP failures or overflow. The existing injected Cloudflare beacon was blocked by CSP once per navigation and is recorded separately. All contexts were closed. Creation evidence combines real-model fictional payloads, actual local PostgreSQL writes and intercepted authenticated UI flows; no customer financial records were used as production test fixtures.
+- Final release recommendation: PASS. The tested artifact is live. The verification boundaries above remain explicit: production checks were signed out, model fixtures were fictional, and database mutation tests ran in isolated local PostgreSQL. This record and its evidence archive are a documentation-only follow-up; the deployed application source remains `7b63ff67020fc82b2cfbdff6132d1c72a4020672`.

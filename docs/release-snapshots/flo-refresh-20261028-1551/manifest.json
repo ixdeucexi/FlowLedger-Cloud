@@ -1,0 +1,68 @@
+{
+  "sourceCommit": "7b63ff67020fc82b2cfbdff6132d1c72a4020672",
+  "scope": "Fixed fictional model records; isolated local PostgreSQL writes; intercepted authenticated browser flows. No customer financial writes.",
+  "modelRun1": "20/32 automated; failed evidence retained before fixes",
+  "modelRound2": "39/40 automated; separate immutable window review explains remaining fixture mismatch",
+  "modelRound3": "5 cases/7 turns passed on final guards",
+  "postgres": "169 canonical + 80 real-model bridge assertions; seven creates and seven exact retries",
+  "evalRetiredVersion": 23,
+  "files": [
+    {
+      "name": "model-run1-failed.json",
+      "bytes": 114546,
+      "sha256": "77139de2a29f6bf921edd06738cd95b2258c270ae68fc55bc38fecd9d63d54aa"
+    },
+    {
+      "name": "model-round2.json",
+      "bytes": 150001,
+      "sha256": "64a59797022158355189b6768cb2957e827e9d6ab74eaa0e052a12434c8c1d6b"
+    },
+    {
+      "name": "model-round2-window-review.json",
+      "bytes": 1677,
+      "sha256": "908cfb6af365203282fcefec34e74650344cfdaef04aa9f08a67a60a266ade99"
+    },
+    {
+      "name": "model-round3.json",
+      "bytes": 28339,
+      "sha256": "e265f07efdca9c25bf24726c244a398bc74484e3bc4ec0ee00b8177170b65146"
+    },
+    {
+      "name": "model-postgres-bridge.json",
+      "bytes": 5295,
+      "sha256": "f0553af2a44b7e2b9f10147551027efadd5c8e4c4372f9896dbcf0f2090c1d9e"
+    },
+    {
+      "name": "browser-earlier-summary.json",
+      "bytes": 1519,
+      "sha256": "afcadbea399357a4df9080e6f6069fb48164aed682d6a21843a978e2dfae4d93"
+    },
+    {
+      "name": "browser-final-summary.json",
+      "bytes": 8753,
+      "sha256": "d09520dd48233fecb3c07c70bdd30067aded8be98d2b5cdec8dfc6f463fa0968"
+    },
+    {
+      "name": "production-browser.json",
+      "bytes": 7212,
+      "sha256": "a6ccf4e0f2993785699a376bf7c20de3bde6880c68ee9c34501d1bab12afa20a"
+    },
+    {
+      "name": "production-backend-boundary.json",
+      "bytes": 388,
+      "sha256": "ec779c35d955109cdbf12c3b5572c4296c614a090ac5d94ea498eaf02fb97bef"
+    },
+    {
+      "name": "production-http-postflight.log",
+      "bytes": 216,
+      "sha256": "49c1ea582d428eac9fce3869bd72f581aa7296eb76162be0133941b29a45c5dc"
+    }
+  ],
+  "production": {
+    "deployment": "dpl_HqK35nQA7bJRzEvGQ77hSXnWdiQX",
+    "aliasesAligned": 4,
+    "bundleSha256": "b1732628dffd92e751996c497ea2aa5bf5a7eba12f4244fe27d1c7fda285483d",
+    "browser": "four fresh signed-out checks at390/1200; correct login boundary, zero Flo requests/crashes/unexpected errors; existing blocked Cloudflare beacon classified separately",
+    "financialWritesInProductionTests": 0
+  }
+}
