@@ -86,6 +86,13 @@ export interface RankedBillMatch extends BillMatchCandidate {
   reasons: string[];
 }
 
+export function compareRankedBillMatches(left: RankedBillMatch, right: RankedBillMatch): number {
+  return right.score - left.score
+    || left.amountDifference - right.amountDifference
+    || (left.daysApart ?? Number.MAX_SAFE_INTEGER) - (right.daysApart ?? Number.MAX_SAFE_INTEGER)
+    || left.name.localeCompare(right.name);
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function dateToUtcDay(value: string): number | null {
@@ -178,12 +185,7 @@ export function rankBillMatches(
         reasons,
       };
     })
-    .sort((left, right) =>
-      right.score - left.score
-      || left.amountDifference - right.amountDifference
-      || (left.daysApart ?? Number.MAX_SAFE_INTEGER) - (right.daysApart ?? Number.MAX_SAFE_INTEGER)
-      || left.name.localeCompare(right.name),
-    );
+    .sort(compareRankedBillMatches);
 }
 
 interface ConfirmedBillMatchLike {

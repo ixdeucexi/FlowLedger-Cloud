@@ -1,4 +1,4 @@
-import type { RankedBillMatch } from "./billMatching";
+import { compareRankedBillMatches, type RankedBillMatch } from "./billMatching";
 
 export type PendingMatchKind = "bill" | "debt" | "manual";
 export const pendingMatchKindLabels: Record<PendingMatchKind, string> = {
@@ -19,4 +19,17 @@ export function pendingMatchesForKind(
     const bill = currentBills.get(option.billId);
     return bill && Boolean(bill.is_debt) === (kind === "debt");
   }).map(option => ({ ...option, targetType: "bill" as const }));
+}
+
+/** One existing-ranked, eligible suggestion, independent of the display filter. */
+export function strongestPendingMatch(
+  billOptions: readonly RankedBillMatch[],
+  manualOptions: readonly RankedBillMatch[],
+  bills: readonly { id: string; is_debt?: boolean | null }[],
+): (RankedBillMatch & { kind: PendingMatchKind; targetType: "bill" | "manual" }) | null {
+  return (["bill", "debt", "manual"] as const)
+    .flatMap(kind => pendingMatchesForKind(kind, billOptions, manualOptions, bills)
+      .map(option => ({ ...option, kind })))
+    .filter(option => option.score >= 48)
+    .sort(compareRankedBillMatches)[0] ?? null;
 }

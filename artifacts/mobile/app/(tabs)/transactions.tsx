@@ -2,7 +2,7 @@ import { createTransactionNameResolver } from "@/lib/transactionNames";
 import { pendingManualReplacementIds } from "@/lib/pendingManualReplacement";
 import { MatchTypeFilters } from "@/components/MatchTypeFilters";
 import { activityTargetsForKind, matchTargetKindLabels, selectedMatchTargetKind, type MatchTargetKind, type MatchTargetSelection } from "@/lib/matchTargetFilters";
-import { pendingMatchesForKind, pendingMatchKindLabels, type PendingMatchKind } from "@/lib/pendingMatchChooser";
+import { pendingMatchesForKind, strongestPendingMatch, pendingMatchKindLabels, type PendingMatchKind } from "@/lib/pendingMatchChooser";
 import { parseMoneyInput } from "@/lib/moneyFormInput";
 import { showFormError } from "@/lib/formInputAlert";
 import Feather from "@expo/vector-icons/Feather";
@@ -1563,6 +1563,10 @@ export function ActivityScreen() {
   const pendingMatchOptions = useMemo(
     () => pendingMatchesForKind(pendingMatchKind, pendingBillMatchOptions, pendingManualMatchOptions, bills),
     [pendingMatchKind, pendingBillMatchOptions, pendingManualMatchOptions, bills],
+  );
+  const pendingMatchSuggestion = useMemo(
+    () => strongestPendingMatch(pendingBillMatchOptions, pendingManualMatchOptions, bills),
+    [pendingBillMatchOptions, pendingManualMatchOptions, bills],
   );
   const bucketMatchOptions = useMemo(() => {
     if (!matchTx || matchTx.amount >= 0) return [];
@@ -3626,7 +3630,12 @@ export function ActivityScreen() {
                 </Pressable>
               </View>
             ) : (
-              <>
+              <ScrollView
+                style={{ flexShrink: 1 }}
+                contentContainerStyle={{ paddingBottom: 8 }}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator
+              >
                 <Text style={[styles.matchIntro, { color: c.mutedForeground }]}>
                   Create a new Activity transaction for this charge, or link it
                   to a bill, debt, or manual transaction you already planned.
@@ -3660,6 +3669,38 @@ export function ActivityScreen() {
                   </View>
                   <Feather name="chevron-right" size={17} color={c.mutedForeground} />
                 </Pressable>
+                {/* Pending suggestion stays outside the type-filtered list. */}
+                {pendingMatchSuggestion ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Use suggested ${pendingMatchKindLabels[pendingMatchSuggestion.kind].toLowerCase()} ${pendingMatchSuggestion.name}, $${pendingMatchSuggestion.plannedAmount.toFixed(2)}`}
+                    accessibilityHint="Links this pending payment only when you choose it"
+                    disabled={savingMatch}
+                    onPress={() => void (pendingMatchSuggestion.targetType === "manual"
+                      ? handleMatchPendingManual(pendingMatchSuggestion.billId)
+                      : handleMatchPendingBill(pendingMatchSuggestion.billId))}
+                    style={({ pressed }) => [styles.matchRow, {
+                      backgroundColor: c.success + "12",
+                      borderColor: c.success + "66",
+                      opacity: savingMatch ? 0.55 : pressed ? 0.82 : 1,
+                    }]}
+                  >
+                    <View style={[styles.matchIcon, { backgroundColor: c.success + "18" }]}>
+                      <Feather name={pendingMatchSuggestion.targetType === "manual" ? "edit-3" : "file-text"} size={17} color={c.success} />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={[styles.matchReason, { color: c.success }]}>Suggested</Text>
+                      <Text style={[styles.matchRowTitle, { color: c.foreground }]}>{pendingMatchSuggestion.name}</Text>
+                      <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>
+                        {pendingMatchKindLabels[pendingMatchSuggestion.kind]} · ${pendingMatchSuggestion.plannedAmount.toFixed(2)} · {pendingMatchSuggestion.nearestOccurrenceDate ?? "Date unavailable"}
+                      </Text>
+                      {pendingMatchSuggestion.reasons.length > 0 ? (
+                        <Text style={[styles.matchReason, { color: c.success }]}>{pendingMatchSuggestion.reasons.slice(0, 2).join(" · ")}</Text>
+                      ) : null}
+                    </View>
+                    <Feather name="chevron-right" size={17} color={c.mutedForeground} />
+                  </Pressable>
+                ) : null}
                 <Text style={[styles.matchRowTitle, { color: c.foreground, marginTop: 16, marginBottom: 8 }]}>What does this payment cover?</Text>
                 <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
                   {(["bill", "debt", "manual"] as const).map(kind => (
@@ -3677,13 +3718,7 @@ export function ActivityScreen() {
                     </Pressable>
                   ))}
                 </View>
-                <ScrollView
-                  style={[
-                    styles.matchList,
-                    isDesktop && styles.desktopMatchList,
-                  ]}
-                  showsVerticalScrollIndicator={isDesktop}
-                >
+                <View>
                   {pendingMatchOptions.length > 0 ? (
                     pendingMatchOptions.map((option, index) => (
                       <Pressable
@@ -3803,7 +3838,7 @@ export function ActivityScreen() {
                       <Text
                         style={[styles.matchRowTitle, { color: c.foreground }]}
                       >
-                        {pendingMatchKind ? `No eligible ${pendingMatchKindLabels[pendingMatchKind].toLowerCase()} found` : "Choose a match type"}
+                        {pendingMatchKind ? `No eligible ${pendingMatchKindLabels[pendingMatchKind].toLowerCase()} found` : pendingMatchSuggestion ? "Choose a type for other entries" : "Choose a match type"}
                       </Text>
                       <Text
                         style={[
@@ -3811,12 +3846,12 @@ export function ActivityScreen() {
                           { color: c.mutedForeground },
                         ]}
                       >
-                        {pendingMatchKind ? "Choose another type, create a transaction above, or return after you have an eligible entry to match." : "Choose Bill, Debt, or Manual transaction to see matching entries. Nothing is matched until you choose an entry."}
+                        {pendingMatchKind ? "Choose another type, create a transaction above, or return after you have an eligible entry to match." : pendingMatchSuggestion ? "Use the suggestion above, or choose Bill, Debt, or Manual transaction to see other entries. Nothing is matched until you choose an entry." : "Choose Bill, Debt, or Manual transaction to see matching entries. Nothing is matched until you choose an entry."}
                       </Text>
                     </View>
                   )}
-                </ScrollView>
-              </>
+                </View>
+              </ScrollView>
             )}
           </Pressable>
         </Pressable>
