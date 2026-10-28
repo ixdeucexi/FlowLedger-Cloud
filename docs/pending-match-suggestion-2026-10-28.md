@@ -2,7 +2,7 @@
 
 Date: October 28, 2026. The owner asked for the suggested match to appear directly in the pending-payment sheet, without choosing a type filter first. Standing authorization covers publication after verification.
 
-Status: source and browser checks passed; publication and production postflight are pending.
+Status: live and verified. Source, functional browser and production HTTP/provenance gates passed. The public browser console diagnostic is recorded below.
 
 ## Change
 
@@ -29,3 +29,17 @@ SENTINEL approved the complete source/browser release gate. Settled fictional sc
 ## Rollback
 
 Annotated tag `rollback/prod-before-pending-suggestion-20261028-1124` was pushed and remotely verified before publication. It captures the currently live application source `44f499820d2b4e97e90c537161ee14f41c745f0d` and READY deployment `dpl_C8REwmuCJtegqjPeSe7bGsrrdEV1`. No backend function or schema change is planned.
+
+## Release
+
+Reviewed application source `93143d52f10d5cdec95f5ff6d8de5e8f492a953e` was committed, pushed and verified clean before publication. Production deployment `dpl_6w95qHbXTPZQz4u3D4jBHff6AYCD` is READY at immutable URL `flow-ledger-cloud-jtpg14h67-flow-ledger-s-projects.vercel.app`.
+
+The canonical, www, project Vercel and legacy team domains were inspected after readiness; all four resolve to the same production deployment and source. The legacy alias was explicitly moved after readiness. Canonical project/team identity, Node 24 and the Production-only metadata scope of all 14 environment records (13 required names) were checked without inspecting plaintext credentials. The deployment request explicitly supplied the repository build/install/output/root contract.
+
+Production HTTP postflight passed exact source provenance, registered public routes and Activity module, no-store SPA HTML, immutable executable JavaScript containing the new suggestion controls and preserved simulator/Flo signatures, health 200, missing API/asset 404, exact no-store service worker and guide-PDF parity. Authenticated Vercel MCP inspections replaced CLI metadata reads while retaining the repository assertions and equivalent GitHub commit metadata field.
+
+Fresh public browsers at 390/1,200 pixels opened `/transactions`, reached the expected sign-in boundary and recorded zero page errors, overflow or write attempts. These checks are separate from the fictional authenticated matching tests and do not claim a customer financial session. Both public widths logged a CSP refusal of an external Cloudflare analytics script. The strict zero-console check therefore did not pass; that diagnostic was retained without suppression or a CSP change. The CSP, app HTML and dependency declarations are unchanged from the preceding release, and no Cloudflare beacon appears in the reviewed app source or candidate JavaScript. A historical browser baseline comparison was not claimed. Matching and app startup were not blocked.
+
+Runtime inspection observed only the known Node `DEP0169` `url.parse()` deprecation warning from the successful health check; this is not a claim of zero log entries. No Supabase function, schema, dependency or environment configuration change was made.
+
+Release verification is complete. This postflight report update is documentation only; the live application remains the reviewed source above.
