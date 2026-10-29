@@ -326,7 +326,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
   }, [bills, current, decisions, extraPayments, getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, goals, incomes, pendingPlanMatches, subscriptionBillLinks, transactions]);
   const groupedTargets = useMemo(() => groupReviewTargets(targets), [targets]);
   const filteredTargets = useMemo(() => reviewTargetsForKind(targets, targetKind), [targets, targetKind]);
-  const suggestion = (current && current.amount > 0 ? targets : filteredTargets)[0];
+  const suggestion = targets[0];
   const spendingBuckets = useMemo(() => goals
     .filter(goal => goal.goal_type === "planned_expense" && !goal.archived_at)
     .sort((left, right) => Number(Boolean(left.closed_at)) - Number(Boolean(right.closed_at))
@@ -1163,15 +1163,6 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
             <Text style={[styles.transactionAmount, { color: current.amount < 0 ? c.destructive : c.success }]}>{current.amount < 0 ? "−" : "+"}{money(current.amount)}</Text>
           </View>
 
-          {current.amount < 0 ? (
-            <MatchTypeFilters
-              selected={targetKind}
-              disabled={saving}
-              includeCalendarPlans={targets.some(target => target.type === "decision")}
-              onChange={kind => setTargetSelection({ scope: targetFilterScope, kind })}
-            />
-          ) : null}
-
           {suggestion && suggestion.score >= 78 ? (
             <Pressable
               accessibilityRole="button"
@@ -1189,6 +1180,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
             >
               <FloLogo size={34} />
               <View style={styles.optionCopy}>
+                <Text style={[styles.optionDescription, { color: c.success }]}>Suggested</Text>
                 <Text style={[styles.optionTitle, { color: c.foreground }]}>Flo suggests {suggestion.name}</Text>
                 <Text style={[styles.optionDescription, { color: c.success }]}>
                   {suggestion.reasons.slice(0, 2).join(" · ")}
@@ -1198,15 +1190,26 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
             </Pressable>
           ) : null}
 
+          {current.amount < 0 ? (
+            <MatchTypeFilters
+              selected={targetKind}
+              disabled={saving}
+              includeCalendarPlans={targets.some(target => target.type === "decision")}
+              onChange={kind => setTargetSelection({ scope: targetFilterScope, kind })}
+            />
+          ) : null}
+
           {current.amount > 0 ? <>
             <Text style={[styles.sectionTitle, { color: c.foreground }]}>Expected income</Text>
             <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>{groupedTargets.income.length ? "Choose the income this deposit belongs to." : "No expected income was found for this month."}</Text>
             {groupedTargets.income.map(renderTarget)}
           </> : <>
-            <Text style={[styles.sectionTitle, { color: c.foreground }]}>{targetKind ? matchTargetKindLabels[targetKind] : "Choose a match type"}</Text>
+            <Text style={[styles.sectionTitle, { color: c.foreground }]}>{targetKind ? matchTargetKindLabels[targetKind] : suggestion && suggestion.score >= 78 ? "Choose a type for other entries" : "Choose a match type"}</Text>
             <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>
               {!targetKind
-                ? "Choose Bill, Debt, Manual transaction, or Buckets to see matching entries. Nothing is matched until you choose an entry."
+                ? suggestion && suggestion.score >= 78
+                  ? "Use the suggestion above, or choose Bill, Debt, Manual transaction, or Buckets to see other entries. Nothing is matched until you choose an entry."
+                  : "Choose Bill, Debt, Manual transaction, or Buckets to see matching entries. Nothing is matched until you choose an entry."
                 : !filteredTargets.length
                   ? `No eligible ${matchTargetKindLabels[targetKind].toLowerCase()} found. Choose another filter.`
                   : targetKind === "manual"

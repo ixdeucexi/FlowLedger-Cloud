@@ -1,6 +1,7 @@
 import { createTransactionNameResolver } from "@/lib/transactionNames";
 import { pendingManualReplacementIds } from "@/lib/pendingManualReplacement";
 import { MatchTypeFilters } from "@/components/MatchTypeFilters";
+import { FloLogo } from "@/components/FloLogo";
 import { activityTargetsForKind, matchTargetKindLabels, selectedMatchTargetKind, type MatchTargetKind, type MatchTargetSelection } from "@/lib/matchTargetFilters";
 import { pendingMatchesForKind, strongestPendingMatch, pendingMatchKindLabels, type PendingMatchKind } from "@/lib/pendingMatchChooser";
 import { parseMoneyInput } from "@/lib/moneyFormInput";
@@ -1615,6 +1616,10 @@ export function ActivityScreen() {
     () => activityTargetsForKind(combinedMatchOptions, matchTargetKind, bills),
     [combinedMatchOptions, matchTargetKind, bills],
   );
+  const matchSuggestion = combinedMatchOptions.find(option => option.score >= 48) ?? null;
+  const matchSuggestionKind = matchSuggestion?.targetType === "bill"
+    ? bills.find(bill => bill.id === matchSuggestion.billId)?.is_debt ? "debt" : "bill"
+    : matchSuggestion?.targetType;
   const transactionName = useMemo(() => createTransactionNameResolver(bills, incomes), [bills, incomes]);
   const matchedBillIdForModal = matchTx ? confirmedBillMatchId(matchTx) : null;
   const matchedBillForModal = matchedBillIdForModal
@@ -3961,14 +3966,6 @@ export function ActivityScreen() {
               </View>
             ) : (
               <>
-                <Text style={[styles.matchIntro, { color: c.mutedForeground }]}>
-                  Choose a match type, then select the entry this payment covered.
-                </Text>
-                <MatchTypeFilters
-                  selected={matchTargetKind}
-                  disabled={savingMatch}
-                  onChange={(kind: MatchTargetKind) => setMatchTargetSelection({ scope: matchTargetScope, kind })}
-                />
                 <ScrollView
                   style={[
                     styles.matchList,
@@ -3976,6 +3973,46 @@ export function ActivityScreen() {
                   ]}
                   showsVerticalScrollIndicator={isDesktop}
                 >
+                  <Text style={[styles.matchIntro, { color: c.mutedForeground }]}>
+                    {matchSuggestion ? "Use Flo’s suggestion, or choose a type to browse other entries." : "Choose a match type, then select the entry this payment covered."}
+                  </Text>
+                  {matchSuggestion ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Use suggested ${matchSuggestionKind ? matchTargetKindLabels[matchSuggestionKind].toLowerCase() : "entry"} ${matchSuggestion.name}`}
+                      disabled={savingMatch}
+                      onPress={() =>
+                        void (matchSuggestion.targetType === "manual"
+                          ? handleMatchManual(matchSuggestion.billId)
+                          : matchSuggestion.targetType === "bucket"
+                            ? handleMatchBucket(matchSuggestion.billId)
+                            : handleMatchBill(matchSuggestion.billId))
+                      }
+                      style={({ pressed }) => [styles.matchRow, {
+                        backgroundColor: c.success + "12",
+                        borderColor: c.success + "66",
+                        opacity: savingMatch ? 0.55 : pressed ? 0.82 : 1,
+                      }]}
+                    >
+                      <FloLogo size={38} />
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={[styles.matchReason, { color: c.success }]}>Suggested</Text>
+                        <Text style={[styles.matchRowTitle, { color: c.foreground }]}>{matchSuggestion.name}</Text>
+                        <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>
+                          {matchSuggestionKind ? matchTargetKindLabels[matchSuggestionKind] : "Entry"} · ${matchSuggestion.plannedAmount.toFixed(2)} · {matchSuggestion.nearestOccurrenceDate ?? "Date unavailable"}
+                        </Text>
+                        {matchSuggestion.reasons.length > 0 ? (
+                          <Text style={[styles.matchReason, { color: c.success }]}>{matchSuggestion.reasons.slice(0, 2).join(" · ")}</Text>
+                        ) : null}
+                      </View>
+                      <Text style={[styles.matchReason, { color: c.success }]}>Use</Text>
+                    </Pressable>
+                  ) : null}
+                  <MatchTypeFilters
+                    selected={matchTargetKind}
+                    disabled={savingMatch}
+                    onChange={(kind: MatchTargetKind) => setMatchTargetSelection({ scope: matchTargetScope, kind })}
+                  />
                   {filteredMatchOptions.length > 0 ? (
                     filteredMatchOptions.map((option, index) => (
                       <Pressable
@@ -4106,7 +4143,7 @@ export function ActivityScreen() {
                       <Text
                         style={[styles.matchRowTitle, { color: c.foreground }]}
                       >
-                        {matchTargetKind ? `No eligible ${matchTargetKindLabels[matchTargetKind].toLowerCase()} found` : "Choose a match type"}
+                        {matchTargetKind ? `No eligible ${matchTargetKindLabels[matchTargetKind].toLowerCase()} found` : matchSuggestion ? "Choose a type for other entries" : "Choose a match type"}
                       </Text>
                       <Text
                         style={[
@@ -4114,7 +4151,7 @@ export function ActivityScreen() {
                           { color: c.mutedForeground },
                         ]}
                       >
-                        {matchTargetKind ? "Choose another filter, or return after an eligible entry is available." : "Choose Bill, Debt, Manual transaction, or Buckets to see matching entries. Nothing is matched until you choose an entry."}
+                        {matchTargetKind ? "Choose another filter, or return after an eligible entry is available." : matchSuggestion ? "Use the suggestion above, or choose Bill, Debt, Manual transaction, or Buckets to see other entries. Nothing is matched until you choose an entry." : "Choose Bill, Debt, Manual transaction, or Buckets to see matching entries. Nothing is matched until you choose an entry."}
                       </Text>
                     </View>
                   )}

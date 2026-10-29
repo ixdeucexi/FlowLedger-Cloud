@@ -1,0 +1,165 @@
+{
+  "status": "PASS",
+  "cases": 7,
+  "results": [
+    {
+      "key": "review-bill-390",
+      "status": "PASS",
+      "suggestion": "Use Flo suggestion Peacock",
+      "filterIndependent": true,
+      "noAutomaticReconciliation": true,
+      "explicitAction": {
+        "name": "reconcile_transaction",
+        "input": {
+          "p_transaction_id": "posted-peacock",
+          "p_resolution": "bill",
+          "p_target_id": "bill-peacock",
+          "p_occurrence_date": "2026-10-28",
+          "p_planned_amount": 12.99,
+          "p_settlement": "exact",
+          "p_extra_category": null
+        }
+      },
+      "uncaughtErrors": [],
+      "consoleWarnings": [],
+      "unknown": [],
+      "externalCallsIntercepted": 37
+    },
+    {
+      "key": "review-bill-1200",
+      "status": "PASS",
+      "suggestion": "Use Flo suggestion Peacock",
+      "filterIndependent": true,
+      "noAutomaticReconciliation": true,
+      "explicitAction": {
+        "name": "reconcile_transaction",
+        "input": {
+          "p_transaction_id": "posted-peacock",
+          "p_resolution": "bill",
+          "p_target_id": "bill-peacock",
+          "p_occurrence_date": "2026-10-28",
+          "p_planned_amount": 12.99,
+          "p_settlement": "exact",
+          "p_extra_category": null
+        }
+      },
+      "uncaughtErrors": [],
+      "consoleWarnings": [],
+      "unknown": [],
+      "externalCallsIntercepted": 37
+    },
+    {
+      "key": "review-manual-390",
+      "status": "PASS",
+      "suggestion": "Use Flo suggestion Peacock manual purchase",
+      "filterIndependent": true,
+      "noAutomaticReconciliation": true,
+      "explicitAction": {
+        "name": "reconcile_manual_transaction",
+        "input": {
+          "p_transaction_id": "posted-peacock",
+          "p_manual_transaction_id": "manual-peacock",
+          "p_occurrence_date": "2026-10-28",
+          "p_planned_amount": 12.99,
+          "p_settlement": "exact"
+        }
+      },
+      "uncaughtErrors": [],
+      "consoleWarnings": [],
+      "unknown": [],
+      "externalCallsIntercepted": 39
+    },
+    {
+      "key": "review-bucket-390",
+      "status": "PASS",
+      "suggestion": "Use Flo suggestion Peacock bucket",
+      "filterIndependent": true,
+      "noAutomaticReconciliation": true,
+      "explicitAction": {
+        "name": "reconcile_transaction",
+        "input": {
+          "p_transaction_id": "posted-peacock",
+          "p_resolution": "goal",
+          "p_target_id": "bucket-peacock",
+          "p_occurrence_date": "2026-10-28",
+          "p_planned_amount": 12.99,
+          "p_settlement": "exact",
+          "p_extra_category": null
+        }
+      },
+      "uncaughtErrors": [],
+      "consoleWarnings": [],
+      "unknown": [],
+      "externalCallsIntercepted": 39
+    },
+    {
+      "key": "review-debt-390",
+      "status": "PASS",
+      "suggestion": "Use Flo suggestion Peacock Card",
+      "filterIndependent": true,
+      "noAutomaticReconciliation": true,
+      "explicitAction": {
+        "name": "reconcile_transaction",
+        "input": {
+          "p_transaction_id": "posted-peacock",
+          "p_resolution": "bill",
+          "p_target_id": "debt-card",
+          "p_occurrence_date": "2026-10-28",
+          "p_planned_amount": 12.99,
+          "p_settlement": "exact",
+          "p_extra_category": null
+        }
+      },
+      "uncaughtErrors": [],
+      "consoleWarnings": [],
+      "unknown": [],
+      "externalCallsIntercepted": 42
+    },
+    {
+      "key": "activity-bill-390",
+      "status": "PASS",
+      "suggestion": "Use suggested bill Peacock",
+      "filterIndependent": true,
+      "noAutomaticReconciliation": true,
+      "explicitAction": {
+        "name": "reconcile_transaction",
+        "input": {
+          "p_transaction_id": "posted-peacock",
+          "p_resolution": "bill",
+          "p_target_id": "bill-peacock",
+          "p_occurrence_date": "2026-10-28",
+          "p_planned_amount": 12.99,
+          "p_settlement": "exact",
+          "p_extra_category": null
+        }
+      },
+      "uncaughtErrors": [],
+      "consoleWarnings": [],
+      "unknown": [],
+      "externalCallsIntercepted": 33
+    },
+    {
+      "key": "activity-bill-1200",
+      "status": "PASS",
+      "suggestion": "Use suggested bill Peacock",
+      "filterIndependent": true,
+      "noAutomaticReconciliation": true,
+      "explicitAction": {
+        "name": "reconcile_transaction",
+        "input": {
+          "p_transaction_id": "posted-peacock",
+          "p_resolution": "bill",
+          "p_target_id": "bill-peacock",
+          "p_occurrence_date": "2026-10-28",
+          "p_planned_amount": 12.99,
+          "p_settlement": "exact",
+          "p_extra_category": null
+        }
+      },
+      "uncaughtErrors": [],
+      "consoleWarnings": [],
+      "unknown": [],
+      "externalCallsIntercepted": 33
+    }
+  ]
+}

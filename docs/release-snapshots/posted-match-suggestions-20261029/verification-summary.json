@@ -1,0 +1,20 @@
+{
+  "status": "PASS",
+  "apiTests": 217,
+  "edgeTests": 563,
+  "releaseFixtureTests": 37,
+  "mobileTests": 1378,
+  "performanceChecks": 5,
+  "focusedMatchingTests": 87,
+  "expoDoctor": "18/18 PASS",
+  "workspaceTypecheck": "PASS",
+  "webExport": "PASS",
+  "artifactAndGuide": "PASS",
+  "browserFlows": 7,
+  "browserExternalRequestsIntercepted": 260,
+  "liveFinancialWrites": 0,
+  "bundle": "entry-8808afb3c3b33e4c37cd65611e20c635.js",
+  "bundleSha256": "45ff71321a0bab9c2716c9b749534d06626d33ebffd31332959222bf64e7e337",
+  "rollbackTag": "rollback/prod-before-posted-match-suggestions-20261029-1103",
+  "fullVerificationLogSha256": "011e01033af21c124531e09345f7636841e6d69d7080e4e6c464a007cb760603"
+}
