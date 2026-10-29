@@ -2,6 +2,7 @@ import Feather from "@expo/vector-icons/Feather";
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useThemeMode } from "@/context/ThemeContext";
+import { CalendarAppearanceSettings } from "@/components/CalendarAppearanceSettings";
 import { useColors } from "@/hooks/useColors";
 import colors from "@/constants/colors";
 import {
@@ -335,6 +336,7 @@ export function AppearanceSettings() {
           );
         })}
       </View>
+      <CalendarAppearanceSettings />
       <View style={[styles.saveStatus, { borderColor: c.border }]}>
         <Text
           accessibilityLiveRegion="polite"

@@ -1,3 +1,7 @@
+import { useCalendarAppearance } from "@/hooks/useCalendarAppearance";
+import type { CalendarAppearance } from "@/lib/calendarAppearance";
+import { calendarAccentVariables, calendarHighlightText } from "@/lib/calendarAppearance";
+import { useColors } from "@/hooks/useColors";
 import Feather from "@expo/vector-icons/Feather";
 import React, { useMemo } from "react";
 import {
@@ -99,15 +103,9 @@ function shortDate(value: string) {
   });
 }
 
-function eventTone(kind: DesktopCalendarEventKind) {
-  return {
-    income: { color: palette.green, background: palette.greenSoft },
-    bill: { color: palette.amber, background: palette.amberSoft },
-    debt: { color: palette.blue, background: palette.blueSoft },
-    plan: { color: palette.textSecondary, background: palette.surfaceMuted },
-    spending: { color: palette.purple, background: palette.purpleSoft },
-    risk: { color: palette.red, background: palette.redSoft },
-  }[kind];
+function eventTone(kind: DesktopCalendarEventKind, tones: CalendarAppearance) {
+  const tone = tones[kind];
+  return { color: tone.text, background: tone.bg, dot: tone.color };
 }
 
 function IconButton({
@@ -155,6 +153,8 @@ function CalendarHeader({
   | "simulatorLocked"
   | "onOpenPlanSimulator"
 > & { compact: boolean; onAdd: () => void }) {
+  const c = useColors();
+  const actionText = calendarHighlightText(c.primary);
   return (
     <View style={[styles.pageHeader, compact && styles.pageHeaderCompact]}>
       <View style={styles.pageHeaderCopy}>
@@ -204,11 +204,11 @@ function CalendarHeader({
           accessibilityRole="button"
           accessibilityLabel="Add transaction"
           onPress={onAdd}
-          style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.addButton, { backgroundColor: c.primary }, pressed && styles.pressed]}
         >
-          <Feather name="plus" size={16} color="#ffffff" />
-          <Text style={styles.addButtonText}>Add</Text>
-          <Feather name="chevron-down" size={14} color="#ffffff" />
+          <Feather name="plus" size={16} color={actionText} />
+          <Text style={[styles.addButtonText, { color: actionText }]}>Add</Text>
+          <Feather name="chevron-down" size={14} color={actionText} />
         </Pressable>
       </View>
     </View>
@@ -226,18 +226,19 @@ function CalendarEventPill({
   transferTransactionIds: ReadonlySet<string>;
   overdueBillOccurrenceKeys: ReadonlySet<string>;
 }) {
+  const calendarColors = useCalendarAppearance();
   const kind = calendarEventKind(
     event,
     transferTransactionIds,
     overdueBillOccurrenceKeys,
   );
-  const tone = eventTone(kind);
+  const tone = eventTone(kind, calendarColors);
   return (
     <View
       accessibilityLabel={`${resolveEventLabel(event)}, ${kind}, ${money(event.amount, true)}`}
       style={[styles.eventPill, { backgroundColor: tone.background }]}
     >
-      <View style={[styles.eventDot, { backgroundColor: tone.color }]} />
+      <View style={[styles.eventDot, { backgroundColor: tone.dot }]} />
       <Text numberOfLines={1} style={styles.eventName}>{resolveEventLabel(event)}</Text>
       <Text style={[styles.eventAmount, { color: tone.color }]}>
         {money(event.amount, true)}
@@ -247,14 +248,15 @@ function CalendarEventPill({
 }
 
 function CalendarLegend() {
+  const calendarColors = useCalendarAppearance();
   return (
     <View accessibilityLabel="Calendar legend" style={styles.legend}>
       {(["income", "bill", "debt", "plan", "spending", "risk"] as const).map((kind) => {
-        const tone = eventTone(kind);
+        const tone = eventTone(kind, calendarColors);
         return (
-          <View key={kind} style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: tone.color }]} />
-            <Text style={styles.legendText}>{kind.charAt(0).toUpperCase() + kind.slice(1)}</Text>
+          <View key={kind} accessibilityLabel={`${kind === "bill" ? "Bills" : kind.charAt(0).toUpperCase() + kind.slice(1)} calendar color`} style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: tone.dot }]} />
+            <Text style={styles.legendText}>{kind === "bill" ? "Bills" : kind.charAt(0).toUpperCase() + kind.slice(1)}</Text>
           </View>
         );
       })}
@@ -284,6 +286,7 @@ function DesktopMonthGrid({
   compact: boolean;
 }) {
   const cells = useMemo(() => desktopCalendarCells(year, month), [month, year]);
+  const c = useColors();
   const balancesByDay = useMemo(
     () => new Map(dailyBalances.map((day) => [day.day, day] as const)),
     [dailyBalances],
@@ -329,8 +332,8 @@ function DesktopMonthGrid({
               ]}
             >
               <View style={styles.dayTopRow}>
-                <View style={[styles.dayNumberWrap, (selected || isToday) && styles.dayNumberActive]}>
-                  <Text style={[styles.dayNumber, !cell.inCurrentMonth && styles.dayNumberMuted, (selected || isToday) && styles.dayNumberActiveText]}>{cell.day}</Text>
+                <View style={[styles.dayNumberWrap, (selected || isToday) && styles.dayNumberActive, (selected || isToday) && { backgroundColor: c.primary }]}>
+                  <Text style={[styles.dayNumber, !cell.inCurrentMonth && styles.dayNumberMuted, (selected || isToday) && styles.dayNumberActiveText, (selected || isToday) && { color: calendarHighlightText(c.primary) }]}>{cell.day}</Text>
                 </View>
                 {isToday && !selected ? <Text style={styles.todayLabel}>Today</Text> : null}
               </View>
@@ -426,7 +429,9 @@ function SelectedDayPanel({
   onAddTransaction: () => void;
   onOpenEvent: (event: FinancialEvent) => void;
 }) {
+  const calendarColors = useCalendarAppearance();
   const events = calendarVisibleForecastEvents(selectedDay?.events);
+  const c = useColors();
   const daySummary = summarizeCalendarEvents(events, transferTransactionIds);
   const weekSummary = summarizeCalendarEvents(
     uniqueCalendarEvents(weekDays),
@@ -458,7 +463,7 @@ function SelectedDayPanel({
               transferTransactionIds,
               overdueBillOccurrenceKeys,
             );
-            const tone = eventTone(kind);
+            const tone = eventTone(kind, calendarColors);
             const canOpen = event.sourceType !== "reconciliation";
             return (
               <Pressable
@@ -469,7 +474,7 @@ function SelectedDayPanel({
                 onPress={() => onOpenEvent(event)}
                 style={({ pressed }) => [styles.scheduledRow, pressed && styles.pressed]}
               >
-                <View style={[styles.scheduledIcon, { backgroundColor: tone.background }]}><View style={[styles.scheduledDot, { backgroundColor: tone.color }]} /></View>
+                <View style={[styles.scheduledIcon, { backgroundColor: tone.background }]}><View style={[styles.scheduledDot, { backgroundColor: tone.dot }]} /></View>
                 <View style={styles.scheduledCopy}><Text numberOfLines={1} style={styles.scheduledName}>{resolveEventLabel(event)}</Text><Text style={styles.scheduledCategory}>{event.status === "pending" ? formatEventStatus(event.status) : kind.charAt(0).toUpperCase() + kind.slice(1)}</Text></View>
                 <Text style={[styles.scheduledAmount, { color: tone.color }]}>{money(event.amount, true)}</Text>
                 {canOpen ? <Feather name="chevron-right" size={16} color={palette.muted} /> : null}
@@ -502,8 +507,8 @@ function SelectedDayPanel({
           </>
         ) : null}
 
-        <Pressable accessibilityRole="button" accessibilityLabel={`Add transaction on ${displayDate(selectedDate)}`} onPress={onAddTransaction} style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}>
-          <Feather name="plus" size={15} color="#ffffff" /><Text style={styles.primaryActionText}>Add Transaction</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Add transaction on ${displayDate(selectedDate)}`} onPress={onAddTransaction} style={({ pressed }) => [styles.primaryAction, { backgroundColor: c.primary }, pressed && styles.pressed]}>
+          <Feather name="plus" size={15} color={calendarHighlightText(c.primary)} /><Text style={[styles.primaryActionText, { color: calendarHighlightText(c.primary) }]}>Add Transaction</Text>
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="Add Note, coming soon" disabled style={styles.disabledAction}>
           <Feather name="file-text" size={15} color={palette.faint} /><Text style={styles.disabledActionText}>Add Note · Coming Soon</Text>
@@ -527,6 +532,7 @@ function SelectedDayPanel({
 }
 
 export function DesktopCalendarPage(props: DesktopCalendarPageProps) {
+  const c = useColors();
   const { width } = useWindowDimensions();
   const compact = width < 1220;
   const summary = useMemo(
@@ -571,7 +577,7 @@ export function DesktopCalendarPage(props: DesktopCalendarPageProps) {
   return (
     <View style={styles.screen}>
       <ScrollView style={styles.pageScroll} contentContainerStyle={styles.pageContent} showsVerticalScrollIndicator>
-        <DesktopPage style={styles.pageReset}>
+        <DesktopPage style={{ ...styles.pageReset, ...calendarAccentVariables(c) } as never}>
           <CalendarHeader
             month={props.month}
             year={props.year}

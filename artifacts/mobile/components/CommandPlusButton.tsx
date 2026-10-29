@@ -1,6 +1,8 @@
 import Feather from "@expo/vector-icons/Feather";
 import React from "react";
 import { Pressable, StyleSheet } from "react-native";
+import { useColors } from "@/hooks/useColors";
+import { calendarHighlightText } from "@/lib/calendarAppearance";
 
 type Props = {
   onPress: () => void;
@@ -15,6 +17,7 @@ export function CommandPlusButton({
   iconSize = 22,
   accessibilityLabel = "Add",
 }: Props) {
+  const c = useColors();
   return (
     <Pressable
       accessibilityRole="button"
@@ -27,10 +30,16 @@ export function CommandPlusButton({
           height: size,
           borderRadius: Math.round(size * 0.35),
           opacity: pressed ? 0.82 : 1,
+          backgroundColor: c.primary,
+          borderColor: c.primary + "88",
+          shadowColor: c.primary,
+          shadowOffset: { width: 0, height: 10 },
+          shadowOpacity: 0.52,
+          shadowRadius: 22,
         },
       ]}
     >
-      <Feather name="plus" size={iconSize} color="#f8fafc" />
+      <Feather name="plus" size={iconSize} color={calendarHighlightText(c.primary)} />
     </Pressable>
   );
 }
@@ -39,13 +48,7 @@ const styles = StyleSheet.create({
   button: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(124,58,237,0.88)",
     borderWidth: 1,
-    borderColor: "rgba(34,211,238,0.38)",
-    shadowColor: "#8b5cf6",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.52,
-    shadowRadius: 22,
     elevation: 12,
   },
 });

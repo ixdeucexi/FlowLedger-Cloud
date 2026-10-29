@@ -3,6 +3,13 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { transpileModule, ModuleKind, JsxEmit } from "typescript";
 import * as appearance from "./appearance";
+import { CALENDAR_CATEGORIES, CALENDAR_COLOR_CHOICES } from "./calendarColors";
+import {
+  calendarAppearance,
+  calendarAccentVariables,
+  calendarCategory,
+  calendarHighlightText,
+} from "./calendarAppearance";
 const {
   DEFAULT_APPEARANCE,
   APPEARANCE_PRESETS,
@@ -387,4 +394,254 @@ test("both settings paths share controls; background and desktop tokens consume 
     readFileSync("components/PremiumBackdrop.tsx", "utf8"),
     /<FlowWaveBackground/,
   );
+});
+
+test("calendar preferences validate closed keys and migrate old five-field records", () => {
+  assert.equal(
+    Object.keys(parseAppearance(JSON.stringify(DEFAULT_APPEARANCE))).length,
+    5,
+  );
+  const value = normalizeAppearance({
+    ...DEFAULT_APPEARANCE,
+    calendarColors: {
+      income: "blue",
+      bill: "rose",
+      risk: "#fff",
+      unknown: "green",
+    },
+  });
+  assert.deepEqual(value.calendarColors, { income: "blue", bill: "rose" });
+  assert.equal(appearancePreset(value), null);
+  for (const invalid of [null, [], "green", { risk: "url(javascript:bad)" }])
+    assert.equal(
+      normalizeAppearance({ ...DEFAULT_APPEARANCE, calendarColors: invalid })
+        .calendarColors,
+      undefined,
+    );
+});
+
+test("all calendar colors stay legible across themes and share category mappings", () => {
+  assert.equal(calendarCategory("goal"), "plan");
+  assert.equal(calendarCategory("expense"), "spending");
+  for (const mode of ["light", "dark"] as const) {
+    const planTones = new Set<string>(),
+      spendingTones = new Set<string>();
+    for (const accent of ACCENT_CHOICES) {
+      const preferences = { ...DEFAULT_APPEARANCE, accent: accent.id };
+      const base = appearancePalette(mode, preferences, colors[mode]);
+      const tones = calendarAppearance(mode, preferences, base);
+      assert.equal(
+        new Set(Object.values(tones).map((tone) => tone.color)).size,
+        CALENDAR_CATEGORIES.length,
+        `${mode}/${accent.id} automatic colors are distinct`,
+      );
+      planTones.add(tones.plan.color);
+      spendingTones.add(tones.spending.color);
+      assert.notEqual(tones.plan.color, tones.spending.color);
+      assert.ok(
+        contrastRatio(base.primary, calendarHighlightText(base.primary)) >= 4.5,
+      );
+      for (const { id } of CALENDAR_CATEGORIES) {
+        for (const choice of CALENDAR_COLOR_CHOICES) {
+          const custom = calendarAppearance(
+            mode,
+            { ...preferences, calendarColors: { [id]: choice.id } },
+            base,
+          );
+          assert.equal(custom[id].color, choice[mode]);
+          assert.ok(
+            contrastRatio(custom[id].text, custom[id].bg) >= 4.5,
+            `${mode}/${accent.id}/${id}/${choice.id}`,
+          );
+          for (const other of CALENDAR_CATEGORIES.filter(
+            (category) => category.id !== id,
+          ))
+            assert.deepEqual(custom[other.id], tones[other.id]);
+        }
+      }
+    }
+    assert.equal(planTones.size, ACCENT_CHOICES.length);
+    assert.equal(spendingTones.size, ACCENT_CHOICES.length);
+  }
+});
+
+test("calendar overrides survive app presets and mode changes; reset clears only what was requested", async () => {
+  const h = provider();
+  await h.settle();
+  h.value.updateAppearance({
+    calendarColors: { income: "blue", risk: "teal" },
+  });
+  h.value.applyPreset("mint");
+  await h.settle();
+  assert.equal(h.value.appearance.themeMode, "light");
+  assert.deepEqual(h.value.appearance.calendarColors, {
+    income: "blue",
+    risk: "teal",
+  });
+  assert.equal(h.value.presetName, "Custom");
+  h.value.setThemeMode("dark");
+  await h.settle();
+  assert.deepEqual(h.value.appearance.calendarColors, {
+    income: "blue",
+    risk: "teal",
+  });
+  const staleUpdate = h.value.updateAppearance;
+  staleUpdate((current: any) => ({
+    calendarColors: { ...current.calendarColors, debt: "amber" },
+  }));
+  staleUpdate((current: any) => ({
+    calendarColors: { ...current.calendarColors, plan: "rose" },
+  }));
+  await h.settle();
+  assert.deepEqual(h.value.appearance.calendarColors, {
+    income: "blue",
+    risk: "teal",
+    debt: "amber",
+    plan: "rose",
+  });
+  h.value.updateAppearance({ calendarColors: undefined });
+  await h.settle();
+  assert.equal(h.value.appearance.calendarColors, undefined);
+  assert.equal(h.value.appearance.accent, "teal");
+  h.value.updateAppearance({ calendarColors: { spending: "cyan" } });
+  h.value.resetAppearance();
+  await h.settle();
+  assert.deepEqual(h.value.appearance, DEFAULT_APPEARANCE);
+  assert.deepEqual(
+    JSON.parse(h.data.get(APPEARANCE_STORAGE_KEY)!),
+    DEFAULT_APPEARANCE,
+  );
+});
+
+test("queued writes snapshot nested calendar choices", async () => {
+  const gate = deferred<void>();
+  const saved: any[] = [];
+  const write = createAppearanceWriter(async (value) => {
+    await gate.promise;
+    saved.push(value);
+  });
+  const value = {
+    ...DEFAULT_APPEARANCE,
+    calendarColors: { income: "blue" as const },
+  };
+  const pending = write(value);
+  value.calendarColors.income = "rose" as "blue";
+  gate.resolve();
+  await pending;
+  assert.equal(saved[0].calendarColors.income, "blue");
+});
+
+test("both calendar views use shared tones and retain text risk signals", () => {
+  const mobile = readFileSync("components/CalendarView.tsx", "utf8");
+  const desktop = readFileSync(
+    "components/desktop/DesktopCalendarPage.tsx",
+    "utf8",
+  );
+  for (const source of [mobile, desktop]) {
+    assert.match(source, /useCalendarAppearance/);
+    assert.match(source, /Calendar legend/);
+    assert.match(source, /calendarHighlightText/);
+  }
+  assert.match(mobile, /Build cushion/);
+  assert.match(mobile, /Overdue ·/);
+  const controls = readFileSync(
+    "components/CalendarAppearanceSettings.tsx",
+    "utf8",
+  );
+  assert.match(controls, /Custom calendar colors stay when you change presets/);
+  assert.match(controls, /Use theme color for/);
+  assert.match(controls, /Reset calendar colors/);
+  assert.doesNotMatch(controls, /useBudget|reconcileTransaction/);
+});
+
+test("desktop Original Light calendar fills match their computed foreground", () => {
+  const source = readFileSync(
+    "components/desktop/DesktopCalendarPage.tsx",
+    "utf8",
+  );
+  const c = appearancePalette("light", DEFAULT_APPEARANCE, colors.light);
+  assert.notEqual(
+    c.primary,
+    "#6d3bea",
+    "legacy desktop purple differs from the original light accent",
+  );
+  const accentVariables = calendarAccentVariables(c);
+  assert.equal(accentVariables["--fl-desktop-purple"], c.primary);
+  assert.equal(accentVariables["--fl-desktop-purple-strong"], c.primary);
+  assert.match(source, /\.\.\.calendarAccentVariables\(c\)/);
+  const flattenStyle = (style: any): any =>
+    Array.isArray(style)
+      ? Object.assign({}, ...style.filter(Boolean).map(flattenStyle))
+      : style;
+  const styles = new Proxy(
+    {},
+    {
+      get: (_target, name) =>
+        String(name).includes("Text")
+          ? { color: "#ffffff" }
+          : { backgroundColor: "#6d3bea" },
+    },
+  );
+  const createElement = (type: any, props: any, ...children: any[]) => ({
+    type,
+    props: { ...props, children },
+  });
+  const render = (expression: string, extra: Record<string, unknown> = {}) => {
+    const bindings = {
+      React: { createElement },
+      View: "View",
+      Text: "Text",
+      Pressable: "Pressable",
+      Feather: "Feather",
+      styles,
+      c,
+      calendarHighlightText,
+      actionText: calendarHighlightText(c.primary),
+      onAdd() {},
+      onAddTransaction() {},
+      selectedDate: "2026-10-29",
+      displayDate: () => "October 29",
+      selected: true,
+      isToday: false,
+      cell: { inCurrentMonth: true, day: 29 },
+      ...extra,
+    };
+    const javascript = transpileModule(`const result = (${expression});`, {
+      compilerOptions: { jsx: JsxEmit.React, module: ModuleKind.CommonJS },
+    }).outputText;
+    return new Function(
+      ...Object.keys(bindings),
+      `${javascript}; return result;`,
+    )(...Object.values(bindings));
+  };
+  const snippets: string[] = [];
+  for (const marker of [
+    'accessibilityLabel="Add transaction"',
+    "accessibilityLabel={`Add transaction on",
+  ]) {
+    const label = source.indexOf(marker),
+      start = source.lastIndexOf("<Pressable", label),
+      end = source.indexOf("</Pressable>", label) + "</Pressable>".length;
+    assert.ok(label >= 0 && start >= 0);
+    snippets.push(source.slice(start, end));
+  }
+  const dayStart = source.indexOf("<View style={[styles.dayNumberWrap"),
+    dayEnd = source.indexOf("</View>", dayStart) + "</View>".length;
+  assert.ok(dayStart >= 0);
+  snippets.push(source.slice(dayStart, dayEnd));
+  for (const snippet of snippets) {
+    const node = render(snippet);
+    const actual = flattenStyle(
+      typeof node.props.style === "function"
+        ? node.props.style({ pressed: false })
+        : node.props.style,
+    );
+    assert.equal(actual.backgroundColor, c.primary);
+    const text = node.props.children.find(
+      (child: any) => child?.type === "Text",
+    );
+    const foreground = flattenStyle(text.props.style).color;
+    assert.equal(foreground, calendarHighlightText(actual.backgroundColor));
+    assert.ok(contrastRatio(actual.backgroundColor, foreground) >= 4.5);
+  }
 });

@@ -21,13 +21,15 @@ import {
 } from "@/lib/appearance";
 export type { ThemeMode } from "@/lib/appearance";
 export type AppFontStyle = "default";
+type AppearancePatch = Partial<Omit<AppearancePreferences, "version">>;
+type AppearanceUpdate =
+  | AppearancePatch
+  | ((current: Readonly<AppearancePreferences>) => AppearancePatch);
 interface ThemeContextValue {
   themeMode: ThemeMode;
   setThemeMode: (mode: ThemeMode) => void;
   appearance: AppearancePreferences;
-  updateAppearance: (
-    patch: Partial<Omit<AppearancePreferences, "version">>,
-  ) => void;
+  updateAppearance: (patch: AppearanceUpdate) => void;
   applyPreset: (id: string) => void;
   resetAppearance: () => void;
   presetName: string;
@@ -128,10 +130,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     [],
   );
   const updateAppearance = useCallback(
-    (patch: Partial<Omit<AppearancePreferences, "version">>) => {
+    (patch: AppearanceUpdate) => {
       const value = normalizeAppearance({
         ...current.current,
-        ...patch,
+        ...(typeof patch === "function" ? patch(current.current) : patch),
         version: 1,
       });
       revision.current += 1;
@@ -150,7 +152,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     [updateAppearance],
   );
   const resetAppearance = useCallback(
-    () => updateAppearance(DEFAULT_APPEARANCE),
+    () =>
+      updateAppearance({ ...DEFAULT_APPEARANCE, calendarColors: undefined }),
     [updateAppearance],
   );
   const setThemeMode = useCallback(

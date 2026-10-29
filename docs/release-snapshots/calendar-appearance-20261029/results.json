@@ -1,0 +1,377 @@
+{
+  "status": "PASS",
+  "results": [
+    {
+      "width": 390,
+      "checks": [
+        "all-six-calendar-types-and-legend-render",
+        "independent-income",
+        "independent-bill",
+        "independent-debt",
+        "independent-plan",
+        "independent-spending",
+        "independent-risk",
+        "preview-reflects-all-independent-colors",
+        "actual-calendar-chip-and-legend-colors-and-financial-labels",
+        "header-add-follows-theme-accent",
+        "mobile-header-and-bottom-add-preserve-Ocean-shadow-color-and-geometry",
+        "independent-calendar-colors-survive-reload",
+        "manual-mode-changes-preserve-every-category-override",
+        "selected-day-highlight-follows-Ocean-accent",
+        "selecting-calendar-date-is-read-only",
+        "theme-preset-preserves-independent-category-choices",
+        "mobile-header-and-bottom-add-preserve-Mint-shadow-color-and-geometry",
+        "light-theme-adapts-custom-tones-and-header",
+        "follow-theme-relinks-only-one-category",
+        "calendar-only-reset-preserves-theme",
+        "global-reset-restores-theme-and-calendar-without-changing-flo-haptics",
+        "Original-Light-header-date-and-detail-controls-use-matching-fill-and-text"
+      ],
+      "defaultLegend": {
+        "Income": {
+          "dot": "rgb(74, 222, 128)",
+          "bg": "rgba(0, 0, 0, 0)",
+          "border": "rgb(0, 0, 0)",
+          "text": "rgb(148, 163, 184)"
+        },
+        "Bills": {
+          "dot": "rgb(251, 191, 36)",
+          "bg": "rgba(0, 0, 0, 0)",
+          "border": "rgb(0, 0, 0)",
+          "text": "rgb(148, 163, 184)"
+        },
+        "Debt": {
+          "dot": "rgb(96, 165, 250)",
+          "bg": "rgba(0, 0, 0, 0)",
+          "border": "rgb(0, 0, 0)",
+          "text": "rgb(148, 163, 184)"
+        },
+        "Plan": {
+          "dot": "rgb(168, 113, 255)",
+          "bg": "rgba(0, 0, 0, 0)",
+          "border": "rgb(0, 0, 0)",
+          "text": "rgb(148, 163, 184)"
+        },
+        "Spending": {
+          "dot": "rgb(162, 132, 254)",
+          "bg": "rgba(0, 0, 0, 0)",
+          "border": "rgb(0, 0, 0)",
+          "text": "rgb(148, 163, 184)"
+        },
+        "Risk": {
+          "dot": "rgb(251, 113, 133)",
+          "bg": "rgba(0, 0, 0, 0)",
+          "border": "rgb(0, 0, 0)",
+          "text": "rgb(148, 163, 184)"
+        }
+      },
+      "darkChips": {
+        "Income": {
+          "background": "rgb(21, 35, 58)",
+          "border": "rgb(75, 129, 196)",
+          "dot": "rgba(0, 0, 0, 0)",
+          "texts": [
+            "rgb(248, 250, 252)"
+          ]
+        },
+        "Bills": {
+          "background": "rgb(34, 31, 58)",
+          "border": "rgb(130, 109, 196)",
+          "dot": "rgba(0, 0, 0, 0)",
+          "texts": [
+            "rgb(248, 250, 252)"
+          ]
+        },
+        "Debt": {
+          "background": "rgb(49, 40, 20)",
+          "border": "rgb(194, 149, 32)",
+          "dot": "rgba(0, 0, 0, 0)",
+          "texts": [
+            "rgb(248, 250, 252)"
+          ]
+        },
+        "Plan": {
+          "background": "rgb(49, 26, 37)",
+          "border": "rgb(194, 89, 106)",
+          "dot": "rgba(0, 0, 0, 0)",
+          "texts": [
+            "rgb(248, 250, 252)"
+          ]
+        },
+        "Spending": {
+          "background": "rgb(10, 44, 56)",
+          "border": "rgb(27, 164, 187)",
+          "dot": "rgba(0, 0, 0, 0)",
+          "texts": [
+            "rgb(248, 250, 252)"
+          ]
+        },
+        "Risk": {
+          "background": "rgb(12, 44, 48)",
+          "border": "rgb(36, 165, 151)",
+          "dot": "rgba(0, 0, 0, 0)",
+          "texts": [
+            "rgb(248, 250, 252)"
+          ]
+        }
+      },
+      "mobileOceanAdd": {
+        "fill": "rgb(67, 113, 212)",
+        "border": "rgba(67, 113, 212, 0.67)",
+        "shadow": "rgba(67, 113, 212, 0.48) 0px 12px 20px 0px",
+        "header": {
+          "fill": "rgb(67, 113, 212)",
+          "shadow": "rgba(67, 113, 212, 0.52) 0px 10px 22px 0px"
+        }
+      },
+      "lightChips": {
+        "Income": {
+          "background": "rgb(213, 226, 242)",
+          "border": "rgb(86, 135, 237)",
+          "dot": "rgba(0, 0, 0, 0)",
+          "texts": [
+            "rgb(26, 26, 46)"
+          ]
+        },
+        "Bills": {
+          "background": "rgb(221, 222, 242)",
+          "border": "rgb(151, 104, 238)",
+          "dot": "rgba(0, 0, 0, 0)",
+          "texts": [
+            "rgb(26, 26, 46)"
+          ]
+        },
+        "Debt": {
+          "background": "rgb(225, 226, 219)",
+          "border": "rgb(179, 134, 66)",
+          "dot": "rgba(0, 0, 0, 0)",
+          "texts": [
+            "rgb(26, 26, 46)"
+          ]
+        },
+        "Plan": {
+          "background": "rgb(228, 218, 225)",
+          "border": "rgb(201, 74, 106)",
+          "dot": "rgba(0, 0, 0, 0)",
+          "texts": [
+            "rgb(26, 26, 46)"
+          ]
+        },
+        "Spending": {
+          "background": "rgb(210, 228, 233)",
+          "border": "rgb(69, 147, 169)",
+          "dot": "rgba(0, 0, 0, 0)",
+          "texts": [
+            "rgb(26, 26, 46)"
+          ]
+        },
+        "Risk": {
+          "background": "rgb(210, 228, 230)",
+          "border": "rgb(70, 149, 144)",
+          "dot": "rgba(0, 0, 0, 0)",
+          "texts": [
+            "rgb(26, 26, 46)"
+          ]
+        }
+      },
+      "mobileMintAdd": {
+        "fill": "rgb(15, 118, 110)",
+        "border": "rgb(15, 118, 110)",
+        "shadow": "rgba(15, 118, 110, 0.48) 0px 12px 20px 0px",
+        "header": {
+          "fill": "rgb(15, 118, 110)",
+          "shadow": "rgba(15, 118, 110, 0.52) 0px 10px 22px 0px"
+        }
+      },
+      "status": "PASS",
+      "noReconciliation": true,
+      "errors": [],
+      "unknown": [],
+      "consoleErrors": [],
+      "knownBaselineCsp": 0,
+      "interceptedExternalRequests": 453
+    },
+    {
+      "width": 1200,
+      "checks": [
+        "all-six-calendar-types-and-legend-render",
+        "independent-income",
+        "independent-bill",
+        "independent-debt",
+        "independent-plan",
+        "independent-spending",
+        "independent-risk",
+        "preview-reflects-all-independent-colors",
+        "actual-calendar-chip-and-legend-colors-and-financial-labels",
+        "header-add-follows-theme-accent",
+        "independent-calendar-colors-survive-reload",
+        "manual-mode-changes-preserve-every-category-override",
+        "selected-day-highlight-follows-Ocean-accent",
+        "selecting-calendar-date-is-read-only",
+        "theme-preset-preserves-independent-category-choices",
+        "light-theme-adapts-custom-tones-and-header",
+        "follow-theme-relinks-only-one-category",
+        "calendar-only-reset-preserves-theme",
+        "global-reset-restores-theme-and-calendar-without-changing-flo-haptics",
+        "Original-Light-header-date-and-detail-controls-use-matching-fill-and-text"
+      ],
+      "defaultLegend": {
+        "Income": {
+          "dot": "rgb(74, 222, 128)",
+          "bg": "rgba(0, 0, 0, 0)",
+          "border": "rgb(0, 0, 0)",
+          "text": "rgb(152, 162, 179)"
+        },
+        "Bills": {
+          "dot": "rgb(251, 191, 36)",
+          "bg": "rgba(0, 0, 0, 0)",
+          "border": "rgb(0, 0, 0)",
+          "text": "rgb(152, 162, 179)"
+        },
+        "Debt": {
+          "dot": "rgb(96, 165, 250)",
+          "bg": "rgba(0, 0, 0, 0)",
+          "border": "rgb(0, 0, 0)",
+          "text": "rgb(152, 162, 179)"
+        },
+        "Plan": {
+          "dot": "rgb(168, 113, 255)",
+          "bg": "rgba(0, 0, 0, 0)",
+          "border": "rgb(0, 0, 0)",
+          "text": "rgb(152, 162, 179)"
+        },
+        "Spending": {
+          "dot": "rgb(162, 132, 254)",
+          "bg": "rgba(0, 0, 0, 0)",
+          "border": "rgb(0, 0, 0)",
+          "text": "rgb(152, 162, 179)"
+        },
+        "Risk": {
+          "dot": "rgb(251, 113, 133)",
+          "bg": "rgba(0, 0, 0, 0)",
+          "border": "rgb(0, 0, 0)",
+          "text": "rgb(152, 162, 179)"
+        }
+      },
+      "darkChips": {
+        "Income": {
+          "background": "rgb(21, 35, 58)",
+          "border": "rgb(0, 0, 0)",
+          "dot": "rgb(96, 165, 250)",
+          "texts": [
+            "rgb(248, 250, 252)",
+            "rgb(248, 250, 252)"
+          ]
+        },
+        "Bills": {
+          "background": "rgb(34, 31, 58)",
+          "border": "rgb(0, 0, 0)",
+          "dot": "rgb(167, 139, 250)",
+          "texts": [
+            "rgb(248, 250, 252)",
+            "rgb(248, 250, 252)"
+          ]
+        },
+        "Debt": {
+          "background": "rgb(49, 40, 20)",
+          "border": "rgb(0, 0, 0)",
+          "dot": "rgb(251, 191, 36)",
+          "texts": [
+            "rgb(248, 250, 252)",
+            "rgb(248, 250, 252)"
+          ]
+        },
+        "Plan": {
+          "background": "rgb(49, 26, 37)",
+          "border": "rgb(0, 0, 0)",
+          "dot": "rgb(251, 113, 133)",
+          "texts": [
+            "rgb(248, 250, 252)",
+            "rgb(248, 250, 252)"
+          ]
+        },
+        "Spending": {
+          "background": "rgb(10, 44, 56)",
+          "border": "rgb(0, 0, 0)",
+          "dot": "rgb(34, 211, 238)",
+          "texts": [
+            "rgb(248, 250, 252)",
+            "rgb(248, 250, 252)"
+          ]
+        },
+        "Risk": {
+          "background": "rgb(12, 44, 48)",
+          "border": "rgb(0, 0, 0)",
+          "dot": "rgb(45, 212, 191)",
+          "texts": [
+            "rgb(248, 250, 252)",
+            "rgb(248, 250, 252)"
+          ]
+        }
+      },
+      "lightChips": {
+        "Income": {
+          "background": "rgb(213, 226, 242)",
+          "border": "rgb(0, 0, 0)",
+          "dot": "rgb(37, 99, 235)",
+          "texts": [
+            "rgb(26, 26, 46)",
+            "rgb(26, 26, 46)"
+          ]
+        },
+        "Bills": {
+          "background": "rgb(221, 222, 242)",
+          "border": "rgb(0, 0, 0)",
+          "dot": "rgb(124, 58, 237)",
+          "texts": [
+            "rgb(26, 26, 46)",
+            "rgb(26, 26, 46)"
+          ]
+        },
+        "Debt": {
+          "background": "rgb(225, 226, 219)",
+          "border": "rgb(0, 0, 0)",
+          "dot": "rgb(161, 98, 7)",
+          "texts": [
+            "rgb(26, 26, 46)",
+            "rgb(26, 26, 46)"
+          ]
+        },
+        "Plan": {
+          "background": "rgb(228, 218, 225)",
+          "border": "rgb(0, 0, 0)",
+          "dot": "rgb(190, 18, 60)",
+          "texts": [
+            "rgb(26, 26, 46)",
+            "rgb(26, 26, 46)"
+          ]
+        },
+        "Spending": {
+          "background": "rgb(210, 228, 233)",
+          "border": "rgb(0, 0, 0)",
+          "dot": "rgb(14, 116, 144)",
+          "texts": [
+            "rgb(26, 26, 46)",
+            "rgb(26, 26, 46)"
+          ]
+        },
+        "Risk": {
+          "background": "rgb(210, 228, 230)",
+          "border": "rgb(0, 0, 0)",
+          "dot": "rgb(15, 118, 110)",
+          "texts": [
+            "rgb(26, 26, 46)",
+            "rgb(26, 26, 46)"
+          ]
+        }
+      },
+      "status": "PASS",
+      "noReconciliation": true,
+      "errors": [],
+      "unknown": [],
+      "consoleErrors": [],
+      "knownBaselineCsp": 0,
+      "interceptedExternalRequests": 460
+    }
+  ]
+}

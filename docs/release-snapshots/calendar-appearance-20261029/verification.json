@@ -1,0 +1,33 @@
+{
+  "status": "PASS",
+  "focusedAppearanceTests": 61,
+  "independentPaletteCases": 1152,
+  "fullVerification": {
+    "command": "pnpm run verify",
+    "exitCode": 0,
+    "api": 217,
+    "edge": 563,
+    "releaseFixture": 37,
+    "mobile": 1393,
+    "performance": 5,
+    "workspaceTypes": true,
+    "export": true,
+    "guideArtifactChecks": true,
+    "auditPolicy": true
+  },
+  "finalShadowCorrection": {
+    "mobileTypecheckExitCode": 0,
+    "webExportExitCode": 0,
+    "browserChecks": 42,
+    "independentReview": "PASS"
+  },
+  "expoDoctorChecks": 18,
+  "auditBaseline": {
+    "low": 1,
+    "moderate": 1,
+    "previouslyIgnoredHigh": 3
+  },
+  "rollbackRef": "rollback/prod-before-calendar-appearance-20261029-2151",
+  "previousDeployment": "dpl_GjLc7fLqCcUVSYdzCGV3qxA6dUdx",
+  "financialWrites": 0
+}

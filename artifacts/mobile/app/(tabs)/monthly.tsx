@@ -1892,8 +1892,8 @@ export default function MonthlyScreen() {
               styles.todayChip,
               isNarrowForecastLayout && styles.narrowTodayChip,
               {
-                borderColor: isCurrentMonth ? c.primary : "rgba(226,232,240,0.58)",
-                backgroundColor: isCurrentMonth ? c.primary : "rgba(2,6,23,0.58)",
+                borderColor: isCurrentMonth ? c.primary : c.border,
+                backgroundColor: isCurrentMonth ? c.primary : c.card,
                 opacity: pressed ? 0.78 : 1,
               },
             ]}

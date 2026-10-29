@@ -800,7 +800,7 @@ function TabContent() {
               sceneStyle: {
                 backgroundColor: colors.background,
               },
-              tabBarActiveTintColor: isDark ? "#8b5cf6" : colors.primary,
+              tabBarActiveTintColor: colors.primary,
               tabBarInactiveTintColor: colors.mutedForeground,
               headerShown: false,
               tabBarLabelStyle: {
@@ -844,7 +844,7 @@ function TabContent() {
                 borderColor: isDark
                   ? "rgba(148,163,184,0.18)"
                   : "rgba(15,23,42,0.10)",
-                shadowColor: isDark ? "#7c3aed" : "#94a3b8",
+                shadowColor: isDark ? colors.primary : "#94a3b8",
                 shadowOffset: { width: 0, height: 14 },
                 shadowOpacity: 0.22,
                 shadowRadius: 26,
@@ -929,9 +929,11 @@ function TabContent() {
                                 styles.addTabButton,
                                 {
                                   backgroundColor: colors.primary,
-                                  borderColor: isDark
-                                    ? "rgba(196,181,253,0.46)"
-                                    : colors.primary,
+                                  borderColor: isDark ? colors.primary + "aa" : colors.primary,
+                                  shadowColor: colors.primary,
+                                  shadowOffset: { width: 0, height: 12 },
+                                  shadowOpacity: 0.48,
+                                  shadowRadius: 20,
                                 },
                               ]}
                             >
@@ -1068,10 +1070,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#7c3aed",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.48,
-    shadowRadius: 20,
     elevation: 18,
   },
   loadingScreen: {

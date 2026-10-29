@@ -1,3 +1,7 @@
+import {
+  normalizeCalendarColors,
+  type CalendarColorOverrides,
+} from "./calendarColors";
 export type ThemeMode = "auto" | "dark" | "light";
 export type AccentChoice =
   | "default"
@@ -14,6 +18,7 @@ export interface AppearancePreferences {
   accent: AccentChoice;
   backdrop: BackdropChoice;
   contrast: AppearanceContrast;
+  calendarColors?: CalendarColorOverrides;
 }
 export const APPEARANCE_STORAGE_KEY = "@flowledger_appearance_v1";
 export const LEGACY_THEME_STORAGE_KEY = "@app_theme_v1";
@@ -99,6 +104,7 @@ export function normalizeAppearance(
     return fallback;
   const v = value as Record<string, unknown>;
   if (v.version !== 1) return fallback;
+  const calendarColors = normalizeCalendarColors(v.calendarColors);
   return {
     version: 1,
     themeMode: isThemeMode(v.themeMode) ? v.themeMode : fallback.themeMode,
@@ -110,6 +116,7 @@ export function normalizeAppearance(
         ? v.backdrop
         : "ambient",
     contrast: v.contrast === "high" ? "high" : "standard",
+    ...(calendarColors ? { calendarColors } : {}),
   };
 }
 export function parseAppearance(
@@ -126,6 +133,7 @@ export function parseAppearance(
   }
 }
 export function appearancePreset(p: AppearancePreferences) {
+  if (p.calendarColors && Object.keys(p.calendarColors).length) return null;
   return (
     APPEARANCE_PRESETS.find(
       (x) =>
@@ -215,7 +223,12 @@ export function createAppearanceWriter(
 ) {
   let tail = Promise.resolve();
   return (value: AppearancePreferences) => {
-    const next = { ...value };
+    const next = {
+      ...value,
+      ...(value.calendarColors
+        ? { calendarColors: { ...value.calendarColors } }
+        : {}),
+    };
     const operation = tail.catch(() => {}).then(() => write(next));
     tail = operation.catch(() => {});
     return operation;
