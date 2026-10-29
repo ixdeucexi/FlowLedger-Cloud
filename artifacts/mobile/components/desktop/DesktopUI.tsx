@@ -1,3 +1,5 @@
+import { appearancePalette, DEFAULT_APPEARANCE, mixColor, type AppearancePreferences } from "@/lib/appearance";
+import colors from "@/constants/colors";
 import Feather from "@expo/vector-icons/Feather";
 import React from "react";
 import {
@@ -20,6 +22,7 @@ export const desktopPalette = {
   muted: "var(--fl-desktop-muted, #667085)",
   faint: "var(--fl-desktop-faint, #98a2b3)",
   purple: "var(--fl-desktop-purple, #6d3bea)",
+  primaryForeground: "var(--fl-desktop-primary-foreground, #ffffff)",
   purpleDark: "var(--fl-desktop-purple-strong, #5b2fc7)",
   purpleSoft: "var(--fl-desktop-purple-soft, #f1edff)",
   green: "var(--fl-desktop-green, #039855)",
@@ -32,8 +35,8 @@ export const desktopPalette = {
   blueSoft: "var(--fl-desktop-blue-soft, #eff8ff)",
 };
 
-export function desktopThemeVariables(isDark: boolean) {
-  return (
+export function desktopThemeVariables(isDark: boolean, appearance: AppearancePreferences = DEFAULT_APPEARANCE) {
+  const variables = (
     isDark
       ? {
           "--fl-desktop-canvas": "#03040b",
@@ -79,7 +82,27 @@ export function desktopThemeVariables(isDark: boolean) {
           "--fl-desktop-blue": "#1570ef",
           "--fl-desktop-blue-soft": "#eff8ff",
         }
-  ) as never;
+  );
+  const c = appearancePalette(isDark ? "dark" : "light", appearance, colors[isDark ? "dark" : "light"]);
+  const customized = appearance.accent !== "default" || appearance.contrast === "high";
+  return {
+    ...variables,
+    "--fl-desktop-primary-foreground": customized ? c.primaryForeground : "#ffffff",
+    "--fl-desktop-backdrop": appearance.backdrop === "plain" ? "none" : `radial-gradient(ellipse at 90% 0%, ${c.primary}${appearance.backdrop === "subtle" ? "07" : "14"}, transparent 65%)`,
+    ...(customized ? {
+      "--fl-desktop-canvas": c.background,
+      "--fl-desktop-surface": isDark ? appearance.contrast === "high" ? "#080c14" : "#0b0e17" : "#ffffff",
+      "--fl-desktop-surface-muted": isDark ? "#101522" : "#f9fafb",
+      "--fl-desktop-border": appearance.contrast === "high" ? c.border : variables["--fl-desktop-border"],
+      "--fl-desktop-border-soft": appearance.contrast === "high" ? c.border : variables["--fl-desktop-border-soft"],
+      "--fl-desktop-text": c.foreground,
+      "--fl-desktop-text-secondary": appearance.contrast === "high" ? c.foreground : variables["--fl-desktop-text-secondary"],
+      "--fl-desktop-muted": c.mutedForeground,
+      "--fl-desktop-purple": c.primary,
+      "--fl-desktop-purple-strong": isDark ? mixColor(c.primary, "#ffffff", .6) : c.primary,
+      "--fl-desktop-purple-soft": c.secondary,
+    } : {}),
+  } as never;
 }
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
@@ -91,7 +114,7 @@ export function DesktopPage({
   children: React.ReactNode;
   style?: ViewStyle;
 }) {
-  return <View style={[styles.page, style]}>{children}</View>;
+  return <View style={[styles.page, { backgroundImage: "var(--fl-desktop-backdrop, none)" } as never, style]}>{children}</View>;
 }
 
 export function PageHeader({
@@ -137,7 +160,7 @@ export function PrimaryButton({
         (pressed || disabled) && styles.controlPressed,
       ]}
     >
-      <Feather name={icon} size={15} color="#ffffff" />
+      <Feather name={icon} size={15} color={desktopPalette.primaryForeground} />
       <Text style={styles.primaryButtonText}>{label}</Text>
     </Pressable>
   );
@@ -490,7 +513,7 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   primaryButtonText: {
-    color: "#ffffff",
+    color: desktopPalette.primaryForeground,
     fontSize: 13,
     fontFamily: "Inter_700Bold",
   },

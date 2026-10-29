@@ -1,3 +1,4 @@
+import { useThemeMode } from "@/context/ThemeContext";
 import Feather from "@expo/vector-icons/Feather";
 import { useGlobalSearchParams, usePathname, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
@@ -44,6 +45,7 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
   const { signOut, user } = useAuth();
   const { activeHousehold, settings } = useBudget();
   const colors = useColors();
+  const { appearance } = useThemeMode();
   const { openCommands, openNotifications, openSearch, unreadNotificationCount } = useAppDiscovery();
   const [collapsed, setCollapsed] = useState(width < 1180);
 
@@ -90,7 +92,7 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
     <View
       style={[
         styles.root,
-        desktopThemeVariables(colors.isDark),
+        desktopThemeVariables(colors.isDark, appearance),
         { backgroundColor: palette.canvas },
       ]}
     >

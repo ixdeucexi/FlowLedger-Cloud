@@ -1,0 +1,21 @@
+{
+  "status": "PASS",
+  "api": 217,
+  "edge": 563,
+  "releaseFixture": 37,
+  "mobile": 1387,
+  "performance": 5,
+  "appearanceFocused": 9,
+  "doctor": "18/18 PASS",
+  "browserChecks": 50,
+  "viewports": [
+    390,
+    1200
+  ],
+  "interceptedRequests": 471,
+  "liveFinancialWrites": 0,
+  "candidateEntry": "entry-2001167ca0fd98c5a4f612aa024107d9.js",
+  "candidateSha256": "55e30bb51f4609e8b7fa3537853e175ab75bcb047be7641b3da3ba396aa36a61",
+  "releaseVerifyLogSha256": "f6d34b57e2485e2ca65283a8aa6a842a4881cc3d760411d08f4e4756af673f92",
+  "securityPatch": "decode-uri-component 0.5.0 -> 0.5.1; GHSA-qr28-fpjm-wq7f"
+}

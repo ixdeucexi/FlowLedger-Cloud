@@ -1,5 +1,7 @@
 "use client";
 
+import { AppearanceSettings } from "@/components/AppearanceSettings";
+
 import { parseMoneyInput } from "@/lib/moneyFormInput";
 import { parseBillCsv } from "@/lib/billCsv";
 import { showFormError } from "@/lib/formInputAlert";
@@ -67,7 +69,6 @@ import { useMembership } from "@/context/MembershipContext";
 import { useAuth } from "@/context/AuthContext";
 import { useAppDiscovery } from "@/context/AppDiscoveryContext";
 import {
-  type ThemeMode,
   useThemeMode,
 } from "@/context/ThemeContext";
 import { useFeedbackBadge } from "@/context/FeedbackBadgeContext";
@@ -182,11 +183,7 @@ const BUILT_IN_CATEGORY_NAMES = new Set([
 const isBuiltInCategory = (name: string) =>
   BUILT_IN_CATEGORY_NAMES.has(name.trim().replace(/\s+/g, " ").toLowerCase());
 
-const THEME_OPTIONS: { label: string; value: ThemeMode; icon: string }[] = [
-  { label: "Light", value: "light", icon: "sun" },
-  { label: "Dark", value: "dark", icon: "moon" },
-  { label: "Auto", value: "auto", icon: "smartphone" },
-];
+
 
 const BACKUP_COMPLETE_KEY = "flowledger_backup_exported";
 type SubscriptionDecision =
@@ -402,7 +399,7 @@ export default function MoreScreen({
     closeBucketScope?: string;
     closeBucketAt?: string;
   }>();
-  const { themeMode, setThemeMode } = useThemeMode();
+  const { themeMode, presetName } = useThemeMode();
   const {
     enabled: hapticsEnabled,
     ready: hapticsReady,
@@ -1591,14 +1588,7 @@ export default function MoreScreen({
             label: `${setupComplete}/${setupSteps.length} complete`,
             tone: "attention",
           },
-      appearance: {
-        label:
-          themeMode === "auto"
-            ? "Auto"
-            : themeMode === "dark"
-              ? "Dark"
-              : "Light",
-      },
+      appearance: { label: presetName },
       backup: backupExported
         ? { label: "Backup saved" }
         : { label: "Not backed up", tone: "attention" },
@@ -1630,6 +1620,7 @@ export default function MoreScreen({
       smartReminders.length,
       subscriptions.length,
       themeMode,
+      presetName,
     ],
   );
 
@@ -2722,60 +2713,7 @@ export default function MoreScreen({
         {activeSettingsSection === "appearance" && (
           <>
             <FloLauncherSetting />
-            <SLabel c={c} text="Theme" />
-            <View
-              style={[
-                styles.card,
-                { backgroundColor: c.card, borderRadius: colors.radius },
-              ]}
-            >
-              <View
-                style={[
-                  styles.themeRow,
-                  isCompactSettingsLayout(viewportWidth) &&
-                    styles.themeRowCompact,
-                  { backgroundColor: c.muted, borderRadius: 10 },
-                ]}
-              >
-                {THEME_OPTIONS.map((opt) => {
-                  const active = themeMode === opt.value;
-                  return (
-                    <Pressable
-                      key={opt.value}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: active }}
-                      onPress={() => {
-                        setThemeMode(opt.value);
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      }}
-                      style={[
-                        styles.themeBtn,
-                        isCompactSettingsLayout(viewportWidth) &&
-                          styles.themeBtnCompact,
-                        {
-                          backgroundColor: active ? c.primary : "transparent",
-                          borderRadius: 8,
-                        },
-                      ]}
-                    >
-                      <Feather
-                        name={opt.icon as any}
-                        size={14}
-                        color={active ? "#fff" : c.mutedForeground}
-                      />
-                      <Text
-                        style={[
-                          styles.themeBtnText,
-                          { color: active ? "#fff" : c.mutedForeground },
-                        ]}
-                      >
-                        {opt.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
+            <AppearanceSettings />
             <SLabel c={c} text="Touch feedback" />
             <PlanningToolToggle
               c={c}

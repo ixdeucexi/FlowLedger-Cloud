@@ -182,10 +182,11 @@ test("Tools summaries count savings and active/closed buckets in their own visib
   const body = source.slice(start, source.indexOf("  const saveSubscriptionDecisions", start));
   const goals = [{ ...open, id: "savings", goal_type: "savings" }, open, closed, archived];
   const bindings = { goals, growthGoals: goals.filter(goal => goal.goal_type !== "planned_expense"), useMemo: (fn: () => unknown) => fn(), formatCountStatus, attentionCountStatus,
-    activeAccounts: [], reviewTransactionCount: 0, subscriptions: [], smartReminders: [], setupIsComplete: true, setupComplete: 0, setupSteps: [], themeMode: "dark", backupExported: false, deletedTransactions: [], membershipStatusLabel: "Free", newFeedbackCount: 0 };
+    activeAccounts: [], reviewTransactionCount: 0, subscriptions: [], smartReminders: [], setupIsComplete: true, setupComplete: 0, setupSteps: [], themeMode: "dark", presetName: "FlowLedger", backupExported: false, deletedTransactions: [], membershipStatusLabel: "Free", newFeedbackCount: 0 };
   const js = transpileModule(body, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
   const statuses = new Function(...Object.keys(bindings), `${js}; return hubStatuses;`)(...Object.values(bindings));
   assert.equal(statuses.goals.label, "1 goal"); assert.equal(statuses.buckets.label, "2 buckets");
+  assert.equal(statuses.appearance.label, "FlowLedger");
 });
 
 

@@ -11,6 +11,7 @@
     "outDir": ".test-dist"
   },
   "include": [
+    "lib/appearance.test.ts",
     "lib/pendingMatchChooser.test.ts",
     "lib/accessNavigation.test.ts",
     "lib/billCsv.test.ts",

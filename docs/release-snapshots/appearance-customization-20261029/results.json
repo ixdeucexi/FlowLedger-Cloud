@@ -1,0 +1,200 @@
+{
+  "status": "PASS",
+  "viewports": 2,
+  "checks": 50,
+  "results": [
+    {
+      "width": 390,
+      "checks": [
+        "opens-without-reconciliation",
+        "preset-FlowLedger",
+        "preset-Ocean",
+        "preset-Mint",
+        "preset-Sunset",
+        "preset-Paper",
+        "preset-persists-across-app-screens",
+        "accent-Original",
+        "accent-Blue",
+        "accent-Teal",
+        "accent-Rose",
+        "accent-Amber",
+        "accent-Slate",
+        "background-Ambient",
+        "background-Subtle",
+        "background-Plain",
+        "contrast-Standard",
+        "contrast-High",
+        "custom-settings-survive-reload",
+        "system-mode-reacts-to-os-colors",
+        "light-mode-high-contrast",
+        "storage-error-visible-no-crash",
+        "storage-retry-saves-current-look",
+        "reset-restores-original-and-persists",
+        "reset-preserves-haptics-and-flo-launcher"
+      ],
+      "screens": [
+        {
+          "route": "/",
+          "gradientLayers": [
+            {
+              "w": 390,
+              "h": 2025,
+              "x": 0,
+              "y": 0,
+              "gradient": "linear-gradient(172.105deg, rgb(232, 240, 243), rgb(255, 255, 255) 36%, rgb(248, 250, 252) 72%, rgb(232, 240, 243) 100%)",
+              "pointer": "none"
+            },
+            {
+              "w": 748.1937255859375,
+              "h": 2306.71875,
+              "x": -179.0968475341797,
+              "y": -140.85940551757812,
+              "gradient": "linear-gradient(169.099deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0) 58%, rgba(255, 255, 255, 0.01) 100%)",
+              "pointer": "none"
+            }
+          ]
+        },
+        {
+          "route": "/bills",
+          "gradientLayers": [
+            {
+              "w": 390,
+              "h": 844,
+              "x": 0,
+              "y": 0,
+              "gradient": "linear-gradient(161.598deg, rgb(232, 240, 243), rgb(255, 255, 255) 36%, rgb(248, 250, 252) 72%, rgb(232, 240, 243) 100%)",
+              "pointer": "none"
+            },
+            {
+              "w": 564.1066284179688,
+              "h": 996.8714599609375,
+              "x": -87.0533218383789,
+              "y": -76.43570709228516,
+              "gradient": "linear-gradient(155.199deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0) 58%, rgba(255, 255, 255, 0.01) 100%)",
+              "pointer": "none"
+            }
+          ]
+        },
+        {
+          "route": "/monthly",
+          "gradientLayers": [
+            {
+              "w": 390,
+              "h": 844,
+              "x": 0,
+              "y": 0,
+              "gradient": "linear-gradient(161.598deg, rgb(232, 240, 243), rgb(255, 255, 255) 36%, rgb(248, 250, 252) 72%, rgb(232, 240, 243) 100%)",
+              "pointer": "none"
+            },
+            {
+              "w": 564.1066284179688,
+              "h": 996.8714599609375,
+              "x": -87.0533218383789,
+              "y": -76.43570709228516,
+              "gradient": "linear-gradient(155.199deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0) 58%, rgba(255, 255, 255, 0.01) 100%)",
+              "pointer": "none"
+            }
+          ]
+        },
+        {
+          "route": "/flo",
+          "gradientLayers": [
+            {
+              "w": 390,
+              "h": 844,
+              "x": 0,
+              "y": 0,
+              "gradient": "linear-gradient(161.598deg, rgb(232, 240, 243), rgb(255, 255, 255) 36%, rgb(248, 250, 252) 72%, rgb(232, 240, 243) 100%)",
+              "pointer": "none"
+            },
+            {
+              "w": 564.1066284179688,
+              "h": 996.8714599609375,
+              "x": -87.0533218383789,
+              "y": -76.43570709228516,
+              "gradient": "linear-gradient(155.199deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0) 58%, rgba(255, 255, 255, 0.01) 100%)",
+              "pointer": "none"
+            }
+          ]
+        }
+      ],
+      "status": "PASS",
+      "noReconciliation": true,
+      "interceptedExternalRequests": 237,
+      "errors": [],
+      "consoleErrors": [],
+      "unknown": []
+    },
+    {
+      "width": 1200,
+      "checks": [
+        "opens-without-reconciliation",
+        "preset-FlowLedger",
+        "preset-Ocean",
+        "preset-Mint",
+        "preset-Sunset",
+        "preset-Paper",
+        "preset-persists-across-app-screens",
+        "accent-Original",
+        "accent-Blue",
+        "accent-Teal",
+        "accent-Rose",
+        "accent-Amber",
+        "accent-Slate",
+        "background-Ambient",
+        "background-Subtle",
+        "background-Plain",
+        "contrast-Standard",
+        "contrast-High",
+        "custom-settings-survive-reload",
+        "system-mode-reacts-to-os-colors",
+        "light-mode-high-contrast",
+        "storage-error-visible-no-crash",
+        "storage-retry-saves-current-look",
+        "reset-restores-original-and-persists",
+        "reset-preserves-haptics-and-flo-launcher"
+      ],
+      "screens": [
+        {
+          "route": "/",
+          "gradientLayers": []
+        },
+        {
+          "route": "/bills",
+          "gradientLayers": []
+        },
+        {
+          "route": "/monthly",
+          "gradientLayers": []
+        },
+        {
+          "route": "/flo",
+          "gradientLayers": [
+            {
+              "w": 956,
+              "h": 900,
+              "x": 244,
+              "y": 0,
+              "gradient": "linear-gradient(142.591deg, rgb(232, 240, 243), rgb(255, 255, 255) 36%, rgb(248, 250, 252) 72%, rgb(232, 240, 243) 100%)",
+              "pointer": "none"
+            },
+            {
+              "w": 1200.58642578125,
+              "h": 1147.2056884765625,
+              "x": 121.70684051513672,
+              "y": -123.60282135009766,
+              "gradient": "linear-gradient(133.272deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0) 58%, rgba(255, 255, 255, 0.01) 100%)",
+              "pointer": "none"
+            }
+          ]
+        }
+      ],
+      "status": "PASS",
+      "noReconciliation": true,
+      "interceptedExternalRequests": 234,
+      "errors": [],
+      "consoleErrors": [],
+      "unknown": []
+    }
+  ]
+}

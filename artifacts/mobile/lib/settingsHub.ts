@@ -51,7 +51,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
   { id: "reports", label: "Reports & insights", description: "Monthly results and next steps", icon: "bar-chart-2" },
   { id: "setup", label: "Setup & walkthrough", description: "Run setup again or explore the demo", icon: "compass" },
   { id: "notifications", label: "Notifications", description: "Choose the reminders you receive", icon: "bell" },
-  { id: "appearance", label: "Appearance & feedback", description: "Theme, text style, and haptic feedback", icon: "sliders" },
+  { id: "appearance", label: "Appearance & feedback", description: "Presets, colors, backgrounds, and haptic feedback", icon: "sliders" },
   { id: "backup", label: "Data & backup", description: "Import, export, install, and reset Flo memory", icon: "download" },
   { id: "deleted", label: "Recently deleted", description: "Restore transactions", icon: "trash-2" },
   { id: "membership", label: "Membership", description: "Plan and pricing", icon: "award" },

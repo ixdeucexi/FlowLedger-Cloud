@@ -1,3 +1,4 @@
+import { AppearanceSettings } from "@/components/AppearanceSettings";
 import Feather from "@expo/vector-icons/Feather";
 import { UpdateCenter } from "@/components/settings/UpdateCenter";
 import { FloLauncherSetting } from "@/components/FloLauncherSetting";
@@ -32,7 +33,6 @@ import { useAuth } from "@/context/AuthContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useMembership } from "@/context/MembershipContext";
 import {
-  type ThemeMode,
   useThemeMode,
 } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
@@ -63,7 +63,7 @@ const SECTIONS: Array<{
   },
   {
     label: "Appearance & feedback",
-    description: "Theme and haptics",
+    description: "Presets, colors, backgrounds, and haptics",
     icon: "sliders",
   },
   {
@@ -143,7 +143,7 @@ export function DesktopSettingsPage({
   const { accounts, connectedBankAccounts, activeHousehold } = useBudget();
   const { actualPlan, loading: membershipLoading } = useMembership();
   const adminProAccess = hasAdminProAccess(actualPlan);
-  const { themeMode, setThemeMode } = useThemeMode();
+  const { themeMode, presetName } = useThemeMode();
   const {
     enabled: hapticsEnabled,
     ready: hapticsReady,
@@ -310,7 +310,7 @@ export function DesktopSettingsPage({
                 <View style={styles.previewGrid}>
                   <SettingsPreview
                     title="Appearance & feedback"
-                    rows={[`Theme: ${themeMode}`, "FlowLedger type scale"]}
+                    rows={[`Look: ${presetName}`, `Mode: ${themeMode}`]}
                     action="Manage preferences"
                     onPress={() => setSection("Appearance & feedback")}
                   />
@@ -386,16 +386,7 @@ export function DesktopSettingsPage({
                 <CardHeader title="Preferences" />
                 <View style={styles.sectionBody}>
                   <FloLauncherSetting />
-                  <OptionGroup
-                    label="Theme"
-                    value={themeMode}
-                    values={[
-                      { label: "Light", value: "light" },
-                      { label: "Dark", value: "dark" },
-                      { label: "Auto", value: "auto" },
-                    ]}
-                    onChange={(value) => void setThemeMode(value as ThemeMode)}
-                  />
+                  <AppearanceSettings />
                   <SettingsLine
                     icon="smartphone"
                     title="Haptic feedback"
@@ -410,10 +401,7 @@ export function DesktopSettingsPage({
                       />
                     }
                   />
-                  <Text style={styles.supportNote}>
-                    Currency, date format, and week start are not stored
-                    settings yet, so they are not shown as inactive controls.
-                  </Text>
+
                 </View>
               </DesktopCard>
             ) : null}
@@ -736,48 +724,6 @@ function SettingsLine({
         <Text style={styles.lineDescription}>{description}</Text>
       </View>
       {action}
-    </View>
-  );
-}
-
-function OptionGroup({
-  label,
-  value,
-  values,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  values: Array<{ label: string; value: string }>;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <View style={styles.optionGroup}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <View style={styles.optionRow}>
-        {values.map((option) => (
-          <Pressable
-            key={option.value}
-            accessibilityRole="radio"
-            accessibilityState={{ selected: value === option.value }}
-            onPress={() => onChange(option.value)}
-            style={({ pressed }) => [
-              styles.option,
-              value === option.value && styles.optionActive,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Text
-              style={[
-                styles.optionText,
-                value === option.value && styles.optionTextActive,
-              ]}
-            >
-              {option.label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
     </View>
   );
 }

@@ -1,3 +1,5 @@
+import { useColors } from "@/hooks/useColors";
+import { useThemeMode } from "@/context/ThemeContext";
 import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import { StyleSheet, View } from "react-native";
@@ -28,13 +30,18 @@ const VARIANT_GLOWS: Record<FlowWaveVariant, { primary: string; secondary: strin
 };
 
 export function FlowWaveBackground({ variant = "blue", intensity = "standard" }: Props) {
-  const glow = VARIANT_GLOWS[variant];
-  const soft = intensity === "soft";
+  const c = useColors();
+  const { appearance } = useThemeMode();
+  const glow = appearance.accent === "default" && c.isDark ? VARIANT_GLOWS[variant] : {
+    primary: c.primary + (c.isDark ? "15" : "19"), secondary: c.primary + "0a", edge: c.primary + "06",
+  };
+  const soft = intensity === "soft" || appearance.backdrop === "subtle";
+  if (appearance.backdrop === "plain") return <View pointerEvents="none" style={[styles.root, { backgroundColor: c.background }]} />;
 
   return (
     <View pointerEvents="none" style={styles.root}>
       <LinearGradient
-        colors={["#01020a", "#020617", "#050816", "#01020a"]}
+        colors={c.isDark ? [c.background, "#020617", "#050816", c.background] : [c.background, "#ffffff", "#f8fafc", c.background]}
         locations={[0, 0.36, 0.72, 1]}
         start={{ x: 0.16, y: 0 }}
         end={{ x: 0.88, y: 1 }}
@@ -50,7 +57,7 @@ export function FlowWaveBackground({ variant = "blue", intensity = "standard" }:
         end={{ x: 1, y: 1 }}
         style={styles.softSheen}
       />
-      <View style={styles.readabilityWash} />
+      <View style={[styles.readabilityWash, { backgroundColor: c.isDark ? "rgba(2,6,23,0.10)" : "rgba(255,255,255,0.16)" }]} />
     </View>
   );
 }
