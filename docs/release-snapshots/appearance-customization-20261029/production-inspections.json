@@ -1,0 +1,187 @@
+{
+  "inspections": [
+    {
+      "host": "flowledger-algo.com",
+      "value": {
+        "id": "dpl_GjLc7fLqCcUVSYdzCGV3qxA6dUdx",
+        "name": "flow-ledger-cloud",
+        "url": "flow-ledger-cloud-qjjm0p70o-flow-ledger-s-projects.vercel.app",
+        "target": "production",
+        "readyState": "READY",
+        "meta": {
+          "githubCommitRef": "f624ed3de446fd769d2882d4f33f9b870bfabada",
+          "githubCommitSha": "f624ed3de446fd769d2882d4f33f9b870bfabada",
+          "githubCommitMessage": "feat(appearance): add presets and device customization",
+          "githubRepo": "FlowLedger-Cloud",
+          "githubOrg": "ixdeucexi"
+        }
+      }
+    },
+    {
+      "host": "www.flowledger-algo.com",
+      "value": {
+        "id": "dpl_GjLc7fLqCcUVSYdzCGV3qxA6dUdx",
+        "name": "flow-ledger-cloud",
+        "url": "flow-ledger-cloud-qjjm0p70o-flow-ledger-s-projects.vercel.app",
+        "target": "production",
+        "readyState": "READY",
+        "meta": {
+          "githubCommitRef": "f624ed3de446fd769d2882d4f33f9b870bfabada",
+          "githubCommitSha": "f624ed3de446fd769d2882d4f33f9b870bfabada",
+          "githubCommitMessage": "feat(appearance): add presets and device customization",
+          "githubRepo": "FlowLedger-Cloud",
+          "githubOrg": "ixdeucexi"
+        }
+      }
+    },
+    {
+      "host": "flow-ledger-cloud.vercel.app",
+      "value": {
+        "id": "dpl_GjLc7fLqCcUVSYdzCGV3qxA6dUdx",
+        "name": "flow-ledger-cloud",
+        "url": "flow-ledger-cloud-qjjm0p70o-flow-ledger-s-projects.vercel.app",
+        "target": "production",
+        "readyState": "READY",
+        "meta": {
+          "githubCommitRef": "f624ed3de446fd769d2882d4f33f9b870bfabada",
+          "githubCommitSha": "f624ed3de446fd769d2882d4f33f9b870bfabada",
+          "githubCommitMessage": "feat(appearance): add presets and device customization",
+          "githubRepo": "FlowLedger-Cloud",
+          "githubOrg": "ixdeucexi"
+        }
+      }
+    },
+    {
+      "host": "flow-ledger-cloud-flow-ledger-s-projects.vercel.app",
+      "value": {
+        "id": "dpl_GjLc7fLqCcUVSYdzCGV3qxA6dUdx",
+        "name": "flow-ledger-cloud",
+        "url": "flow-ledger-cloud-qjjm0p70o-flow-ledger-s-projects.vercel.app",
+        "target": "production",
+        "readyState": "READY",
+        "meta": {
+          "githubCommitRef": "f624ed3de446fd769d2882d4f33f9b870bfabada",
+          "githubCommitSha": "f624ed3de446fd769d2882d4f33f9b870bfabada",
+          "githubCommitMessage": "feat(appearance): add presets and device customization",
+          "githubRepo": "FlowLedger-Cloud",
+          "githubOrg": "ixdeucexi"
+        }
+      }
+    }
+  ],
+  "deployment": {
+    "id": "dpl_GjLc7fLqCcUVSYdzCGV3qxA6dUdx",
+    "name": "flow-ledger-cloud",
+    "target": "production",
+    "readyState": "READY",
+    "meta": {
+      "githubCommitRef": "f624ed3de446fd769d2882d4f33f9b870bfabada",
+      "githubCommitSha": "f624ed3de446fd769d2882d4f33f9b870bfabada",
+      "githubCommitMessage": "feat(appearance): add presets and device customization",
+      "githubRepo": "FlowLedger-Cloud",
+      "githubOrg": "ixdeucexi",
+      "gitCommitSha": "f624ed3de446fd769d2882d4f33f9b870bfabada"
+    }
+  },
+  "normalization": "Observed meta.githubCommitSha mapped to CLI-equivalent gitCommitSha; original field retained.",
+  "environmentMetadata": [
+    {
+      "key": "EXPO_PUBLIC_SUPABASE_ANON_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "EXPO_PUBLIC_SUPABASE_URL",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "SUPABASE_URL",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "PLAID_CLIENT_ID",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "PLAID_SECRET",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "PLAID_REDIRECT_URI",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "PLAID_ENV",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "SUPABASE_SERVICE_ROLE_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "VAPID_SUBJECT",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted"
+    },
+    {
+      "key": "VAPID_PRIVATE_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "VAPID_PUBLIC_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted"
+    },
+    {
+      "key": "CRON_SECRET",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "PLAID_WEBHOOK_URL",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted"
+    },
+    {
+      "key": "PLAID_TOKEN_ENCRYPTION_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    }
+  ]
+}

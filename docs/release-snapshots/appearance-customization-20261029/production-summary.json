@@ -1,0 +1,12 @@
+{
+  "status": "PASS",
+  "viewports": 2,
+  "checks": 50,
+  "interceptedRequests": 517,
+  "liveFinancialWrites": 0,
+  "applicationErrors": 0,
+  "unknownRequests": 0,
+  "unexpectedConsoleEvents": 0,
+  "knownBaselineBeaconCspBlocks": 16,
+  "exactCandidateBundle": true
+}
