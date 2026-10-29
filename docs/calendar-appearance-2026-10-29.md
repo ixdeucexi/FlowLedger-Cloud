@@ -1,6 +1,6 @@
 # Independent Forecast calendar colors
 
-Status: verified candidate; production release pending.
+Status: live at https://flowledger-algo.com on October 29, 2026. Production HTTP and browser postflight passed.
 
 Settings > Appearance & feedback now includes Forecast calendar colors. Income, Bills, Debt, Plan, Spending and Risk each have eight curated color choices plus Follow theme. Custom choices remain independent when changing app presets or Light/Dark/System mode. Follow theme reconnects one category; Reset calendar colors clears only calendar overrides. Reset appearance explicitly restores both app and calendar defaults. Preferences save on the current device.
 
@@ -17,3 +17,11 @@ Rollback: `rollback/prod-before-calendar-appearance-20261029-2151`, remotely ver
 Evidence: `release-snapshots/calendar-appearance-20261029/`.
 
 Final candidate: `entry-3f0da92b21050e4f9e9c43ffa8470b0a.js`, SHA-256 `6ceba59b2e2332d754d7e7b314ca75cca261f818c2c9194bf958da2219b3eab2`. All 42 browser checks passed (22 phone, 20 desktop) with no application/console errors, unknown requests or financial writes. Final browser evidence asserts both Add-button shadow color and original nonzero geometry. Independent whole-candidate review passed.
+
+## Production release
+
+- Clean reviewed source: `dcaf8d5e09e28fd415bb1eff445d87dbd45d42a8`, pushed on `dev`. Source/config/guide guards passed in a clean isolated release checkout. The exact rollback tag and prior READY deployment were checked again before release.
+- READY production deployment: `dpl_DsHzL1RJFmQU1khmyEUSE53yzN4k`, immutable https://flow-ledger-cloud-3a32zjuju-flow-ledger-s-projects.vercel.app. All four app aliases were freshly verified and aligned; only the legacy alias required reassignment. Only the duplicate in-progress non-production build of this exact source was canceled.
+- Repository HTTP postflight passed using fresh connected-tool deployment observations, preserving original GitHub source metadata while mapping its source SHA to the CLI-equivalent field expected by the guard. Startup, registered routes, executable assets, cache policies, health/missing-resource responses and guide/service-worker parity passed. The published bundle SHA-256 exactly matches the browser-tested candidate above.
+- All 42 browser checks passed again using the actual published assets at 390/1,200 pixels. Phone and desktop screenshots were visually reviewed. Independent choices, presets/modes/reload, Follow theme, reset scope, unchanged financial labels, Original + Light controls and exact accent shadow geometry passed. Fictional authentication and financial records were used with every financial/API request intercepted; no live financial test writes occurred. No application errors, unknown requests, unexpected console events or reconciliations occurred. Existing injected Cloudflare beacon CSP blocks were classified separately (17 navigation occurrences per viewport). Browser contexts were closed.
+- Independent production review verified the HTTP results, alias/source identity, downloaded bundle hash and browser evidence. No backend deployments, migrations, environment changes or unrelated marketing files were included. The exact rollback tag and prior READY deployment above remain available.

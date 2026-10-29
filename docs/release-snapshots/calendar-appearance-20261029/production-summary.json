@@ -1,0 +1,20 @@
+{
+  "status": "PASS",
+  "source": "dcaf8d5e09e28fd415bb1eff445d87dbd45d42a8",
+  "deployment": "dpl_DsHzL1RJFmQU1khmyEUSE53yzN4k",
+  "target": "production",
+  "readyState": "READY",
+  "immutableUrl": "https://flow-ledger-cloud-3a32zjuju-flow-ledger-s-projects.vercel.app",
+  "allFourAliasesAligned": true,
+  "publishedBundleSha256": "6ceba59b2e2332d754d7e7b314ca75cca261f818c2c9194bf958da2219b3eab2",
+  "publishedBundleMatchesTestedCandidate": true,
+  "httpPostflight": "PASS",
+  "browserChecks": 42,
+  "phoneChecks": 22,
+  "desktopChecks": 20,
+  "financialWrites": 0,
+  "unexpectedBrowserErrors": 0,
+  "knownBaselineCloudflareCspBlocksPerViewport": 17,
+  "rollbackRef": "rollback/prod-before-calendar-appearance-20261029-2151",
+  "rollbackDeployment": "dpl_GjLc7fLqCcUVSYdzCGV3qxA6dUdx"
+}

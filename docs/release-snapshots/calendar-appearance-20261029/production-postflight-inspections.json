@@ -1,0 +1,172 @@
+{
+  "inspections": [
+    {
+      "host": "flowledger-algo.com",
+      "value": {
+        "id": "dpl_DsHzL1RJFmQU1khmyEUSE53yzN4k",
+        "name": "flow-ledger-cloud",
+        "url": "flow-ledger-cloud-3a32zjuju-flow-ledger-s-projects.vercel.app",
+        "target": "production",
+        "readyState": "READY",
+        "meta": {
+          "githubCommitSha": "dcaf8d5e09e28fd415bb1eff445d87dbd45d42a8",
+          "gitCommitSha": "dcaf8d5e09e28fd415bb1eff445d87dbd45d42a8"
+        }
+      }
+    },
+    {
+      "host": "www.flowledger-algo.com",
+      "value": {
+        "id": "dpl_DsHzL1RJFmQU1khmyEUSE53yzN4k",
+        "name": "flow-ledger-cloud",
+        "url": "flow-ledger-cloud-3a32zjuju-flow-ledger-s-projects.vercel.app",
+        "target": "production",
+        "readyState": "READY",
+        "meta": {
+          "githubCommitSha": "dcaf8d5e09e28fd415bb1eff445d87dbd45d42a8",
+          "gitCommitSha": "dcaf8d5e09e28fd415bb1eff445d87dbd45d42a8"
+        }
+      }
+    },
+    {
+      "host": "flow-ledger-cloud.vercel.app",
+      "value": {
+        "id": "dpl_DsHzL1RJFmQU1khmyEUSE53yzN4k",
+        "name": "flow-ledger-cloud",
+        "url": "flow-ledger-cloud-3a32zjuju-flow-ledger-s-projects.vercel.app",
+        "target": "production",
+        "readyState": "READY",
+        "meta": {
+          "githubCommitSha": "dcaf8d5e09e28fd415bb1eff445d87dbd45d42a8",
+          "gitCommitSha": "dcaf8d5e09e28fd415bb1eff445d87dbd45d42a8"
+        }
+      }
+    },
+    {
+      "host": "flow-ledger-cloud-flow-ledger-s-projects.vercel.app",
+      "value": {
+        "id": "dpl_DsHzL1RJFmQU1khmyEUSE53yzN4k",
+        "name": "flow-ledger-cloud",
+        "url": "flow-ledger-cloud-3a32zjuju-flow-ledger-s-projects.vercel.app",
+        "target": "production",
+        "readyState": "READY",
+        "meta": {
+          "githubCommitSha": "dcaf8d5e09e28fd415bb1eff445d87dbd45d42a8",
+          "gitCommitSha": "dcaf8d5e09e28fd415bb1eff445d87dbd45d42a8"
+        }
+      }
+    }
+  ],
+  "deployment": {
+    "id": "dpl_DsHzL1RJFmQU1khmyEUSE53yzN4k",
+    "name": "flow-ledger-cloud",
+    "url": "flow-ledger-cloud-3a32zjuju-flow-ledger-s-projects.vercel.app",
+    "target": "production",
+    "readyState": "READY",
+    "meta": {
+      "githubCommitSha": "dcaf8d5e09e28fd415bb1eff445d87dbd45d42a8",
+      "gitCommitSha": "dcaf8d5e09e28fd415bb1eff445d87dbd45d42a8"
+    }
+  },
+  "environmentMetadata": [
+    {
+      "key": "EXPO_PUBLIC_SUPABASE_ANON_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "EXPO_PUBLIC_SUPABASE_URL",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "SUPABASE_URL",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "PLAID_CLIENT_ID",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "PLAID_SECRET",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "PLAID_REDIRECT_URI",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "PLAID_ENV",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "SUPABASE_SERVICE_ROLE_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "VAPID_SUBJECT",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted"
+    },
+    {
+      "key": "VAPID_PRIVATE_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "VAPID_PUBLIC_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted"
+    },
+    {
+      "key": "CRON_SECRET",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "PLAID_WEBHOOK_URL",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted"
+    },
+    {
+      "key": "PLAID_TOKEN_ENCRYPTION_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    }
+  ],
+  "normalization": "Observed githubCommitSha normalized to CLI-equivalent gitCommitSha with original retained."
+}
