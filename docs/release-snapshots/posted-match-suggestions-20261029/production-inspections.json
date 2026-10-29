@@ -1,0 +1,187 @@
+{
+  "inspections": [
+    {
+      "host": "flowledger-algo.com",
+      "value": {
+        "id": "dpl_7cuYo4XL73dGtrhgNxdcdSQPa1Sv",
+        "name": "flow-ledger-cloud",
+        "url": "flow-ledger-cloud-bld78cjzi-flow-ledger-s-projects.vercel.app",
+        "target": "production",
+        "readyState": "READY",
+        "meta": {
+          "githubCommitRef": "637e840ed028fc72568ba10368506a1f98995787",
+          "githubCommitSha": "637e840ed028fc72568ba10368506a1f98995787",
+          "githubCommitMessage": "fix(matching): show posted suggestions before filters",
+          "githubRepo": "FlowLedger-Cloud",
+          "githubOrg": "ixdeucexi"
+        }
+      }
+    },
+    {
+      "host": "www.flowledger-algo.com",
+      "value": {
+        "id": "dpl_7cuYo4XL73dGtrhgNxdcdSQPa1Sv",
+        "name": "flow-ledger-cloud",
+        "url": "flow-ledger-cloud-bld78cjzi-flow-ledger-s-projects.vercel.app",
+        "target": "production",
+        "readyState": "READY",
+        "meta": {
+          "githubCommitRef": "637e840ed028fc72568ba10368506a1f98995787",
+          "githubCommitSha": "637e840ed028fc72568ba10368506a1f98995787",
+          "githubCommitMessage": "fix(matching): show posted suggestions before filters",
+          "githubRepo": "FlowLedger-Cloud",
+          "githubOrg": "ixdeucexi"
+        }
+      }
+    },
+    {
+      "host": "flow-ledger-cloud.vercel.app",
+      "value": {
+        "id": "dpl_7cuYo4XL73dGtrhgNxdcdSQPa1Sv",
+        "name": "flow-ledger-cloud",
+        "url": "flow-ledger-cloud-bld78cjzi-flow-ledger-s-projects.vercel.app",
+        "target": "production",
+        "readyState": "READY",
+        "meta": {
+          "githubCommitRef": "637e840ed028fc72568ba10368506a1f98995787",
+          "githubCommitSha": "637e840ed028fc72568ba10368506a1f98995787",
+          "githubCommitMessage": "fix(matching): show posted suggestions before filters",
+          "githubRepo": "FlowLedger-Cloud",
+          "githubOrg": "ixdeucexi"
+        }
+      }
+    },
+    {
+      "host": "flow-ledger-cloud-flow-ledger-s-projects.vercel.app",
+      "value": {
+        "id": "dpl_7cuYo4XL73dGtrhgNxdcdSQPa1Sv",
+        "name": "flow-ledger-cloud",
+        "url": "flow-ledger-cloud-bld78cjzi-flow-ledger-s-projects.vercel.app",
+        "target": "production",
+        "readyState": "READY",
+        "meta": {
+          "githubCommitRef": "637e840ed028fc72568ba10368506a1f98995787",
+          "githubCommitSha": "637e840ed028fc72568ba10368506a1f98995787",
+          "githubCommitMessage": "fix(matching): show posted suggestions before filters",
+          "githubRepo": "FlowLedger-Cloud",
+          "githubOrg": "ixdeucexi"
+        }
+      }
+    }
+  ],
+  "deployment": {
+    "id": "dpl_7cuYo4XL73dGtrhgNxdcdSQPa1Sv",
+    "name": "flow-ledger-cloud",
+    "target": "production",
+    "readyState": "READY",
+    "meta": {
+      "githubCommitRef": "637e840ed028fc72568ba10368506a1f98995787",
+      "githubCommitSha": "637e840ed028fc72568ba10368506a1f98995787",
+      "githubCommitMessage": "fix(matching): show posted suggestions before filters",
+      "githubRepo": "FlowLedger-Cloud",
+      "githubOrg": "ixdeucexi",
+      "gitCommitSha": "637e840ed028fc72568ba10368506a1f98995787"
+    }
+  },
+  "normalization": "Observed meta.githubCommitSha is mapped to CLI field meta.gitCommitSha; original metadata retained.",
+  "environmentMetadata": [
+    {
+      "key": "EXPO_PUBLIC_SUPABASE_ANON_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "EXPO_PUBLIC_SUPABASE_URL",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "SUPABASE_URL",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "PLAID_CLIENT_ID",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "PLAID_SECRET",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "PLAID_REDIRECT_URI",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "PLAID_ENV",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "SUPABASE_SERVICE_ROLE_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "VAPID_SUBJECT",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted"
+    },
+    {
+      "key": "VAPID_PRIVATE_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "VAPID_PUBLIC_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted"
+    },
+    {
+      "key": "CRON_SECRET",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    },
+    {
+      "key": "PLAID_WEBHOOK_URL",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted"
+    },
+    {
+      "key": "PLAID_TOKEN_ENCRYPTION_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive"
+    }
+  ]
+}

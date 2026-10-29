@@ -1,0 +1,179 @@
+{
+  "status": "PASS",
+  "cases": 7,
+  "results": [
+    {
+      "key": "review-bill-390",
+      "status": "PASS",
+      "suggestion": "Use Flo suggestion Peacock",
+      "filterIndependent": true,
+      "noAutomaticReconciliation": true,
+      "explicitAction": {
+        "name": "reconcile_transaction",
+        "input": {
+          "p_transaction_id": "posted-peacock",
+          "p_resolution": "bill",
+          "p_target_id": "bill-peacock",
+          "p_occurrence_date": "2026-10-28",
+          "p_planned_amount": 12.99,
+          "p_settlement": "exact",
+          "p_extra_category": null
+        }
+      },
+      "uncaughtErrors": [],
+      "consoleWarnings": [
+        "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+      ],
+      "unknown": [],
+      "externalCallsIntercepted": 46
+    },
+    {
+      "key": "review-bill-1200",
+      "status": "PASS",
+      "suggestion": "Use Flo suggestion Peacock",
+      "filterIndependent": true,
+      "noAutomaticReconciliation": true,
+      "explicitAction": {
+        "name": "reconcile_transaction",
+        "input": {
+          "p_transaction_id": "posted-peacock",
+          "p_resolution": "bill",
+          "p_target_id": "bill-peacock",
+          "p_occurrence_date": "2026-10-28",
+          "p_planned_amount": 12.99,
+          "p_settlement": "exact",
+          "p_extra_category": null
+        }
+      },
+      "uncaughtErrors": [],
+      "consoleWarnings": [
+        "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+      ],
+      "unknown": [],
+      "externalCallsIntercepted": 46
+    },
+    {
+      "key": "review-manual-390",
+      "status": "PASS",
+      "suggestion": "Use Flo suggestion Peacock manual purchase",
+      "filterIndependent": true,
+      "noAutomaticReconciliation": true,
+      "explicitAction": {
+        "name": "reconcile_manual_transaction",
+        "input": {
+          "p_transaction_id": "posted-peacock",
+          "p_manual_transaction_id": "manual-peacock",
+          "p_occurrence_date": "2026-10-28",
+          "p_planned_amount": 12.99,
+          "p_settlement": "exact"
+        }
+      },
+      "uncaughtErrors": [],
+      "consoleWarnings": [
+        "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+      ],
+      "unknown": [],
+      "externalCallsIntercepted": 46
+    },
+    {
+      "key": "review-bucket-390",
+      "status": "PASS",
+      "suggestion": "Use Flo suggestion Peacock bucket",
+      "filterIndependent": true,
+      "noAutomaticReconciliation": true,
+      "explicitAction": {
+        "name": "reconcile_transaction",
+        "input": {
+          "p_transaction_id": "posted-peacock",
+          "p_resolution": "goal",
+          "p_target_id": "bucket-peacock",
+          "p_occurrence_date": "2026-10-28",
+          "p_planned_amount": 12.99,
+          "p_settlement": "exact",
+          "p_extra_category": null
+        }
+      },
+      "uncaughtErrors": [],
+      "consoleWarnings": [
+        "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+      ],
+      "unknown": [],
+      "externalCallsIntercepted": 46
+    },
+    {
+      "key": "review-debt-390",
+      "status": "PASS",
+      "suggestion": "Use Flo suggestion Peacock Card",
+      "filterIndependent": true,
+      "noAutomaticReconciliation": true,
+      "explicitAction": {
+        "name": "reconcile_transaction",
+        "input": {
+          "p_transaction_id": "posted-peacock",
+          "p_resolution": "bill",
+          "p_target_id": "debt-card",
+          "p_occurrence_date": "2026-10-28",
+          "p_planned_amount": 12.99,
+          "p_settlement": "exact",
+          "p_extra_category": null
+        }
+      },
+      "uncaughtErrors": [],
+      "consoleWarnings": [
+        "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+      ],
+      "unknown": [],
+      "externalCallsIntercepted": 49
+    },
+    {
+      "key": "activity-bill-390",
+      "status": "PASS",
+      "suggestion": "Use suggested bill Peacock",
+      "filterIndependent": true,
+      "noAutomaticReconciliation": true,
+      "explicitAction": {
+        "name": "reconcile_transaction",
+        "input": {
+          "p_transaction_id": "posted-peacock",
+          "p_resolution": "bill",
+          "p_target_id": "bill-peacock",
+          "p_occurrence_date": "2026-10-28",
+          "p_planned_amount": 12.99,
+          "p_settlement": "exact",
+          "p_extra_category": null
+        }
+      },
+      "uncaughtErrors": [],
+      "consoleWarnings": [
+        "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+      ],
+      "unknown": [],
+      "externalCallsIntercepted": 33
+    },
+    {
+      "key": "activity-bill-1200",
+      "status": "PASS",
+      "suggestion": "Use suggested bill Peacock",
+      "filterIndependent": true,
+      "noAutomaticReconciliation": true,
+      "explicitAction": {
+        "name": "reconcile_transaction",
+        "input": {
+          "p_transaction_id": "posted-peacock",
+          "p_resolution": "bill",
+          "p_target_id": "bill-peacock",
+          "p_occurrence_date": "2026-10-28",
+          "p_planned_amount": 12.99,
+          "p_settlement": "exact",
+          "p_extra_category": null
+        }
+      },
+      "uncaughtErrors": [],
+      "consoleWarnings": [
+        "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+      ],
+      "unknown": [],
+      "externalCallsIntercepted": 33
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "status": "PASS",
+  "browserFlows": 7,
+  "externalApplicationRequestsIntercepted": 299,
+  "liveFinancialWrites": 0,
+  "uncaughtErrors": 0,
+  "unknownRoutes": 0,
+  "unexpectedConsoleEvents": 0,
+  "knownBaselineBeaconCspBlocks": 7,
+  "warningClassification": "Only pre-existing injected Cloudflare Insights beacon blocked by unchanged script-src; no application error."
+}
