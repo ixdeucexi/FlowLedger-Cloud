@@ -404,6 +404,7 @@ export default function MoreScreen({
   const { newFeedbackCount, refreshFeedbackCount } = useFeedbackBadge();
   const {
     actualPlan,
+    hasFoundingAccess,
     effectiveTier,
     isAdmin: feedbackAdmin,
     loading: membershipLoading,
@@ -1557,11 +1558,13 @@ export default function MoreScreen({
   );
   const membershipStatusLabel = membershipLoading
     ? "Loading"
-    : adminProAccess
-      ? "Pro · Admin"
-      : FOUNDING_FREE_LAUNCH
-      ? FOUNDING_FREE_NAME
-      : `${effectiveTier === "pro" ? "Pro" : "Basic"}${previewTier ? " preview" : ""}`;
+    : previewTier
+      ? `${effectiveTier === "pro" ? "Pro" : "Free"} preview`
+      : adminProAccess
+        ? "Pro · Admin"
+        : actualPlan.tier === "pro"
+          ? actualPlan.source === "grandfathered" ? "Pro · Permanent" : "Pro"
+          : hasFoundingAccess ? FOUNDING_FREE_NAME : "Free";
   const hubStatuses = useMemo<
     Partial<Record<SettingsDestinationId, SettingsStatus>>
   >(

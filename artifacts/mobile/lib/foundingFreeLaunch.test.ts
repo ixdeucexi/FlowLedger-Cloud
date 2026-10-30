@@ -1,19 +1,24 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
+import {
+  FREE_CORE_FEATURES,
+  FOUNDING_PLANNING_FEATURES,
+  canUseFeature,
+} from "./membership";
 
-test("public v1 is Founding Free without starting native billing", () => {
+test("tier eligibility is server-owned and checkout remains independently disabled by default", () => {
   const launchMode = readFileSync("lib/launchMode.ts", "utf8");
   const membership = readFileSync("context/MembershipContext.tsx", "utf8");
   const panel = readFileSync("components/MembershipPanel.tsx", "utf8");
-
+  assert.match(launchMode, /EXPO_PUBLIC_BILLING_CHECKOUT_ENABLED === "true"/);
   assert.match(launchMode, /EXPO_PUBLIC_LAUNCH_MODE !== "paid"/);
-  assert.match(launchMode, /Founding Free/);
-  assert.match(membership, /FOUNDING_FREE_LAUNCH \|\| !user\?\.id/);
-  assert.match(membership, /if \(!FOUNDING_FREE_LAUNCH && user\?\.id && activeHousehold\.role === "owner"\)/);
-  assert.match(membership, /if \(FOUNDING_FREE_LAUNCH\) return false/);
-  assert.match(panel, /No subscription or trial required/);
-  assert.match(panel, /Bank sync and advanced automation/);
+  assert.match(membership, /requestHouseholdFeatureAccess/);
+  assert.match(membership, /FREE_CORE_FEATURES.includes/);
+  assert.doesNotMatch(membership, /if \(FOUNDING_FREE_LAUNCH\) return false/);
+  assert.match(panel, /Pro subscriptions are not open yet/);
+  assert.match(panel, /Your existing planning and Flo tools are protected/);
+  assert.match(panel, /No purchase is available from this screen yet/);
 });
 
 test("a transient admin lookup failure retries instead of permanently hiding tester tools", () => {
@@ -22,7 +27,10 @@ test("a transient admin lookup failure retries instead of permanently hiding tes
   assert.match(membership, /const retryDelays = \[0, 300, 1_200\]/);
   assert.match(membership, /const \{ data, error \} = await supabase/);
   assert.match(membership, /if \(error\) throw error/);
-  assert.doesNotMatch(membership, /catch \{\s*if \(!cancelled\) setIsAdmin\(false\)/);
+  assert.doesNotMatch(
+    membership,
+    /catch \{\s*if \(!cancelled\) setIsAdmin\(false\)/,
+  );
 });
 
 test("account deletion only shows store subscription controls for a billing plan", () => {
@@ -34,7 +42,10 @@ test("account deletion only shows store subscription controls for a billing plan
 
 test("public v1 replaces unavailable bank linking with honest launch copy", () => {
   const more = readFileSync("app\/(tabs)\/more.tsx", "utf8");
-  const desktop = readFileSync("components/desktop/DesktopSettingsPage.tsx", "utf8");
+  const desktop = readFileSync(
+    "components/desktop/DesktopSettingsPage.tsx",
+    "utf8",
+  );
   const simulator = readFileSync("app/plan-simulator.tsx", "utf8");
 
   assert.match(more, /FOUNDING_FREE_LAUNCH && !adminProAccess \? \(/);
@@ -50,12 +61,12 @@ test("Apple sign-in is hidden unless the server capability is explicitly enabled
   const login = readFileSync("app/login.tsx", "utf8");
   const authContext = readFileSync("context/AuthContext.tsx", "utf8");
 
+  assert.match(login, /EXPO_PUBLIC_APPLE_AUTH_ENABLED === "true"/);
+  assert.match(login, /Platform\.OS === "ios" && appleAuthEnabled/);
   assert.match(
     login,
-    /EXPO_PUBLIC_APPLE_AUTH_ENABLED === "true"/,
+    /socialAuthEnabled\s*=\s*Platform\.OS !== "ios" \|\| appleAuthEnabled/,
   );
-  assert.match(login, /Platform\.OS === "ios" && appleAuthEnabled/);
-  assert.match(login, /socialAuthEnabled\s*=\s*Platform\.OS !== "ios" \|\| appleAuthEnabled/);
   assert.match(login, /\{socialAuthEnabled \? \(/);
   assert.match(authContext, /EXPO_PUBLIC_APPLE_AUTH_ENABLED !== "true"/);
   assert.match(authContext, /Crypto\.CryptoDigestAlgorithm\.SHA256/);
@@ -73,7 +84,10 @@ test("login exposes labeled controls, selected modes, and live feedback", () => 
   assert.match(login, /autoComplete="email"/);
   assert.match(login, /accessibilityLabel="Password"/);
   assert.match(login, /current-password/);
-  assert.match(login, /accessibilityLabel=\{showPass \? "Hide password" : "Show password"\}/);
+  assert.match(
+    login,
+    /accessibilityLabel=\{showPass \? "Hide password" : "Show password"\}/,
+  );
   assert.match(login, /accessibilityRole="alert"/);
   assert.match(login, /accessibilityLiveRegion="assertive"/);
   assert.match(login, /accessibilityLiveRegion="polite"/);
@@ -100,7 +114,10 @@ test("web OAuth lets auth-js exchange the callback code exactly once", () => {
 
   assert.match(supabaseClient, /detectSessionInUrl: Platform\.OS === "web"/);
   assert.doesNotMatch(authContext, /exchangeCodeForSession/);
-  assert.match(authContext, /shouldCleanWebAuthUrl[\s\S]+supabase\.auth\.getSession\(\)[\s\S]+window\.history\.replaceState/);
+  assert.match(
+    authContext,
+    /shouldCleanWebAuthUrl[\s\S]+supabase\.auth\.getSession\(\)[\s\S]+window\.history\.replaceState/,
+  );
 });
 
 test("withdrawn Terms and Privacy surfaces are not shipped or required", () => {
@@ -121,49 +138,52 @@ test("withdrawn Terms and Privacy surfaces are not shipped or required", () => {
   assert.equal(existsSync("lib/legalDocuments.ts"), false);
 });
 
-test("public matching and Flo copy does not send Founding Free users to a missing upgrade", () => {
-  const activity = readFileSync("app\/(tabs)\/transactions.tsx", "utf8");
-  const flo = readFileSync("app\/(tabs)\/flo.tsx", "utf8");
-
-  assert.doesNotMatch(activity, /Upgrade to Pro/i);
-  assert.match(activity, /stay available in Activity during Founding Free/);
-  assert.match(activity, /Pending charges stay visible during Founding Free/);
-  assert.doesNotMatch(flo, /Pro membership is required/i);
-  assert.match(flo, /Confirming Flo changes is planned for Pro/);
+test("Free manual matching and basic planning are not whole-screen paid features", () => {
+  for (const feature of FREE_CORE_FEATURES)
+    assert.equal(canUseFeature("free", feature), true);
+  assert.equal(canUseFeature("free", "transaction_matching"), true);
+  assert.equal(canUseFeature("free", "debt_payoff"), true);
+  assert.equal(canUseFeature("free", "plan_simulator"), true);
+  assert.equal(canUseFeature("free", "flo_creation"), false);
 });
 
 test("admin Pro remains account-scoped and keeps Plaid available during Founding Free", () => {
   const launchMode = readFileSync("lib/launchMode.ts", "utf8");
   const more = readFileSync("app\/(tabs)\/more.tsx", "utf8");
-  const desktop = readFileSync("components/desktop/DesktopSettingsPage.tsx", "utf8");
+  const desktop = readFileSync(
+    "components/desktop/DesktopSettingsPage.tsx",
+    "utf8",
+  );
   const panel = readFileSync("components/MembershipPanel.tsx", "utf8");
-  const adminTools = readFileSync("components/AdminMembershipTools.tsx", "utf8");
+  const adminTools = readFileSync(
+    "components/AdminMembershipTools.tsx",
+    "utf8",
+  );
 
-  assert.match(launchMode, /plan\?\.tier === "pro" && plan\.source === "admin"/);
+  assert.match(
+    launchMode,
+    /plan\?\.tier === "pro" && plan\.source === "admin"/,
+  );
   assert.match(more, /FOUNDING_FREE_LAUNCH && !adminProAccess/);
   assert.match(desktop, /FOUNDING_FREE_LAUNCH && !adminProAccess/);
   assert.match(panel, /ADMIN HOUSEHOLD PLAN/);
-  assert.match(panel, /does not expose purchase controls/);
+  assert.match(panel, /Pro subscriptions are not open yet/);
   assert.match(adminTools, /Manage Pro by email/);
   assert.match(adminTools, /Upgrade to Pro/);
 });
 
-test("founding free unlocked workspaces are not mislabeled as paid-only", () => {
-  const simulator = readFileSync("app/plan-simulator.tsx", "utf8");
-  const reviewCenter = readFileSync("components/ReviewCenter.tsx", "utf8");
-
-  assert.match(simulator, /foundingFreeLocalOnly \? "FOUNDING FREE PLAN SIMULATOR" : "PRO PLAN SIMULATOR"/);
-  assert.match(reviewCenter, /FOUNDING_FREE_LAUNCH \? "FOUNDING FREE REVIEW CENTER" : "PRO REVIEW CENTER"/);
-});
-
-test("Founding Free Plan Simulator keeps calculations local while admin Pro retains household scenarios", () => {
-  const simulator = readFileSync("app/plan-simulator.tsx", "utf8");
-
-  assert.match(simulator, /canPersistPlanSimulations\(actualPlan\)/);
-  assert.match(simulator, /!canPersistScenarios \|\| demoMode \|\| householdId === "local" \? Promise\.resolve\(\[\]\) : loadPlanSimulations/);
-  assert.match(simulator, /loadScenarioDeviceState\(AsyncStorage, deviceKeys, isCurrent/);
-  assert.match(simulator, /Named options are saved privately on this device/);
-  assert.match(simulator, /label="Save as new"/);
-  assert.match(simulator, /canPersistScenarios && canEditHousehold && !demoMode \? <Button label="Save household copy"/);
-  assert.match(simulator, /foundingFreeLocalOnly \? "Private on-device draft" : "Simulation only"/);
+test("the explicit founding feature version preserves planning without unlocking bank or cloud", () => {
+  for (const feature of [
+    "debt_strategies",
+    "saved_scenarios",
+    "scenario_comparison",
+    "long_term_reports",
+    "flo_creation",
+  ] as const)
+    assert.ok(FOUNDING_PLANNING_FEATURES.includes(feature));
+  assert.equal(FOUNDING_PLANNING_FEATURES.includes("plaid_sync"), false);
+  assert.equal(FOUNDING_PLANNING_FEATURES.includes("cloud_scenarios"), false);
+  const membership = readFileSync("context/MembershipContext.tsx", "utf8");
+  assert.match(membership, /resolvedAccess\?\.foundingPlanning === true/);
+  assert.doesNotMatch(membership, /household_plans[\s\S]+upsert/);
 });

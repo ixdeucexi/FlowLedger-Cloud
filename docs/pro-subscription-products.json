@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "configurationStatus": "prepared_requires_external_store_console_setup",
+  "entitlement": "pro",
+  "billingScope": "one_household_including_current_members",
+  "currency": "USD",
+  "standard": { "monthly": 9.99, "annual": 79.99 },
+  "optionalIntroduction": {
+    "price": 59.99,
+    "period": "P1Y",
+    "cycles": 1,
+    "renewsAtAnnual": 79.99,
+    "freeTrial": false,
+    "eligibilityAuthority": "store"
+  },
+  "apple": {
+    "subscriptionGroup": "flowledger_pro",
+    "monthlyProduct": "flowledger_pro_monthly",
+    "annualProduct": "flowledger_pro_annual",
+    "annualIntroduction": "one paid annual cycle, store-verified eligible new subscription"
+  },
+  "googlePlay": {
+    "subscription": "flowledger_pro",
+    "monthlyBasePlan": "monthly-autorenewing",
+    "annualBasePlan": "annual-autorenewing",
+    "annualOffer": "launch-first-year",
+    "annualOfferPhases": [
+      { "period": "P1Y", "cycles": 1, "priceUSD": 59.99 },
+      { "period": "P1Y", "autoRenews": true, "priceUSD": 79.99 }
+    ]
+  },
+  "readiness": {
+    "buildFlag": "EXPO_PUBLIC_BILLING_CHECKOUT_ENABLED",
+    "defaultEnabled": false,
+    "requires": [
+      "real store products",
+      "matching cadence and current localized price",
+      "eligible offer if advertised",
+      "signed native receipt and restore tests",
+      "server-owned entitlement verification"
+    ]
+  },
+  "bankReadiness": "separate_existing_public_bank_release_gate",
+  "accountIdentity": "authenticated_supabase_uuid_only",
+  "restoreBehavior": "keep_with_original_app_user_id"
+}

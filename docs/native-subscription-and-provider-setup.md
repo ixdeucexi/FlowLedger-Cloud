@@ -1,12 +1,15 @@
 # Native subscription, Plaid, and push setup
 
-Last code audit: August 21, 2026.
+Last code audit: October 30, 2026.
 
 ## RevenueCat and store subscriptions
 
 - Entitlement: `pro`
-- Apple products: `flowledger_pro_monthly` at $9.99/month and `flowledger_pro_annual` at $89/year
-- Google Play subscription/base plans: `flowledger_pro:monthly-autorenewing` at $9.99/month and `flowledger_pro:annual-autorenewing` at $89/year
+- Apple products: `flowledger_pro_monthly` at $9.99/month and `flowledger_pro_annual` at $79.99/year
+- Google Play subscription/base plans: `flowledger_pro:monthly-autorenewing` at $9.99/month and `flowledger_pro:annual-autorenewing` at $79.99/year
+- Optional annual introduction: $59.99 for one year, then $79.99/year; no free trial. Show it only after the store confirms eligible matching terms.
+- Google Play annual offer ID: `launch-first-year` on `annual-autorenewing`, one paid P1Y cycle at $59.99 followed by the $79.99 P1Y base plan. Eligibility: new subscribers, as enforced by Play.
+- Apple introductory offer: annual product in the shared subscription group; one P1Y paid cycle at $59.99, then $79.99/year. Require StoreKit/RevenueCat eligibility before displaying it.
 - Trial: none
 - App User ID: authenticated Supabase UUID only; never email or an anonymous RevenueCat ID
 - Scope: the household owner must confirm the currently active household by name before purchase or restore
@@ -16,6 +19,7 @@ Configure the RevenueCat project’s restore behavior to **Keep with original Ap
 
 Required public build variables:
 
+- `EXPO_PUBLIC_BILLING_CHECKOUT_ENABLED=true` only after signed-store product/receipt/restore tests pass; default false keeps purchases dormant independently of Free/Pro feature eligibility
 - `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY`
 - `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY`
 - `EXPO_PUBLIC_BILLING_ENVIRONMENT=production` for production builds
@@ -32,6 +36,16 @@ Required Edge secrets:
 TestFlight and App Review send platform `SANDBOX` events for the production binary. Keep the shipped binary configured with `EXPO_PUBLIC_BILLING_ENVIRONMENT=production`. Create a separate Free reviewer UUID with `app_metadata.flowledger_store_reviewer=true`, run the reviewer seeder, and add that exact UUID to RevenueCat **Sandbox Testing Access → Allowed App User IDs only**. The dispatcher accepts a sandbox webhook in production only for UUIDs in the service-only `billing_sandbox_testers` table; ordinary users' sandbox events fail closed. The matching production intent is accepted for that allowlisted reviewer's sandbox event.
 
 Subscription disclosure shown in-app: payment is charged to the Apple App Store or Google Play account; Pro renews automatically until cancelled through that store; monthly is $9.99, annual is $89, and there is no free trial. A cancellation keeps access through the verified paid-through date; billing issues show grace status; expiry/refund/revocation can downgrade only the matching billing-owned household and never an admin/grandfathered plan.
+
+## Paid release and founding access
+
+Free/Pro feature eligibility now comes from the authenticated, active-household `get_household_feature_access` RPC. It is separate from `EXPO_PUBLIC_LAUNCH_MODE`, which continues to hold public bank readiness, and separate from the explicit checkout flag above. Existing permanent `pro/grandfathered` records are retained. A versioned founding-planning grant preserves the current captured households’ planning/Flo capabilities without assigning Pro or bank/cloud access.
+
+Standard US prices are $9.99/month or $79.99/year per household, including its members. New Free gets ten full-chat preview requests each UTC calendar month; new paid Pro gets 300 per household. Existing founding/admin/permanent-Pro households retain their existing daily allowance. Free local Flo Essentials does not use provider requests. Monthly quotas are server-authoritative, not a client claim.
+
+The code includes a concrete product manifest at `docs/pro-subscription-products.json`; it does not create console products, price changes or promotions. Current connected tools do not include RevenueCat/Play Console. Before enabling checkout, create/configure those products in the consoles, confirm the entitlement/webhook bindings, test signed sandbox and production products, verify current localized prices, price period, ownership, restore, cancel/refund/expiry and each eligible/ineligible offer. The adapter refuses stale $89 US annual products, unknown periods, unsupported trial/intro terms or unverified purchaser identities. An annual discount is shown only for the exact eligible store offer; regular prices remain truthful for ineligible users.
+
+Existing subscriptions retain management access even when new checkout is disabled. Store confirmation and server receipts remain the authority; client plan displays or RevenueCat CustomerInfo cannot assign Pro. Never enable public bank linking merely because paid checkout is ready.
 
 ## Plaid native dashboard setup
 

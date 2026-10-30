@@ -445,7 +445,7 @@ export function DesktopSettingsPage({
                   <CardHeader title="Bank Connections" />
                   <View style={styles.connectionActions}>
                     {FOUNDING_FREE_LAUNCH && !adminProAccess ? (
-                      <Text style={styles.supportNote}>Bank sync is planned for a later Pro release. Manual accounts and activity are available during the Founding Free launch.</Text>
+                      <Text style={styles.supportNote}>Bank sync is planned for a later Pro release. Manual accounts and activity are available on Free.</Text>
                     ) : (
                       <>
                         <PlaidLinkButton colors={desktopColors as never} onConnected={onSync} />
