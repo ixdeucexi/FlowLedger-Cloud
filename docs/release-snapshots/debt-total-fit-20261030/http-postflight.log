@@ -1,0 +1,2 @@
+Production postflight passed: dpl_979XCUmB2FYU1gQXzmmgvJiNmYpQ at clean commit c461e9082904c530fbedf8a2574638a7cce2a02d.
+{"status":"PASS","name":"Debt summary text fit","deploymentId":"dpl_979XCUmB2FYU1gQXzmmgvJiNmYpQ","source":"c461e9082904c530fbedf8a2574638a7cce2a02d","bundlePath":"/_expo/static/js/web/entry-2ef3e4bc362cccf6d32ae034f767ff45.js","bundleSha256":"9152cb501fab4bea5aba67b212a7c10a97f9b4ed15f66f3edd92ba812a949313","exactBrowserTestedBundle":true}

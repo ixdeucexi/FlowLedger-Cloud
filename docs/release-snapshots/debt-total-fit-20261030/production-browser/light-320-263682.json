@@ -1,0 +1,613 @@
+{
+  "width": 320,
+  "theme": "light",
+  "amount": 263682.34,
+  "expected": "$263,682.34",
+  "checks": [
+    "Exact large debt amount renders on one visual line without clipping or ellipsis",
+    "All three summary values, labels and details fit their tiles with readable font sizes",
+    "Mobile summary tiles stack cleanly",
+    "Selected light/dark theme renders with loaded fonts",
+    "Hero target/copy words remain whole in a readable column, with contained nonoverlapping strategy badge"
+  ],
+  "hero": {
+    "copy": {
+      "x": 124,
+      "y": 128,
+      "w": 158,
+      "h": 143,
+      "right": 282,
+      "bottom": 271
+    },
+    "top": {
+      "x": 38,
+      "y": 128,
+      "w": 244,
+      "h": 193,
+      "right": 282,
+      "bottom": 321
+    },
+    "hero": {
+      "x": 20,
+      "y": 110,
+      "w": 280,
+      "h": 534,
+      "right": 300,
+      "bottom": 644
+    },
+    "badge": {
+      "x": 38,
+      "y": 285,
+      "w": 95.25,
+      "h": 36,
+      "right": 133.25,
+      "bottom": 321
+    },
+    "children": [
+      {
+        "x": 38,
+        "y": 163.5,
+        "w": 72,
+        "h": 72,
+        "right": 110,
+        "bottom": 235.5
+      },
+      {
+        "x": 124,
+        "y": 128,
+        "w": 158,
+        "h": 143,
+        "right": 282,
+        "bottom": 271
+      },
+      {
+        "x": 38,
+        "y": 285,
+        "w": 95.25,
+        "h": 36,
+        "right": 133.25,
+        "bottom": 321
+      }
+    ],
+    "words": [
+      {
+        "word": "CURRENT",
+        "rects": [
+          {
+            "x": 124,
+            "y": 128,
+            "w": 55.484375,
+            "h": 12,
+            "right": 179.484375,
+            "bottom": 140
+          }
+        ]
+      },
+      {
+        "word": "TARGET",
+        "rects": [
+          {
+            "x": 182.65625,
+            "y": 128,
+            "w": 46.578125,
+            "h": 12,
+            "right": 229.234375,
+            "bottom": 140
+          }
+        ]
+      },
+      {
+        "word": "Family",
+        "rects": [
+          {
+            "x": 124,
+            "y": 142,
+            "w": 75.84375,
+            "h": 29,
+            "right": 199.84375,
+            "bottom": 171
+          }
+        ]
+      },
+      {
+        "word": "card",
+        "rects": [
+          {
+            "x": 204.578125,
+            "y": 142,
+            "w": 51.359375,
+            "h": 29,
+            "right": 255.9375,
+            "bottom": 171
+          }
+        ]
+      },
+      {
+        "word": "Your",
+        "rects": [
+          {
+            "x": 124,
+            "y": 178,
+            "w": 26.28125,
+            "h": 15,
+            "right": 150.28125,
+            "bottom": 193
+          }
+        ]
+      },
+      {
+        "word": "required",
+        "rects": [
+          {
+            "x": 153.875,
+            "y": 178,
+            "w": 47.703125,
+            "h": 15,
+            "right": 201.578125,
+            "bottom": 193
+          }
+        ]
+      },
+      {
+        "word": "payments",
+        "rects": [
+          {
+            "x": 205.171875,
+            "y": 178,
+            "w": 56.390625,
+            "h": 15,
+            "right": 261.5625,
+            "bottom": 193
+          }
+        ]
+      },
+      {
+        "word": "stay",
+        "rects": [
+          {
+            "x": 124,
+            "y": 197,
+            "w": 23.84375,
+            "h": 15,
+            "right": 147.84375,
+            "bottom": 212
+          }
+        ]
+      },
+      {
+        "word": "intact",
+        "rects": [
+          {
+            "x": 151.453125,
+            "y": 197,
+            "w": 31.078125,
+            "h": 15,
+            "right": 182.53125,
+            "bottom": 212
+          }
+        ]
+      },
+      {
+        "word": "When",
+        "rects": [
+          {
+            "x": 189.734375,
+            "y": 197,
+            "w": 33.984375,
+            "h": 15,
+            "right": 223.71875,
+            "bottom": 212
+          }
+        ]
+      },
+      {
+        "word": "one",
+        "rects": [
+          {
+            "x": 227.3125,
+            "y": 197,
+            "w": 21.703125,
+            "h": 15,
+            "right": 249.015625,
+            "bottom": 212
+          }
+        ]
+      },
+      {
+        "word": "debt",
+        "rects": [
+          {
+            "x": 252.609375,
+            "y": 197,
+            "w": 25.328125,
+            "h": 15,
+            "right": 277.9375,
+            "bottom": 212
+          }
+        ]
+      },
+      {
+        "word": "closes",
+        "rects": [
+          {
+            "x": 124,
+            "y": 216,
+            "w": 36.859375,
+            "h": 15,
+            "right": 160.859375,
+            "bottom": 231
+          }
+        ]
+      },
+      {
+        "word": "unused",
+        "rects": [
+          {
+            "x": 168.0625,
+            "y": 216,
+            "w": 42.671875,
+            "h": 15,
+            "right": 210.734375,
+            "bottom": 231
+          }
+        ]
+      },
+      {
+        "word": "money",
+        "rects": [
+          {
+            "x": 214.328125,
+            "y": 216,
+            "w": 39.03125,
+            "h": 15,
+            "right": 253.359375,
+            "bottom": 231
+          }
+        ]
+      },
+      {
+        "word": "moves",
+        "rects": [
+          {
+            "x": 124,
+            "y": 235,
+            "w": 38.296875,
+            "h": 15,
+            "right": 162.296875,
+            "bottom": 250
+          }
+        ]
+      },
+      {
+        "word": "the",
+        "rects": [
+          {
+            "x": 180.34375,
+            "y": 235,
+            "w": 18.09375,
+            "h": 15,
+            "right": 198.4375,
+            "bottom": 250
+          }
+        ]
+      },
+      {
+        "word": "next",
+        "rects": [
+          {
+            "x": 202.03125,
+            "y": 235,
+            "w": 24.59375,
+            "h": 15,
+            "right": 226.625,
+            "bottom": 250
+          }
+        ]
+      },
+      {
+        "word": "debt",
+        "rects": [
+          {
+            "x": 230.21875,
+            "y": 235,
+            "w": 25.3125,
+            "h": 15,
+            "right": 255.53125,
+            "bottom": 250
+          }
+        ]
+      },
+      {
+        "word": "the",
+        "rects": [
+          {
+            "x": 124,
+            "y": 254,
+            "w": 18.078125,
+            "h": 15,
+            "right": 142.078125,
+            "bottom": 269
+          }
+        ]
+      },
+      {
+        "word": "same",
+        "rects": [
+          {
+            "x": 145.671875,
+            "y": 254,
+            "w": 31.8125,
+            "h": 15,
+            "right": 177.484375,
+            "bottom": 269
+          }
+        ]
+      },
+      {
+        "word": "date",
+        "rects": [
+          {
+            "x": 181.078125,
+            "y": 254,
+            "w": 25.3125,
+            "h": 15,
+            "right": 206.390625,
+            "bottom": 269
+          }
+        ]
+      }
+    ]
+  },
+  "bundles": [
+    {
+      "path": "/_expo/static/js/web/entry-2ef3e4bc362cccf6d32ae034f767ff45.js",
+      "sha256": "9152cb501fab4bea5aba67b212a7c10a97f9b4ed15f66f3edd92ba812a949313",
+      "bytes": 5098058
+    }
+  ],
+  "cards": [
+    {
+      "label": "ACTIVE DEBT",
+      "value": "$263,682.34",
+      "card": {
+        "x": 38,
+        "y": 341,
+        "w": 244,
+        "h": 87,
+        "right": 282,
+        "bottom": 428
+      },
+      "valueBox": {
+        "x": 53,
+        "y": 371,
+        "w": 214,
+        "h": 25,
+        "right": 267,
+        "bottom": 396
+      },
+      "textRects": [
+        {
+          "x": 53,
+          "y": 371,
+          "w": 137.71875,
+          "h": 25,
+          "right": 190.71875,
+          "bottom": 396
+        }
+      ],
+      "allTextRects": [
+        {
+          "x": 53,
+          "y": 356,
+          "w": 68.625,
+          "h": 11,
+          "right": 121.625,
+          "bottom": 367
+        },
+        {
+          "x": 53,
+          "y": 371,
+          "w": 137.71875,
+          "h": 25,
+          "right": 190.71875,
+          "bottom": 396
+        },
+        {
+          "x": 53,
+          "y": 399,
+          "w": 4.578125,
+          "h": 14,
+          "right": 57.578125,
+          "bottom": 413
+        },
+        {
+          "x": 60.515625,
+          "y": 399,
+          "w": 23.8125,
+          "h": 14,
+          "right": 84.328125,
+          "bottom": 413
+        },
+        {
+          "x": 84.328125,
+          "y": 399,
+          "w": 37.703125,
+          "h": 14,
+          "right": 122.03125,
+          "bottom": 413
+        }
+      ],
+      "fontSize": 21,
+      "fontFamily": "Inter_800ExtraBold",
+      "textOverflow": "clip",
+      "clientWidth": 214,
+      "scrollWidth": 214,
+      "color": "rgb(26, 26, 46)",
+      "background": "rgba(240, 244, 248, 0.6)"
+    },
+    {
+      "label": "MONTH PLAN PREVIEW",
+      "value": "$12,345.67",
+      "card": {
+        "x": 38,
+        "y": 440,
+        "w": 244,
+        "h": 87,
+        "right": 282,
+        "bottom": 527
+      },
+      "valueBox": {
+        "x": 53,
+        "y": 470,
+        "w": 214,
+        "h": 25,
+        "right": 267,
+        "bottom": 495
+      },
+      "textRects": [
+        {
+          "x": 53,
+          "y": 470,
+          "w": 117.59375,
+          "h": 25,
+          "right": 170.59375,
+          "bottom": 495
+        }
+      ],
+      "allTextRects": [
+        {
+          "x": 53,
+          "y": 455,
+          "w": 120.109375,
+          "h": 11,
+          "right": 173.109375,
+          "bottom": 466
+        },
+        {
+          "x": 53,
+          "y": 470,
+          "w": 117.59375,
+          "h": 25,
+          "right": 170.59375,
+          "bottom": 495
+        },
+        {
+          "x": 53,
+          "y": 498,
+          "w": 58.234375,
+          "h": 14,
+          "right": 111.234375,
+          "bottom": 512
+        },
+        {
+          "x": 111.234375,
+          "y": 498,
+          "w": 70.953125,
+          "h": 14,
+          "right": 182.1875,
+          "bottom": 512
+        },
+        {
+          "x": 182.1875,
+          "y": 498,
+          "w": 31.15625,
+          "h": 14,
+          "right": 213.34375,
+          "bottom": 512
+        },
+        {
+          "x": 213.34375,
+          "y": 498,
+          "w": 29.6875,
+          "h": 14,
+          "right": 243.03125,
+          "bottom": 512
+        }
+      ],
+      "fontSize": 21,
+      "fontFamily": "Inter_800ExtraBold",
+      "textOverflow": "clip",
+      "clientWidth": 214,
+      "scrollWidth": 214,
+      "color": "rgb(34, 197, 94)",
+      "background": "rgba(240, 244, 248, 0.6)"
+    },
+    {
+      "label": "PROJECTED PAYOFF",
+      "value": "Jul 2028",
+      "card": {
+        "x": 38,
+        "y": 539,
+        "w": 244,
+        "h": 87,
+        "right": 282,
+        "bottom": 626
+      },
+      "valueBox": {
+        "x": 53,
+        "y": 569,
+        "w": 214,
+        "h": 25,
+        "right": 267,
+        "bottom": 594
+      },
+      "textRects": [
+        {
+          "x": 53,
+          "y": 569,
+          "w": 91.53125,
+          "h": 25,
+          "right": 144.53125,
+          "bottom": 594
+        }
+      ],
+      "allTextRects": [
+        {
+          "x": 53,
+          "y": 554,
+          "w": 104.25,
+          "h": 11,
+          "right": 157.25,
+          "bottom": 565
+        },
+        {
+          "x": 53,
+          "y": 569,
+          "w": 91.53125,
+          "h": 25,
+          "right": 144.53125,
+          "bottom": 594
+        },
+        {
+          "x": 53,
+          "y": 597,
+          "w": 65.3125,
+          "h": 14,
+          "right": 118.3125,
+          "bottom": 611
+        }
+      ],
+      "fontSize": 21,
+      "fontFamily": "Inter_800ExtraBold",
+      "textOverflow": "clip",
+      "clientWidth": 214,
+      "scrollWidth": 214,
+      "color": "rgb(47, 111, 255)",
+      "background": "rgba(240, 244, 248, 0.6)"
+    }
+  ],
+  "fonts": {
+    "status": "loaded",
+    "loaded": [
+      "feather",
+      "Inter_500Medium",
+      "Inter_600SemiBold",
+      "Inter_700Bold",
+      "Inter_800ExtraBold"
+    ]
+  },
+  "uncaughtErrors": [],
+  "unknownRequests": [],
+  "actualCustomerProviderOrFinancialWrites": 0,
+  "status": "PASS"
+}
