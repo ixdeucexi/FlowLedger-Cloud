@@ -130,7 +130,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   compact: {
-    flex: 0,
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: "auto",
     minHeight: 0,
     marginHorizontal: 0,
     marginVertical: 10,
