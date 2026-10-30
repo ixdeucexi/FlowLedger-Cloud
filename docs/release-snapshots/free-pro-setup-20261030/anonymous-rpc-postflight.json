@@ -1,0 +1,10 @@
+{
+  "status": "PASS",
+  "httpStatus": 401,
+  "code": "42501",
+  "message": "permission denied for function get_household_feature_access",
+  "rpcRegistered": true,
+  "anonymousDenied": true,
+  "customerRowsRead": 0,
+  "financialWrites": 0
+}

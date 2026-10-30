@@ -1,0 +1,9 @@
+{
+  "status": "PASS",
+  "name": "Free and Pro membership",
+  "deploymentId": "dpl_3EEJjFUEtNjufQ6HZmkRHxnKAyFs",
+  "source": "36d240051fc88a4d45677adccce407d1220ac42f",
+  "bundlePath": "/_expo/static/js/web/entry-b50e2278d1022d345c081580671687bb.js",
+  "bundleSha256": "2d50dc5b68ccd5be7cab23cbbb7830907a4d2c5a9850ad6cecfb7d7294a3a9be",
+  "exactBrowserTestedBundle": true
+}

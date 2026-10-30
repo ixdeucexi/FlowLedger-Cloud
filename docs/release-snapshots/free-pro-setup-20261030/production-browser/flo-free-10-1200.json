@@ -1,0 +1,26 @@
+{
+  "case": "flo-free-10",
+  "width": 1200,
+  "checks": [
+    "Opening Flo does not automatically ask a question",
+    "Unlimited useful local Essentials answers do not invoke a provider",
+    "Exhausted monthly allowance leaves saved chats and Essentials readable but prevents a new provider request"
+  ],
+  "bundles": [
+    {
+      "path": "/_expo/static/js/web/entry-b50e2278d1022d345c081580671687bb.js",
+      "sha256": "2d50dc5b68ccd5be7cab23cbbb7830907a4d2c5a9850ad6cecfb7d7294a3a9be",
+      "bytes": 5097994
+    }
+  ],
+  "errors": [],
+  "unknown": [],
+  "knownConsole": [
+    "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  ],
+  "mockFinancialWrites": [],
+  "mockAiCalls": 0,
+  "mockCloudWrites": 0,
+  "realCustomerOrProviderWrites": 0,
+  "status": "PASS"
+}
