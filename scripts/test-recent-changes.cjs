@@ -21,6 +21,13 @@ const ok=(condition,message)=>{assert(condition,message);checks++;};
 function rejects(statement,pattern){let failure;try{sql(statement)}catch(e){failure=String(e.stderr||e.message)}assert(failure,'expected SQL rejection');if(pattern)assert.match(failure,pattern);checks++;}
 const undoSql=(id,h=hh,b=budget)=>`select public.undo_recent_change('${id}','${h}','${b}')`;
 function session(statement){return new Promise(resolve=>{const p=spawn('docker',[...base,container,'psql','-X','-At','-v','ON_ERROR_STOP=1','-U','postgres','-d',database,'-c',statement],{env});let output='';p.stdout.on('data',x=>output+=x);p.stderr.on('data',x=>output+=x);p.on('close',code=>resolve({code,output}));});}
+async function waitForSleepingSession(name){
+ const deadline=Date.now()+5000;
+ while(scalar(`select exists(select 1 from pg_stat_activity where datname=current_database()and application_name='${name}'and wait_event='PgSleep')`)!=='t'){
+  if(Date.now()>deadline)throw Error(`Fixture session did not acquire its locks: ${name}`);
+  await new Promise(r=>setTimeout(r,15));
+ }
+}
 const insertIncome=(id,amount=2000)=>`${claims()}insert into public.incomes(id,user_id,household_id,budget_id,name,amount,frequency,start_date,next_payment_date) values('${id}','${actor}','${hh}','${budget}','Salary',${amount},'monthly','2026-10-01','2026-11-01');`;
 const insertBill=(id,debt=false)=>`${claims()}insert into public.bills(id,user_id,household_id,budget_id,name,amount,is_debt,balance,created_at) values('${id}','${actor}','${hh}','${budget}','Water',75,${debt},${debt?1000:0},'2026-10-30');`;
 const insertGoal=(id,type='savings',current=0)=>`${claims()}insert into public.goals(id,user_id,household_id,budget_id,name,target_amount,target_date,current_amount,goal_type,created_at) values('${id}','${actor}','${hh}','${budget}','Holiday',500,'2026-12-20',${current},'${type}','2026-10-30');`;
@@ -90,6 +97,14 @@ create function private.is_household_editor(p_household_id uuid)returns boolean 
   ok(list().items.some(x=>x.id===receipt.inverseChangeId&&!x.canUndo),'inverse history cannot be recursively undone');
   sql(`${claims()}update public.incomes set amount=2100 where id='baseline-income'`);let edit=latest('baseline-income');
   undo(edit.id);ok(scalar("select amount from public.incomes where id='baseline-income'")==='2000','income edit restored exact saved amount');
+  sql(insertIncome('income-arrays'));
+  for(const patch of [`amount_history='[{"effective_from":"2026-11-01","amount":2500}]'::jsonb`,`excluded_dates='["2026-11-01"]'::jsonb`,`amount=2600,amount_history='[{"effective_from":"2026-12-01","amount":2600}]'::jsonb`]){
+   sql(`${claims()}update public.incomes set ${patch} where id='income-arrays'`);
+   const complex=latest('income-arrays'),display=list().items.find(x=>x.id===complex.id);
+   ok(!display.canUndo&&/amount history and skipped dates/.test(display.undoReason),'complex income schedules are history-only with an explicit dedicated-controls reason');
+   rejects(`${claims()}${undoSql(complex.id)}`,/amount history and skipped dates/);
+   ok(scalar(`select undone_at is null from private.recent_changes where id='${complex.id}'`)==='t'&&scalar("select count(*)from private.recent_changes where undo_of is not null and entity_id='income-arrays'")==='0','array-only or scalar-plus-array updates cannot produce an unreviewable inverse');
+  }
   sql(`${claims()}update public.incomes set amount=2100 where id='baseline-income'`);const aba=latest('baseline-income');
   sql(`${claims()}update public.incomes set amount=2200 where id='baseline-income'`);sql(`${claims()}update public.incomes set amount=2100 where id='baseline-income'`);
   rejects(`${claims()}${undoSql(aba.id)}`,/changed again/);ok(scalar("select amount from public.incomes where id='baseline-income'")==='2100','ABA rejection does not overwrite newer work');
@@ -160,6 +175,26 @@ create function private.is_household_editor(p_household_id uuid)returns boolean 
   const editing=session(`begin;${claims()}update public.incomes set amount=2400 where id='race-income';select pg_sleep(0.25);commit;`);
   await new Promise(r=>setTimeout(r,75));const racingUndo=await session(`${claims()}${undoSql(race.id)}`);await editing;
   ok(racingUndo.code!==0&&/changed again/.test(racingUndo.output),'concurrent edit defeats stale inverse');ok(scalar("select amount from public.incomes where id='race-income'")==='2400','concurrent new edit is preserved');
+  // The ordinary bill writer locks a bill before inserting monthly overrides.
+  // Undo must wait without holding a legacy table lock that blocks that insert.
+  sql(insertBill('row-first-bill'));const rowFirst=latest('row-first-bill'),rowFirstCount=scalar('select count(*)from private.recent_changes');
+  const rowFirstWriter=session(`set application_name='recent_changes_row_first';begin;${claims()}select id from public.bills where id='row-first-bill'for update;select pg_sleep(0.5);reset role;insert into public.monthly_overrides values('row-first-override','row-first-bill');commit;`);
+  await waitForSleepingSession('recent_changes_row_first');
+  const rowFirstUndo=await session(`${claims()}${undoSql(rowFirst.id)}`),rowFirstResult=await rowFirstWriter;
+  ok(rowFirstResult.code===0,'canonical bill-row then override writer completes without deadlock');
+  ok(rowFirstUndo.code!==0&&/linked records/.test(rowFirstUndo.output)&&!/deadlock/.test(rowFirstUndo.output),'creation inverse sees the committed override instead of deadlocking');
+  ok(scalar("select count(*)from public.bills where id='row-first-bill'")==='1','row-first writer retains its linked bill');
+  ok(scalar(`select undone_at is null from private.recent_changes where id='${rowFirst.id}'`)==='t'&&scalar('select count(*)from private.recent_changes')===rowFirstCount,'row-first conflict leaves no inverse or receipt');
+  // A writer can also have a dependency table lock before touching the bill.
+  // Dependency NOWAIT makes Undo release its target row immediately on conflict.
+  sql(insertBill('table-first-bill'));const tableFirst=latest('table-first-bill'),tableFirstCount=scalar('select count(*)from private.recent_changes');
+  const tableFirstWriter=session(`set application_name='recent_changes_table_first';begin;lock table public.monthly_overrides in row exclusive mode;select pg_sleep(0.5);${claims()}select id from public.bills where id='table-first-bill'for update;reset role;insert into public.monthly_overrides values('table-first-override','table-first-bill');commit;`);
+  await waitForSleepingSession('recent_changes_table_first');
+  const tableFirstUndo=await session(`${claims()}${undoSql(tableFirst.id)}`),tableFirstResult=await tableFirstWriter;
+  ok(tableFirstUndo.code!==0&&/plan is being updated/.test(tableFirstUndo.output)&&!/deadlock/.test(tableFirstUndo.output),'busy dependency tables return a friendly retryable conflict');
+  ok(tableFirstResult.code===0,'table-first writer acquires its target after conflicting inverse releases locks');
+  ok(scalar("select count(*)from public.bills where id='table-first-bill'")==='1','busy-table inverse does not remove the bill');
+  ok(scalar(`select undone_at is null from private.recent_changes where id='${tableFirst.id}'`)==='t'&&scalar('select count(*)from private.recent_changes')===tableFirstCount,'busy-table conflict atomically leaves row, receipt and journal intact');
   let command=0;for(const kind of ['create_bill','create_debt','create_income','create_manual_transaction','create_bucket','create_savings_goal']){
    const payload={create_bill:{name:'Flo bill',amount:40,frequency:'monthly',first_date:'2026-11-01'},create_debt:{name:'Flo card',balance:1000,minimum_payment:30,apr:10,frequency:'monthly',first_date:'2026-11-01'},create_income:{name:'Flo salary',amount:2000,frequency:'monthly',first_date:'2026-11-01'},create_manual_transaction:{amount:20,direction:'expense',date:'2026-10-30',category:'Food',note:'Flo lunch',account_id:'checking'},create_bucket:{name:'Flo holiday',target_amount:500,target_date:'2026-12-20'},create_savings_goal:{name:'Flo savings',target_amount:500,target_date:'2026-12-20'}}[kind];
    const id=`00000000-0000-4000-8000-${String(++command).padStart(12,'0')}`,literal="'"+JSON.stringify(payload).replace(/'/g,"''")+"'::jsonb";
@@ -185,7 +220,7 @@ create function private.is_household_editor(p_household_id uuid)returns boolean 
   ok(scalar(`select count(*)from private.recent_changes where household_id='${deletedHh}'`)==='0'&&scalar("select count(*)from public.incomes where id='deleting-income'")==='0','account and household cascades remove private journal without blocking financial cleanup');
   const former=list().items.find(x=>x.id===formerEdit.id);ok(former.actorId===null&&former.actorLabel==='Former household member'&&former.source==='manual','removed authors are anonymized without falsely crediting their edit to the app');
   rejects(`${claims(deletable)}select public.list_recent_changes('${deletedHh}','${deletedBudget}')`,/Sign in/);
-  const report={status:'PASS',assertions:checks,isolatedPostgres:true,liveFinancialWrites:0,actualFinancialGuards:triggers.length,covered:['scope and permission','private RLS/ACL','semantic diffs','supported inverses','linked and compound rejection','ABA and stale metadata','atomic failure','concurrent retries and edits','verified Flo provenance','immutable creation receipt after Undo','keyset pagination','service actors and account/household cascade cleanup']};
+  const report={status:'PASS',assertions:checks,isolatedPostgres:true,liveFinancialWrites:0,actualFinancialGuards:triggers.length,covered:['scope and permission','private RLS/ACL','semantic diffs','supported inverses','complex income schedule history-only eligibility','linked and compound rejection','ABA and stale metadata','atomic failure','concurrent retries and edits','canonical bill writer lock order and busy-table atomic conflicts','verified Flo provenance','immutable creation receipt after Undo','keyset pagination','service actors and account/household cascade cleanup']};
   fs.writeFileSync('/tmp/recent-changes-postgres-results.json',JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report));
  }finally{docker([container,'dropdb','-U','postgres','--if-exists',database]);}
 })().catch(e=>{console.error(e.stderr||e.stack);process.exitCode=1});

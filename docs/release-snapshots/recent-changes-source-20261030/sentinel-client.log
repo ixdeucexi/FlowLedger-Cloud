@@ -1,0 +1,30 @@
+✔ recent changes validates the selected household and budget before exposing rows (3.0402ms)
+✔ every supported entity uses only its canonical in-app destination (0.537318ms)
+✔ invalid snapshots cannot enter the money diff or claim eligibility (0.471119ms)
+✔ paging requires ordered unique IDs and a last-row cursor (0.532531ms)
+✔ cursor validation retains bigint precision and rejects malformed pages (0.145178ms)
+✔ formatted before and after preserve money signs, zero and absent fields (14.531514ms)
+✔ page append deduplicates without replacing newer rows or mutating inputs (0.362885ms)
+✔ request gate rejects old page and old household completions, including scope ABA (0.188934ms)
+✔ Undo rejects a different SDK user while React still shows the same household editor (92.596717ms)
+✔ Undo requires a successful nonempty SDK session before dispatch (52.699639ms)
+✔ Undo rechecks user, household, budget, generation and disposal after session lookup (68.586223ms)
+✔ Undo binds the request to the verified token even if SDK identity changes at dispatch (10.922402ms)
+✔ late Undo receipts cannot refresh or publish after scope changes or disposal (24.74413ms)
+✔ late authoritative refresh cannot publish after provider disposal (18.085807ms)
+✔ provider cleanup invalidates the Undo lifecycle even if it mounts again (5.209436ms)
+✔ unverified inverse receipts fail without publishing an old snapshot (8.551931ms)
+✔ settings hub places every true setting in exactly one group (1.904463ms)
+✔ settings hub preserves the intended group order (1.412684ms)
+✔ count statuses handle zero, singular, and larger values (0.865421ms)
+✔ attention statuses only highlight positive counts (0.399391ms)
+✔ settings group lookups preserve the destination hierarchy (0.461875ms)
+✔ admin settings are visible only to approved admins (0.257106ms)
+ℹ tests 22
+ℹ suites 0
+ℹ pass 22
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 551.12008

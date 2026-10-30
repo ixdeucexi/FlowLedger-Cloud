@@ -3912,6 +3912,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   // ─── Transactions ─────────────────────────────────────────────────────────────
 
   const debtRefreshRequestRef = useRef(0);
+  const recentChangeUndoLifecycleRef = useRef({ mounted: true, generation: 0 });
+  useEffect(() => {
+    recentChangeUndoLifecycleRef.current.mounted = true;
+    return () => {
+      recentChangeUndoLifecycleRef.current.mounted = false;
+      recentChangeUndoLifecycleRef.current.generation += 1;
+    };
+  }, []);
+
   const refreshDebtRows = useCallback(async () => {
     if (!user || user.id !== userScopeIdRef.current) return;
     const uid = user.id, scope = householdScopeRef.current;
@@ -3939,18 +3948,29 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     const uid = user.id, scope = householdScopeRef.current;
     const generation = financialScopeGenerationRef.current;
+    const lifecycleGeneration = recentChangeUndoLifecycleRef.current.generation;
     if (!scope?.householdId || !scope.budgetId) throw new Error("Choose a household and budget first");
-    const current = () => userScopeIdRef.current === uid
+    const current = () => recentChangeUndoLifecycleRef.current.mounted
+      && recentChangeUndoLifecycleRef.current.generation === lifecycleGeneration
+      && userScopeIdRef.current === uid
       && financialScopeGenerationRef.current === generation
       && householdScopeRef.current?.householdId === scope.householdId
       && householdScopeRef.current?.budgetId === scope.budgetId;
     const persist: () => Promise<void> = () => runTrackedFinancialMutation(async () => {
       if (!current()) throw new Error("Your household changed. Open Recent Changes again");
+      // React auth refs can lag an SDK account change. Verify the dispatching
+      // session, then bind this request to that token rather than global auth.
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (!current()) throw new Error("Your household changed. Open Recent Changes again");
+      const session = sessionData?.session;
+      if (sessionError || !session || session.user.id !== uid || !session.access_token) {
+        throw new Error("Your sign-in changed. Open Recent Changes again");
+      }
       const { data, error } = await supabase.rpc("undo_recent_change", {
         p_change_id: changeId,
         p_expected_household_id: scope.householdId,
         p_expected_budget_id: scope.budgetId,
-      });
+      }).setHeader("Authorization", `Bearer ${session.access_token}`);
       if (error) throw new Error(error.message);
       if (!data || data.changeId !== changeId || data.householdId !== scope.householdId
         || data.budgetId !== scope.budgetId || typeof data.undoneAt !== "string" || !Number.isFinite(Date.parse(data.undoneAt))

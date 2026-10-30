@@ -1,22 +1,41 @@
-✔ recent changes validates the selected household and budget before exposing rows (2.495746ms)
-✔ every supported entity uses only its canonical in-app destination (0.553913ms)
-✔ invalid snapshots cannot enter the money diff or claim eligibility (0.698361ms)
-✔ paging requires ordered unique IDs and a last-row cursor (0.699322ms)
-✔ cursor validation retains bigint precision and rejects malformed pages (0.142435ms)
-✔ formatted before and after preserve money signs, zero and absent fields (16.805314ms)
-✔ page append deduplicates without replacing newer rows or mutating inputs (0.433763ms)
-✔ request gate rejects old page and old household completions, including scope ABA (0.192119ms)
-✔ settings hub places every true setting in exactly one group (1.030801ms)
-✔ settings hub preserves the intended group order (1.00284ms)
-✔ count statuses handle zero, singular, and larger values (0.248714ms)
-✔ attention statuses only highlight positive counts (0.322486ms)
-✔ settings group lookups preserve the destination hierarchy (0.231899ms)
-✔ admin settings are visible only to approved admins (0.290277ms)
-ℹ tests 14
+✔ debt refresh discards A to B and A to B to A before any setter (86.084372ms)
+✔ latest debt request wins when first finishes last (14.585034ms)
+✔ prior actor and stale query failures cannot clear current data (9.373854ms)
+✔ transfer editor uses one atomic intent and stable ids across failed retry (22.973504ms)
+✔ new transfer uses stable proposed group and both leg ids across a lost response (15.692458ms)
+✔ allocated amount or date changes require undo; note-only and categorized edits work (0.930482ms)
+✔ actual household switch advances generation across A to B to A (6.317379ms)
+✔ in-flight scheduled debt sync cannot schedule another timer after cleanup (11.996104ms)
+✔ ordinary manual pending and applied debt edits keep sync and serialize No debt as null (63.52424ms)
+✔ note-only bank match edit preserves its confirmed bill link when editor omits debt choice (13.111826ms)
+✔ recent changes validates the selected household and budget before exposing rows (2.836193ms)
+✔ every supported entity uses only its canonical in-app destination (0.629628ms)
+✔ invalid snapshots cannot enter the money diff or claim eligibility (0.596368ms)
+✔ paging requires ordered unique IDs and a last-row cursor (0.673935ms)
+✔ cursor validation retains bigint precision and rejects malformed pages (0.187062ms)
+✔ formatted before and after preserve money signs, zero and absent fields (17.788912ms)
+✔ page append deduplicates without replacing newer rows or mutating inputs (0.430929ms)
+✔ request gate rejects old page and old household completions, including scope ABA (0.264489ms)
+✔ Undo rejects a different SDK user while React still shows the same household editor (87.487145ms)
+✔ Undo requires a successful nonempty SDK session before dispatch (55.122527ms)
+✔ Undo rechecks user, household, budget, generation and disposal after session lookup (83.527939ms)
+✔ Undo binds the request to the verified token even if SDK identity changes at dispatch (9.848929ms)
+✔ late Undo receipts cannot refresh or publish after scope changes or disposal (27.104147ms)
+✔ late authoritative refresh cannot publish after provider disposal (12.796911ms)
+✔ provider cleanup invalidates the Undo lifecycle even if it mounts again (6.273682ms)
+✔ unverified inverse receipts fail without publishing an old snapshot (11.618966ms)
+✔ history-only income schedules render their reason and destination without Undo confirmation (97.250084ms)
+✔ settings hub places every true setting in exactly one group (0.784983ms)
+✔ settings hub preserves the intended group order (0.649369ms)
+✔ count statuses handle zero, singular, and larger values (0.151979ms)
+✔ attention statuses only highlight positive counts (0.202445ms)
+✔ settings group lookups preserve the destination hierarchy (0.188364ms)
+✔ admin settings are visible only to approved admins (0.145239ms)
+ℹ tests 33
 ℹ suites 0
-ℹ pass 14
+ℹ pass 33
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 108.218811
+ℹ duration_ms 654.259077

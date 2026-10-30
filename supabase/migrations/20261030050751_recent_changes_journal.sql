@@ -180,7 +180,10 @@ begin
       elsif not raw_fields <@ array['name','category'] then return 'Payment, schedule and debt changes need the bill’s dedicated controls'; end if;
     when 'incomes' then
       if private.recent_change_has_links('incomes',p_change.entity_id,p_change.household_id,p_change.budget_id) then return 'This income has linked activity. Open income settings to make changes'; end if;
-      if p_change.operation='UPDATE' and not raw_fields <@ array['name','amount','frequency','start_date','next_payment_date','amount_history','excluded_dates'] then return 'This income change needs income settings’ dedicated controls'; end if;
+      -- Complex schedule arrays have a privacy-preserving summary in history,
+      -- not a reviewable date/money preview. Do not offer a blind inverse.
+      if p_change.operation='UPDATE' and raw_fields && array['amount_history','excluded_dates'] then return 'Income amount history and skipped dates need income settings’ dedicated controls'; end if;
+      if p_change.operation='UPDATE' and not raw_fields <@ array['name','amount','frequency','start_date','next_payment_date'] then return 'This income change needs income settings’ dedicated controls'; end if;
     when 'goals' then
       if a->>'goal_type' is distinct from 'savings' or (b is not null and b->>'goal_type' is distinct from 'savings') then return 'Spending bucket budgets and purchases use their dedicated controls'; end if;
       if coalesce((a->>'current_amount')::numeric,0)<>0 or (b is not null and coalesce((b->>'current_amount')::numeric,0)<>0) or private.recent_change_has_links('goals',p_change.entity_id,p_change.household_id,p_change.budget_id) then return 'Funded or linked goals need their dedicated controls'; end if;
@@ -301,24 +304,30 @@ begin
   select * into change from private.recent_changes where id=p_change_id and household_id=p_expected_household_id and budget_id=p_expected_budget_id;
   if not found then raise exception 'This change is unavailable in the selected household'; end if;
   if change.undone_at is null then
-    -- For deleting an unused creation, block legacy non-FK link writes while
-    -- checking. Normal edits use only target row/version locks.
-    if change.operation='INSERT' then
-      lock table public.transactions in share row exclusive mode;
-      if to_regclass('public.pending_plan_matches') is not null then execute 'lock table public.pending_plan_matches in share row exclusive mode'; end if;
-      if to_regclass('public.extra_payments') is not null then execute 'lock table public.extra_payments in share row exclusive mode'; end if;
-      lock table public.transaction_reconciliations in share row exclusive mode;
-      if change.entity_table='bills' then
-        lock table public.monthly_overrides,public.bill_date_moves in share row exclusive mode;
-      elsif change.entity_table='goals' then
-        lock table private.planned_reconciliation_bases in share row exclusive mode;
-      end if;
-    end if;
     -- All ordinary writers acquire the entity row before its version trigger.
-    -- Keep that lock order here to avoid entity/version deadlocks.
+    -- Wait for that row before taking any global dependency-table locks. A bill
+    -- writer may already hold the row and be about to insert an override.
     execute format('select to_jsonb(t) from public.%I t where id=$1 for update',change.entity_table) into current_row using change.entity_id;
     select version into latest from private.recent_change_versions where entity_table=change.entity_table and entity_id=change.entity_id for update;
     select * into change from private.recent_changes where id=p_change_id for update;
+    -- Re-read the receipt first so an exact concurrent retry needs no legacy
+    -- locks. For unused creations, block non-FK links only if every dependency
+    -- table is immediately available; never wait while holding global locks.
+    if change.undone_at is null and change.operation='INSERT' then
+      begin
+        lock table public.transactions in share row exclusive mode nowait;
+        if to_regclass('public.pending_plan_matches') is not null then execute 'lock table public.pending_plan_matches in share row exclusive mode nowait'; end if;
+        if to_regclass('public.extra_payments') is not null then execute 'lock table public.extra_payments in share row exclusive mode nowait'; end if;
+        lock table public.transaction_reconciliations in share row exclusive mode nowait;
+        if change.entity_table='bills' then
+          lock table public.monthly_overrides,public.bill_date_moves in share row exclusive mode nowait;
+        elsif change.entity_table='goals' then
+          lock table private.planned_reconciliation_bases in share row exclusive mode nowait;
+        end if;
+      exception when lock_not_available then
+        raise exception using errcode='55P03',message='Your plan is being updated. Try Undo again in a moment';
+      end;
+    end if;
   end if;
   if change.undone_at is not null then
     return jsonb_build_object('changeId',change.id,'householdId',change.household_id,'budgetId',change.budget_id,'undoneAt',change.undone_at,'inverseChangeId',change.inverse_change_id);
