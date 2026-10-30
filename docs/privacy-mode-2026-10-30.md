@@ -1,6 +1,6 @@
 # App-wide money Privacy Mode
 
-Status: verified candidate; production release pending.
+Status: LIVE and verified. Production source `d1e55435f5c60592de3fde4611cf8429d2f44e86`, READY deployment `dpl_6cJhPYfHwjknioqJT9hUrobmvgTu`.
 
 Privacy Mode adds an eye control on Dashboard, an Appearance setting, a desktop sidebar control, and an always-available Show amounts bar while hidden. It conceals monetary text and accessibility labels across mobile/desktop screens, charts, search, notifications, dialogs and forms without changing stored numbers, calculations or action payloads. Dates, counts, Flow Score and APR remain readable. Money fields become explicit Show to edit controls while hidden. Flo conversations and drafts stay out of view; showing them does not send a question or perform a creation.
 
@@ -15,3 +15,5 @@ All 80 final browser checks passed across 390/1,200-pixel layouts and 86 recorde
 Rollback: `rollback/prod-before-privacy-mode-20261030-0532`, remotely verified annotated tag at `f0790d3b3452b55e73186bc5a8fcd79b7c00c267`, exact prior READY deployment `dpl_AuCv4TBT8P5VX1mQUBV62DKBXXtM`. Marketing assets and later isolated features remain outside release source.
 
 Evidence: `release-snapshots/privacy-mode-20261030/`.
+
+Production verification: all four aliases resolved to that exact READY source after assignment. Startup shell, deep routes, caches, service worker and exact entry-byte postflight passed. All 80 browser checks passed again against published assets with intercepted fictional APIs. Production lazy Reports readiness was explicitly awaited; this required a harness wait and no app change. Evidence: `release-snapshots/privacy-mode-20261030/production/`.

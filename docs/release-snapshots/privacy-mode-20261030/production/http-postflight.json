@@ -1,0 +1,9 @@
+{
+  "status": "PASS",
+  "name": "Privacy Mode",
+  "deploymentId": "dpl_6cJhPYfHwjknioqJT9hUrobmvgTu",
+  "source": "d1e55435f5c60592de3fde4611cf8429d2f44e86",
+  "bundlePath": "/_expo/static/js/web/entry-0240763657e575ad48cb96315a93e634.js",
+  "bundleSha256": "e3b5d4350a8f646e5ddb4334e75bc80fcc8c36153fcc0c59262b0c5b11251748",
+  "exactBrowserTestedBundle": true
+}

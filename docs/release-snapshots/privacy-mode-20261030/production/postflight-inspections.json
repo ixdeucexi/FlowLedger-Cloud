@@ -1,0 +1,72 @@
+{
+  "inspections": [
+    {
+      "host": "flowledger-algo.com",
+      "value": {
+        "id": "dpl_6cJhPYfHwjknioqJT9hUrobmvgTu",
+        "name": "flow-ledger-cloud",
+        "url": "flow-ledger-cloud-g8wbkdqx7-flow-ledger-s-projects.vercel.app",
+        "target": "production",
+        "readyState": "READY",
+        "meta": {
+          "githubCommitSha": "d1e55435f5c60592de3fde4611cf8429d2f44e86",
+          "gitCommitSha": "d1e55435f5c60592de3fde4611cf8429d2f44e86"
+        }
+      }
+    },
+    {
+      "host": "www.flowledger-algo.com",
+      "value": {
+        "id": "dpl_6cJhPYfHwjknioqJT9hUrobmvgTu",
+        "name": "flow-ledger-cloud",
+        "url": "flow-ledger-cloud-g8wbkdqx7-flow-ledger-s-projects.vercel.app",
+        "target": "production",
+        "readyState": "READY",
+        "meta": {
+          "githubCommitSha": "d1e55435f5c60592de3fde4611cf8429d2f44e86",
+          "gitCommitSha": "d1e55435f5c60592de3fde4611cf8429d2f44e86"
+        }
+      }
+    },
+    {
+      "host": "flow-ledger-cloud.vercel.app",
+      "value": {
+        "id": "dpl_6cJhPYfHwjknioqJT9hUrobmvgTu",
+        "name": "flow-ledger-cloud",
+        "url": "flow-ledger-cloud-g8wbkdqx7-flow-ledger-s-projects.vercel.app",
+        "target": "production",
+        "readyState": "READY",
+        "meta": {
+          "githubCommitSha": "d1e55435f5c60592de3fde4611cf8429d2f44e86",
+          "gitCommitSha": "d1e55435f5c60592de3fde4611cf8429d2f44e86"
+        }
+      }
+    },
+    {
+      "host": "flow-ledger-cloud-flow-ledger-s-projects.vercel.app",
+      "value": {
+        "id": "dpl_6cJhPYfHwjknioqJT9hUrobmvgTu",
+        "name": "flow-ledger-cloud",
+        "url": "flow-ledger-cloud-g8wbkdqx7-flow-ledger-s-projects.vercel.app",
+        "target": "production",
+        "readyState": "READY",
+        "meta": {
+          "githubCommitSha": "d1e55435f5c60592de3fde4611cf8429d2f44e86",
+          "gitCommitSha": "d1e55435f5c60592de3fde4611cf8429d2f44e86"
+        }
+      }
+    }
+  ],
+  "deployment": {
+    "id": "dpl_6cJhPYfHwjknioqJT9hUrobmvgTu",
+    "name": "flow-ledger-cloud",
+    "url": "flow-ledger-cloud-g8wbkdqx7-flow-ledger-s-projects.vercel.app",
+    "target": "production",
+    "readyState": "READY",
+    "meta": {
+      "githubCommitSha": "d1e55435f5c60592de3fde4611cf8429d2f44e86",
+      "gitCommitSha": "d1e55435f5c60592de3fde4611cf8429d2f44e86"
+    }
+  },
+  "normalization": "Observed githubCommitSha normalized to CLI-equivalent gitCommitSha, retaining original."
+}

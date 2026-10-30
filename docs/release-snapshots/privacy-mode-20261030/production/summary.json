@@ -1,0 +1,33 @@
+{
+  "status": "PASS",
+  "origin": "https://flowledger-algo.com",
+  "deployment": "dpl_6cJhPYfHwjknioqJT9hUrobmvgTu",
+  "source": "d1e55435f5c60592de3fde4611cf8429d2f44e86",
+  "checks": 80,
+  "mainChecks": 70,
+  "readRetryChecks": 4,
+  "floCreationChecks": 6,
+  "recordedScannedSurfaces": 86,
+  "entry": {
+    "path": "/_expo/static/js/web/entry-0240763657e575ad48cb96315a93e634.js",
+    "sha256": "e3b5d4350a8f646e5ddb4334e75bc80fcc8c36153fcc0c59262b0c5b11251748"
+  },
+  "viewports": [
+    390,
+    1200
+  ],
+  "appErrors": 0,
+  "unknownRequests": 0,
+  "financialWrites": 0,
+  "realAiProviderCalls": 0,
+  "mockedFloSends": 2,
+  "mainKnownBaselineCsp": 64,
+  "screenshots": 24,
+  "evidence": "/tmp/privacy-mode-release/production-browser",
+  "visuallyReviewed": [
+    "dashboard-hidden-390.png",
+    "flo-creation/restored-form-390.png",
+    "flo-creation/restored-form-1200.png"
+  ],
+  "screenshotsCapturedAfterModalAnimation": true
+}

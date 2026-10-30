@@ -1,0 +1,48 @@
+{
+  "width": 1200,
+  "mode": "queued",
+  "checks": [
+    "initial-or-newly-enabled-fully-spent-bucket-does-not-celebrate",
+    "confirmed-completion-stays-queued-behind-personalization-without-timer-expiry",
+    "confirmed-completion-is-visible-and-hit-testable-above-other-modals",
+    "dismiss-queued-closes-only-the-celebration",
+    "bucket-details-return-after-milestone-dismissal",
+    "confirmed-moment-is-persisted-once-and-not-repeated-after-reload"
+  ],
+  "visibleOpacity": 1,
+  "hit": {
+    "receivesPointer": true,
+    "bounds": {
+      "x": 775,
+      "y": 719,
+      "width": 40,
+      "height": 44
+    },
+    "topRole": null,
+    "topLabel": null
+  },
+  "loadedBundles": [
+    {
+      "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+      "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+    },
+    {
+      "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+      "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+    }
+  ],
+  "closeCalls": [
+    {
+      "input": {
+        "p_bucket_id": "fixture-full",
+        "p_expected_spent": 100,
+        "p_expected_remainder": 0
+      },
+      "failed": false
+    }
+  ],
+  "consoleErrors": [
+    "Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md"
+  ],
+  "success": true
+}

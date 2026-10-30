@@ -1,0 +1,335 @@
+{
+  "width": 390,
+  "checks": [
+    "dashboard-hide-toggle-masks-text-values-and-accessibility",
+    "private-preference-survives-reload-without-raw-money-flash",
+    "private-route-dashboard",
+    "private-route-bills",
+    "private-route-debt",
+    "private-route-forecast",
+    "private-route-activity",
+    "private-route-accounts",
+    "private-route-income-settings",
+    "private-route-buckets",
+    "private-route-savings-goals",
+    "private-route-review",
+    "private-route-reports",
+    "private-route-snowball",
+    "private-route-simulator",
+    "private-route-flo",
+    "private-route-subscriptions",
+    "private-route-bank-connections",
+    "private-route-recently-deleted",
+    "private-route-appearance",
+    "private-route-backup",
+    "forecast-cell-and-selected-day-overlay-hide-accessible-balances",
+    "notification-prose-and-notification-accessibility-hide-money",
+    "universal-search-numeric-query-is-hidden-and-restored-without-editing-state",
+    "activity-numeric-search-is-hidden-and-restores-the-query",
+    "existing-flo-conversation-history-and-draft-stay-private-and-restore-without-ai-call",
+    "private-bill-form-preserves-numeric-draft-and-requires-reveal-to-edit",
+    "private-debt-form-preserves-numeric-draft-and-requires-reveal-to-edit",
+    "private-income-form-preserves-numeric-draft-and-requires-reveal-to-edit",
+    "private-goal-form-preserves-numeric-draft-and-requires-reveal-to-edit",
+    "private-transaction-form-preserves-numeric-draft-and-requires-reveal-to-edit",
+    "appearance-switch-and-global-controls-share-privacy-preference",
+    "privacy-does-not-change-theme-dashboard-favorites-flo-or-haptics",
+    "household-switch-keeps-each-scoped-privacy-choice-and-clears-old-values",
+    "privacy-save-failure-is-visible-and-retry-saves-current-choice"
+  ],
+  "surfaces": [
+    {
+      "name": "dashboard-toggle",
+      "inputs": 0,
+      "attributes": 51,
+      "maskedTokens": 17,
+      "startupLeaks": 0
+    },
+    {
+      "name": "private-reload",
+      "inputs": 0,
+      "attributes": 51,
+      "maskedTokens": 17,
+      "startupLeaks": 0
+    },
+    {
+      "name": "dashboard",
+      "inputs": 0,
+      "attributes": 51,
+      "maskedTokens": 17,
+      "startupLeaks": 0
+    },
+    {
+      "name": "bills",
+      "inputs": 1,
+      "attributes": 13,
+      "maskedTokens": 5,
+      "startupLeaks": 0
+    },
+    {
+      "name": "debt",
+      "inputs": 0,
+      "attributes": 12,
+      "maskedTokens": 7,
+      "startupLeaks": 0
+    },
+    {
+      "name": "forecast",
+      "inputs": 0,
+      "attributes": 90,
+      "maskedTokens": 37,
+      "startupLeaks": 0
+    },
+    {
+      "name": "activity",
+      "inputs": 1,
+      "attributes": 24,
+      "maskedTokens": 10,
+      "startupLeaks": 0
+    },
+    {
+      "name": "accounts",
+      "inputs": 1,
+      "attributes": 10,
+      "maskedTokens": 3,
+      "startupLeaks": 0
+    },
+    {
+      "name": "income-settings",
+      "inputs": 2,
+      "attributes": 15,
+      "maskedTokens": 4,
+      "startupLeaks": 0
+    },
+    {
+      "name": "buckets",
+      "inputs": 0,
+      "attributes": 13,
+      "maskedTokens": 3,
+      "startupLeaks": 0
+    },
+    {
+      "name": "savings-goals",
+      "inputs": 0,
+      "attributes": 9,
+      "maskedTokens": 3,
+      "startupLeaks": 0
+    },
+    {
+      "name": "review",
+      "inputs": 0,
+      "attributes": 19,
+      "maskedTokens": 1,
+      "startupLeaks": 0
+    },
+    {
+      "name": "reports",
+      "inputs": 0,
+      "attributes": 13,
+      "maskedTokens": 26,
+      "startupLeaks": 0
+    },
+    {
+      "name": "snowball",
+      "inputs": 0,
+      "attributes": 7,
+      "maskedTokens": 12,
+      "startupLeaks": 0
+    },
+    {
+      "name": "simulator",
+      "inputs": 0,
+      "attributes": 8,
+      "maskedTokens": 30,
+      "startupLeaks": 0
+    },
+    {
+      "name": "flo",
+      "inputs": 0,
+      "attributes": 8,
+      "maskedTokens": 0,
+      "startupLeaks": 0
+    },
+    {
+      "name": "subscriptions",
+      "inputs": 0,
+      "attributes": 10,
+      "maskedTokens": 2,
+      "startupLeaks": 0
+    },
+    {
+      "name": "bank-connections",
+      "inputs": 0,
+      "attributes": 10,
+      "maskedTokens": 0,
+      "startupLeaks": 0
+    },
+    {
+      "name": "recently-deleted",
+      "inputs": 0,
+      "attributes": 9,
+      "maskedTokens": 1,
+      "startupLeaks": 0
+    },
+    {
+      "name": "appearance",
+      "inputs": 1,
+      "attributes": 47,
+      "maskedTokens": 1,
+      "startupLeaks": 0
+    },
+    {
+      "name": "backup",
+      "inputs": 0,
+      "attributes": 9,
+      "maskedTokens": 0,
+      "startupLeaks": 0
+    },
+    {
+      "name": "forecast-day-overlay",
+      "inputs": 0,
+      "attributes": 98,
+      "maskedTokens": 44,
+      "startupLeaks": 0
+    },
+    {
+      "name": "notifications-overlay",
+      "inputs": 0,
+      "attributes": 62,
+      "maskedTokens": 19,
+      "startupLeaks": 0
+    },
+    {
+      "name": "numeric-universal-search",
+      "inputs": 0,
+      "attributes": 55,
+      "maskedTokens": 19,
+      "startupLeaks": 0
+    },
+    {
+      "name": "numeric-activity-search",
+      "inputs": 0,
+      "attributes": 19,
+      "maskedTokens": 6,
+      "startupLeaks": 0
+    },
+    {
+      "name": "existing-flo-chat-and-draft-hidden",
+      "inputs": 0,
+      "attributes": 52,
+      "maskedTokens": 17,
+      "startupLeaks": 0
+    },
+    {
+      "name": "flo-history-hidden",
+      "inputs": 0,
+      "attributes": 52,
+      "maskedTokens": 17,
+      "startupLeaks": 0
+    },
+    {
+      "name": "private-bill-form",
+      "inputs": 3,
+      "attributes": 58,
+      "maskedTokens": 18,
+      "startupLeaks": 0
+    },
+    {
+      "name": "draft-bill-form-hidden",
+      "inputs": 3,
+      "attributes": 58,
+      "maskedTokens": 18,
+      "startupLeaks": 0
+    },
+    {
+      "name": "private-debt-form",
+      "inputs": 3,
+      "attributes": 58,
+      "maskedTokens": 19,
+      "startupLeaks": 0
+    },
+    {
+      "name": "draft-debt-form-hidden",
+      "inputs": 3,
+      "attributes": 58,
+      "maskedTokens": 19,
+      "startupLeaks": 0
+    },
+    {
+      "name": "private-income-form",
+      "inputs": 3,
+      "attributes": 62,
+      "maskedTokens": 22,
+      "startupLeaks": 0
+    },
+    {
+      "name": "draft-income-form-hidden",
+      "inputs": 3,
+      "attributes": 62,
+      "maskedTokens": 23,
+      "startupLeaks": 0
+    },
+    {
+      "name": "private-goal-form",
+      "inputs": 1,
+      "attributes": 56,
+      "maskedTokens": 19,
+      "startupLeaks": 0
+    },
+    {
+      "name": "draft-goal-form-hidden",
+      "inputs": 1,
+      "attributes": 56,
+      "maskedTokens": 19,
+      "startupLeaks": 0
+    },
+    {
+      "name": "private-transaction-form",
+      "inputs": 2,
+      "attributes": 72,
+      "maskedTokens": 29,
+      "startupLeaks": 0
+    },
+    {
+      "name": "draft-transaction-form-hidden",
+      "inputs": 2,
+      "attributes": 72,
+      "maskedTokens": 29,
+      "startupLeaks": 0
+    },
+    {
+      "name": "appearance-privacy-setting",
+      "inputs": 1,
+      "attributes": 47,
+      "maskedTokens": 1,
+      "startupLeaks": 0
+    },
+    {
+      "name": "household-return-hidden",
+      "inputs": 0,
+      "attributes": 51,
+      "maskedTokens": 17,
+      "startupLeaks": 0
+    },
+    {
+      "name": "save-retry",
+      "inputs": 0,
+      "attributes": 51,
+      "maskedTokens": 17,
+      "startupLeaks": 0
+    }
+  ],
+  "status": "PASS",
+  "errors": [],
+  "unknown": [],
+  "knownBaselineCsp": 32,
+  "financialWrites": 0,
+  "aiCalls": 0,
+  "interceptedRequests": 1132,
+  "bundles": [
+    {
+      "path": "/_expo/static/js/web/entry-0240763657e575ad48cb96315a93e634.js",
+      "sha256": "e3b5d4350a8f646e5ddb4334e75bc80fcc8c36153fcc0c59262b0c5b11251748"
+    }
+  ]
+}

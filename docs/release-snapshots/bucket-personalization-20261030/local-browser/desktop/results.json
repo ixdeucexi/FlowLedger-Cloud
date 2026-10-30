@@ -1,0 +1,682 @@
+{
+  "success": true,
+  "origin": "http://127.0.0.1:39563",
+  "photo": "/workspace/FlowLedger-Cloud/marketing/play-store-2026-10-30/assets/ambient-background.png",
+  "results": [
+    {
+      "width": 1200,
+      "checks": [
+        "initial-fully-funded-goal-and-spent-bucket-do-not-celebrate",
+        "icon-and-cover-selected-state-save-immediately",
+        "actual-filechooser-fileblob-saved-in-indexeddb-and-displayed",
+        "list-detail-personalization-host-flow-has-no-stacked-financial-editor",
+        "real-photo-and-metadata-survive-page-reload",
+        "dashboard-thumbnail-hides-actual-photo-in-privacy-and-restores-on-reveal",
+        "personalization-preview-photo-hides-and-restores-with-global-privacy",
+        "real-photo-replacement-removes-obsolete-indexeddb-blob",
+        "invalid-selected-file-keeps-previous-real-photo",
+        "real-indexeddb-quota-failure-keeps-previous-photo-and-retry-succeeds",
+        "cosmetic-storage-error-preserves-old-look-and-retries",
+        "remove-photo-deletes-persisted-blob-and-survives-reload",
+        "reset-restores-defaults-selected-state-and-cleans-real-photo",
+        "archived-buckets-can-be-personalized-without-restoring-financial-record",
+        "household-budget-scopes-with-same-goal-id-keep-independent-looks",
+        "personalization-never-changes-financial-goals-or-calls-financial-writes"
+      ],
+      "screens": [],
+      "routes": [
+        "/more?section=buckets",
+        "/"
+      ],
+      "loadedBundles": [
+        {
+          "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+          "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+        },
+        {
+          "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+          "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+        },
+        {
+          "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+          "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+        },
+        {
+          "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+          "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+        },
+        {
+          "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+          "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+        },
+        {
+          "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+          "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+        },
+        {
+          "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+          "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+        },
+        {
+          "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+          "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+        },
+        {
+          "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+          "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+        },
+        {
+          "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+          "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+        },
+        {
+          "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+          "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+        },
+        {
+          "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+          "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+        }
+      ],
+      "calls": [
+        {
+          "name": "table:app_diagnostics",
+          "input": {
+            "user_id": "11111111-1111-4111-8111-111111111111",
+            "app_version": "phase0",
+            "platform": "web",
+            "event_type": "performance",
+            "operation": "data_load",
+            "error_code": null,
+            "duration_ms": 246
+          },
+          "method": "POST"
+        },
+        {
+          "name": "sync_due_debt_transactions",
+          "input": {
+            "p_as_of_date": "2026-10-29",
+            "p_household_id": "22222222-2222-4222-8222-222222222222"
+          }
+        },
+        {
+          "name": "table:app_diagnostics",
+          "input": {
+            "user_id": "11111111-1111-4111-8111-111111111111",
+            "app_version": "phase0",
+            "platform": "web",
+            "event_type": "performance",
+            "operation": "data_load",
+            "error_code": null,
+            "duration_ms": 202
+          },
+          "method": "POST"
+        },
+        {
+          "name": "table:app_diagnostics",
+          "input": {
+            "user_id": "11111111-1111-4111-8111-111111111111",
+            "app_version": "phase0",
+            "platform": "web",
+            "event_type": "performance",
+            "operation": "data_load",
+            "error_code": null,
+            "duration_ms": 162
+          },
+          "method": "POST"
+        },
+        {
+          "name": "table:app_diagnostics",
+          "input": {
+            "user_id": "11111111-1111-4111-8111-111111111111",
+            "app_version": "phase0",
+            "platform": "web",
+            "event_type": "performance",
+            "operation": "data_load",
+            "error_code": null,
+            "duration_ms": 201
+          },
+          "method": "POST"
+        },
+        {
+          "name": "sync_due_debt_transactions",
+          "input": {
+            "p_as_of_date": "2026-10-29",
+            "p_household_id": "22222222-2222-4222-8222-222222222222"
+          }
+        },
+        {
+          "name": "sync_due_debt_transactions",
+          "input": {
+            "p_as_of_date": "2026-10-29",
+            "p_household_id": "22222222-2222-4222-8222-222222222222"
+          }
+        },
+        {
+          "name": "table:app_diagnostics",
+          "input": {
+            "user_id": "11111111-1111-4111-8111-111111111111",
+            "app_version": "phase0",
+            "platform": "web",
+            "event_type": "performance",
+            "operation": "data_load",
+            "error_code": null,
+            "duration_ms": 229
+          },
+          "method": "POST"
+        },
+        {
+          "name": "table:app_diagnostics",
+          "input": {
+            "user_id": "11111111-1111-4111-8111-111111111111",
+            "app_version": "phase0",
+            "platform": "web",
+            "event_type": "performance",
+            "operation": "data_load",
+            "error_code": null,
+            "duration_ms": 205
+          },
+          "method": "POST"
+        },
+        {
+          "name": "table:app_diagnostics",
+          "input": {
+            "user_id": "11111111-1111-4111-8111-111111111111",
+            "app_version": "phase0",
+            "platform": "web",
+            "event_type": "performance",
+            "operation": "data_load",
+            "error_code": null,
+            "duration_ms": 246
+          },
+          "method": "POST"
+        },
+        {
+          "name": "table:app_diagnostics",
+          "input": {
+            "user_id": "11111111-1111-4111-8111-111111111111",
+            "app_version": "phase0",
+            "platform": "web",
+            "event_type": "performance",
+            "operation": "data_load",
+            "error_code": null,
+            "duration_ms": 310
+          },
+          "method": "POST"
+        },
+        {
+          "name": "sync_due_debt_transactions",
+          "input": {
+            "p_as_of_date": "2026-10-29",
+            "p_household_id": "22222222-2222-4222-8222-222222222222"
+          }
+        },
+        {
+          "name": "table:app_diagnostics",
+          "input": {
+            "user_id": "11111111-1111-4111-8111-111111111111",
+            "app_version": "phase0",
+            "platform": "web",
+            "event_type": "performance",
+            "operation": "data_load",
+            "error_code": null,
+            "duration_ms": 106
+          },
+          "method": "POST"
+        },
+        {
+          "name": "sync_due_debt_transactions",
+          "input": {
+            "p_as_of_date": "2026-10-29",
+            "p_household_id": "22222222-2222-4222-8222-222222222222"
+          }
+        },
+        {
+          "name": "table:app_diagnostics",
+          "input": {
+            "user_id": "11111111-1111-4111-8111-111111111111",
+            "app_version": "phase0",
+            "platform": "web",
+            "event_type": "performance",
+            "operation": "data_load",
+            "error_code": null,
+            "duration_ms": 194
+          },
+          "method": "POST"
+        },
+        {
+          "name": "table:user_preferences",
+          "input": {
+            "user_id": "11111111-1111-4111-8111-111111111111",
+            "active_household_id": "44444444-4444-4444-8444-444444444444",
+            "updated_at": "2026-10-29T12:00:00.000Z"
+          },
+          "method": "POST"
+        },
+        {
+          "name": "table:app_diagnostics",
+          "input": {
+            "user_id": "11111111-1111-4111-8111-111111111111",
+            "app_version": "phase0",
+            "platform": "web",
+            "event_type": "performance",
+            "operation": "data_load",
+            "error_code": null,
+            "duration_ms": 103
+          },
+          "method": "POST"
+        },
+        {
+          "name": "table:app_diagnostics",
+          "input": {
+            "user_id": "11111111-1111-4111-8111-111111111111",
+            "app_version": "phase0",
+            "platform": "web",
+            "event_type": "performance",
+            "operation": "data_load",
+            "error_code": null,
+            "duration_ms": 283
+          },
+          "method": "POST"
+        },
+        {
+          "name": "table:app_diagnostics",
+          "input": {
+            "user_id": "11111111-1111-4111-8111-111111111111",
+            "app_version": "phase0",
+            "platform": "web",
+            "event_type": "performance",
+            "operation": "data_load",
+            "error_code": null,
+            "duration_ms": 188
+          },
+          "method": "POST"
+        },
+        {
+          "name": "table:user_preferences",
+          "input": {
+            "user_id": "11111111-1111-4111-8111-111111111111",
+            "active_household_id": "22222222-2222-4222-8222-222222222222",
+            "updated_at": "2026-10-29T12:00:00.000Z"
+          },
+          "method": "POST"
+        },
+        {
+          "name": "table:app_diagnostics",
+          "input": {
+            "user_id": "11111111-1111-4111-8111-111111111111",
+            "app_version": "phase0",
+            "platform": "web",
+            "event_type": "performance",
+            "operation": "data_load",
+            "error_code": null,
+            "duration_ms": 165
+          },
+          "method": "POST"
+        },
+        {
+          "name": "table:app_diagnostics",
+          "input": {
+            "user_id": "11111111-1111-4111-8111-111111111111",
+            "app_version": "phase0",
+            "platform": "web",
+            "event_type": "performance",
+            "operation": "data_load",
+            "error_code": null,
+            "duration_ms": 403
+          },
+          "method": "POST"
+        }
+      ],
+      "unknown": [],
+      "consoleErrors": [],
+      "success": true
+    },
+    {
+      "width": 1200,
+      "checks": [
+        "viewer-can-personalize-real-photo-but-cannot-create-edit-close-finances"
+      ],
+      "success": true
+    },
+    {
+      "width": 1200,
+      "success": true,
+      "checks": [
+        "initial-or-newly-enabled-fully-spent-bucket-does-not-celebrate",
+        "confirmed-completion-is-visible-and-hit-testable-above-other-modals",
+        "dismiss-click-closes-only-the-celebration",
+        "bucket-details-return-after-milestone-dismissal",
+        "confirmed-moment-is-persisted-once-and-not-repeated-after-reload",
+        "initial-or-newly-enabled-fully-spent-bucket-does-not-celebrate",
+        "failed-confirmed-close-save-has-no-moment-or-seen-claim",
+        "real-global-save-banner-retry-confirms-canonical-close",
+        "confirmed-completion-is-visible-and-hit-testable-above-other-modals",
+        "dismiss-global-retry-closes-only-the-celebration",
+        "confirmed-moment-is-persisted-once-and-not-repeated-after-reload",
+        "initial-or-newly-enabled-fully-spent-bucket-does-not-celebrate",
+        "confirmed-completion-is-visible-and-hit-testable-above-other-modals",
+        "dismiss-escape-closes-only-the-celebration",
+        "bucket-details-return-after-milestone-dismissal",
+        "confirmed-moment-is-persisted-once-and-not-repeated-after-reload",
+        "initial-or-newly-enabled-fully-spent-bucket-does-not-celebrate",
+        "confirmed-completion-is-visible-and-hit-testable-above-other-modals",
+        "dismiss-back-closes-only-the-celebration",
+        "bucket-details-return-after-milestone-dismissal",
+        "confirmed-moment-is-persisted-once-and-not-repeated-after-reload",
+        "initial-or-newly-enabled-fully-spent-bucket-does-not-celebrate",
+        "confirmed-completion-is-visible-and-hit-testable-above-other-modals",
+        "dismiss-reduced-motion-closes-only-the-celebration",
+        "bucket-details-return-after-milestone-dismissal",
+        "confirmed-moment-is-persisted-once-and-not-repeated-after-reload",
+        "initial-or-newly-enabled-fully-spent-bucket-does-not-celebrate",
+        "confirmed-completion-stays-queued-behind-personalization-without-timer-expiry",
+        "confirmed-completion-is-visible-and-hit-testable-above-other-modals",
+        "dismiss-queued-closes-only-the-celebration",
+        "bucket-details-return-after-milestone-dismissal",
+        "confirmed-moment-is-persisted-once-and-not-repeated-after-reload"
+      ],
+      "cases": [
+        {
+          "width": 1200,
+          "mode": "click",
+          "checks": [
+            "initial-or-newly-enabled-fully-spent-bucket-does-not-celebrate",
+            "confirmed-completion-is-visible-and-hit-testable-above-other-modals",
+            "dismiss-click-closes-only-the-celebration",
+            "bucket-details-return-after-milestone-dismissal",
+            "confirmed-moment-is-persisted-once-and-not-repeated-after-reload"
+          ],
+          "visibleOpacity": 1,
+          "hit": {
+            "receivesPointer": true,
+            "bounds": {
+              "x": 775,
+              "y": 719,
+              "width": 40,
+              "height": 44
+            },
+            "topRole": null,
+            "topLabel": null
+          },
+          "loadedBundles": [
+            {
+              "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+              "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+            },
+            {
+              "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+              "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+            }
+          ],
+          "closeCalls": [
+            {
+              "input": {
+                "p_bucket_id": "fixture-full",
+                "p_expected_spent": 100,
+                "p_expected_remainder": 0
+              },
+              "failed": false
+            }
+          ],
+          "consoleErrors": [
+            "Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md"
+          ],
+          "success": true
+        },
+        {
+          "width": 1200,
+          "mode": "global-retry",
+          "checks": [
+            "initial-or-newly-enabled-fully-spent-bucket-does-not-celebrate",
+            "failed-confirmed-close-save-has-no-moment-or-seen-claim",
+            "real-global-save-banner-retry-confirms-canonical-close",
+            "confirmed-completion-is-visible-and-hit-testable-above-other-modals",
+            "dismiss-global-retry-closes-only-the-celebration",
+            "confirmed-moment-is-persisted-once-and-not-repeated-after-reload"
+          ],
+          "visibleOpacity": 1,
+          "hit": {
+            "receivesPointer": true,
+            "bounds": {
+              "x": 775,
+              "y": 719,
+              "width": 40,
+              "height": 44
+            },
+            "topRole": null,
+            "topLabel": null
+          },
+          "loadedBundles": [
+            {
+              "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+              "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+            },
+            {
+              "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+              "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+            }
+          ],
+          "closeCalls": [
+            {
+              "input": {
+                "p_bucket_id": "fixture-full",
+                "p_expected_spent": 100,
+                "p_expected_remainder": 0
+              },
+              "failed": true
+            },
+            {
+              "input": {
+                "p_bucket_id": "fixture-full",
+                "p_expected_spent": 100,
+                "p_expected_remainder": 0
+              },
+              "failed": false
+            }
+          ],
+          "consoleErrors": [
+            "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+            "Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md"
+          ],
+          "success": true
+        },
+        {
+          "width": 1200,
+          "mode": "escape",
+          "checks": [
+            "initial-or-newly-enabled-fully-spent-bucket-does-not-celebrate",
+            "confirmed-completion-is-visible-and-hit-testable-above-other-modals",
+            "dismiss-escape-closes-only-the-celebration",
+            "bucket-details-return-after-milestone-dismissal",
+            "confirmed-moment-is-persisted-once-and-not-repeated-after-reload"
+          ],
+          "visibleOpacity": 1,
+          "hit": {
+            "receivesPointer": true,
+            "bounds": {
+              "x": 775,
+              "y": 719,
+              "width": 40,
+              "height": 44
+            },
+            "topRole": null,
+            "topLabel": null
+          },
+          "loadedBundles": [
+            {
+              "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+              "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+            },
+            {
+              "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+              "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+            }
+          ],
+          "closeCalls": [
+            {
+              "input": {
+                "p_bucket_id": "fixture-full",
+                "p_expected_spent": 100,
+                "p_expected_remainder": 0
+              },
+              "failed": false
+            }
+          ],
+          "consoleErrors": [
+            "Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md"
+          ],
+          "success": true
+        },
+        {
+          "width": 1200,
+          "mode": "back",
+          "checks": [
+            "initial-or-newly-enabled-fully-spent-bucket-does-not-celebrate",
+            "confirmed-completion-is-visible-and-hit-testable-above-other-modals",
+            "dismiss-back-closes-only-the-celebration",
+            "bucket-details-return-after-milestone-dismissal",
+            "confirmed-moment-is-persisted-once-and-not-repeated-after-reload"
+          ],
+          "visibleOpacity": 1,
+          "hit": {
+            "receivesPointer": true,
+            "bounds": {
+              "x": 775,
+              "y": 719,
+              "width": 40,
+              "height": 44
+            },
+            "topRole": null,
+            "topLabel": null
+          },
+          "beforeBack": {
+            "state": {
+              "id": "fv8rl1OvPxsiXqkpQuZQZ",
+              "flowledgerLayer": "flowledger-editor-1793275201767-abq3tntqsde"
+            },
+            "length": 6,
+            "time": 2459.8999999910593
+          },
+          "loadedBundles": [
+            {
+              "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+              "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+            },
+            {
+              "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+              "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+            }
+          ],
+          "closeCalls": [
+            {
+              "input": {
+                "p_bucket_id": "fixture-full",
+                "p_expected_spent": 100,
+                "p_expected_remainder": 0
+              },
+              "failed": false
+            }
+          ],
+          "consoleErrors": [
+            "Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md"
+          ],
+          "success": true
+        },
+        {
+          "width": 1200,
+          "mode": "reduced-motion",
+          "checks": [
+            "initial-or-newly-enabled-fully-spent-bucket-does-not-celebrate",
+            "confirmed-completion-is-visible-and-hit-testable-above-other-modals",
+            "dismiss-reduced-motion-closes-only-the-celebration",
+            "bucket-details-return-after-milestone-dismissal",
+            "confirmed-moment-is-persisted-once-and-not-repeated-after-reload"
+          ],
+          "visibleOpacity": 1,
+          "hit": {
+            "receivesPointer": true,
+            "bounds": {
+              "x": 775,
+              "y": 719,
+              "width": 40,
+              "height": 44
+            },
+            "topRole": null,
+            "topLabel": null
+          },
+          "loadedBundles": [
+            {
+              "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+              "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+            },
+            {
+              "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+              "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+            }
+          ],
+          "closeCalls": [
+            {
+              "input": {
+                "p_bucket_id": "fixture-full",
+                "p_expected_spent": 100,
+                "p_expected_remainder": 0
+              },
+              "failed": false
+            }
+          ],
+          "consoleErrors": [],
+          "success": true
+        },
+        {
+          "width": 1200,
+          "mode": "queued",
+          "checks": [
+            "initial-or-newly-enabled-fully-spent-bucket-does-not-celebrate",
+            "confirmed-completion-stays-queued-behind-personalization-without-timer-expiry",
+            "confirmed-completion-is-visible-and-hit-testable-above-other-modals",
+            "dismiss-queued-closes-only-the-celebration",
+            "bucket-details-return-after-milestone-dismissal",
+            "confirmed-moment-is-persisted-once-and-not-repeated-after-reload"
+          ],
+          "visibleOpacity": 1,
+          "hit": {
+            "receivesPointer": true,
+            "bounds": {
+              "x": 775,
+              "y": 719,
+              "width": 40,
+              "height": 44
+            },
+            "topRole": null,
+            "topLabel": null
+          },
+          "loadedBundles": [
+            {
+              "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+              "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+            },
+            {
+              "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+              "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+            }
+          ],
+          "closeCalls": [
+            {
+              "input": {
+                "p_bucket_id": "fixture-full",
+                "p_expected_spent": 100,
+                "p_expected_remainder": 0
+              },
+              "failed": false
+            }
+          ],
+          "consoleErrors": [
+            "Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md"
+          ],
+          "success": true
+        }
+      ]
+    }
+  ]
+}

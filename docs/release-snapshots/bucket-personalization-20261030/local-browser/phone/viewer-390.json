@@ -1,0 +1,7 @@
+{
+  "width": 390,
+  "checks": [
+    "viewer-can-personalize-real-photo-but-cannot-create-edit-close-finances"
+  ],
+  "success": true
+}
