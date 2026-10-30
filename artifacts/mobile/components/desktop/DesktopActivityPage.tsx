@@ -700,6 +700,7 @@ export function DesktopActivityPage({
                       </View>
                       <View style={styles.colType}>
                         <StatusBadge
+                          truncate
                           label={
                             row.pending ? "Pending" : sourceLabel(row.source)
                           }
