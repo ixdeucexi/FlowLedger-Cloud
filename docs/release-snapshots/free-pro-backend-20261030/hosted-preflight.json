@@ -1,0 +1,45 @@
+{
+  "projectId": "imqmhfdquqlqxgtcdbvc",
+  "migration": "20261030121749_free_pro_feature_access.sql",
+  "mode": "metadata-only hosted preflight; no customer financial rows queried",
+  "results": [
+    {
+      "prior_founding_grants": null,
+      "prior_access_rpc": null,
+      "creation_boundary_matches": true,
+      "proposal_boundary_matches": true,
+      "authenticated_private_usage": true,
+      "service_private_usage": true,
+      "scenario_policies": [
+        {
+          "name": "plan simulations: pro editors delete",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "DELETE"
+        },
+        {
+          "name": "plan simulations: pro editors insert",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "INSERT"
+        },
+        {
+          "name": "plan simulations: pro editors update",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "UPDATE"
+        },
+        {
+          "name": "plan simulations: pro members read",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "SELECT"
+        }
+      ]
+    }
+  ]
+}

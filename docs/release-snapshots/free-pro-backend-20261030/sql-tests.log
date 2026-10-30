@@ -1,0 +1,78 @@
+PASS new backdated household stays Free without a founding grant
+PASS Free includes manual planning, basic debt/simulator and recovery/review capabilities
+PASS Free can preview real chat without gaining confirmed AI creation
+PASS Free does not receive advanced Pro features
+PASS Free preview starts with ten shared monthly requests
+PASS founding snapshot preserves planning without promoting household tier
+PASS founders retain existing advanced planning and Flo creation
+PASS founding planning grant does not unlock bank/cloud cost features
+PASS founders retain existing per-actor daily Flo allowance
+PASS new paid Pro receives three hundred shared monthly requests and Pro capabilities
+PASS permanent grandfathered Pro keeps its actual plan and legacy allowance
+PASS admin Pro keeps its existing daily allowance
+PASS viewer can read access without creation rights
+PASS a founding planning grant never elevates a viewer to an editor
+PASS founding viewer cannot invoke canonical creation
+PASS monthly reset is UTC-derived regardless of the database session timezone
+PASS verified admin preview simulates Free rather than inheriting Pro/founder access
+PASS non-admin cannot spoof a Pro preview
+PASS unknown preview tier is rejected
+PASS capability reads reject a different active household
+PASS nonmember cannot inspect another household entitlement
+PASS anonymous capability reads are denied
+PASS empty authenticated identity fails closed
+PASS stale access token for deleted user fails closed
+PASS all private grant/quota/receipt tables have RLS enabled
+PASS anon has no direct access to private feature/counter/receipt data
+PASS authenticated has no direct access to private feature/counter/receipt data
+PASS service_role has no direct access to private feature/counter/receipt data
+PASS public capability and service RPCs are invoker wrappers
+PASS reserve_flo_plan_request(uuid,uuid,uuid,text) is service-only
+PASS refund_flo_plan_request(uuid,uuid,uuid) is service-only
+PASS authenticated callers cannot reserve their own chosen quota
+PASS service reservation validates actor active scope
+PASS service preview cannot elevate a non-admin actor
+PASS first monthly reservation is charged once with a server-derived allowance
+PASS same reservation cannot call the provider twice or charge twice
+PASS monthly Free allowance is shared across household members
+PASS concurrent quota reservations complete without database failures
+PASS concurrent final-slot requests cannot exceed the Free monthly cap
+PASS eleventh Free request is denied with zero remaining
+PASS failed provider reservation refunds exactly one consumed request
+PASS repeat refund cannot create credit
+PASS refunded reservation ID cannot be reused for another provider request
+PASS another actor cannot refund someone else’s reservation
+PASS foreign household refund cannot affect the original counter
+PASS unknown reservation refund has no effect
+PASS a genuine refund makes one slot available again
+PASS an in-flight failure can refund its captured scope after a household switch
+PASS scope-switch refund adjusts only the original household counter
+PASS late refund of a prior-month request cannot add current-month credit
+PASS late refund adjusts its original stored month only
+PASS defensive refund never makes the counter negative
+PASS Pro monthly cap is three hundred and cannot exceed its trusted limit
+PASS downgrade preserves usage and cannot reset a spent monthly cap
+PASS legacy requests retain existing daily enforcement without double charging
+PASS legacy reservation IDs cannot be used for a second provider call
+PASS new Free cannot invoke canonical AI creation directly
+PASS denied canonical creation writes no financial row
+PASS Free manual income creation remains available independently of AI creation eligibility
+PASS founder confirmed creation remains available
+PASS downgraded exact creation retry replays one committed receipt without duplication
+PASS downgraded paid household cannot create another AI item
+PASS viewer cannot create even before feature authorization
+PASS committed receipt read remains available after downgrade
+PASS downgraded member can still read existing cloud scenario data
+PASS downgraded member cannot modify an existing cloud scenario
+PASS downgraded member cannot create a cloud scenario
+PASS other households cannot read retained cloud scenarios
+PASS viewer retains member-only read access to existing cloud data
+PASS viewer cannot delete retained household scenario data
+PASS downgraded editor can delete their retained cloud data
+PASS Free cannot bypass AI mutation eligibility through the recurring-proposal RPC
+PASS denied recurring proposal leaves financial amount unchanged
+PASS founder keeps confirmed recurring-proposal access
+PASS downgraded confirmed recurring-proposal retry creates no second mutation/audit
+PASS new Free keeps the existing Review Center/bucket recovery entitlement
+PASS migration leaves the proven free bucket/reversal entitlement helper unchanged
+PASS 80 actual PostgreSQL Free/Pro assertions
