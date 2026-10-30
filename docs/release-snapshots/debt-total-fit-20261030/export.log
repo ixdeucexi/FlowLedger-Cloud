@@ -1,9 +1,9 @@
 React Compiler enabled
 Starting Metro Bundler
-Web node_modules/.pnpm/expo-router@6.0.24_17800d93b92d7f67939b0eaa9cfcf837/node_modules/expo-router/entry.js ▓▓▓▓▓▓▓▓▓▓▓▓░░░░ 77.8% (1038/1177)
-| (node:256053) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+Web node_modules/.pnpm/expo-router@6.0.24_17800d93b92d7f67939b0eaa9cfcf837/node_modules/expo-router/entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 89.4% (1487/1573)
+| (node:257288) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 | (Use `node --trace-warnings ...` to show where the warning was created)
-Web Bundled 2233ms node_modules/.pnpm/expo-router@6.0.24_17800d93b92d7f67939b0eaa9cfcf837/node_modules/expo-router/entry.js (1737 modules)
+Web Bundled 2115ms node_modules/.pnpm/expo-router@6.0.24_17800d93b92d7f67939b0eaa9cfcf837/node_modules/expo-router/entry.js (1737 modules)
 
 › Assets (27):
 ../../node_modules/.pnpm/@expo-google-fonts+inter@0.4.2/node_modules/@expo-google-fonts/inter/400Regular/Inter_400Regular.51b6ad87261f18b6433ec52871ddfabc.ttf (342 kB)
@@ -31,7 +31,7 @@ assets/images/startup_f_transparent.8776bedafc34522b9c1e6eccaa411b0b.png (289 kB
 › web bundles (7):
 _expo/static/js/web/DesktopChrome-6d6b67e2b7181a7fbcb29f2273a2b092.js (15.3 kB)
 _expo/static/js/web/DesktopDashboard-51acbaa71bbaaf210709edc9693aa6ab.js (74.8 kB)
-_expo/static/js/web/entry-2db402260143182c1205f6f1e916fbd1.js (5.1 MB)
+_expo/static/js/web/entry-2ef3e4bc362cccf6d32ae034f767ff45.js (5.1 MB)
 _expo/static/js/web/index-39266bd786aac14e72927bae3f5a5de6.js (12.5 kB)
 _expo/static/js/web/NotificationCenterModal-cd5ff0ae0a10d4692ead5371eae385aa.js (9.44 kB)
 _expo/static/js/web/ReportsInsightsView-65e1d969e8d8d5db3c1d666ba14926c1.js (35.8 kB)
