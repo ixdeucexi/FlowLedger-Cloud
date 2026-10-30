@@ -1245,6 +1245,7 @@ savings_goals: (<SurfaceCard
               </View>
             </View> : null}
             {goalTotals.target > 0 ? <ProgressBar percent={goalPercent} color={BRAND.green} height={7} /> : null}
+            {activeGoals.length > 0 && bucketPersonalization.unavailableReason ? <Text style={styles.goalMeta}>{bucketPersonalization.unavailableReason}</Text> : null}
             <View style={styles.goalList}>
               {activeGoals.length ? (
                 activeGoals.slice(0, 3).map((goal, index) => {
@@ -1261,7 +1262,7 @@ savings_goals: (<SurfaceCard
                       onPress={() => setGoalEditor(goal)}
                       style={({ pressed }) => [styles.goalRow, index > 0 && styles.rowDivider, { opacity: pressed ? 0.72 : 1 }]}
                     >
-                      <Pressable accessibilityRole="button" accessibilityLabel={`Personalize ${goal.name}`} onPress={event => { event.stopPropagation(); bucketPersonalization.open(goal.id); }}><BucketThumbnail goalId={goal.id} name={goal.name} size={29} /></Pressable>
+                      <Pressable accessibilityRole="button" accessibilityLabel={`Personalize ${goal.name}`} accessibilityHint={bucketPersonalization.unavailableReason ?? undefined} disabled={!bucketPersonalization.available} style={{ opacity: bucketPersonalization.available ? 1 : 0.5 }} onPress={event => { event.stopPropagation(); bucketPersonalization.open(goal.id); }}><BucketThumbnail goalId={goal.id} name={goal.name} size={29} /></Pressable>
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text style={styles.goalName} numberOfLines={1}>{goal.name}</Text>
                         <Text style={styles.goalMeta}>{bucket ? `${currency(bucket.planned)} planned · ${currency(bucket.spent)} spent` : goal.target_amount > 0 ? `${Math.round(percent)}% funded` : "No savings target set"}</Text>

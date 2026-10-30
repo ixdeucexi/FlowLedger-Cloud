@@ -22,7 +22,7 @@ const manual = { id: "manual", amount: -25, date: "2026-10-25", category: "Shopp
 function harness(component = "BucketDetailModal", overrides: Record<string, any> = {}) {
   const states: any[] = [], effects: Array<() => void> = [], cleanups: Array<() => void> = [], exported: any = {};
   let cursor = 0, dirty = false;
-  const personalization = { active: false, opened: [] as string[], open(id: string) { this.opened.push(id); this.active = true; dirty = true; } };
+  const personalization = { active: false, available: true, unavailableReason: null as string | null, opened: [] as string[], open(id: string) { this.opened.push(id); this.active = true; dirty = true; } };
   const budget: any = { activeHousehold: { householdId: "home", budgetId: "budget", role: "owner" }, canEditHousehold: true,
     goals: [{ ...bucket }], transactions: [{ ...purchase }, { ...bank }, { ...manual }, { ...bank, id: "unknown", note: "Unknown account", plaid_account_id: "unknown" }],
     transactionAccountIdentities: [], categories: ["Other", "Shopping", "Debt"], bills: [{ id: "debt", is_debt: true, balance: 100, name: "Card" }], accounts: [], settings: { safety_floor: 100, forecast_horizon_months: 6 },
@@ -77,6 +77,17 @@ test("viewers can personalize a bucket without opening a financial editor or lea
   assert.deepEqual(h.personalization.opened, ["bucket"]);
   assert.equal(flatten(h.render()).find(node => node.type === "Modal").props.visible, false);
   assert.equal(writes, 0);
+});
+
+test("bucket detail disables personalization with a visible reason while the plan scope is unavailable", () => {
+  const h = harness();
+  h.personalization.available = false;
+  h.personalization.unavailableReason = "Bucket personalization is unavailable while your budget loads.";
+  const button = h.button("Personalize Holiday bucket");
+  assert.equal(button.props.disabled, true);
+  assert.equal(button.props.accessibilityHint, h.personalization.unavailableReason);
+  assert.match(copy(h.render()), /Bucket personalization is unavailable while your budget loads/);
+  assert.deepEqual(h.personalization.opened, []);
 });
 
 test("bucket detail keeps purchase history readable and mutation controls scoped to editors", () => {

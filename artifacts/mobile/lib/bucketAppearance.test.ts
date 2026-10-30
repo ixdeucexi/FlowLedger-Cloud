@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { transpileModule, ModuleKind, ScriptTarget } from "typescript";
+import { transpileModule, ModuleKind, ScriptTarget, JsxEmit } from "typescript";
 import * as model from "./bucketAppearance";
 import { BucketAppearanceStore } from "./bucketAppearanceStore";
 
@@ -32,6 +32,7 @@ function source(file: string, dependencies: Record<string, unknown>): any {
         module: ModuleKind.CommonJS,
         target: ScriptTarget.ES2022,
         esModuleInterop: true,
+        jsx: JsxEmit.React,
       },
     },
   ).outputText;
@@ -42,6 +43,256 @@ function source(file: string, dependencies: Record<string, unknown>): any {
   });
   return exports;
 }
+test("personal bucket scopes are settled, user-isolated and never replace an incomplete household budget", () => {
+  const input = {
+    userId: "user-one",
+    household: null,
+    loading: false,
+    loadError: null,
+  };
+  const personal = model.resolveBucketAppearanceScope(input);
+  assert.deepEqual(personal, {
+    scope: {
+      userId: "user-one",
+      householdId: "personal-user-one",
+      budgetId: "personal",
+    },
+    unavailableReason: null,
+  });
+  const other = model.resolveBucketAppearanceScope({
+    ...input,
+    userId: "user-two",
+  });
+  assert.notEqual(
+    model.bucketAppearanceKey(personal.scope!),
+    model.bucketAppearanceKey(other.scope!),
+  );
+  for (const patch of [
+    { loading: true },
+    { loadError: "Failed" },
+    { userId: null },
+    { household: { householdId: "home", budgetId: null } },
+    { household: { householdId: null, budgetId: "budget" } },
+    { userId: "../invalid" },
+  ]) {
+    const result = model.resolveBucketAppearanceScope({ ...input, ...patch });
+    assert.equal(result.scope, null);
+    assert.ok(result.unavailableReason);
+  }
+  const household = { householdId: "home", budgetId: "budget" };
+  assert.deepEqual(
+    model.resolveBucketAppearanceScope({ ...input, household }).scope,
+    {
+      userId: "user-one",
+      ...household,
+    },
+  );
+  assert.equal(
+    model.resolveBucketAppearanceScope({ ...input, household, loading: true })
+      .scope,
+    null,
+  );
+});
+
+test("bucket appearance hook blocks loading scopes and stale picker callbacks even after a scope round trip", async () => {
+  const refs: any[] = [];
+  let cursor = 0,
+    pickerCalls = 0,
+    releases = 0;
+  const auth = {
+    user: { id: "user-one" } as { id: string } | null,
+    demoMode: false,
+  };
+  const budget: any = { activeHousehold: null, loading: true, loadError: null };
+  const pending = deferred<any>();
+  const writes: any[] = [],
+    loads: string[] = [];
+  const stores = new Map();
+  const api = source("hooks/useBucketAppearance.ts", {
+    react: {
+      useMemo: (fn: () => unknown) => fn(),
+      useCallback: (fn: unknown) => fn,
+      useRef: (initial: unknown) => (refs[cursor++] ??= { current: initial }),
+      useEffect: (fn: () => void) => {
+        fn();
+      },
+      useSyncExternalStore: (_sub: unknown, snapshot: () => unknown) =>
+        snapshot(),
+    },
+    "@/context/AuthContext": { useAuth: () => auth },
+    "@/context/BudgetContext": { useBudget: () => budget },
+    "@/lib/bucketAppearance": model,
+    "@/lib/bucketAppearanceRuntime": {
+      getBucketAppearanceStore: (value: model.BucketAppearanceScope) => {
+        const key = model.bucketAppearanceKey(value);
+        if (!stores.has(key))
+          stores.set(key, {
+            subscribe() {},
+            load() {
+              loads.push(key);
+              return Promise.resolve();
+            },
+            getSnapshot: () => ({
+              ready: true,
+              data: model.EMPTY_BUCKET_APPEARANCE,
+              loadError: null,
+            }),
+          });
+        return stores.get(key);
+      },
+      saveBucketLook: async (
+        value: unknown,
+        _goal: unknown,
+        _patch: unknown,
+        current: () => boolean,
+      ) => {
+        if (current()) writes.push(value);
+      },
+      saveBucketPhoto: async (
+        value: unknown,
+        _goal: unknown,
+        _asset: unknown,
+        current: () => boolean,
+      ) => {
+        if (current()) writes.push(value);
+      },
+    },
+    "@/lib/bucketPhotoStorage": {
+      chooseBucketPhoto: () => {
+        pickerCalls++;
+        return pending.promise;
+      },
+      releasePickedBucketPhoto: async () => {
+        releases++;
+      },
+      loadBucketPhoto() {},
+    },
+  });
+  const render = () => {
+    cursor = 0;
+    return api.useBucketAppearance("holiday");
+  };
+  let appearance = render();
+  assert.equal(appearance.enabled, false);
+  assert.equal(loads.length, 0);
+  await appearance.pickPhoto();
+  assert.equal(pickerCalls, 0);
+  await assert.rejects(appearance.update({ icon: "gift" }), /loading/);
+  budget.loading = false;
+  appearance = render();
+  assert.equal(appearance.enabled, true);
+  assert.deepEqual(appearance.scope, {
+    userId: "user-one",
+    householdId: "personal-user-one",
+    budgetId: "personal",
+  });
+  const oldUpdate = appearance.update;
+  const picking = appearance.pickPhoto();
+  budget.loading = true;
+  render();
+  budget.loading = false;
+  appearance = render();
+  await assert.rejects(oldUpdate({ icon: "sun" }), /account changed/);
+  pending.resolve({ uri: "blob:old-photo" });
+  await picking;
+  assert.equal(releases, 1);
+  assert.equal(writes.length, 0);
+  await appearance.update({ icon: "sun" });
+  auth.user = { id: "user-two" };
+  appearance = render();
+  await appearance.update({ icon: "gift" });
+  assert.deepEqual(
+    writes.map((value) => value.userId),
+    ["user-one", "user-two"],
+  );
+  assert.notEqual(writes[0].householdId, writes[1].householdId);
+  budget.activeHousehold = { householdId: "home", budgetId: null };
+  appearance = render();
+  assert.equal(appearance.enabled, false);
+  assert.match(appearance.unavailableReason, /budget loads/);
+});
+
+test("personalization host rejects unavailable, unknown and stale entry callbacks", () => {
+  const values: any[] = [];
+  let cursor = 0,
+    current = false;
+  const appearance: any = {
+    key: "scope",
+    enabled: false,
+    unavailableReason: "Loading…",
+    ready: false,
+    data: model.EMPTY_BUCKET_APPEARANCE,
+    current: () => current,
+  };
+  const react = {
+    createElement: (type: unknown, props: any, ...children: any[]) => ({
+      type,
+      props: { ...props, children },
+    }),
+    createContext: () => ({ Provider: "Provider" }),
+    useContext() {},
+    useCallback: (fn: unknown) => fn,
+    useEffect() {},
+    useRef: (initial: unknown) => (values[cursor++] ??= { current: initial }),
+    useState: (initial: unknown) => {
+      const index = cursor++;
+      if (!(index in values)) values[index] = initial;
+      return [
+        values[index],
+        (value: unknown) => {
+          values[index] = value;
+        },
+      ];
+    },
+  };
+  const api = source("context/BucketPersonalizationContext.tsx", {
+    react: { __esModule: true, default: react, ...react },
+    "@expo/vector-icons/Feather": "Feather",
+    "react-native": {
+      Animated: { Value: class {} },
+      StyleSheet: { create: (value: unknown) => value },
+      Pressable: "Pressable",
+      Text: "Text",
+      View: "View",
+    },
+    "@/components/BucketAppearanceModal": {
+      BucketAppearanceModal: "BucketAppearanceModal",
+    },
+    "@/context/BudgetContext": {
+      useBudget: () => ({
+        goals: [{ id: "holiday", name: "Holiday" }],
+        loading: false,
+        startupCoreReady: true,
+      }),
+    },
+    "@/hooks/useBucketAppearance": { useBucketAppearance: () => appearance },
+    "@/hooks/useColors": { useColors: () => ({}) },
+    "@/hooks/useReducedMotion": { useReducedMotion: () => true },
+    "@/lib/bucketAppearance": model,
+    "@/lib/bucketAppearanceRuntime": {},
+  });
+  const render = () => {
+    cursor = 0;
+    return api.BucketPersonalizationProvider({ children: null });
+  };
+  let value = render().props.value;
+  assert.equal(value.available, false);
+  assert.equal(value.unavailableReason, "Loading…");
+  value.open("holiday");
+  assert.equal(render().props.value.active, false);
+  appearance.enabled = current = true;
+  appearance.unavailableReason = null;
+  value = render().props.value;
+  value.open("missing");
+  assert.equal(render().props.value.active, false);
+  const staleOpen = value.open;
+  current = false;
+  staleOpen("holiday");
+  assert.equal(render().props.value.active, false);
+  current = true;
+  render().props.value.open("holiday");
+  assert.equal(render().props.value.active, true);
+});
 test("bucket appearance is closed, bounded, scoped and separate from financial fields", () => {
   const value = model.normalizeBucketAppearance({
     version: 1,

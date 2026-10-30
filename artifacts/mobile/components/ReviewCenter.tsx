@@ -976,6 +976,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
 
       {bucketsOnly || spendingBuckets.length || archivedBuckets.length ? (
         <View style={[styles.bucketManager, { backgroundColor: c.card, borderColor: c.border }]}>
+          {bucketPersonalization.unavailableReason ? <Text accessibilityLiveRegion="polite" style={[styles.optionDescription, { color: c.mutedForeground }]}>{bucketPersonalization.unavailableReason}</Text> : null}
           <View style={styles.bucketManagerHeader}>
             <View style={[styles.heroIcon, { backgroundColor: c.primary + "18" }]}><Feather name="shopping-bag" size={19} color={c.primary} /></View>
             <View style={styles.optionCopy}>
@@ -1021,7 +1022,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
                   </View>
                   <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Planned {money(summary.planned)} · Spent {money(summary.spent)} · {summary.closed ? `Released ${money(summary.released)}` : `${money(summary.remaining)} left`}</Text>
                 </Pressable>
-                <View style={styles.bucketActions}><Pressable accessibilityRole="button" accessibilityLabel={`Personalize ${goal.name} bucket`} disabled={saving} onPress={() => bucketPersonalization.open(goal.id)} style={[styles.bucketActionButton, { borderColor: c.border }]}><Feather name="image" size={13} color={c.primary} /><Text style={[styles.bucketActionText, { color: c.primary }]}>Personalize</Text></Pressable></View>
+                <View style={styles.bucketActions}><Pressable accessibilityRole="button" accessibilityLabel={`Personalize ${goal.name} bucket`} accessibilityHint={bucketPersonalization.unavailableReason ?? undefined} disabled={saving || !bucketPersonalization.available} onPress={() => bucketPersonalization.open(goal.id)} style={[styles.bucketActionButton, { borderColor: c.border, opacity: bucketPersonalization.available ? 1 : 0.5 }]}><Feather name="image" size={13} color={c.primary} /><Text style={[styles.bucketActionText, { color: c.primary }]}>Personalize</Text></Pressable></View>
                 {canEditHousehold ? <View style={styles.bucketActions}>
                   {!routed ? (
                     <Pressable
@@ -1091,7 +1092,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
                     <View style={styles.bucketNameRow}><BucketThumbnail goalId={goal.id} name={goal.name} size={30} /><Text numberOfLines={1} style={[styles.optionTitle, { color: c.foreground, flex: 1 }]}>{goal.name}</Text><Feather name="chevron-right" size={18} color={c.mutedForeground} /></View>
                     <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Completed bucket · history preserved</Text>
                   </Pressable>
-                  <View style={styles.bucketActions}><Pressable accessibilityRole="button" accessibilityLabel={`Personalize ${goal.name} bucket`} disabled={saving} onPress={() => bucketPersonalization.open(goal.id)} style={[styles.bucketActionButton, { borderColor: c.border }]}><Feather name="image" size={13} color={c.primary} /><Text style={[styles.bucketActionText, { color: c.primary }]}>Personalize</Text></Pressable></View>
+                  <View style={styles.bucketActions}><Pressable accessibilityRole="button" accessibilityLabel={`Personalize ${goal.name} bucket`} accessibilityHint={bucketPersonalization.unavailableReason ?? undefined} disabled={saving || !bucketPersonalization.available} onPress={() => bucketPersonalization.open(goal.id)} style={[styles.bucketActionButton, { borderColor: c.border, opacity: bucketPersonalization.available ? 1 : 0.5 }]}><Feather name="image" size={13} color={c.primary} /><Text style={[styles.bucketActionText, { color: c.primary }]}>Personalize</Text></Pressable></View>
                   {canEditHousehold ? <View style={styles.bucketActions}>
                     <Pressable
                       accessibilityRole="button"

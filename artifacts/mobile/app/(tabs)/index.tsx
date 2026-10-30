@@ -1262,6 +1262,7 @@ overview: (<View
                 <Feather name="plus" size={14} color="#f8fafc" />
               </Pressable>
             </View>
+            {currentGoals.length > 0 && bucketPersonalization.unavailableReason ? <AppText style={{ color: dashboardTheme.mutedText, fontSize: 12 }}>{bucketPersonalization.unavailableReason}</AppText> : null}
             {currentGoals.length > 0 ? (
               <ScrollView
                 style={[styles.referenceGoalsScroll, { maxHeight: goalsScrollViewportHeight }]}
@@ -1280,7 +1281,7 @@ overview: (<View
                       style={({ pressed }) => [styles.referenceGoalItem, { backgroundColor: dashboardTheme.goalSurface, borderColor: dashboardTheme.goalBorder, opacity: pressed ? 0.72 : 1 }]}
                     >
                       <View style={styles.referenceGoalTopRow}>
-                        <Pressable accessibilityRole="button" accessibilityLabel={`Personalize ${goal.name}`} onPress={event => { event.stopPropagation(); bucketPersonalization.open(goal.id); }}><BucketThumbnail goalId={goal.id} name={goal.name} size={28} /></Pressable>
+                        <Pressable accessibilityRole="button" accessibilityLabel={`Personalize ${goal.name}`} accessibilityHint={bucketPersonalization.unavailableReason ?? undefined} disabled={!bucketPersonalization.available} style={{ opacity: bucketPersonalization.available ? 1 : 0.5 }} onPress={event => { event.stopPropagation(); bucketPersonalization.open(goal.id); }}><BucketThumbnail goalId={goal.id} name={goal.name} size={28} /></Pressable>
                         <AppText style={[styles.referenceGoalName, { color: dashboardTheme.mutedText }]} numberOfLines={1}>{goal.name}</AppText>
                         <AppText numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.referenceGoalAmounts, { color: dashboardTheme.subtleText }]}>{bucket ? `${formatDashboardCurrency(bucket.remaining)} left` : `${formatDashboardCurrency(goal.current_amount)} / ${formatDashboardCurrency(goal.target_amount)}`}</AppText>
                       </View>

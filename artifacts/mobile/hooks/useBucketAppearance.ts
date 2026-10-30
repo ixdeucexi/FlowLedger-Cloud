@@ -11,6 +11,7 @@ import { useBudget } from "@/context/BudgetContext";
 import {
   bucketAppearanceKey,
   DEFAULT_BUCKET_LOOK,
+  resolveBucketAppearanceScope,
   type BucketLook,
 } from "@/lib/bucketAppearance";
 import {
@@ -26,25 +27,27 @@ import {
 
 export function useBucketAppearance(goalId: string) {
   const { user, demoMode } = useAuth();
-  const { activeHousehold } = useBudget();
+  const { activeHousehold, loading, loadError } = useBudget();
+  const resolution = resolveBucketAppearanceScope({
+    userId: user?.id ?? (demoMode ? "demo" : null),
+    household: activeHousehold,
+    loading,
+    loadError,
+  });
   const scope = useMemo(
-    () => ({
-      userId: user?.id ?? (demoMode ? "demo" : "unavailable"),
-      householdId: activeHousehold?.householdId ?? "unavailable",
-      budgetId: activeHousehold?.budgetId ?? "unavailable",
-    }),
+    () =>
+      resolution.scope ?? {
+        userId: "unavailable",
+        householdId: "unavailable",
+        budgetId: "unavailable",
+      },
     [
-      user?.id,
-      demoMode,
-      activeHousehold?.householdId,
-      activeHousehold?.budgetId,
+      resolution.scope?.userId,
+      resolution.scope?.householdId,
+      resolution.scope?.budgetId,
     ],
   );
-  const enabled = Boolean(
-    (user || demoMode) &&
-    activeHousehold?.householdId &&
-    activeHousehold?.budgetId,
-  );
+  const enabled = Boolean(resolution.scope);
   const key = bucketAppearanceKey(scope);
   const store = useMemo(() => getBucketAppearanceStore(scope), [key]);
   const snapshot = useSyncExternalStore(
@@ -52,9 +55,15 @@ export function useBucketAppearance(goalId: string) {
     store.getSnapshot,
     store.getSnapshot,
   );
-  const live = useRef({ key, enabled, mounted: true });
-  live.current.key = key;
-  live.current.enabled = enabled;
+  const live = useRef({ key, enabled, revision: 0, mounted: true });
+  if (live.current.key !== key || live.current.enabled !== enabled)
+    live.current = {
+      key,
+      enabled,
+      revision: live.current.revision + 1,
+      mounted: live.current.mounted,
+    };
+  const revision = live.current.revision;
   useEffect(() => {
     live.current.mounted = true;
     if (enabled) void store.load();
@@ -64,18 +73,28 @@ export function useBucketAppearance(goalId: string) {
   }, [store, enabled]);
   const current = useCallback(
     () =>
-      live.current.mounted && live.current.enabled && live.current.key === key,
-    [key],
+      live.current.mounted &&
+      live.current.enabled &&
+      live.current.key === key &&
+      live.current.revision === revision,
+    [key, revision],
   );
   const look = enabled
     ? (snapshot.data.looks[goalId] ?? DEFAULT_BUCKET_LOOK)
     : DEFAULT_BUCKET_LOOK;
   const update = useCallback(
-    (patch: Partial<BucketLook>) =>
-      saveBucketLook(scope, goalId, patch, current),
+    async (patch: Partial<BucketLook>) => {
+      if (!current())
+        throw new Error(
+          resolution.unavailableReason ??
+            "Your bucket account changed. Open personalization again.",
+        );
+      await saveBucketLook(scope, goalId, patch, current);
+    },
     [key, goalId, current],
   );
   const pickPhoto = useCallback(async () => {
+    if (!current()) return;
     const asset = await chooseBucketPhoto();
     if (!asset) return;
     try {
@@ -89,11 +108,12 @@ export function useBucketAppearance(goalId: string) {
     scope,
     key,
     enabled,
+    unavailableReason: resolution.unavailableReason,
     ready: enabled && snapshot.ready,
     look,
     update,
     pickPhoto,
-    retryLoad: () => store.load(true),
+    retryLoad: () => (enabled ? store.load(true) : Promise.resolve()),
     current,
   };
 }

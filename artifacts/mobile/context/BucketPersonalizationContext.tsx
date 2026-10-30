@@ -20,7 +20,12 @@ import {
 } from "@/lib/bucketAppearance";
 import { getBucketAppearanceStore } from "@/lib/bucketAppearanceRuntime";
 
-const Context = createContext({ active: false, open: (_goalId: string) => {} });
+const Context = createContext({
+  active: false,
+  available: false,
+  unavailableReason: "Bucket personalization is loading…" as string | null,
+  open: (_goalId: string) => {},
+});
 export const useBucketPersonalization = () => useContext(Context);
 /** A single host keeps personalization separate from financial editors. */
 export function BucketPersonalizationProvider({
@@ -54,10 +59,10 @@ export function BucketPersonalizationProvider({
       : undefined;
   const open = useCallback(
     (goalId: string) => {
-      if (appearance.enabled && goals.some((g) => g.id === goalId))
+      if (appearance.current() && goals.some((g) => g.id === goalId))
         setSelected({ key: appearance.key, goalId });
     },
-    [appearance.enabled, appearance.key, goals],
+    [appearance.current, appearance.key, goals],
   );
   useEffect(() => {
     setSelected(null);
@@ -162,7 +167,14 @@ export function BucketPersonalizationProvider({
     return () => clearTimeout(timer);
   }, [moment?.key, reduceMotion, dismiss, fade]);
   return (
-    <Context.Provider value={{ active: Boolean(goal), open }}>
+    <Context.Provider
+      value={{
+        active: Boolean(goal),
+        available: appearance.enabled,
+        unavailableReason: appearance.unavailableReason,
+        open,
+      }}
+    >
       {children}
       {goal ? (
         <BucketAppearanceModal

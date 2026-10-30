@@ -54,6 +54,54 @@ export const MAX_BUCKET_PHOTO_BYTES = 12 * 1024 * 1024;
 export function validBucketScopePart(value: string) {
   return /^[a-zA-Z0-9_-]{1,96}$/.test(value);
 }
+/** Legacy plans are user-owned. Never infer that fallback during a scope load. */
+export function resolveBucketAppearanceScope(input: {
+  userId: string | null;
+  household: { householdId?: string | null; budgetId?: string | null } | null;
+  loading: boolean;
+  loadError: unknown;
+}): {
+  scope: BucketAppearanceScope | null;
+  unavailableReason: string | null;
+} {
+  if (!input.userId)
+    return {
+      scope: null,
+      unavailableReason: "Sign in to personalize buckets.",
+    };
+  if (input.loading)
+    return {
+      scope: null,
+      unavailableReason: "Bucket personalization is loading…",
+    };
+  if (input.loadError)
+    return {
+      scope: null,
+      unavailableReason:
+        "Bucket personalization is unavailable until your plan loads.",
+    };
+  if (
+    input.household &&
+    (!input.household.householdId || !input.household.budgetId)
+  )
+    return {
+      scope: null,
+      unavailableReason:
+        "Bucket personalization is unavailable while your budget loads.",
+    };
+  const scope = {
+    userId: input.userId,
+    householdId: input.household?.householdId ?? `personal-${input.userId}`,
+    budgetId: input.household?.budgetId ?? "personal",
+  };
+  if (!Object.values(scope).every(validBucketScopePart))
+    return {
+      scope: null,
+      unavailableReason:
+        "Bucket personalization is unavailable for this account.",
+    };
+  return { scope, unavailableReason: null };
+}
 export function bucketAppearanceKey(scope: BucketAppearanceScope) {
   if (
     ![scope.userId, scope.householdId, scope.budgetId].every(
