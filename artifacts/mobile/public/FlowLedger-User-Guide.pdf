@@ -132,7 +132,7 @@ endobj
 endobj
 16 0 obj
 <<
-/Author (FlowLedger) /CreationDate (D:20261030122616+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:264bd84bce7b6bb3bb0df391f8113af32b0373adfe6c9d0821b949cb642da415) /ModDate (D:20261030122616+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+/Author (FlowLedger) /CreationDate (D:20261030144109+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:0cd66732bf9bf110de9bb8ce6203d14e9718a3f4ea18b0e50051ac391704a8f1) /ModDate (D:20261030144109+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
   /Subject (Current Dashboard, Activity, Bills, Forecast, payoff, Flo, and Settings guidance) /Title (FlowLedger User Guide) /Trapped /False
 >>
 endobj
@@ -1205,7 +1205,7 @@ endstream
 endobj
 23 0 obj
 <<
-/Length 6711
+/Length 6800
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -1282,15 +1282,15 @@ BT 1 0 0 1 56 566 Tm (debts going out.) Tj T* ET
 .160784 .207843 .321569 RG
 .8 w
 n
-58 496 m
-283 496 l
-291.8448 496 299 503.1552 299 512 c
+58 490 m
+283 490 l
+291.8448 490 299 497.1552 299 506 c
 299 529 l
 299 537.8448 291.8448 545 283 545 c
 58 545 l
 49.1552 545 42 537.8448 42 529 c
-42 512 l
-42 503.1552 49.1552 496 58 496 c
+42 506 l
+42 497.1552 49.1552 490 58 490 c
 h
 B*
 .360784 .65098 1 rg
@@ -1306,67 +1306,68 @@ BT /F2 9.5 Tf 11.4 TL ET
 BT 1 0 0 1 67 530 Tm (Open the day) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 515 Tm (Tap a date to see every item behind its closing balance.) Tj T* ET
+BT 1 0 0 1 56 515 Tm (Large calendar values use K/M/B to fit. Tap a date for the) Tj T* ET
+BT 1 0 0 1 56 504 Tm (full amount and every item behind its closing balance.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-58 434 m
-283 434 l
-291.8448 434 299 441.1552 299 450 c
-299 473 l
-299 481.8448 291.8448 489 283 489 c
-58 489 l
-49.1552 489 42 481.8448 42 473 c
-42 450 l
-42 441.1552 49.1552 434 58 434 c
+58 428 m
+283 428 l
+291.8448 428 299 435.1552 299 444 c
+299 467 l
+299 475.8448 291.8448 483 283 483 c
+58 483 l
+49.1552 483 42 475.8448 42 467 c
+42 444 l
+42 435.1552 49.1552 428 58 428 c
 h
 B*
 .360784 .65098 1 rg
 n
-60 472 m
-60 474.2091 58.20914 476 56 476 c
-53.79086 476 52 474.2091 52 472 c
-52 469.7909 53.79086 468 56 468 c
-58.20914 468 60 469.7909 60 472 c
+60 466 m
+60 468.2091 58.20914 470 56 470 c
+53.79086 470 52 468.2091 52 466 c
+52 463.7909 53.79086 462 56 462 c
+58.20914 462 60 463.7909 60 466 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 67 474 Tm (Verify status) Tj T* ET
+BT 1 0 0 1 67 468 Tm (Verify status) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 459 Tm (When bank sync is available, matched pending payments) Tj T* ET
-BT 1 0 0 1 56 448 Tm (should appear once with their current status.) Tj T* ET
+BT 1 0 0 1 56 453 Tm (When bank sync is available, matched pending payments) Tj T* ET
+BT 1 0 0 1 56 442 Tm (should appear once with their current status.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-58 372 m
-283 372 l
-291.8448 372 299 379.1552 299 388 c
-299 411 l
-299 419.8448 291.8448 427 283 427 c
-58 427 l
-49.1552 427 42 419.8448 42 411 c
-42 388 l
-42 379.1552 49.1552 372 58 372 c
+58 366 m
+283 366 l
+291.8448 366 299 373.1552 299 382 c
+299 405 l
+299 413.8448 291.8448 421 283 421 c
+58 421 l
+49.1552 421 42 413.8448 42 405 c
+42 382 l
+42 373.1552 49.1552 366 58 366 c
 h
 B*
 .360784 .65098 1 rg
 n
-60 410 m
-60 412.2091 58.20914 414 56 414 c
-53.79086 414 52 412.2091 52 410 c
-52 407.7909 53.79086 406 56 406 c
-58.20914 406 60 407.7909 60 410 c
+60 404 m
+60 406.2091 58.20914 408 56 408 c
+53.79086 408 52 406.2091 52 404 c
+52 401.7909 53.79086 400 56 400 c
+58.20914 400 60 401.7909 60 404 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 67 412 Tm (Sync is not cash activity) Tj T* ET
+BT 1 0 0 1 67 406 Tm (Sync is not cash activity) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 397 Tm (When bank sync is available, a refresh updates data but is) Tj T* ET
-BT 1 0 0 1 56 386 Tm (not itself a calendar cash event.) Tj T* ET
+BT 1 0 0 1 56 391 Tm (When bank sync is available, a refresh updates data but is) Tj T* ET
+BT 1 0 0 1 56 380 Tm (not itself a calendar cash event.) Tj T* ET
 .360784 .65098 1 rg
 BT /F2 9 Tf 10.8 TL ET
 BT 1 0 0 1 313 625 Tm (TRY A WHAT-IF) Tj T* ET
@@ -2987,15 +2988,15 @@ xref
 0000017693 00000 n 
 0000022678 00000 n 
 0000028928 00000 n 
-0000035691 00000 n 
-0000042793 00000 n 
-0000049425 00000 n 
-0000057541 00000 n 
-0000063001 00000 n 
+0000035780 00000 n 
+0000042882 00000 n 
+0000049514 00000 n 
+0000057630 00000 n 
+0000063090 00000 n 
 trailer
 <<
 /ID 
-[<6489ceaaefd8789c1c0343ebb9741d90><6489ceaaefd8789c1c0343ebb9741d90>]
+[<92a43f247d88fa314b0a0fcc4895b92c><92a43f247d88fa314b0a0fcc4895b92c>]
 % ReportLab generated PDF document -- digest (opensource)
 
 /Info 16 0 R
@@ -3003,5 +3004,5 @@ trailer
 /Size 29
 >>
 startxref
-72453
+72542
 %%EOF
