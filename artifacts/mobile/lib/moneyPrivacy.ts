@@ -12,6 +12,22 @@ const currency = new RegExp(
   "giu",
 );
 
+/** Display runs only: preserve the source text while identifying complete currency tokens. */
+export function moneyTextSegments(text: string): { kind: "text" | "money"; text: string }[] {
+  const segments: { kind: "text" | "money"; text: string }[] = [];
+  let cursor = 0;
+  for (const match of text.matchAll(new RegExp(currency.source, currency.flags))) {
+    const leadingWhitespace = match[0].match(/^\s*/u)?.[0].length ?? 0;
+    const start = match.index + leadingWhitespace;
+    const end = match.index + match[0].length;
+    if (start > cursor) segments.push({ kind: "text", text: text.slice(cursor, start) });
+    segments.push({ kind: "money", text: text.slice(start, end) });
+    cursor = end;
+  }
+  if (cursor < text.length) segments.push({ kind: "text", text: text.slice(cursor) });
+  return segments;
+}
+
 export function maskMoneyText(text: string, hidden: boolean): string {
   if (!hidden || !text) return text;
   // Keep whitespace outside the currency token so words/lines do not run together.

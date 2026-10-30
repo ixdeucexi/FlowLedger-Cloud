@@ -1,8 +1,29 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import React from "react";
-import { canCommitMoneyPrivacy, HIDDEN_MONEY, maskMoneyText, moneyPrivacyAccessibility, moneyPrivacyPreference, moneyPrivacyScope, privateAlertText, readSettledMoneyPrivacy, moneyPrivacySearchSensitive, moneyPrivacyHouseholdScope } from "./moneyPrivacy";
+import { canCommitMoneyPrivacy, HIDDEN_MONEY, maskMoneyText, moneyTextSegments, moneyPrivacyAccessibility, moneyPrivacyPreference, moneyPrivacyScope, privateAlertText, readSettledMoneyPrivacy, moneyPrivacySearchSensitive, moneyPrivacyHouseholdScope } from "./moneyPrivacy";
 import { privateTextChildren } from "./moneyPrivacyChildren";
+
+test("display currency runs preserve signs, whitespace, compact amounts and ordinary dates exactly", () => {
+  const text = "Checking −$263,682.34.\n  Income +$4.2k; reserve USD 1234.56; debt $12M and $8B. Due 2026-10-30 at 12.5% APR.";
+  const segments = moneyTextSegments(text);
+  assert.equal(segments.map(segment => segment.text).join(""), text);
+  assert.deepEqual(segments.filter(segment => segment.kind === "money").map(segment => segment.text), ["−$263,682.34", "+$4.2k", "USD 1234.56", "$12M", "$8B"]);
+  assert.ok(segments.filter(segment => segment.kind === "text").some(segment => segment.text.includes("2026-10-30 at 12.5% APR")));
+  assert.equal(moneyTextSegments("").map(segment => segment.text).join(""), "");
+});
+
+test("currency run scanning and Privacy Mode remain independent across repeated calls", () => {
+  const text = "Before $12.99, 2026-10-30; after −$4.20.\n€ 1 234.50 stays recorded.";
+  for (let index = 0; index < 3; index++) {
+    const segments = moneyTextSegments(text);
+    assert.equal(segments.map(segment => segment.text).join(""), text);
+    assert.deepEqual(segments.filter(segment => segment.kind === "money").map(segment => segment.text), ["$12.99", "−$4.20", "€ 1 234.50"]);
+    const rich = segments.map((segment, key) => segment.kind === "money" ? React.createElement("span", { key }, segment.text) : segment.text);
+    assert.equal(privateTextChildren(rich, true), maskMoneyText(text, true));
+    assert.equal(maskMoneyText(text, false), text);
+  }
+});
 
 test("private display masks signed, compact, scientific and ISO currency without changing dates, counts or APR", () => {
   const values = ["$1,234.56", "−$17.20", "+$4.2k", "$1e+24", "USD 1234.56", "1234.56 USD", "£920.50", "€ 1 234.50", "$-12.00", "$12M", "AUD12.40"];

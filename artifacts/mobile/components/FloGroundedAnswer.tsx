@@ -1,10 +1,14 @@
 import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import React from "react";
-import { StyleSheet } from "react-native";
+import { Platform, StyleSheet, type TextStyle } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
 import type { FloEvidenceRef, FloReviewProposal } from "@/lib/floExperience";
+import { moneyTextSegments } from "@/lib/moneyPrivacy";
+
+// Keep the sign with its amount while preserving the answer's original spacing.
+const atomicMoneyStyle: TextStyle & { whiteSpace: "pre" } = { whiteSpace: "pre" };
 
 type Props = {
   text: string;
@@ -26,7 +30,7 @@ export function FloGroundedAnswer({ text, followUps = [], proposal, proposalConf
 
   return (
     <View>
-      <Text style={[styles.answer, { color: c.foreground }]}>{text}</Text>
+      <Text style={[styles.answer, { color: c.foreground }]}>{moneyTextSegments(text).map((segment, index) => segment.kind === "money" ? <Text key={index} style={Platform.OS === "web" ? atomicMoneyStyle : undefined}>{segment.text}</Text> : segment.text)}</Text>
       {proposal?.kind === "recurring_bill_change" ? (
         <View style={[styles.proposal, { backgroundColor: c.primary + "0D", borderColor: proposalConfirmed ? c.success : c.primary + "45" }]}>
           <Text style={[styles.proposalEyebrow, { color: proposalConfirmed ? c.success : c.primary }]}>{proposalConfirmed ? "CHANGE CONFIRMED" : "REVIEW REQUIRED"}</Text>
