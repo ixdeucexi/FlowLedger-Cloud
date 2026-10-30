@@ -9,7 +9,7 @@ import Feather from "@expo/vector-icons/Feather";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Image, Keyboard, Linking, Modal, PanResponder, Platform, ScrollView, StyleSheet, useWindowDimensions } from "react-native";
+import { Animated, Image, Keyboard, Linking, Modal, PanResponder, Platform, ScrollView, StyleSheet, useWindowDimensions, type StyleProp, type TextStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from "react-native-svg";
 
@@ -153,8 +153,27 @@ function formatDashboardCurrency(value: number | null): string {
   });
 }
 
-function FlowScoreGauge({ score, theme }: { score: number; theme: DashboardTheme }) {
-  const size = 112;
+function DashboardFittedAmount({ value, maxFontSize, style }: { value: string; maxFontSize: number; style: StyleProp<TextStyle> }) {
+  const [width, setWidth] = useState(0);
+  // The bundled Inter digits have similar advances. Reserve extra room so web
+  // can fit the full currency token, where native font fitting is unavailable.
+  const textUnits = Array.from(value).reduce((total, character) => total + (character === "," || character === "." ? 0.36 : 0.68), 0);
+  const fontSize = width > 0
+    ? Math.min(maxFontSize, Math.max(8, Math.floor((width + Math.max(0, value.length - 1)) / textUnits)))
+    : maxFontSize;
+
+  return <AppText
+    tone="number"
+    onLayout={event => {
+      const nextWidth = Math.floor(event.nativeEvent.layout.width);
+      setWidth(current => current === nextWidth ? current : nextWidth);
+    }}
+    {...(Platform.OS === "web" ? {} : { numberOfLines: 1, adjustsFontSizeToFit: true, minimumFontScale: 0.2 })}
+    style={[style, { width: "100%", fontSize, lineHeight: Math.ceil(maxFontSize * 1.12) }]}
+  >{value}</AppText>;
+}
+
+function FlowScoreGauge({ score, theme, size = 112 }: { score: number; theme: DashboardTheme; size?: number }) {
   const stroke = 8;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -162,7 +181,7 @@ function FlowScoreGauge({ score, theme }: { score: number; theme: DashboardTheme
   const dash = (clamped / 100) * circumference;
 
   return (
-    <View style={styles.referenceGaugeWrap}>
+    <View style={[styles.referenceGaugeWrap, { width: size, height: size }]}>
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={styles.referenceGaugeSvg}>
         <Defs>
           <SvgLinearGradient id="flowScoreGradient" x1="0" y1="0" x2="1" y2="1">
@@ -1124,10 +1143,10 @@ overview: (<View
                   <AppText style={[styles.referenceFlipButtonText, { color: dashboardTheme.purpleText }]}>Savings</AppText>
                 </Pressable>
               </View>
-              <View style={[styles.referenceHeroPrimaryRow, !isCommandWide && styles.referenceHeroPrimaryRowCompact]}>
+              <View style={styles.referenceHeroPrimaryRow}>
                 <View style={styles.referenceBalanceAmount}>
-                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}><AppText tone="label" style={[styles.referenceHeroLabel, { color: dashboardTheme.mutedText }]}>Checking balance</AppText><MoneyPrivacyToggle /></View>
-                  <AppText tone="number"    style={[styles.referenceHeroAmount, viewportWidth < 600 && formatDashboardCurrency(dashboardCheckingBalance).length > 10 && styles.referenceHeroAmountCompact, { color: dashboardTheme.amount, textShadowColor: "transparent" }]}>{formatDashboardCurrency(dashboardCheckingBalance)}</AppText>
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}><AppText tone="label" style={[styles.referenceHeroLabel, { flex: 1, minWidth: 0, color: dashboardTheme.mutedText }]}>Checking balance</AppText><MoneyPrivacyToggle /></View>
+                  <DashboardFittedAmount value={formatDashboardCurrency(dashboardCheckingBalance)} maxFontSize={42} style={[styles.referenceHeroAmount, { color: dashboardTheme.amount, textShadowColor: "transparent" }]} />
                   {pendingCheckingSummary && pendingCheckingSummary.pendingCount > 0 ? (
                     <Pressable
                       accessibilityRole="button"
@@ -1161,9 +1180,9 @@ overview: (<View
                   accessibilityRole="button"
                   accessibilityLabel={`View Flow Score details. ${algorithmSuite.flowScore.score}, ${algorithmSuite.flowScore.label}.`}
                   onPress={() => setFlowScoreVisible(true)}
-                  style={({ pressed }) => [styles.referenceScorePanel, { opacity: pressed ? 0.86 : 1 }]}
+                  style={({ pressed }) => [styles.referenceScorePanel, viewportWidth < 360 && { width: 88 }, { opacity: pressed ? 0.86 : 1 }]}
                 >
-                  <FlowScoreGauge score={algorithmSuite.flowScore.score} theme={dashboardTheme} />
+                  <FlowScoreGauge score={algorithmSuite.flowScore.score} theme={dashboardTheme} size={viewportWidth < 360 ? 88 : 112} />
                   <AppText tone="title" style={[styles.referenceScoreStatus, { color: dashboardTheme.scoreStatus }]}>{algorithmSuite.flowScore.label}</AppText>
                 </Pressable>
               </View>
@@ -1312,7 +1331,7 @@ snapshot: (<View style={[styles.dashboardSnapshotCard, { backgroundColor: c.card
             <Feather name="file-text" size={18} color={c.primary} />
           </View>
           <AppText style={[styles.dashboardSnapshotLabel, { color: c.mutedForeground }]}>Bills left</AppText>
-          <AppText tone="number"    style={[styles.dashboardSnapshotValue, { color: c.foreground }]}>{formatDashboardCurrency(dashboardBillsLeft)}</AppText>
+          <DashboardFittedAmount value={formatDashboardCurrency(dashboardBillsLeft)} maxFontSize={18} style={[styles.dashboardSnapshotValue, { color: c.foreground }]} />
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -1324,7 +1343,7 @@ snapshot: (<View style={[styles.dashboardSnapshotCard, { backgroundColor: c.card
             <Feather name="shield" size={18} color={c.success} />
           </View>
           <AppText style={[styles.dashboardSnapshotLabel, { color: c.mutedForeground }]}>Safe to spend</AppText>
-          <AppText tone="number"    style={[styles.dashboardSnapshotValue, { color: c.success }]}>{formatDashboardCurrency(dashboardSafeToSpend)}</AppText>
+          <DashboardFittedAmount value={formatDashboardCurrency(dashboardSafeToSpend)} maxFontSize={18} style={[styles.dashboardSnapshotValue, { color: c.success }]} />
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -2190,9 +2209,8 @@ const styles = StyleSheet.create({
   referenceHeroMoneyPanelWide: { flex: 1, width: "auto" },
   referenceMoneyHeader: { flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", gap: 10 },
   referenceHeroPrimaryRow: { flexDirection: "row", alignItems: "center", gap: 14, marginTop: 12 },
-  referenceHeroPrimaryRowCompact: { flexDirection: "column", alignItems: "stretch" },
   referenceHeroAmountCompact: { fontSize: 26, lineHeight: 34, letterSpacing: -0.8 },
-  referenceBalanceAmount: { flex: 1, minWidth: 0, width: "100%" },
+  referenceBalanceAmount: { flex: 1, minWidth: 0 },
   pendingBalanceStrip: { flexWrap: "wrap", alignSelf: "flex-start", maxWidth: "100%", minHeight: 27, borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, marginTop: 3, flexDirection: "row", alignItems: "center", gap: 5 },
   pendingBalancePrimary: { fontSize: 10, fontFamily: "Inter_800ExtraBold" },
   pendingBalanceDot: { width: 3, height: 3, borderRadius: 2 },
@@ -2235,7 +2253,7 @@ const styles = StyleSheet.create({
   referenceHeroLabel: { color: "#cbd5e1", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.4, textTransform: "uppercase" },
   referenceHeroAmount: { color: "#ffffff", fontSize: 42, lineHeight: 46, fontFamily: "Inter_800ExtraBold", letterSpacing: -2.4, textShadowColor: "transparent", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 0 },
   referenceSafeThrough: { fontSize: 11, fontFamily: "Inter_700Bold", marginTop: 7 },
-  referenceScorePanel: { width: 112, alignSelf: "center", alignItems: "center", justifyContent: "center", paddingVertical: 1 },
+  referenceScorePanel: { width: 112, flexShrink: 0, alignSelf: "center", alignItems: "center", justifyContent: "center", paddingVertical: 1 },
   referenceGaugeWrap: { width: 98, height: 98, alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
   referenceGaugeSvg: { backgroundColor: "transparent" },
   referenceGaugeCenter: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
@@ -2243,8 +2261,8 @@ const styles = StyleSheet.create({
   referenceGaugeLabel: { color: "#cbd5e1", fontSize: 9, fontFamily: "Inter_700Bold" },
   referenceScoreStatus: { color: "#4ade80", fontSize: 12, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
   referenceScoreUnderline: { width: 64, height: 3, borderRadius: 3, backgroundColor: "#22c55e", marginTop: 4, marginBottom: 4 },
-  dashboardSnapshotCard: { minHeight: 134, flexDirection: "row", flexWrap: "wrap", borderRadius: 24, borderWidth: 1, overflow: "hidden", marginBottom: 12 },
-  dashboardSnapshotItem: { flex: 1, minWidth: 180, paddingVertical: 15, paddingHorizontal: 9, alignItems: "center", justifyContent: "center" },
+  dashboardSnapshotCard: { minHeight: 134, flexDirection: "row", borderRadius: 24, borderWidth: 1, overflow: "hidden", marginBottom: 12 },
+  dashboardSnapshotItem: { flex: 1, minWidth: 0, paddingVertical: 15, paddingHorizontal: 6, alignItems: "center", justifyContent: "center" },
   dashboardSnapshotItemBorder: { borderLeftWidth: 1 },
   dashboardSnapshotIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center", marginBottom: 7 },
   dashboardSnapshotLabel: { fontSize: 10, lineHeight: 13, fontFamily: "Inter_700Bold", textAlign: "center" },
