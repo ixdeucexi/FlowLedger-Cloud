@@ -299,10 +299,14 @@ export function observeBucketMilestones(
     confirmed: boolean;
   },
 ) {
-  if (!state.ready || state.failed)
-    return { previous: null, events: [] as BucketMilestone[] };
-  if (state.saving) return { previous, events: [] as BucketMilestone[] };
-  const before = previous?.key === key ? previous.goals : null;
+  if (!state.ready) return { previous: null, events: [] as BucketMilestone[] };
+  const scopedPrevious = previous?.key === key ? previous : null;
+  // A failed write can be retried while the global banner still says "failed".
+  // Keep the pre-save baseline until that retry is confirmed, without observing
+  // optimistic values or letting another household's baseline follow the retry.
+  if (state.saving || state.failed)
+    return { previous: scopedPrevious, events: [] as BucketMilestone[] };
+  const before = scopedPrevious?.goals ?? null;
   return {
     previous: { key, goals: goals.map((goal) => ({ ...goal })) },
     events: state.confirmed ? newBucketMilestones(before, goals, data) : [],

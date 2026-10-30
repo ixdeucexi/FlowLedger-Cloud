@@ -7,6 +7,7 @@ import Feather from "@expo/vector-icons/Feather";
 import React, { useEffect, useRef, useState } from "react";
 import { Modal, ScrollView, StyleSheet, Switch } from "react-native";
 import { useBucketAppearance } from "@/hooks/useBucketAppearance";
+import { useMoneyPrivacy } from "@/context/MoneyPrivacyContext";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
@@ -34,6 +35,7 @@ export function BucketAppearanceModal({
   const c = useColors(),
     desktop = useDesktopExperience(),
     appearance = useBucketAppearance(goalId);
+  const { hidden } = useMoneyPrivacy();
   const [error, setError] = useState<string | null>(null),
     [working, setWorking] = useState(false);
   const busy = working || appearance.saving,
@@ -285,6 +287,11 @@ export function BucketAppearanceModal({
                 </Pressable>
               ) : null}
             </View>
+            {hidden ? (
+              <Text style={[styles.copy, { color: c.mutedForeground }]}>
+                Photos are hidden while Privacy Mode is on.
+              </Text>
+            ) : null}
             <Text style={[styles.copy, { color: c.mutedForeground }]}>
               JPG, PNG or WebP · up to 12 MB. Photos stay on this device and
               aren’t uploaded.

@@ -6,6 +6,7 @@ import path from "node:path";
 import { transpileModule, ModuleKind, ScriptTarget, JsxEmit } from "typescript";
 import * as model from "./bucketAppearance";
 import { BucketAppearanceStore } from "./bucketAppearanceStore";
+import { runSingleFlight } from "./financialMutationRecovery";
 
 const scope = {
   userId: "user-one",
@@ -217,6 +218,7 @@ test("bucket appearance hook blocks loading scopes and stale picker callbacks ev
 
 test("personalization host rejects unavailable, unknown and stale entry callbacks", () => {
   const values: any[] = [];
+  const backHandlers: Array<{ active: boolean; dismiss: () => void }> = [];
   let cursor = 0,
     current = false;
   const appearance: any = {
@@ -243,7 +245,8 @@ test("personalization host rejects unavailable, unknown and stale entry callback
       return [
         values[index],
         (value: unknown) => {
-          values[index] = value;
+          values[index] =
+            typeof value === "function" ? value(values[index]) : value;
         },
       ];
     },
@@ -252,7 +255,8 @@ test("personalization host rejects unavailable, unknown and stale entry callback
     react: { __esModule: true, default: react, ...react },
     "@expo/vector-icons/Feather": "Feather",
     "react-native": {
-      Animated: { Value: class {} },
+      Animated: { Value: class {}, View: "AnimatedView" },
+      Modal: "Modal",
       StyleSheet: { create: (value: unknown) => value },
       Pressable: "Pressable",
       Text: "Text",
@@ -271,6 +275,10 @@ test("personalization host rejects unavailable, unknown and stale entry callback
     "@/hooks/useBucketAppearance": { useBucketAppearance: () => appearance },
     "@/hooks/useColors": { useColors: () => ({}) },
     "@/hooks/useReducedMotion": { useReducedMotion: () => true },
+    "@/hooks/useBackDismiss": {
+      useBackDismiss: (active: boolean, dismiss: () => void) =>
+        backHandlers.push({ active, dismiss }),
+    },
     "@/lib/bucketAppearance": model,
     "@/lib/bucketAppearanceRuntime": {},
   });
@@ -295,6 +303,32 @@ test("personalization host rejects unavailable, unknown and stale entry callback
   current = true;
   render().props.value.open("holiday");
   assert.equal(render().props.value.active, true);
+  // A real Modal owns the moment above financial portals; the context suspends
+  // bucket details while it is visible, and Back dismisses only that moment.
+  values[0] = null;
+  values[1] = {
+    key: "scope",
+    values: [
+      {
+        key: "closed:holiday",
+        goalId: "holiday",
+        label: "Bucket complete",
+        name: "Holiday",
+      },
+    ],
+  };
+  const tree = render();
+  assert.equal(tree.props.value.active, true);
+  const modal = tree.props.children
+    .flat()
+    .find((node: any) => node?.type === "Modal");
+  assert.ok(modal);
+  assert.equal(modal.props.visible, true);
+  assert.equal(modal.props.transparent, true);
+  assert.equal(modal.props.animationType, "none");
+  assert.equal(backHandlers.at(-1)?.active, true);
+  backHandlers.at(-1)!.dismiss();
+  assert.equal(render().props.value.active, false);
 });
 test("bucket thumbnails and covers suppress personal photos in Privacy Mode", () => {
   let hidden = true;
@@ -611,7 +645,7 @@ test("milestones only celebrate real transitions, never spent budgets or initial
     null,
   );
 });
-test("milestone observation waits for confirmed saves, suppresses hydration and clears failed/scope baselines", () => {
+test("milestone observation waits for confirmed saves, suppresses hydration and retains only same-scope failed baselines", () => {
   const below = {
       id: "rainy",
       name: "Rainy",
@@ -664,6 +698,23 @@ test("milestone observation waits for confirmed saves, suppresses hydration and 
       ...idle,
       failed: true,
     }).previous,
+    initial.previous,
+  );
+  assert.equal(
+    model.observeBucketMilestones(
+      initial.previous,
+      "other-scope",
+      [funded],
+      data,
+      { ...idle, failed: true },
+    ).previous,
+    null,
+  );
+  assert.equal(
+    model.observeBucketMilestones(initial.previous, "one", [funded], data, {
+      ...idle,
+      ready: false,
+    }).previous,
     null,
   );
   assert.deepEqual(
@@ -676,6 +727,267 @@ test("milestone observation waits for confirmed saves, suppresses hydration and 
     ).events,
     [],
   );
+});
+
+/** Execute the app's actual lifecycle functions rather than mocking save status. */
+function milestoneSaveLifecycle() {
+  let status = "idle",
+    error: string | null = null;
+  const bindings = {
+    useCallback: (fn: unknown) => fn,
+    saveOperationSequenceRef: { current: 0 },
+    activeSaveOperationsRef: { current: new Set<number>() },
+    saveGenerationByOperationRef: { current: new Map<number, number>() },
+    saveLifecycleGenerationRef: { current: 1 },
+    retryingSaveFailureRef: { current: null },
+    retryParentByOperationRef: { current: new Map<number, number>() },
+    saveStatusTimerRef: { current: null },
+    failedSaveOperationRef: { current: null },
+    failedSaveOperationsRef: { current: new Map() },
+    retrySaveRef: { current: null },
+    retrySavePromiseRef: { current: null },
+    setSaveError: (value: string | null) => {
+      error = value;
+    },
+    setSaveStatus: (value: string) => {
+      status = value;
+    },
+    setDataUpdatedAt() {},
+    clearScopedFinancialData() {
+      throw Error("Unexpected scope reset");
+    },
+    recordDiagnostic: async () => {},
+    user: { id: "user-one" },
+    diagnosticPlatform: () => "web",
+    diagnosticErrorCode: () => "test",
+    clearTimeout() {},
+    setTimeout: () => 1,
+    runSingleFlight,
+  };
+  const context = readFileSync("context/BudgetContext.tsx", "utf8");
+  const lifecycle = context.slice(
+    context.indexOf("  const markSaveStarted ="),
+    context.indexOf("  const runTrackedFinancialMutation ="),
+  );
+  const retry = context.slice(
+    context.indexOf("  const retryLastSave ="),
+    context.indexOf(
+      "  useLayoutEffect(() => {",
+      context.indexOf("  const clearSaveError ="),
+    ),
+  );
+  const js = transpileModule(lifecycle + retry, {
+    compilerOptions: { module: ModuleKind.CommonJS },
+  }).outputText;
+  const actions = new Function(
+    ...Object.keys(bindings),
+    `${js}; return { markSaveStarted, markSaveCompleted, markSaveFailed, retryLastSave, clearSaveError };`,
+  )(...Object.values(bindings));
+  return {
+    ...actions,
+    state: () => ({
+      ready: true,
+      saving: status === "saving",
+      failed: status === "failed",
+      confirmed: status === "saved",
+    }),
+    status: () => status,
+    error: () => error,
+  };
+}
+test("a failed bucket close stays silent and its confirmed Retry celebrates exactly once", async () => {
+  const h = milestoneSaveLifecycle();
+  const open = {
+    id: "trip",
+    name: "Trip",
+    goal_type: "planned_expense",
+    current_amount: 100,
+    target_amount: 100,
+  };
+  let goals: model.MilestoneGoal[] = [open];
+  const data = model.normalizeBucketAppearance({
+    version: 1,
+    looks: { trip: { celebrateCompletion: true } },
+  });
+  let observation = model.observeBucketMilestones(
+    null,
+    "one",
+    goals,
+    data,
+    h.state(),
+  );
+  const baseline = observation.previous;
+  const observe = () =>
+    (observation = model.observeBucketMilestones(
+      observation.previous,
+      "one",
+      goals,
+      data,
+      h.state(),
+    ));
+  const failed = h.markSaveStarted();
+  observe();
+  h.markSaveFailed(
+    Error("Close failed"),
+    async () => {
+      const retry = h.markSaveStarted();
+      assert.equal(h.status(), "failed");
+      goals = [{ ...open, closed_at: "2026-10-30T10:00:00Z" }];
+      assert.deepEqual(observe().events, []);
+      assert.equal(observation.previous, baseline);
+      h.markSaveCompleted(retry);
+    },
+    failed,
+  );
+  assert.deepEqual(observe().events, []);
+  assert.equal(observation.previous, baseline);
+  await h.retryLastSave();
+  assert.equal(h.status(), "saved");
+  assert.equal(observe().events[0]?.label, "Bucket complete");
+  assert.deepEqual(observe().events, []);
+});
+test("unrelated save completion cannot hide a failure, and dismissing failure silently rebases milestones", () => {
+  const h = milestoneSaveLifecycle();
+  const open = {
+    id: "trip",
+    name: "Trip",
+    goal_type: "planned_expense",
+    current_amount: 100,
+    target_amount: 100,
+  };
+  let goals: model.MilestoneGoal[] = [open];
+  const data = model.normalizeBucketAppearance({
+    version: 1,
+    looks: { trip: { celebrateCompletion: true } },
+  });
+  let previous = model.observeBucketMilestones(
+    null,
+    "one",
+    goals,
+    data,
+    h.state(),
+  ).previous;
+  const observe = () => {
+    const result = model.observeBucketMilestones(
+      previous,
+      "one",
+      goals,
+      data,
+      h.state(),
+    );
+    previous = result.previous;
+    return result.events;
+  };
+  const failed = h.markSaveStarted();
+  h.markSaveFailed(Error("Unrelated bill failed"), async () => {}, failed);
+  const completion = h.markSaveStarted();
+  goals = [{ ...open, closed_at: "2026-10-30T10:00:00Z" }];
+  h.markSaveCompleted(completion);
+  assert.equal(h.status(), "failed");
+  assert.equal(h.error(), "Unrelated bill failed");
+  assert.deepEqual(observe(), []);
+  h.clearSaveError();
+  assert.equal(h.status(), "idle");
+  assert.deepEqual(observe(), []);
+  const later = h.markSaveStarted();
+  h.markSaveCompleted(later);
+  assert.deepEqual(observe(), []);
+});
+test("failed optimistic savings edits roll back before a confirmed retry can celebrate funding", async () => {
+  const h = milestoneSaveLifecycle();
+  const below = {
+    id: "rainy",
+    name: "Rainy",
+    goal_type: "savings",
+    current_amount: 50,
+    target_amount: 100,
+  };
+  const funded = { ...below, current_amount: 100 };
+  let goals = [below],
+    fail = true;
+  const gate = deferred<void>();
+  const bindings = {
+    useCallback: (fn: unknown) => fn,
+    user: { id: "user-one" },
+    goals,
+    demoMode: false,
+    assertCanEditHousehold() {},
+    setGoals: (update: (value: typeof goals) => typeof goals) => {
+      goals = update(goals);
+    },
+    markSaveStarted: h.markSaveStarted,
+    markSaveCompleted: h.markSaveCompleted,
+    markSaveFailed: h.markSaveFailed,
+    runTrackedFinancialMutation() {
+      throw Error("Unexpected bucket path");
+    },
+    supabase: {
+      from: () => ({
+        update: () => ({
+          eq: () => ({
+            select: () => ({
+              single: async () => {
+                await gate.promise;
+                return { error: fail ? { message: "Save failed" } : null };
+              },
+            }),
+          }),
+        }),
+      }),
+    },
+    ensureSaved: async (
+      query: Promise<{ error: { message: string } | null }>,
+    ) => {
+      const { error } = await query;
+      if (error) throw Error(error.message);
+    },
+  };
+  const context = readFileSync("context/BudgetContext.tsx", "utf8");
+  const body = context.slice(
+    context.indexOf("  const updateGoal ="),
+    context.indexOf("  const refreshBucketRoutingData ="),
+  );
+  const js = transpileModule(body, {
+    compilerOptions: { module: ModuleKind.CommonJS },
+  }).outputText;
+  const updateGoal = new Function(
+    ...Object.keys(bindings),
+    `${js}; return updateGoal;`,
+  )(...Object.values(bindings));
+  const data = model.normalizeBucketAppearance({
+    version: 1,
+    looks: { rainy: { celebrateCompletion: true } },
+  });
+  let previous = model.observeBucketMilestones(
+    null,
+    "one",
+    goals,
+    data,
+    h.state(),
+  ).previous;
+  const observe = () => {
+    const result = model.observeBucketMilestones(
+      previous,
+      "one",
+      goals,
+      data,
+      h.state(),
+    );
+    previous = result.previous;
+    return result.events;
+  };
+  const saving = updateGoal(funded);
+  assert.equal(goals[0].current_amount, 100);
+  assert.deepEqual(observe(), []);
+  gate.resolve();
+  await assert.rejects(saving, /Save failed/);
+  assert.equal(goals[0].current_amount, 50);
+  assert.deepEqual(observe(), []);
+  fail = false;
+  await h.retryLastSave();
+  assert.equal(h.status(), "saved");
+  assert.equal(goals[0].current_amount, 100);
+  assert.equal(observe()[0]?.label, "Goal funded");
 });
 
 function runtimeFixture() {

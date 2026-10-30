@@ -12,12 +12,13 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Animated, StyleSheet } from "react-native";
+import { Animated, Modal, StyleSheet } from "react-native";
 import { BucketAppearanceModal } from "@/components/BucketAppearanceModal";
 import { useBudget } from "@/context/BudgetContext";
 import { useBucketAppearance } from "@/hooks/useBucketAppearance";
 import { useColors } from "@/hooks/useColors";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
+import { useBackDismiss } from "@/hooks/useBackDismiss";
 import {
   observeBucketMilestones,
   type BucketMilestone,
@@ -159,6 +160,7 @@ export function BucketPersonalizationProvider({
       ),
     [],
   );
+  useBackDismiss(Boolean(moment), dismiss, true, false);
   useEffect(() => {
     if (!moment) return;
     fade.setValue(reduceMotion ? 1 : 0);
@@ -174,7 +176,7 @@ export function BucketPersonalizationProvider({
   return (
     <Context.Provider
       value={{
-        active: Boolean(goal),
+        active: Boolean(goal || moment),
         available: appearance.enabled,
         unavailableReason: appearance.unavailableReason,
         open,
@@ -189,40 +191,56 @@ export function BucketPersonalizationProvider({
         />
       ) : null}
       {moment ? (
-        <View pointerEvents="box-none" style={styles.toastPosition}>
-          <Animated.View
-            accessibilityRole="alert"
-            accessibilityLiveRegion="polite"
-            style={[
-              styles.toast,
-              {
-                backgroundColor: c.card,
-                borderColor: c.primary + "66",
-                opacity: fade,
-              },
-            ]}
-          >
-            <View style={[styles.star, { backgroundColor: c.primary + "20" }]}>
-              <Feather name="award" size={26} color={c.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.toastTitle, { color: c.foreground }]}>
-                {moment.label}
-              </Text>
-              <Text style={[styles.toastCopy, { color: c.mutedForeground }]}>
-                {moment.name} · A step worth celebrating.
-              </Text>
-            </View>
+        <Modal
+          visible
+          transparent
+          animationType="none"
+          presentationStyle="overFullScreen"
+          onRequestClose={dismiss}
+        >
+          <View accessibilityViewIsModal style={styles.toastPosition}>
             <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Dismiss milestone celebration"
+              accessible={false}
+              importantForAccessibility="no-hide-descendants"
               onPress={dismiss}
-              style={styles.dismiss}
+              style={StyleSheet.absoluteFillObject}
+            />
+            <Animated.View
+              accessibilityRole="alert"
+              accessibilityLiveRegion="polite"
+              style={[
+                styles.toast,
+                {
+                  backgroundColor: c.card,
+                  borderColor: c.primary + "66",
+                  opacity: fade,
+                },
+              ]}
             >
-              <Feather name="x" color={c.mutedForeground} size={18} />
-            </Pressable>
-          </Animated.View>
-        </View>
+              <View
+                style={[styles.star, { backgroundColor: c.primary + "20" }]}
+              >
+                <Feather name="award" size={26} color={c.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.toastTitle, { color: c.foreground }]}>
+                  {moment.label}
+                </Text>
+                <Text style={[styles.toastCopy, { color: c.mutedForeground }]}>
+                  {moment.name} · A step worth celebrating.
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss milestone celebration"
+                onPress={dismiss}
+                style={styles.dismiss}
+              >
+                <Feather name="x" color={c.mutedForeground} size={18} />
+              </Pressable>
+            </Animated.View>
+          </View>
+        </Modal>
       ) : null}
     </Context.Provider>
   );
