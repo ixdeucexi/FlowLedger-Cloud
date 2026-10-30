@@ -288,7 +288,8 @@ export function MembershipPanel() {
     if (!confirmed || !current()) return;
     setBillingMessage(null);
     setBillingBusy("restore");
-    let restoreIntentIds: string[] = [];
+    let restoreIntentIds: string[] = [],
+      storeRestoreCompleted = false;
     try {
       const intent = await createBillingRestoreIntent({
         householdId: household.householdId,
@@ -309,6 +310,7 @@ export function MembershipPanel() {
         expectedUserId: actorId,
         isCurrent: current,
       });
+      storeRestoreCompleted = true;
       if (!current()) return;
       await reconcileBillingRestore(household.householdId, restoreIntentIds);
       if (!current()) return;
@@ -323,7 +325,11 @@ export function MembershipPanel() {
             : "No verified active Pro purchase for this account was found yet.",
         );
     } catch (error) {
-      if (restoreIntentIds.length && isBillingCancellation(error))
+      if (
+        restoreIntentIds.length &&
+        !storeRestoreCompleted &&
+        isBillingCancellation(error)
+      )
         await cancelBillingIntents(
           household.householdId,
           restoreIntentIds,

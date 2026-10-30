@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { billingQuoteDisclosure, verifiedBillingQuote } from "./billingProductPolicy";
 
 test("shared press controls enforce a 44-point minimum target", () => {
   const source = readFileSync("components/AccessiblePressable.tsx", "utf8");
@@ -45,9 +46,14 @@ test("subscription cadence and purchase controls meet native touch target minimu
 test("billing UI uses live store pricing without blocking foreground resumes", () => {
   const membership = readFileSync("components/MembershipPanel.tsx", "utf8");
   const context = readFileSync("context/MembershipContext.tsx", "utf8");
-  assert.match(membership, /product\.priceString/);
+  const native = readFileSync("lib/nativeBilling.native.ts", "utf8");
+  assert.match(native, /const quote = verifiedBillingQuote\(/);
+  assert.match(membership, /product\?\.quote\.priceString/);
+  assert.match(membership, /billingQuoteDisclosure\(product\.quote\)/);
+  const quote = verifiedBillingQuote({ identifier: "flowledger_pro_annual", price: 109.99, priceString: "CA$109.99", currencyCode: "CAD", subscriptionPeriod: "P1Y", subscription: true }, "flowledger_pro_annual");
+  assert.equal(billingQuoteDisclosure(quote), "CA$109.99 per year. Renews automatically until cancelled. No free trial.");
   assert.doesNotMatch(membership, /Monthly is \$9\.99|annual is \$89|\$89 per year|\$9\.99 per month/);
   assert.doesNotMatch(context, /AppState\.addEventListener\("change"/);
   assert.match(context, /const refreshPlan = useCallback/);
-  assert.match(context, /if \(!FOUNDING_FREE_LAUNCH && user\?\.id && activeHousehold\.role === "owner"\)/);
+  assert.match(context, /if\s*\(\s*STORE_CHECKOUT_ENABLED\s*&&\s*user\?\.id\s*&&\s*activeHousehold\?\.role === "owner"\s*&&\s*!demoMode\s*\)/);
 });

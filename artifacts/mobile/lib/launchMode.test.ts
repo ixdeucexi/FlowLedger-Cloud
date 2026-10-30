@@ -3,13 +3,17 @@ import test from "node:test";
 
 import { canPersistPlanSimulations } from "./launchMode";
 
-test("Founding Free keeps public Plan Simulator scenarios on the device", () => {
-  assert.equal(canPersistPlanSimulations({ tier: "free", source: "default" }, true), false);
-  assert.equal(canPersistPlanSimulations({ tier: "pro", source: "billing" }, true), false);
+test("Free and founding planning alone never authorize cloud scenario writes", () => {
+  for (const foundingLaunch of [true, false]) {
+    assert.equal(canPersistPlanSimulations({ tier: "free", source: "default" }, foundingLaunch), false);
+    assert.equal(canPersistPlanSimulations(null, foundingLaunch), false);
+  }
 });
 
-test("admin Pro and the paid launch retain remote Plan Simulator persistence", () => {
-  assert.equal(canPersistPlanSimulations({ tier: "pro", source: "admin" }, true), true);
-  assert.equal(canPersistPlanSimulations({ tier: "pro", source: "billing" }, false), true);
-  assert.equal(canPersistPlanSimulations({ tier: "free", source: "default" }, false), false);
+test("actual paid, permanent grandfathered, and admin Pro retain cloud eligibility independently of checkout launch", () => {
+  for (const source of ["billing", "grandfathered", "admin"]) {
+    for (const foundingLaunch of [true, false]) {
+      assert.equal(canPersistPlanSimulations({ tier: "pro", source }, foundingLaunch), true);
+    }
+  }
 });
