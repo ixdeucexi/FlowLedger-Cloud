@@ -50,7 +50,7 @@ export function BucketAppearanceModal({
   const close = () => {
     if (!busy) onClose();
   };
-  useBackDismiss(true, close);
+  useBackDismiss(true, close, true, false);
   const run = async (operation: () => Promise<unknown>) => {
     if (blocked) return;
     setWorking(true);
