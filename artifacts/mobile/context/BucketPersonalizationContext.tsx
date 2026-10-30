@@ -60,7 +60,7 @@ export function BucketPersonalizationProvider({
       ? goals.find((g) => g.id === selected.goalId)
       : undefined;
   const moment =
-    moments?.key === appearance.key && appearance.enabled
+    !goal && moments?.key === appearance.key && appearance.enabled
       ? moments.values[0]
       : undefined;
   const open = useCallback(
@@ -151,15 +151,28 @@ export function BucketPersonalizationProvider({
     saveStatus,
     demoMode,
   ]);
-  const dismiss = useCallback(
-    () =>
-      setMoments((current) =>
-        current?.values.length
-          ? { ...current, values: current.values.slice(1) }
-          : null,
-      ),
-    [],
-  );
+  const presentedScope = appearance.key;
+  const presentedMoment = moment?.key;
+  const isCurrent = appearance.current;
+  const visibleMoment = useRef<{ scope: string; key: string } | null>(null);
+  visibleMoment.current = moment
+    ? { scope: presentedScope, key: moment.key }
+    : null;
+  const dismiss = useCallback(() => {
+    if (
+      !presentedMoment ||
+      !isCurrent() ||
+      visibleMoment.current?.scope !== presentedScope ||
+      visibleMoment.current?.key !== presentedMoment
+    )
+      return;
+    setMoments((current) =>
+      current?.key === presentedScope &&
+      current.values[0]?.key === presentedMoment
+        ? { ...current, values: current.values.slice(1) }
+        : current,
+    );
+  }, [presentedScope, presentedMoment, isCurrent]);
   useBackDismiss(Boolean(moment), dismiss, true, false);
   useEffect(() => {
     if (!moment) return;

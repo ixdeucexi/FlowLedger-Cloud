@@ -65,14 +65,21 @@ export function createNestedOverlayHistory(host: HistoryHost, onDismiss: () => v
       if (open && !nestedToken) openNested();
       if (!open && nestedToken) {
         const token = nestedToken; nestedToken = null;
-        if (host.history.state?.flowledgerLayer === token) { awaitingOwnedPop = true; host.history.back(); }
+        if (host.history.state?.flowledgerLayer === token) {
+          awaitingOwnedPop = true;
+          // Register settlement before requesting Back. An earlier router
+          // listener can dispose this editor during that very pop dispatch;
+          // a listener first installed in dispose would miss the settled pop.
+          finishOwnedPop(host, true);
+        }
       }
     },
     dispose() {
       if (disposed) return;
       disposed = true; host.removeEventListener("popstate", onPop);
       const ownsNested = nestedToken && host.history.state?.flowledgerLayer === nestedToken;
-      if (awaitingOwnedPop || ownsNested) finishOwnedPop(host, !awaitingOwnedPop);
+      // An awaiting UI Back already registered its settlement listener.
+      if (ownsNested) finishOwnedPop(host, true);
       nestedToken = null;
     },
   };

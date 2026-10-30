@@ -26,7 +26,11 @@ function deferred<T>() {
 async function tick() {
   for (let i = 0; i < 8; i++) await Promise.resolve();
 }
-function source(file: string, dependencies: Record<string, unknown>): any {
+function source(
+  file: string,
+  dependencies: Record<string, unknown>,
+  globals: Record<string, unknown> = {},
+): any {
   const js = transpileModule(
     readFileSync(path.join(__dirname, "..", file), "utf8"),
     {
@@ -39,12 +43,16 @@ function source(file: string, dependencies: Record<string, unknown>): any {
     },
   ).outputText;
   const exports: Record<string, unknown> = {};
-  new Function("exports", "require", js)(exports, (name: string) => {
-    if (name in dependencies) return dependencies[name];
-    const privacyModule = revealedPrivacyModule(name);
-    if (privacyModule) return privacyModule;
-    throw Error("Unexpected dependency " + name);
-  });
+  new Function("exports", "require", ...Object.keys(globals), js)(
+    exports,
+    (name: string) => {
+      if (name in dependencies) return dependencies[name];
+      const privacyModule = revealedPrivacyModule(name);
+      if (privacyModule) return privacyModule;
+      throw Error("Unexpected dependency " + name);
+    },
+    ...Object.values(globals),
+  );
   return exports;
 }
 test("personal bucket scopes are settled, user-isolated and never replace an incomplete household budget", () => {
@@ -216,18 +224,24 @@ test("bucket appearance hook blocks loading scopes and stale picker callbacks ev
   assert.match(appearance.unavailableReason, /budget loads/);
 });
 
-test("personalization host rejects unavailable, unknown and stale entry callbacks", () => {
+function personalizationHostFixture() {
   const values: any[] = [];
   const backHandlers: Array<{ active: boolean; dismiss: () => void }> = [];
+  const effects: Array<() => void> = [];
+  const state = { current: false };
+  const timers = new Map<number, { at: number; run: () => void }>();
   let cursor = 0,
-    current = false;
+    dirty = false,
+    now = 0,
+    timerId = 0;
+  const goals = [{ id: "holiday", name: "Holiday" }];
   const appearance: any = {
     key: "scope",
     enabled: false,
     unavailableReason: "Loading…",
     ready: false,
     data: model.EMPTY_BUCKET_APPEARANCE,
-    current: () => current,
+    current: () => state.current,
   };
   const react = {
     createElement: (type: unknown, props: any, ...children: any[]) => ({
@@ -236,8 +250,26 @@ test("personalization host rejects unavailable, unknown and stale entry callback
     }),
     createContext: () => ({ Provider: "Provider" }),
     useContext() {},
-    useCallback: (fn: unknown) => fn,
-    useEffect() {},
+    useCallback: (fn: unknown, deps: unknown[]) => {
+      const index = cursor++;
+      const before = values[index];
+      if (!before || deps.some((value, i) => !Object.is(value, before.deps[i])))
+        values[index] = { fn, deps };
+      return values[index].fn;
+    },
+    useEffect(run: () => void | (() => void), deps: unknown[]) {
+      const index = cursor++;
+      const before = values[index];
+      if (
+        !before ||
+        deps.some((value, i) => !Object.is(value, before.deps[i]))
+      ) {
+        effects.push(() => {
+          before?.cleanup?.();
+          values[index] = { deps, cleanup: run() };
+        });
+      }
+    },
     useRef: (initial: unknown) => (values[cursor++] ??= { current: initial }),
     useState: (initial: unknown) => {
       const index = cursor++;
@@ -245,62 +277,105 @@ test("personalization host rejects unavailable, unknown and stale entry callback
       return [
         values[index],
         (value: unknown) => {
-          values[index] =
+          const next =
             typeof value === "function" ? value(values[index]) : value;
+          if (!Object.is(next, values[index])) {
+            values[index] = next;
+            dirty = true;
+          }
         },
       ];
     },
   };
-  const api = source("context/BucketPersonalizationContext.tsx", {
-    react: { __esModule: true, default: react, ...react },
-    "@expo/vector-icons/Feather": "Feather",
-    "react-native": {
-      Animated: { Value: class {}, View: "AnimatedView" },
-      Modal: "Modal",
-      StyleSheet: { create: (value: unknown) => value },
-      Pressable: "Pressable",
-      Text: "Text",
-      View: "View",
+  const api = source(
+    "context/BucketPersonalizationContext.tsx",
+    {
+      react: { __esModule: true, default: react, ...react },
+      "@expo/vector-icons/Feather": "Feather",
+      "react-native": {
+        Animated: {
+          Value: class {
+            setValue() {}
+          },
+          View: "AnimatedView",
+        },
+        Modal: "Modal",
+        StyleSheet: { create: (value: unknown) => value },
+        Pressable: "Pressable",
+        Text: "Text",
+        View: "View",
+      },
+      "@/components/BucketAppearanceModal": {
+        BucketAppearanceModal: "BucketAppearanceModal",
+      },
+      "@/context/BudgetContext": {
+        useBudget: () => ({
+          goals,
+          loading: false,
+          startupCoreReady: true,
+        }),
+      },
+      "@/hooks/useBucketAppearance": { useBucketAppearance: () => appearance },
+      "@/hooks/useColors": { useColors: () => ({}) },
+      "@/hooks/useReducedMotion": { useReducedMotion: () => true },
+      "@/hooks/useBackDismiss": {
+        useBackDismiss: (active: boolean, dismiss: () => void) =>
+          backHandlers.push({ active, dismiss }),
+      },
+      "@/lib/bucketAppearance": model,
+      "@/lib/bucketAppearanceRuntime": {},
     },
-    "@/components/BucketAppearanceModal": {
-      BucketAppearanceModal: "BucketAppearanceModal",
+    {
+      setTimeout: (run: () => void, delay: number) => {
+        const id = ++timerId;
+        timers.set(id, { at: now + delay, run });
+        return id;
+      },
+      clearTimeout: (id: number) => {
+        timers.delete(id);
+      },
     },
-    "@/context/BudgetContext": {
-      useBudget: () => ({
-        goals: [{ id: "holiday", name: "Holiday" }],
-        loading: false,
-        startupCoreReady: true,
-      }),
-    },
-    "@/hooks/useBucketAppearance": { useBucketAppearance: () => appearance },
-    "@/hooks/useColors": { useColors: () => ({}) },
-    "@/hooks/useReducedMotion": { useReducedMotion: () => true },
-    "@/hooks/useBackDismiss": {
-      useBackDismiss: (active: boolean, dismiss: () => void) =>
-        backHandlers.push({ active, dismiss }),
-    },
-    "@/lib/bucketAppearance": model,
-    "@/lib/bucketAppearanceRuntime": {},
-  });
+  );
   const render = () => {
-    cursor = 0;
-    return api.BucketPersonalizationProvider({ children: null });
+    let tree: any;
+    for (let i = 0; i < 8; i++) {
+      cursor = 0;
+      dirty = false;
+      tree = api.BucketPersonalizationProvider({ children: null });
+      effects.splice(0).forEach((run) => run());
+      if (!dirty) break;
+    }
+    return tree;
   };
+  const advance = (elapsed: number) => {
+    now += elapsed;
+    for (const [id, timer] of timers)
+      if (timer.at <= now) {
+        timers.delete(id);
+        timer.run();
+      }
+    return render();
+  };
+  return { values, backHandlers, state, appearance, render, timers, advance };
+}
+test("personalization host rejects unavailable, unknown and stale entry callbacks", () => {
+  const { values, backHandlers, state, appearance, render } =
+    personalizationHostFixture();
   let value = render().props.value;
   assert.equal(value.available, false);
   assert.equal(value.unavailableReason, "Loading…");
   value.open("holiday");
   assert.equal(render().props.value.active, false);
-  appearance.enabled = current = true;
+  appearance.enabled = state.current = true;
   appearance.unavailableReason = null;
   value = render().props.value;
   value.open("missing");
   assert.equal(render().props.value.active, false);
   const staleOpen = value.open;
-  current = false;
+  state.current = false;
   staleOpen("holiday");
   assert.equal(render().props.value.active, false);
-  current = true;
+  state.current = true;
   render().props.value.open("holiday");
   assert.equal(render().props.value.active, true);
   // A real Modal owns the moment above financial portals; the context suspends
@@ -329,6 +404,92 @@ test("personalization host rejects unavailable, unknown and stale entry callback
   assert.equal(backHandlers.at(-1)?.active, true);
   backHandlers.at(-1)!.dismiss();
   assert.equal(render().props.value.active, false);
+});
+test("milestones queue behind personalization without a second modal, Back handler or running timer", () => {
+  const h = personalizationHostFixture();
+  h.render();
+  h.appearance.enabled = h.state.current = true;
+  h.render().props.value.open("holiday");
+  h.render();
+  h.values[1] = {
+    key: "scope",
+    values: [
+      {
+        key: "closed:holiday",
+        goalId: "holiday",
+        label: "Bucket complete",
+        name: "Holiday",
+      },
+    ],
+  };
+  const modals = (tree: any) =>
+    tree.props.children
+      .flat()
+      .filter(
+        (node: any) =>
+          node?.type === "Modal" || node?.type === "BucketAppearanceModal",
+      );
+  const queued = h.render();
+  assert.deepEqual(
+    modals(queued).map((node: any) => node.type),
+    ["BucketAppearanceModal"],
+  );
+  assert.equal(h.backHandlers.at(-1)?.active, false);
+  assert.equal(h.timers.size, 0);
+  h.advance(12000);
+  assert.equal(h.values[1].values.length, 1, "the hidden moment never expires");
+  modals(h.render())[0].props.onClose();
+  const visible = h.render();
+  assert.deepEqual(
+    modals(visible).map((node: any) => node.type),
+    ["Modal"],
+  );
+  assert.equal(h.backHandlers.at(-1)?.active, true);
+  assert.equal(h.timers.size, 1);
+  assert.equal(modals(h.advance(5999)).length, 1);
+  assert.equal(modals(h.advance(1)).length, 0);
+});
+test("late milestone dismissal cannot consume the next queued moment or a new household's moment", () => {
+  const h = personalizationHostFixture();
+  h.render();
+  h.appearance.enabled = h.state.current = true;
+  const first = {
+    key: "first",
+    goalId: "holiday",
+    label: "Bucket complete",
+    name: "Holiday",
+  };
+  const second = { ...first, key: "second" };
+  h.values[1] = { key: "scope", values: [first, second] };
+  h.render();
+  const oldDismiss = h.backHandlers.at(-1)!.dismiss;
+  const oldTimer = [...h.timers.values()][0].run;
+  h.render().props.value.open("holiday");
+  h.render();
+  oldTimer();
+  h.render();
+  assert.equal(
+    h.values[1].values[0].key,
+    "first",
+    "a suspended moment cannot expire behind personalization",
+  );
+  h.values[0] = null;
+  h.render();
+  oldDismiss();
+  h.render();
+  assert.equal(h.values[1].values[0].key, "second");
+  oldDismiss();
+  oldTimer();
+  h.render();
+  assert.equal(h.values[1].values[0].key, "second");
+  const priorHouseholdDismiss = h.backHandlers.at(-1)!.dismiss;
+  h.appearance.key = "next-household";
+  h.render();
+  h.values[1] = { key: "next-household", values: [second] };
+  h.render();
+  priorHouseholdDismiss();
+  h.render();
+  assert.equal(h.values[1].values[0].key, "second");
 });
 test("bucket thumbnails and covers suppress personal photos in Privacy Mode", () => {
   let hidden = true;

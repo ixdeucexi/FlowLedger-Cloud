@@ -279,6 +279,46 @@ test("an editor closed while awaiting an old traversal never mounts its history 
   assert.equal(browser.position(), 2); assert.equal(browser.listeners.size, 0);
 });
 
+test("router disposal during the owned pop settles before the next overlay's first user Back", () => {
+  for (const stripMarker of [false, true]) {
+    const stack: any[] = [{ route: "base" }]; let index = 0;
+    const listeners = new Set<(event?: { state?: any }) => void>();
+    const traversals: Array<() => void> = [];
+    const host = {
+      history: {
+        get state() { return stack[index]; },
+        pushState(value: any) { stack.splice(index + 1); stack.push(value); index++; },
+        back() { traversals.push(() => {
+          index--; const event = { state: { ...stack[index] } };
+          // Native dispatch skips a listener removed by an earlier listener and
+          // doesn't invoke listeners added midway through the same event.
+          for (const listener of [...listeners]) if (listeners.has(listener)) listener(event);
+        }); },
+      },
+      location: { href: "https://example.test/more?section=buckets" },
+      addEventListener(_type: "popstate", listener: (event?: { state?: any }) => void) { listeners.add(listener); },
+      removeEventListener(_type: "popstate", listener: (event?: { state?: any }) => void) { listeners.delete(listener); },
+    };
+    let next: ReturnType<typeof createNestedOverlayHistory> | undefined;
+    let dismissals = 0, disposed = false;
+    listeners.add(() => {
+      if (disposed) return;
+      disposed = true;
+      if (stripMarker) stack[index] = { id: "router-state" };
+      detail.dispose();
+      next = createNestedOverlayHistory(host, () => { dismissals++; next!.dispose(); });
+    });
+    const detail = createNestedOverlayHistory(host, () => { throw Error("Disposed detail received Back"); });
+    detail.setNested(true); detail.setNested(false);
+    traversals.shift()!();
+    assert.equal(dismissals, 0);
+    assert.match(host.history.state.flowledgerLayer, /^flowledger-editor-/);
+    assert.equal(index, 2, "next overlay starts on the already requested owned pop");
+    host.history.back(); traversals.shift()!();
+    assert.equal(dismissals, 1, "the first user Back dismisses the next overlay");
+  }
+});
+
 
 test("owned nested Back uses the pop snapshot when an earlier router listener replaces host state", () => {
   const stack: any[] = [{ route: "base" }]; let index = 0;
