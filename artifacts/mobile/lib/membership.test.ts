@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createClient, type Session } from "@supabase/supabase-js";
 import {
   FREE_CORE_FEATURES,
   FOUNDING_PLANNING_FEATURES,
@@ -193,9 +194,14 @@ function client(sessionUserId = userA) {
         },
       }),
     },
-    rpc: async (...args) => {
+    rpc: (...args) => {
       calls.push(args);
-      return { data: access(), error: null };
+      return {
+        setHeader: async (name, value) => {
+          calls.push(["setHeader", name, value]);
+          return { data: access(), error: null };
+        },
+      };
     },
   };
   return { sdk, calls };
@@ -212,8 +218,8 @@ test("access RPC pins the verified SDK token and expected household/preview", as
     [
       "get_household_feature_access",
       { p_expected_household_id: householdId, p_preview_tier: null },
-      { headers: { Authorization: "Bearer verified-token-a" } },
     ],
+    ["setHeader", "Authorization", "Bearer verified-token-a"],
   ]);
 });
 test("a changed SDK identity cannot dispatch under a prior React user", async () => {
@@ -252,10 +258,12 @@ test("scope changes during session lookup prevent even an A-to-B-to-A stale disp
 test("scope changes while the RPC is in flight discard the old receipt", async () => {
   const c = client();
   let current = true;
-  c.sdk.rpc = async () => {
-    current = false;
-    return { data: access(), error: null };
-  };
+  c.sdk.rpc = () => ({
+    setHeader: async () => {
+      current = false;
+      return { data: access(), error: null };
+    },
+  });
   assert.equal(
     await requestHouseholdFeatureAccess(
       c.sdk,
@@ -267,9 +275,11 @@ test("scope changes while the RPC is in flight discard the old receipt", async (
 });
 test("access errors fail rather than inventing a founder or Pro grant", async () => {
   const c = client();
-  c.sdk.rpc = async () => ({
-    data: null,
-    error: { message: "Temporarily unavailable" },
+  c.sdk.rpc = () => ({
+    setHeader: async () => ({
+      data: null,
+      error: { message: "Temporarily unavailable" },
+    }),
   });
   await assert.rejects(
     requestHouseholdFeatureAccess(
@@ -279,6 +289,80 @@ test("access errors fail rather than inventing a founder or Pro grant", async ()
     ),
     /Temporarily unavailable/,
   );
+});
+test("the real installed Supabase RPC transport retains the captured token after auth changes", async () => {
+  const transport: Array<{
+    path: string;
+    authorization: string | null;
+    body: unknown;
+  }> = [];
+  const realClient = createClient(
+    "https://unit-test.invalid",
+    "unit-public-anon-key",
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+      global: {
+        fetch: async (input, init) => {
+          transport.push({
+            path: new URL(String(input)).pathname,
+            authorization: new Headers(init?.headers).get("Authorization"),
+            body: JSON.parse(String(init?.body)),
+          });
+          return new Response(JSON.stringify(access()), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        },
+      },
+    },
+  );
+  await realClient.auth.initialize();
+  const makeSession = (id: string, token: string): Session => ({
+    access_token: token,
+    refresh_token: "unit-refresh",
+    token_type: "bearer",
+    expires_in: 3600,
+    user: {
+      id,
+      aud: "authenticated",
+      app_metadata: {},
+      user_metadata: {},
+      created_at: "2026-01-01T00:00:00Z",
+    },
+  });
+  const usersRead: string[] = [];
+  realClient.auth.getSession = async () => {
+    const id = usersRead.length === 0 ? userA : userB;
+    usersRead.push(id);
+    return {
+      data: {
+        session: makeSession(
+          id,
+          id === userA ? "captured-token-a" : "new-global-token-b",
+        ),
+      },
+      error: null,
+    };
+  };
+  const result = await requestHouseholdFeatureAccess(
+    realClient,
+    { userId: userA, householdId, previewTier: null },
+    () => true,
+  );
+  assert.equal(result?.householdId, householdId);
+  assert.deepEqual(usersRead.slice(0, 2), [userA, userB]);
+  assert.deepEqual(transport, [
+    {
+      path: "/rest/v1/rpc/get_household_feature_access",
+      authorization: "Bearer captured-token-a",
+      body: { p_expected_household_id: householdId, p_preview_tier: null },
+    },
+  ]);
+  realClient.realtime.disconnect();
 });
 const annual = {
   identifier: "flowledger_pro_annual",

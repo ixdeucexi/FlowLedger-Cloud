@@ -19,8 +19,12 @@ export interface FeatureAccessClient {
   rpc(
     name: string,
     params: Record<string, unknown>,
-    options: { headers: Record<string, string> },
-  ): PromiseLike<{ data: unknown; error: { message?: string } | null }>;
+  ): {
+    setHeader(
+      name: string,
+      value: string,
+    ): PromiseLike<{ data: unknown; error: { message?: string } | null }>;
+  };
 }
 /** A verified token is bound to this request, never written to global headers. */
 export async function requestHouseholdFeatureAccess(
@@ -36,14 +40,12 @@ export async function requestHouseholdFeatureAccess(
       "Your signed-in account changed. Sign in again to verify your household plan.",
     );
   }
-  const result = await client.rpc(
-    "get_household_feature_access",
-    {
+  const result = await client
+    .rpc("get_household_feature_access", {
       p_expected_household_id: scope.householdId,
       p_preview_tier: scope.previewTier,
-    },
-    { headers: { Authorization: `Bearer ${session.access_token}` } },
-  );
+    })
+    .setHeader("Authorization", `Bearer ${session.access_token}`);
   if (!isCurrent()) return null;
   if (result.error)
     throw new Error(

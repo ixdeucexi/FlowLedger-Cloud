@@ -31,10 +31,7 @@ import {
 } from "@/lib/nativeBilling";
 import { readBillingStatus } from "@/lib/billing";
 import { STORE_CHECKOUT_ENABLED } from "@/lib/launchMode";
-import {
-  requestHouseholdFeatureAccess,
-  type FeatureAccessClient,
-} from "@/lib/membershipAccess";
+import { requestHouseholdFeatureAccess } from "@/lib/membershipAccess";
 import { isStoreCaptureMode } from "@/lib/demoMode";
 
 interface MembershipContextValue {
@@ -58,6 +55,7 @@ interface MembershipContextValue {
 const MembershipContext = createContext<MembershipContextValue | undefined>(
   undefined,
 );
+const NO_BYPASSED_FEATURES: readonly PlanFeature[] = [];
 
 function previewStorageKey(userId: string, householdId: string) {
   return `flowledger-plan-preview-${userId}-${householdId}`;
@@ -115,7 +113,9 @@ export function MembershipProvider({
     };
   }, []);
   const bypassedFeatures =
-    bypassState.scopeKey === accessScopeKey ? bypassState.features : [];
+    bypassState.scopeKey === accessScopeKey
+      ? bypassState.features
+      : NO_BYPASSED_FEATURES;
   const resolvedAccess =
     accessState.scopeKey === accessScopeKey ? accessState.access : null;
   const accessReady = resolvedAccess !== null;
@@ -254,7 +254,7 @@ export function MembershipProvider({
     }
     try {
       const access = await requestHouseholdFeatureAccess(
-        supabase as unknown as FeatureAccessClient,
+        supabase,
         {
           userId: user.id,
           householdId: activeHousehold.householdId,

@@ -232,6 +232,9 @@ export async function loadBillingProduct(
     }
     if (
       !option?.fullPricePhase ||
+      option.fullPricePhase.recurrenceMode !== 1 ||
+      option.fullPricePhase.billingPeriod.iso8601 !==
+        (billingCadenceForProduct(productId) === "annual" ? "P1Y" : "P1M") ||
       option.freePhase ||
       option.isPrepaid ||
       option.installmentsInfo ||
