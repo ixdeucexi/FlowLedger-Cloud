@@ -1,0 +1,22 @@
+{
+  "status": "PASS",
+  "checks": 10,
+  "viewports": [
+    390,
+    1200
+  ],
+  "entry": {
+    "path": "/_expo/static/js/web/entry-721eaf33822da0afb8ff61705688682c.js",
+    "sha256": "3417c3cbc3f124d8cbd283620cd09c8e06ec63dde6a9d848b122b56c90afeb3a",
+    "bytes": 5073649
+  },
+  "screenshots": 8,
+  "financialWrites": 0,
+  "undoCalls": 0,
+  "realAuthCalls": 0,
+  "aiCalls": 0,
+  "appErrors": 0,
+  "unknownRequests": 0,
+  "knownBaselineCsp": 10,
+  "evidence": "/tmp/recent-changes-release/final-integration-browser"
+}

@@ -1,0 +1,30 @@
+{
+  "width": 390,
+  "case": "viewer",
+  "checks": [
+    "Viewer can read valid history and destinations while Undo is unavailable"
+  ],
+  "screens": [
+    "history-viewer-390.png"
+  ],
+  "safety": {
+    "financialTableWrites": 0,
+    "providerCalls": 0,
+    "reconciliationCalls": 0,
+    "onlyMockUndoIntents": 0,
+    "controlledFailures": [],
+    "knownBaselineCsp": 1
+  },
+  "geometry": {
+    "viewport": 390,
+    "scroll": 390
+  },
+  "bundles": [
+    {
+      "path": "/_expo/static/js/web/entry-721eaf33822da0afb8ff61705688682c.js",
+      "sha256": "3417c3cbc3f124d8cbd283620cd09c8e06ec63dde6a9d848b122b56c90afeb3a",
+      "bytes": 5073649
+    }
+  ],
+  "status": "PASS"
+}

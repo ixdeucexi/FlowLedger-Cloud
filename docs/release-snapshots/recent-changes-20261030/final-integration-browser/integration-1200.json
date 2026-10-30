@@ -1,0 +1,49 @@
+{
+  "width": 1200,
+  "checks": [
+    "Dashboard presets apply to real cards and preserve required sections",
+    "Section arrows change actual rendered order and favorites remain reachable",
+    "Privacy eye hides and restores actual Dashboard money",
+    "Bucket icon and cover persist and personalization respects Privacy Mode",
+    "Settings entry reaches loaded Recent Changes and private before/after values reveal correctly"
+  ],
+  "screens": [
+    "dashboard-presets-1200.png",
+    "dashboard-private-1200.png",
+    "bucket-private-personalization-1200.png",
+    "recent-changes-private-1200.png"
+  ],
+  "masked": [
+    {
+      "masks": 14,
+      "accessibleAttributes": 372
+    },
+    {
+      "masks": 3,
+      "accessibleAttributes": 330
+    },
+    {
+      "masks": 10,
+      "accessibleAttributes": 462
+    }
+  ],
+  "bundles": [
+    {
+      "path": "/_expo/static/js/web/entry-721eaf33822da0afb8ff61705688682c.js",
+      "sha256": "3417c3cbc3f124d8cbd283620cd09c8e06ec63dde6a9d848b122b56c90afeb3a",
+      "bytes": 5073649
+    }
+  ],
+  "safety": {
+    "appErrors": 0,
+    "unknownRequests": 0,
+    "financialWrites": 0,
+    "undoCalls": 0,
+    "realAuthCalls": 0,
+    "aiCalls": 0,
+    "mockedPresentationSaves": 5,
+    "mockedJournalReads": 1,
+    "knownBaselineCsp": 5
+  },
+  "status": "PASS"
+}

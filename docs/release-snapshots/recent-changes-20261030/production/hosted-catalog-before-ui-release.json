@@ -1,0 +1,231 @@
+{
+  "note": "Read-only catalog rechecked after continuation and before UI release; no customer rows accessed.",
+  "catalog": {
+    "checks": [
+      {
+        "name": "function.private.capture_recent_change.exact_reviewed_body",
+        "passed": true
+      },
+      {
+        "name": "function.private.capture_recent_change.execute_acl",
+        "passed": true
+      },
+      {
+        "name": "function.private.capture_recent_change.shape",
+        "passed": true
+      },
+      {
+        "name": "function.private.list_recent_changes.exact_reviewed_body",
+        "passed": true
+      },
+      {
+        "name": "function.private.list_recent_changes.execute_acl",
+        "passed": true
+      },
+      {
+        "name": "function.private.list_recent_changes.shape",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_diff.exact_reviewed_body",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_diff.execute_acl",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_diff.shape",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_fields.exact_reviewed_body",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_fields.execute_acl",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_fields.shape",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_has_links.exact_reviewed_body",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_has_links.execute_acl",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_has_links.shape",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_reason.exact_reviewed_body",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_reason.execute_acl",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_reason.shape",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_scope.exact_reviewed_body",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_scope.execute_acl",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_scope.shape",
+        "passed": true
+      },
+      {
+        "name": "function.private.undo_recent_change.exact_reviewed_body",
+        "passed": true
+      },
+      {
+        "name": "function.private.undo_recent_change.execute_acl",
+        "passed": true
+      },
+      {
+        "name": "function.private.undo_recent_change.shape",
+        "passed": true
+      },
+      {
+        "name": "function.public.list_recent_changes.exact_reviewed_body",
+        "passed": true
+      },
+      {
+        "name": "function.public.list_recent_changes.execute_acl",
+        "passed": true
+      },
+      {
+        "name": "function.public.list_recent_changes.shape",
+        "passed": true
+      },
+      {
+        "name": "function.public.undo_recent_change.exact_reviewed_body",
+        "passed": true
+      },
+      {
+        "name": "function.public.undo_recent_change.execute_acl",
+        "passed": true
+      },
+      {
+        "name": "function.public.undo_recent_change.shape",
+        "passed": true
+      },
+      {
+        "name": "functions.exact_ten_expected_overloads",
+        "passed": true
+      },
+      {
+        "name": "index.private.flo_creation_receipts_recent_actor_idx",
+        "passed": true
+      },
+      {
+        "name": "index.private.recent_change_versions_pkey",
+        "passed": true
+      },
+      {
+        "name": "index.private.recent_changes_actor_idx",
+        "passed": true
+      },
+      {
+        "name": "index.private.recent_changes_entity_idx",
+        "passed": true
+      },
+      {
+        "name": "index.private.recent_changes_group_idx",
+        "passed": true
+      },
+      {
+        "name": "index.private.recent_changes_pkey",
+        "passed": true
+      },
+      {
+        "name": "index.private.recent_changes_scope_page_idx",
+        "passed": true
+      },
+      {
+        "name": "index.private.recent_changes_sequence_key",
+        "passed": true
+      },
+      {
+        "name": "index.private.recent_changes_undo_actor_idx",
+        "passed": true
+      },
+      {
+        "name": "schema.anon_private_usage_denied",
+        "passed": true
+      },
+      {
+        "name": "schema.authenticated_private_usage",
+        "passed": true
+      },
+      {
+        "name": "sequence.private.recent_changes_sequence_seq.identity",
+        "passed": true
+      },
+      {
+        "name": "sequence.private.recent_changes_sequence_seq.no_direct_client_or_public_grants",
+        "passed": true
+      },
+      {
+        "name": "table.private.recent_change_versions.deny_all_rls",
+        "passed": true
+      },
+      {
+        "name": "table.private.recent_change_versions.no_direct_client_or_public_grants",
+        "passed": true
+      },
+      {
+        "name": "table.private.recent_changes.deny_all_rls",
+        "passed": true
+      },
+      {
+        "name": "table.private.recent_changes.no_direct_client_or_public_grants",
+        "passed": true
+      },
+      {
+        "name": "trigger.public.bills.capture",
+        "passed": true
+      },
+      {
+        "name": "trigger.public.goals.capture",
+        "passed": true
+      },
+      {
+        "name": "trigger.public.incomes.capture",
+        "passed": true
+      },
+      {
+        "name": "trigger.public.transactions.capture",
+        "passed": true
+      },
+      {
+        "name": "triggers.exactly_four_capture_triggers",
+        "passed": true
+      }
+    ],
+    "failures": [],
+    "allPassed": true,
+    "projectId": "imqmhfdquqlqxgtcdbvc",
+    "checkCount": 53,
+    "schemaUsage": {
+      "anon": false,
+      "serviceRole": true,
+      "authenticated": true
+    },
+    "sourceCommit": "501174de671fc02bfd4d364cd1433b51398ab16d",
+    "migrationSha256": "6164d30afc55406c61b32f1f05bb0ba555e002612f4b084c98eed73630756fdd"
+  },
+  "recordedAtUtc": "2026-10-30 11:08:12 UTC"
+}

@@ -1,0 +1,22 @@
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "rpc": "list_recent_changes",
+      "status": 401,
+      "code": "42501",
+      "registered": true,
+      "anonymousRejectedBeforeBody": true
+    },
+    {
+      "rpc": "undo_recent_change",
+      "status": 401,
+      "code": "42501",
+      "registered": true,
+      "anonymousRejectedBeforeBody": true
+    }
+  ],
+  "authenticatedCustomerSession": false,
+  "customerRecordsAccessed": false,
+  "financialWrites": 0
+}

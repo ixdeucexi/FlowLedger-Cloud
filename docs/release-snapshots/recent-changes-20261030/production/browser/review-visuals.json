@@ -1,0 +1,69 @@
+{
+  "status": "PASS",
+  "screens": [
+    {
+      "width": 390,
+      "hidden": false,
+      "file": "undo-review-390.png",
+      "confirm": {
+        "x": 123.3125,
+        "y": 402,
+        "width": 126.171875,
+        "height": 40
+      },
+      "bundle": {
+        "sha256": "3417c3cbc3f124d8cbd283620cd09c8e06ec63dde6a9d848b122b56c90afeb3a",
+        "bytes": 5073649
+      },
+      "mockUndo": 0
+    },
+    {
+      "width": 390,
+      "hidden": true,
+      "file": "history-private-review-390.png",
+      "confirm": {
+        "x": 123.3125,
+        "y": 425,
+        "width": 126.171875,
+        "height": 40
+      },
+      "bundle": {
+        "sha256": "3417c3cbc3f124d8cbd283620cd09c8e06ec63dde6a9d848b122b56c90afeb3a",
+        "bytes": 5073649
+      },
+      "mockUndo": 0
+    },
+    {
+      "width": 1200,
+      "hidden": false,
+      "file": "undo-review-1200.png",
+      "confirm": {
+        "x": 465.3125,
+        "y": 430,
+        "width": 126.171875,
+        "height": 40
+      },
+      "bundle": {
+        "sha256": "3417c3cbc3f124d8cbd283620cd09c8e06ec63dde6a9d848b122b56c90afeb3a",
+        "bytes": 5073649
+      },
+      "mockUndo": 0
+    },
+    {
+      "width": 1200,
+      "hidden": true,
+      "file": "history-private-review-1200.png",
+      "confirm": {
+        "x": 465.3125,
+        "y": 453,
+        "width": 126.171875,
+        "height": 40
+      },
+      "bundle": {
+        "sha256": "3417c3cbc3f124d8cbd283620cd09c8e06ec63dde6a9d848b122b56c90afeb3a",
+        "bytes": 5073649
+      },
+      "mockUndo": 0
+    }
+  ]
+}
