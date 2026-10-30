@@ -1,0 +1,9 @@
+{
+  "source": "c461e9082904c530fbedf8a2574638a7cce2a02d",
+  "deployment": "dpl_979XCUmB2FYU1gQXzmmgvJiNmYpQ",
+  "url": "flow-ledger-cloud-h3mig01ui-flow-ledger-s-projects.vercel.app",
+  "state": "READY",
+  "rollback": "rollback/prod-before-numeric-layout-audit-20261030-1431",
+  "rollbackRemoteVerified": true,
+  "scope": "App numeric presentation and responsive layout; no financial math/auth/data/API/SQL/Edge changes."
+}

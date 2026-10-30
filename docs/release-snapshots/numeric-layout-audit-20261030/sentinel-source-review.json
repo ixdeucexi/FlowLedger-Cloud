@@ -1,0 +1,132 @@
+{
+  "assessment": "PASS",
+  "overlayCommit": "ecebd667b2aef6c00c3411e73ee8a05f562ca8f5",
+  "mainCommit": "14580583dc36309093191b132bfd5709b2449b15",
+  "floCommit": "d834f77b471085e94a2a83294aecfb7447d83725",
+  "reviewedAllOwnedDiffs": true,
+  "financialFormulaChanges": false,
+  "authorizationOrPersistenceChanges": false,
+  "privacyWrappersPreserved": true,
+  "independentTests": {
+    "forecastDisplay": {
+      "passed": 26,
+      "failed": 0,
+      "source": "4a61fd8bc68e501fe3633b162ba7c816b13f6016"
+    },
+    "moneyPrivacyAndFloAnswerUi": {
+      "passed": 18,
+      "failed": 0
+    }
+  },
+  "sourceFindings": [],
+  "requiredRuntimeProof": [
+    "Exact integrated bundle bytes and financial render readiness",
+    "Full currency/sign/date geometry at narrow phone and desktop breakpoints",
+    "Dashboard active savings face and flip shell contain large aggregate/accounts/goals",
+    "Simulator metric follows its own panel width through resize",
+    "Calendar compact display retains full accessible/day-detail values and privacy",
+    "Flo currency spans preserve whitespace/signs and mask during hide/reveal"
+  ],
+  "releaseRecommendation": "Published release PASS for the exact approved application source and bundle; source, aliases, HTTP and browser evidence verified.",
+  "runtimeFindings": [
+    {
+      "severity": "P2",
+      "path": "components/desktop/DesktopActivityPage.tsx",
+      "case": "NET MOVEMENT at 1200 with \u2212$3,293,302.52",
+      "actual": "296.55px text is ellipsized in 286.77px slot",
+      "evidence": "/tmp/app-numeric-layout-20261030/interim-96e6/net-boundary/1200-wide-glyphs.json",
+      "status": "RESOLVED_RUNTIME_VERIFIED",
+      "fix": "4a61fd8bc68e501fe3633b162ba7c816b13f6016",
+      "finalEvidence": "/tmp/app-numeric-layout-20261030/final-local/desktop-net-boundary/results.json",
+      "finalActual": "Wide-glyph amount 296.55px fits 341px box at 1100/1200; one line, no ellipsis."
+    },
+    {
+      "severity": "P2",
+      "path": "components/CalendarView.tsx",
+      "case": "320px compact negative \u2212$264K",
+      "actual": "34.72px text exceeds 31px slot and loses its K suffix",
+      "status": "RESOLVED_RUNTIME_VERIFIED",
+      "requiredBoundaryCases": [
+        "-9999.49",
+        "-9999.5",
+        "-9999.99",
+        "9999.99"
+      ],
+      "fix": "4a61fd8bc68e501fe3633b162ba7c816b13f6016",
+      "finalEvidence": "/tmp/app-numeric-layout-20261030/final-focused/boundaries/results.json"
+    }
+  ],
+  "mainFollowupCommit": "29222c1e39f9d348e76319b42822cea6cc0e4127",
+  "mainRepairCommit": "4a61fd8bc68e501fe3633b162ba7c816b13f6016",
+  "overlayChipCommit": "ca950252c7defce94c65707f91381f5e9d72745b",
+  "independentParseCheck": {
+    "mainTsxFiles": 13,
+    "errors": 0,
+    "source": "b71199ba2020a63b069a3d67f96ef22b2fed9f6b"
+  },
+  "financialNavigationHandlerComparison": {
+    "baseline": "980b026",
+    "source": "b71199ba2020a63b069a3d67f96ef22b2fed9f6b",
+    "props": 622,
+    "differences": 0
+  },
+  "sourceReviewHistory": [
+    {
+      "severity": "P1",
+      "commit": "29222c1e39f9d348e76319b42822cea6cc0e4127",
+      "issue": "Broad JSX whitespace cleanup removed Bills Modal opening tag",
+      "status": "RESOLVED",
+      "repair": "4a61fd8bc68e501fe3633b162ba7c816b13f6016"
+    }
+  ],
+  "integratedSource": "b71199ba2020a63b069a3d67f96ef22b2fed9f6b",
+  "integratedOwnedFileCheck": {
+    "files": 24,
+    "mismatches": []
+  },
+  "mainLabelDateCommit": "885baa9c0ddbc3d01bce728478e7ed11beb64c4c",
+  "priorBroadLocalBundle": "ce98e5e10834299f6b4d61b6add9df8c837b7c11baaf06bf0e4dc8cbf392f161",
+  "priorBroadRuntimeSummary": {
+    "mainPhoneStages": 80,
+    "desktopCases": 92,
+    "phoneOverlayStages": 64,
+    "wideOverlayStages": 30,
+    "extraStages": 8,
+    "observedBundleHashes": 1,
+    "appErrors": 0,
+    "unknownRequests": 0,
+    "actualFinancialProviderWrites": 0
+  },
+  "intentionalExceptions": [
+    "Dense calendar merchant/event labels may ellipsize; full strings remain accessible and full selected-day money is checked. Compact balance labels must retain their unit and sign.",
+    "Ordinary editable inputs may scroll horizontally to preserve their entire underlying value."
+  ],
+  "mainTypeBadgeCommit": "ca5aef838cbd30e8778ecd33a6f787bbb9ebbf5a",
+  "finalBundleSha256": "0f7510975a3c535ee515ec0624cbb576817412f209d23e0e37f5dcd2ef018283",
+  "finalReleaseAppSource": "b71199ba2020a63b069a3d67f96ef22b2fed9f6b",
+  "finalFocusedProof": "/tmp/app-numeric-layout-20261030/final-type-focused/desktop-verification-summary.json",
+  "finalFocusedSummary": {
+    "cases": 12,
+    "wholeRowPaintCases": 8,
+    "wideGlyphNetCases": 4,
+    "maxPaintOverlapPx": 0,
+    "unexpectedNumericIssues": 0,
+    "appErrors": 0,
+    "unknownRequests": 0,
+    "actualFinancialProviderWrites": 0
+  },
+  "intermediateFocusedProof": "/tmp/app-numeric-layout-20261030/final-focused",
+  "intermediateFocusedSummary": {
+    "boundaryAndDateStages": 12,
+    "overlayStages": 12,
+    "extraStages": 8,
+    "netBoundaryCases": 3,
+    "bundleSha256": "57e909bd6d05241e6a8ae0e4fb92b04c1fe879607d57d8f4bcfa7e16d65d83ec",
+    "appErrors": 0,
+    "unknownRequests": 0,
+    "actualFinancialProviderWrites": 0
+  },
+  "reviewedAtUtc": "2026-10-30T15:19:37.236539+00:00",
+  "publishedPostflightAssessment": "PASS",
+  "publishedProof": "sentinel-published-review.json"
+}

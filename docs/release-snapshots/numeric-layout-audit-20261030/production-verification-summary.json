@@ -1,0 +1,155 @@
+{
+  "status": "PASS",
+  "releaseClearance": "PASS",
+  "canonicalUrl": "https://flowledger-algo.com",
+  "deploymentId": "dpl_GmD96Cq7d1x1Gw6cLj6bUmPW3goK",
+  "releasedApplicationSource": "b71199ba2020a63b069a3d67f96ef22b2fed9f6b",
+  "entry": {
+    "path": "/_expo/static/js/web/entry-bd76415530044d77ccec3ee6dfd2182e.js",
+    "sha256": "0f7510975a3c535ee515ec0624cbb576817412f209d23e0e37f5dcd2ef018283",
+    "bytes": 5099598
+  },
+  "allLoadedEntryBytesMatched": true,
+  "renderChecks": 306,
+  "caseFamilies": {
+    "phonePagesSavingsAndPrivacy": 80,
+    "desktopTabletMainModalsRowPaintAndNet": 108,
+    "overlaysResizeAndScrollReplay": 98,
+    "monthlyCheckInAndEightDigitSavingsFrame": 8,
+    "calendarPhysicalThresholdsAndWholeDateYears": 12
+  },
+  "viewports": [
+    320,
+    390,
+    768,
+    1024,
+    1200
+  ],
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "pageFamilies": [
+    "accounts",
+    "activity",
+    "appearance",
+    "bills",
+    "buckets",
+    "dashboard",
+    "dashboard-savings",
+    "debt",
+    "forecast",
+    "forecast-day",
+    "goals",
+    "income",
+    "membership",
+    "privacy-hide-reveal",
+    "reports",
+    "review",
+    "snowball"
+  ],
+  "overlayFamilies": [
+    "appearance",
+    "bucket-close-preview",
+    "flo-creation-form",
+    "flo-essentials",
+    "flo-history",
+    "manual-add",
+    "manual-edit",
+    "membership",
+    "pending-match",
+    "planned-debt",
+    "planned-debt-large",
+    "posted-match",
+    "posted-variance",
+    "privacy",
+    "simulator-compare",
+    "simulator-debt-editor",
+    "simulator-resize-1024",
+    "simulator-resize-1200",
+    "simulator-resize-768",
+    "monthly-debt-check-in",
+    "bucket-detail",
+    "snowball-preview"
+  ],
+  "financialStress": {
+    "largePositive": [
+      263682.34,
+      9999999.99,
+      10263682.33
+    ],
+    "largeNegative": [
+      -263682.34,
+      -3293302.52,
+      -9999999.99
+    ],
+    "calendarPhysicalBoundaryValues": [
+      -9999.49,
+      -9999.5,
+      -9999.99,
+      9999.99
+    ],
+    "otherStress": [
+      "2026 date-year digits",
+      "23.4567% APR",
+      "100% and8100% counts/percentages",
+      "long merchant/debt/account/goal names"
+    ]
+  },
+  "strictOutcome": {
+    "unresolvedConfirmedNumericOrPaintBugs": 0,
+    "uncaughtAppErrors": 0,
+    "unknownRequests": 0,
+    "actualCustomerProviderOrFinancialWrites": 0,
+    "browserAgentApplicationSourceEdits": 0,
+    "maximumActivityNeighborPaintOverlapPx": 0,
+    "ownedQaRunnerProcessesRemaining": 0,
+    "allOwnedBrowsersAndServersClosed": true
+  },
+  "numericInstances": {
+    "phoneVisibleInstances": 920,
+    "desktopTabletInstances": 1168,
+    "note": "Instances are observations across cases, not unique account records."
+  },
+  "verificationMethod": [
+    "Actual published application in isolated Chromium contexts using fictional intercepted APIs/auth/financial/AI data",
+    "Route-specific loaded financial records and exact full-token expectations before geometry checks",
+    "DOM Range geometry across split React text nodes, visible faces, actual line count and clipping",
+    "Bounded long-choice hit targets and full Category/Account/Type/edit-control painted neighbor checks",
+    "Actual measured Simulator440px panel threshold with1200\u21921024\u2192768\u21921200 resizing",
+    "Date2026 glyphs stay whole; physical320px Calendar thresholds fit in both themes",
+    "Real UI Privacy hide/mask/reveal restores original values and exact Flo answer",
+    "Every loaded entry matches the approved final source bundle, including all Privacy navigations in their isolated context response-listener proofs"
+  ],
+  "privacy": "PASS across phone/tablet/desktop and Flo/financial overlays; values and original answers restored",
+  "intentionalExceptionTriage": {
+    "phoneCalendarLabelObservations": 40,
+    "desktopCalendarLabelObservations": 6,
+    "overlayIntentionalRecords": [
+      {
+        "kind": "Simulator horizontal debt chooser",
+        "reason": "Long choice list can scroll horizontally; full9999999.99 proved visible at scroll end at320and390 inboth themes"
+      },
+      {
+        "kind": "Existing name ellipsis",
+        "reason": "Only actually painted name glyphs participate in overlap checks; no currency ellipsis exempted"
+      }
+    ],
+    "policy": [
+      "Combined calendar merchant/event labels may ellipsize; standalone financial balance tokens must fit. Exact values remain accessible through day details/accessible labels.",
+      "Calendar K/M/B formatting is deliberate; full precision remains available in details.",
+      "Nonmonetary category/type labels may truncate within their own bounded cell. Financial value ellipsis is not allowed.",
+      "Horizontally scrollable Simulator options remain reachable; scroll-to-end tests expose full9,999,999.99 values."
+    ]
+  },
+  "evidence": {
+    "phone": "main-phone/results.json",
+    "desktop": "desktop-verification-summary.json",
+    "overlays": "overlays/results.json",
+    "monthlySavings": "extra/results.json",
+    "calendarDateBoundaries": "boundaries/results.json"
+  },
+  "screenshotsAvailable": 318,
+  "diagnosticPolicy": "The initial wide-overlay cold-load readiness timeout was archived outside definitive production proof; all30 wide/resize cases were regenerated with30-second loaded-field readiness and unchanged financial assertions.",
+  "scope": "Browser CSS viewports; native device hardware testing is not claimed."
+}

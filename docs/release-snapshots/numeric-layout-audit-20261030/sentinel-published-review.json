@@ -1,0 +1,43 @@
+{
+  "assessment": "PASS",
+  "reviewedAtUtc": "2026-10-30T15:34:39.542849+00:00",
+  "deploymentId": "dpl_GmD96Cq7d1x1Gw6cLj6bUmPW3goK",
+  "applicationSource": "b71199ba2020a63b069a3d67f96ef22b2fed9f6b",
+  "bundleSha256": "0f7510975a3c535ee515ec0624cbb576817412f209d23e0e37f5dcd2ef018283",
+  "publishedRenderStages": 306,
+  "independentlyCountedStageGroups": {
+    "mainPhone": 80,
+    "desktopMain": 92,
+    "desktopModals": 4,
+    "desktopRowPaint": 8,
+    "desktopWideGlyphNet": 4,
+    "overlayPhone": 64,
+    "overlayWideResize": 30,
+    "overlayScrollReachability": 4,
+    "extra": 8,
+    "calendarAndDateBoundaries": 12
+  },
+  "allObservedBundleHashesMatched": true,
+  "allFourAliasesExactReadyProduction": true,
+  "repositoryHttpPostflight": "PASS",
+  "strictOutcome": {
+    "unresolvedConfirmedNumericOrPaintBugs": 0,
+    "uncaughtAppErrors": 0,
+    "unknownRequests": 0,
+    "actualCustomerProviderOrFinancialWrites": 0,
+    "browserAgentApplicationSourceEdits": 0,
+    "maximumActivityNeighborPaintOverlapPx": 0,
+    "ownedQaRunnerProcessesRemaining": 0,
+    "allOwnedBrowsersAndServersClosed": true
+  },
+  "intentionalExceptionPolicyReviewed": true,
+  "aggregateMatchesLeafProofs": true,
+  "manifestCopiesMatch": true,
+  "evidence": [
+    "production-verification-summary.json",
+    "production-alias-proof.json",
+    "production-http-postflight.json",
+    "production-browser/"
+  ],
+  "releaseRecommendation": "Published release PASS. No unresolved confirmed numeric or paint defects in the verified coverage. Native hardware testing is not claimed."
+}

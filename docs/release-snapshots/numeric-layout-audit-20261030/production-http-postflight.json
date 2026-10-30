@@ -1,0 +1,9 @@
+{
+  "status": "PASS",
+  "name": "App numeric layout audit",
+  "deploymentId": "dpl_GmD96Cq7d1x1Gw6cLj6bUmPW3goK",
+  "source": "b71199ba2020a63b069a3d67f96ef22b2fed9f6b",
+  "bundlePath": "/_expo/static/js/web/entry-bd76415530044d77ccec3ee6dfd2182e.js",
+  "bundleSha256": "0f7510975a3c535ee515ec0624cbb576817412f209d23e0e37f5dcd2ef018283",
+  "exactBrowserTestedBundle": true
+}

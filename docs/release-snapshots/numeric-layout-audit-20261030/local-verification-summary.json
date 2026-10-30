@@ -1,0 +1,159 @@
+{
+  "status": "PASS",
+  "localReleaseClearance": "PASS",
+  "publishedVerification": "PENDING_DEPLOYMENT",
+  "finalApplicationSource": "b71199ba2020a63b069a3d67f96ef22b2fed9f6b",
+  "finalEntry": {
+    "path": "/_expo/static/js/web/entry-bd76415530044d77ccec3ee6dfd2182e.js",
+    "sha256": "0f7510975a3c535ee515ec0624cbb576817412f209d23e0e37f5dcd2ef018283"
+  },
+  "proofStrategy": "Broad ce98 application review retained; subsequent changes were isolated date-column and nonmonetary table badge containment fixes, checked on exact newer exports with full-row paint and critical-money regressions. Full final-byte published audit remains pending deployment.",
+  "viewports": [
+    320,
+    390,
+    768,
+    1024,
+    1200
+  ],
+  "additionalNetBoundaryWidth": 1100,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "pageFamilies": [
+    "accounts",
+    "activity",
+    "appearance",
+    "bills",
+    "buckets",
+    "dashboard",
+    "dashboard-savings",
+    "debt",
+    "forecast",
+    "forecast-day",
+    "goals",
+    "income",
+    "membership",
+    "privacy-hide-reveal",
+    "reports",
+    "review",
+    "snowball"
+  ],
+  "overlayFamilies": [
+    "appearance",
+    "bucket-close-preview",
+    "flo-creation-form",
+    "flo-essentials",
+    "flo-history",
+    "manual-add",
+    "manual-edit",
+    "membership",
+    "pending-match",
+    "planned-debt",
+    "planned-debt-large",
+    "posted-match",
+    "posted-variance",
+    "privacy",
+    "simulator-compare",
+    "simulator-debt-editor",
+    "simulator-resize-1024",
+    "simulator-resize-1200",
+    "simulator-resize-768",
+    "monthly-debt-check-in",
+    "bucket-detail",
+    "snowball-preview"
+  ],
+  "financialStress": {
+    "largePositive": [
+      263682.34,
+      9999999.99,
+      10263682.33
+    ],
+    "largeNegative": [
+      -263682.34,
+      -3293302.52,
+      -9999999.99
+    ],
+    "calendarPhysicalBoundaries": [
+      -9999.49,
+      -9999.5,
+      -9999.99,
+      9999.99
+    ],
+    "otherNumbers": [
+      "APR 23.4567%",
+      "percentage100% and8100%",
+      "year2026",
+      "long account/debt/merchant/goal names"
+    ]
+  },
+  "phases": [
+    {
+      "phase": "broad-final-local",
+      "source": "c47928a24975af4510ebde7dd435f1004e89f321",
+      "entrySha256": "ce98e5e10834299f6b4d61b6add9df8c837b7c11baaf06bf0e4dc8cbf392f161",
+      "phoneStages": 80,
+      "phoneUnexpectedCurrencyIssues": 0,
+      "desktopCases": 99,
+      "desktopNumericInstances": 1063,
+      "overlayPrimaryScans": 94,
+      "overlayScrollReplays": 4,
+      "extraMonthlySavingsStages": 8,
+      "calendarPhysicalStages": 8,
+      "evidence": "final-local",
+      "scope": "Financial amount geometry, layouts, resize, readable fonts, controls and Privacy. Date and table-label findings discovered separately were closed in following phases."
+    },
+    {
+      "phase": "date-and-category-focused",
+      "source": "a770bfc3e6a3e127d9c2ca3b2d53c72851aa54bb",
+      "entrySha256": "57e909bd6d05241e6a8ae0e4fb92b04c1fe879607d57d8f4bcfa7e16d65d83ec",
+      "dateAndCalendarStages": 12,
+      "monthlySavingsStages": 8,
+      "overlayWorkflowScans": 12,
+      "evidence": "final-focused",
+      "closed": [
+        "2026 year fracture",
+        "Category/Account label overlap"
+      ],
+      "remainingFindingAtThatPhase": "Transaction Type badge crossed edit-neighbor; closed by final Type phase."
+    },
+    {
+      "phase": "final-type-focused",
+      "source": "b71199ba2020a63b069a3d67f96ef22b2fed9f6b",
+      "entrySha256": "0f7510975a3c535ee515ec0624cbb576817412f209d23e0e37f5dcd2ef018283",
+      "completeRowPaintCases": 8,
+      "wideGlyphNetCases": 4,
+      "evidence": "final-type-focused",
+      "closed": [
+        "Typebadge versus edit-control overlap"
+      ],
+      "allCategoryAccountTypeEditPaintOverlaps": 0,
+      "allExactRowAmountsAndNetValuesFit": true
+    }
+  ],
+  "strictOutcome": {
+    "unresolvedConfirmedNumericOrPaintBugs": 0,
+    "appErrors": 0,
+    "unknownRequests": 0,
+    "actualCustomerProviderOrFinancialWrites": 0,
+    "browserAgentAppSourceEdits": 0,
+    "ownedQaRunnerProcessesRemaining": 0
+  },
+  "verificationMethod": [
+    "Actual exported app with fictional intercepted auth/household/financial/AI APIs",
+    "Route-specific financial readiness and exact fixture values before assertions",
+    "Currency DOM Ranges across split React text nodes; actual text-line geometry and clipping",
+    "Physically visible card faces, inline currency atomicity, long-choice hit-target containment",
+    "Measured Simulator440px panel transition and actual1200\u21921024\u2192768\u21921200 resize",
+    "Date-year glyph geometry, full-row Category/Account/Type/edit painted bounds",
+    "Privacy hides amounts/history and restores exact original answer/values",
+    "Every loaded application bundle checked against approved phase SHA"
+  ],
+  "intentionalExceptions": [
+    "Calendar merchant/event labels may ellipsize; compact standalone balance tokens must fit and full amounts remain accessible in day details.",
+    "Calendar K/M/B summaries are intentional; cents and exact amounts remain in detail/accessible labels.",
+    "Nonmonetary category/type labels may truncate inside their own bounded table cells. Financial values do not ellipsize.",
+    "Simulator option chip rows may scroll horizontally; explicit scroll-to-end tests reveal the full9,999,999.99 amount."
+  ],
+  "testingScope": "Browser CSS viewports in Chromium; native device hardware is not claimed."
+}
