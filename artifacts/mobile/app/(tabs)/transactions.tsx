@@ -2504,17 +2504,11 @@ export function ActivityScreen() {
               </View>
               <View style={styles.summaryTotalRight}>
                 <Text
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.72}
                   style={[styles.summaryMiniValue, { color: c.success }]}
                 >
                   +${formatActivityMoney(activitySummary.income)} in
                 </Text>
                 <Text
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.72}
                   style={[styles.summaryMiniValue, { color: c.destructive }]}
                 >
                   −${formatActivityMoney(activitySummary.out)} out
@@ -3083,9 +3077,6 @@ export function ActivityScreen() {
             styles.activityNetValue,
             { color: activitySummary.net >= 0 ? c.success : c.destructive },
           ]}
-
-
-
         >
           {activitySummary.net > 0 ? "+" : activitySummary.net < 0 ? "−" : ""}$
           {formatActivityMoney(activitySummary.net)}
@@ -3106,9 +3097,6 @@ export function ActivityScreen() {
           >
             <Text
               style={[styles.monthlySummaryValue, { color: c.success }]}
-
-
-
             >
               ${formatActivityMoney(activitySummary.income)}
             </Text>
@@ -3133,9 +3121,6 @@ export function ActivityScreen() {
           >
             <Text
               style={[styles.monthlySummaryValue, { color: c.destructive }]}
-
-
-
             >
               ${formatActivityMoney(activitySummary.out)}
             </Text>
@@ -3415,7 +3400,6 @@ export function ActivityScreen() {
             const statusColor =
               item.pending || needsIncomeReview ? c.warning : c.primary;
             const runningBalance = runningBalanceById.get(item.id);
-
             return (
               <Pressable
                 accessibilityRole="button"
@@ -3451,7 +3435,6 @@ export function ActivityScreen() {
                     color={sourceMeta.color}
                   />
                 </View>
-
                 {/* Middle */}
                 <View style={styles.txMid}>
                   <Text
@@ -3483,7 +3466,6 @@ export function ActivityScreen() {
                     </View>
                   ) : null}
                 </View>
-
                 {/* Amount + action hint */}
                 <View style={styles.txRight}>
                   <Text
@@ -3491,16 +3473,12 @@ export function ActivityScreen() {
                       styles.txAmount,
                       { color: isExpense ? c.destructive : c.success },
                     ]}
-
-
-
                   >
                     {isExpense ? "−" : "+"}${formatActivityMoney(item.amount)}
                   </Text>
                   {runningBalance != null ? (
                     <Text
                       style={[styles.txBalance, { color: c.mutedForeground }]}
-
                     >
                       Balance ${formatActivityMoney(runningBalance)}
                     </Text>
@@ -3519,8 +3497,7 @@ export function ActivityScreen() {
               </Pressable>
             );
           }}
-        />
-      )}
+        />   )}
 
       {/* ── Filter sheet ── */}
       <Modal
@@ -5203,7 +5180,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   summaryLargeNet: {
-    fontSize: 30,
+    fontSize: 26,
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: -0.8,
     marginTop: 2,
@@ -5212,18 +5189,20 @@ const styles = StyleSheet.create({
     width: "100%",
     minWidth: 0,
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "space-between",
     gap: 10,
   },
   summaryMiniValue: {
     flex: 1,
-    minWidth: 0,
+    minWidth: 160,
     fontSize: 13,
     fontFamily: "Inter_800ExtraBold",
   },
   summaryWeekList: { gap: 8 },
   summaryWeekCard: {
     minHeight: 52,
+    flexWrap: "wrap",
     borderWidth: 1,
     borderRadius: 15,
     paddingHorizontal: 14,
@@ -5232,7 +5211,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
-  summaryWeekMiddle: { flex: 1 },
+  summaryWeekMiddle: { flex: 1, minWidth: 120 },
   summaryWeekLabel: {
     fontSize: 13,
     fontFamily: "Inter_700Bold",

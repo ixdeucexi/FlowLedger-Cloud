@@ -777,9 +777,6 @@ overview: (<SurfaceCard
                 <View>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}><Text style={styles.cardEyebrow}>CHECKING BALANCE</Text><MoneyPrivacyToggle /></View>
                   <Text
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.55}
-                    numberOfLines={1}
                     style={styles.checkingValue}
                   >
                     {checkingBalanceLabel}
@@ -816,7 +813,6 @@ overview: (<SurfaceCard
                   </Pressable>
                 </View>
               </View>
-
               <View style={styles.accountBody}>
                 <View pointerEvents="none" style={styles.accountGlow} />
                 <View pointerEvents="none" style={styles.accountGlowSecondary} />
@@ -936,7 +932,6 @@ stability_path: (<SurfaceCard accent="purple" style={styles.stabilityWrap} acces
                   </Text>
                 </View>
               </View>
-
               <View style={styles.stabilitySummary}>
                 <View style={styles.protectedMetric}>
                   <Text style={styles.protectedValue}>{progress.protectedDays}</Text>
@@ -951,7 +946,6 @@ stability_path: (<SurfaceCard accent="purple" style={styles.stabilityWrap} acces
                   <Text style={styles.summaryValue}>{nextMilestone} protected days</Text>
                 </View>
               </View>
-
               <View style={styles.stabilityCallout}>
                 <View style={styles.calloutIcon}>
                   <Feather name="check" size={13} color="#5ee6b5" />
@@ -960,7 +954,6 @@ stability_path: (<SurfaceCard accent="purple" style={styles.stabilityWrap} acces
                   {progress.safeUntilPayday === true ? `Safe until ${progress.nextPaycheckLabel ?? "payday"}` : progress.safeUntilPayday === false ? `${currency(progress.paydayShortfall)} to add before ${progress.nextPaycheckLabel ?? "payday"}` : "Next payday not confirmed"}
                 </Text>
               </View>
-
               <View style={styles.pathHeader}>
                 <Text style={styles.pathLabel}>180-day path</Text>
                 <Text style={styles.pathPercent}>{Math.round(progress.backupProgress * 100)}%</Text>
@@ -971,7 +964,6 @@ stability_path: (<SurfaceCard accent="purple" style={styles.stabilityWrap} acces
                   <Text key={day} style={styles.pathMilestone}>{day}d</Text>
                 ))}
               </View>
-
               <View style={styles.nextAction}>
                 <View style={styles.nextActionIcon}>
                   <Feather name="arrow-up-right" size={16} color="#e2c6ff" />
@@ -981,7 +973,6 @@ stability_path: (<SurfaceCard accent="purple" style={styles.stabilityWrap} acces
                   <Text style={styles.nextActionText} numberOfLines={2}>{progress.nextAction}</Text>
                 </View>
               </View>
-
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Review my payday plan"
@@ -1026,7 +1017,7 @@ debt_planner: (<SurfaceCard
             <Text style={styles.debtPlannerStatusValue} numberOfLines={1}>
               {payoffTarget ? payoffTarget.name : "Build your plan"}
             </Text>
-            <Text style={styles.debtPlannerStatusMeta} numberOfLines={1}>
+            <Text style={styles.debtPlannerStatusMeta}>
               {payoffTarget
                 ? `${payoffDebts.length} active ${payoffDebts.length === 1 ? "debt" : "debts"} · ${currency(payoffBalance)} remaining`
                 : "Add a debt to preview your payoff path"}
@@ -1277,8 +1268,7 @@ savings_goals: (<SurfaceCard
             </View>
           </View>
         </SurfaceCard>),
-}} />
-      {customizerOpen ? <DashboardCustomizer
+}} />    {customizerOpen ? <DashboardCustomizer
         visible={customizerOpen}
         layout={dashboardLayout}
         loading={dashboardPreferences.loading}
@@ -1577,7 +1567,7 @@ const styles = StyleSheet.create({
   primaryColumn: { flex: 1, minWidth: 0, gap: 16 },
   accountCardWrap: { minHeight: 274 },
   accountCard: { flex: 1, padding: 22 },
-  accountHeader: { flexDirection: "row", alignItems: "flex-start", gap: 14 },
+  accountHeader: { flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", gap: 14 },
   cardEyebrow: {
     color: "#a8b5ca",
     fontSize: 11,

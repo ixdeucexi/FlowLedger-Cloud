@@ -785,9 +785,6 @@ export default function BillsScreen() {
             <View style={styles.cardRight}>
               <Text
                 style={[styles.amount, { color: c.foreground }]}
-
-
-
               >
                 ${item.amount.toFixed(2)}
               </Text>
@@ -934,9 +931,6 @@ export default function BillsScreen() {
                     color: isPaidOff ? c.success : c.destructive,
                   },
                 ]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.68}
                 sensitive={!isPaidOff}
               >
                 {isPaidOff
@@ -1090,7 +1084,6 @@ export default function BillsScreen() {
                 />
               </View>
               <DataFreshnessLabel inset compact />
-
               {/* Keep the Bills / Debt switch in one stable location for both views. */}
               <View
                 style={[
@@ -1144,7 +1137,6 @@ export default function BillsScreen() {
                   ))}
                 </View>
               </View>
-
               {activeTab === "bills" && visibleOverdueAlerts.length > 0 ? (
                 <View style={styles.overdueAlerts}>
                   {visibleOverdueAlerts.map((overdueBill) => (
@@ -1246,7 +1238,6 @@ export default function BillsScreen() {
                   ))}
                 </View>
               ) : null}
-
               {activeTab === "bills" ? (
                 <View
                   style={[
@@ -1319,9 +1310,6 @@ export default function BillsScreen() {
                                 : c.success,
                           },
                         ]}
-
-
-
                       >
                         ${currentBillRemaining.toFixed(0)}
                       </Text>
@@ -1477,7 +1465,6 @@ export default function BillsScreen() {
                   </View>
                 </View>
               ) : null}
-
               {/* ════════════════════ BILLS VIEW ════════════════════ */}
               {activeTab === "bills" && (
                 <>
@@ -1543,7 +1530,6 @@ export default function BillsScreen() {
                       </Pressable>
                     ))}
                   </View>
-
                   <View
                     style={[
                       styles.searchRow,
@@ -1615,7 +1601,6 @@ export default function BillsScreen() {
                   </View>
                 </>
               )}
-
               {/* ════════════════════ DEBT VIEW ════════════════════ */}
               {activeTab === "debt" && !debtWorkEnabled ? (
                 <View
@@ -1674,9 +1659,6 @@ export default function BillsScreen() {
                         styles.debtOverviewAmount,
                         { color: c.foreground },
                       ]}
-
-
-
                     >
                       $
                       {totalDebt.toLocaleString(undefined, {
@@ -1699,9 +1681,6 @@ export default function BillsScreen() {
                             styles.debtOverviewStatValue,
                             { color: c.foreground },
                           ]}
-
-
-
                         >
                           ${totalMinPayments.toFixed(0)}
                         </Text>
@@ -1728,9 +1707,6 @@ export default function BillsScreen() {
                             styles.debtOverviewStatValue,
                             { color: c.success },
                           ]}
-
-
-
                         >
                           +${debtPaymentPlan.extraPayment.toFixed(0)}
                         </Text>
@@ -1875,9 +1851,6 @@ export default function BillsScreen() {
                                     styles.debtPaymentStatValue,
                                     { color: c.primary },
                                   ]}
-                                  numberOfLines={1}
-                                  adjustsFontSizeToFit
-                                  minimumFontScale={0.7}
                                 >
                                   +${debtPaymentPlan.extraPayment.toFixed(0)}
                                 </Text>
@@ -1902,9 +1875,6 @@ export default function BillsScreen() {
                                     styles.debtPaymentStatValue,
                                     { color: c.success },
                                   ]}
-                                  numberOfLines={1}
-                                  adjustsFontSizeToFit
-                                  minimumFontScale={0.7}
                                 >
                                   ${debtPaymentPlan.totalPlanned.toFixed(0)}
                                 </Text>
@@ -1955,7 +1925,6 @@ export default function BillsScreen() {
                           ) : null}
                         </View>
                       )}
-
                       {settings.debtPayoffEnabled && (
                         <View
                           style={[
@@ -2043,10 +2012,7 @@ export default function BillsScreen() {
             </View>
           </>
         }
-      />
-
-      <Modal
-        animationType="fade"
+      />     animationType="fade"
         transparent
         visible={debtInfoVisible}
         onRequestClose={() => setDebtInfoVisible(false)}
@@ -2734,13 +2700,14 @@ const styles = StyleSheet.create({
   },
   debtPaymentSummary: {
     flexDirection: "row",
+    flexWrap: "wrap",
     borderWidth: 1,
     borderRadius: 15,
     paddingVertical: 10,
   },
   debtPaymentStat: {
     flex: 1,
-    minWidth: 0,
+    minWidth: 160,
     alignItems: "center",
     gap: 3,
     paddingHorizontal: 5,

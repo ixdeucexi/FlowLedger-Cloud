@@ -1,3 +1,4 @@
+import { formatCalendarBalance, formatCompactCalendarAmount } from "@/lib/forecastDisplay";
 import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -682,9 +683,10 @@ function BillCalendar({
                         styles.calendarAmount,
                         { color: entry.paid ? palette.green : palette.purple },
                       ]}
+                      accessibilityLabel={`Amount ${money(entry.amount)}`}
                       numberOfLines={1}
                     >
-                      {money(entry.amount).replace(".00", "")}
+                      {formatCompactCalendarAmount(entry.amount, formatCalendarBalance(entry.amount), 1_000)}
                     </Text>
                   ) : null}
                 </>
@@ -1203,7 +1205,8 @@ const styles = StyleSheet.create({
   calendarCell: {
     width: `${100 / 7}%` as never,
     height: 41,
-    padding: 5,
+    paddingVertical: 5,
+    paddingHorizontal: 1,
     borderRightWidth: 1,
     borderBottomWidth: 1,
     borderColor: palette.borderSoft,

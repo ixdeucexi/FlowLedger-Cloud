@@ -21,7 +21,13 @@ test("calendar balances round cents to the nearest whole dollar", () => {
 
 test("dense calendar labels compact large amounts while preserving normal labels and signs", () => {
   assert.equal(formatCompactCalendarAmount(1689.49), "$1,689");
-  assert.equal(formatCompactCalendarAmount(9999.99, "$9,999.99"), "$9,999.99");
+  assert.equal(formatCompactCalendarAmount(9999.49, "$9,999.49"), "$9,999.49");
+  assert.equal(formatCompactCalendarAmount(9999.99, "$9,999.99"), "$10K");
+  assert.equal(formatCompactCalendarAmount(-9999.49), "-$9,999");
+  assert.equal(formatCompactCalendarAmount(-9999.5), "-$10K");
+  assert.equal(formatCompactCalendarAmount(-9999.99), "-$10K");
+  assert.equal(formatCompactCalendarAmount(1689.49, "$1,689.49", 1_000), "$1.7K");
+  assert.equal(formatCompactCalendarAmount(-1689.49, "−$1,689.49", 1_000), "−$1.7K");
   assert.equal(formatCompactCalendarAmount(10000), "$10K");
   assert.equal(formatCompactCalendarAmount(263682.34, "−$263,682.34"), "−$264K");
   assert.equal(formatCompactCalendarAmount(-263682.34), "-$264K");

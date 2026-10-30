@@ -347,9 +347,6 @@ export function DesktopActivityPage({
                       visibleSummary.net >= 0 ? palette.green : palette.red,
                   },
                 ]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.7}
               >
                 {money(visibleSummary.net, true)}
               </Text>
@@ -382,9 +379,6 @@ export function DesktopActivityPage({
                   <Text style={styles.flowSupportLabel}>INFLOWS</Text>
                   <Text
                     style={[styles.flowSupportValue, { color: palette.green }]}
-
-
-
                   >
                     {money(visibleSummary.income)}
                   </Text>
@@ -407,9 +401,6 @@ export function DesktopActivityPage({
                   <Text style={styles.flowSupportLabel}>OUTFLOWS</Text>
                   <Text
                     style={[styles.flowSupportValue, { color: palette.red }]}
-
-
-
                   >
                     {money(visibleSummary.out)}
                   </Text>
@@ -874,12 +865,13 @@ const styles = StyleSheet.create({
   },
   flowHeroBody: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "stretch",
     gap: 18,
   },
   flowHeroBodyStack: { flexDirection: "column" },
   netFlowBlockBase: {
-    minWidth: 240,
+    minWidth: 360,
     justifyContent: "center",
     paddingRight: 18,
     borderRightWidth: 1,

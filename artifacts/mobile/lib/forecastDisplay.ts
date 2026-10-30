@@ -202,15 +202,17 @@ export function formatCalendarBalance(amount: number): string {
 }
 
 /** Compact grid-only money; retain fullLabel in accessibility and day details. */
-export function formatCompactCalendarAmount(amount: number, fullLabel = formatCalendarBalance(amount)): string {
+export function formatCompactCalendarAmount(amount: number, fullLabel = formatCalendarBalance(amount), compactAt = 10_000): string {
   const magnitude = Math.abs(Number(amount) || 0);
-  if (!Number.isFinite(magnitude) || magnitude < 10_000) return fullLabel;
+  if (!Number.isFinite(magnitude) || Math.round(magnitude) < compactAt) return fullLabel;
   const sign = fullLabel.match(/^[+\-−]/)?.[0] ?? "";
   const units = [{ divisor: 1_000, suffix: "K" }, { divisor: 1_000_000, suffix: "M" }, { divisor: 1_000_000_000, suffix: "B" }];
   let index = magnitude >= 1_000_000_000 ? 2 : magnitude >= 1_000_000 ? 1 : 0;
   if (index < units.length - 1 && Math.round(magnitude / units[index].divisor) >= 1_000) index += 1;
   const unit = units[index];
-  return `${sign}$${Math.round(magnitude / unit.divisor).toLocaleString("en-US")}${unit.suffix}`;
+  const scaled = magnitude / unit.divisor;
+  const compact = magnitude < 10_000 ? Number(scaled.toFixed(1)) : Math.round(scaled);
+  return `${sign}$${compact.toLocaleString("en-US")}${unit.suffix}`;
 }
 
 export function formatForecastDateLabel(value?: string): string {

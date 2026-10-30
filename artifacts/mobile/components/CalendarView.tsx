@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     borderWidth: 0,
     paddingTop: 4,
-    paddingHorizontal: 4,
+    paddingHorizontal: 1,
     paddingBottom: 4,
   },
   desktopCellInner: { paddingTop: 8, paddingHorizontal: 8, paddingBottom: 7 },
