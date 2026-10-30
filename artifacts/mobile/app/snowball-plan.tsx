@@ -473,7 +473,7 @@ function SnowballPlanScreen() {
                     </View>
                     <View style={[styles.debtCard, { backgroundColor: c.background + "88", borderColor: row.id === target?.id ? c.primary + "66" : c.border }]}>
                       <View style={styles.debtHeader}>
-                        <View style={styles.flexOne}>
+                        <View style={styles.debtHeaderCopy}>
                           <View style={styles.inlineBadges}>
                             {row.id === target?.id ? <Text style={[styles.targetBadge, { color: c.primary }]}>TARGET NOW</Text> : null}
                             {row.settlement.status !== "scheduled" ? <Text style={[styles.paidBadge, { color: debtOccurrenceProgress(row.settlement).hasPartial ? c.warning : c.success }]}>{debtOccurrenceProgress(row.settlement).label}</Text> : null}
@@ -575,7 +575,7 @@ function SnowballPlanScreen() {
                           <View style={[styles.kindBadge, { backgroundColor: allocation.kind === "rollover" ? c.success + "18" : allocation.kind === "extra" ? c.primary + "18" : c.background }]}>
                             <Text style={[styles.kindBadgeText, { color: allocation.kind === "rollover" ? c.success : allocation.kind === "extra" ? c.primary : c.mutedForeground }]}>{allocationLabel(allocation.kind)}</Text>
                           </View>
-                          <View style={styles.flexOne}>
+                          <View style={styles.allocationCopy}>
                             <Text style={[styles.allocationName, { color: c.foreground }]}>{allocation.targetBillName}</Text>
                             <Text style={[styles.allocationDetail, { color: c.mutedForeground }]}>
                               {allocation.kind === "rollover"
@@ -827,14 +827,15 @@ const styles = StyleSheet.create({
   rankText: { fontSize: 10, fontFamily: "Inter_800ExtraBold" },
   railLine: { width: 2, flex: 1, minHeight: 20 },
   debtCard: { flex: 1, borderWidth: 1, borderRadius: 18, padding: 14, marginLeft: 5 },
-  debtHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  debtHeader: { flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", gap: 12 },
+  debtHeaderCopy: { flexGrow: 1, flexBasis: 140, minWidth: 0 },
   inlineBadges: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   targetBadge: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7 },
   paidBadge: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.6 },
   debtName: { fontSize: 17, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
-  debtBalance: { fontSize: 18, fontFamily: "Inter_800ExtraBold" },
-  debtStats: { flexDirection: "row", gap: 9, marginTop: 13 },
-  debtStat: { flex: 1 },
+  debtBalance: { flexShrink: 0, maxWidth: "100%", marginLeft: "auto", fontSize: 18, fontFamily: "Inter_800ExtraBold" },
+  debtStats: { flexDirection: "row", flexWrap: "wrap", gap: 9, marginTop: 13 },
+  debtStat: { flexGrow: 1, flexBasis: 120, minWidth: 0 },
   debtStatLabel: { fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.65 },
   debtStatValue: { fontSize: 13, fontFamily: "Inter_700Bold", marginTop: 3 },
   sourceOutflow: { fontSize: 10, lineHeight: 15, fontFamily: "Inter_600SemiBold", marginTop: 10 },
@@ -849,15 +850,16 @@ const styles = StyleSheet.create({
   timelineDot: { width: 10, height: 10, borderRadius: 99, marginTop: 6 },
   timelineLine: { width: 2, flex: 1, marginTop: 3 },
   timelineBody: { flex: 1, paddingLeft: 8 },
-  timelineHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  timelineHeader: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10 },
   timelineDate: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
-  timelineTotal: { fontSize: 12, fontFamily: "Inter_700Bold" },
-  timelineAllocation: { flexDirection: "row", alignItems: "center", gap: 9, borderTopWidth: 1, paddingVertical: 10, marginTop: 8 },
+  timelineTotal: { flexShrink: 0, maxWidth: "100%", fontSize: 12, fontFamily: "Inter_700Bold" },
+  timelineAllocation: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 9, borderTopWidth: 1, paddingVertical: 10, marginTop: 8 },
   kindBadge: { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 5 },
   kindBadgeText: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.45 },
+  allocationCopy: { flexGrow: 1, flexBasis: 140, minWidth: 0 },
   allocationName: { fontSize: 13, fontFamily: "Inter_700Bold" },
   allocationDetail: { fontSize: 10, lineHeight: 14, marginTop: 2 },
-  allocationAmount: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  allocationAmount: { flexShrink: 0, maxWidth: "100%", marginLeft: "auto", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   timelineEmpty: { borderRadius: 14, padding: 14, marginTop: 14 },
   plannerCard: { borderWidth: 1, borderRadius: 23, padding: 17 },
   shieldIcon: { width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center" },
@@ -873,13 +875,13 @@ const styles = StyleSheet.create({
   error: { fontSize: 11, lineHeight: 16, marginTop: 6 },
   safeLink: { alignSelf: "flex-start", paddingVertical: 9 },
   safeLinkText: { fontSize: 12, fontFamily: "Inter_700Bold" },
-  payoffDateLine: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 16 },
+  payoffDateLine: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 16 },
   payoffDateLabel: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7 },
   payoffDateValue: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   allocations: { marginTop: 1 },
-  previewAllocation: { flexDirection: "row", alignItems: "center", gap: 8, borderTopWidth: 1, paddingVertical: 10 },
-  previewAllocationName: { flex: 1, fontSize: 12, fontFamily: "Inter_600SemiBold" },
-  previewAllocationAmount: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
+  previewAllocation: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8, borderTopWidth: 1, paddingVertical: 10 },
+  previewAllocationName: { flexGrow: 1, flexBasis: 120, minWidth: 0, fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  previewAllocationAmount: { flexShrink: 0, maxWidth: "100%", marginLeft: "auto", fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   actions: { flexDirection: "row", gap: 10, marginTop: 16 },
   removeButton: { minWidth: 94, height: 52, borderRadius: 14, borderWidth: 1, flexDirection: "row", gap: 6, alignItems: "center", justifyContent: "center" },
   removeText: { fontSize: 13, fontFamily: "Inter_700Bold" },

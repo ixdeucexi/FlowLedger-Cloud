@@ -1167,7 +1167,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
             <View style={[styles.transactionIcon, { backgroundColor: current.amount < 0 ? c.destructive + "16" : c.success + "16" }]}>
               <Feather name={current.amount < 0 ? "arrow-up-right" : "arrow-down-left"} size={20} color={current.amount < 0 ? c.destructive : c.success} />
             </View>
-            <View style={{ flex: 1 }}>
+            <View style={styles.transactionCopy}>
               <Text style={[styles.transactionName, { color: c.foreground }]} numberOfLines={2}>{transactionName(current)}</Text>
               <Text style={[styles.transactionMeta, { color: c.mutedForeground }]}>{displayDate(current.date)} · Posted</Text>
             </View>
@@ -1499,10 +1499,11 @@ const styles = StyleSheet.create({
   progressRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   progressText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   progressTrack: { height: 5, borderRadius: 3, overflow: "hidden", marginTop: 7 }, progressFill: { height: 5, borderRadius: 3 },
-  transactionRow: { flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 18 },
-  transactionIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  transactionRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 11, paddingVertical: 18 },
+  transactionIcon: { width: 44, height: 44, flexShrink: 0, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  transactionCopy: { flexGrow: 1, flexBasis: 160, minWidth: 0 },
   transactionName: { fontSize: 17, fontFamily: "Inter_800ExtraBold" }, transactionMeta: { fontSize: 12, fontFamily: "Inter_500Medium", marginTop: 4 },
-  transactionAmount: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
+  transactionAmount: { flexShrink: 0, maxWidth: "100%", marginLeft: "auto", fontSize: 17, fontFamily: "Inter_800ExtraBold" },
   floSuggestion: { minHeight: 62, borderWidth: 1, borderRadius: 15, paddingHorizontal: 12, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
   useSuggestionText: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   sectionTitle: { fontSize: 16, fontFamily: "Inter_800ExtraBold", marginTop: 4 },
@@ -1530,7 +1531,7 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 22, lineHeight: 29, fontFamily: "Inter_700Bold", textAlign: "center", marginTop: 8 },
   modalDescription: { fontSize: 13, lineHeight: 19, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: 8 },
   amountBox: { borderRadius: 16, padding: 14, marginTop: 16, marginBottom: 12, gap: 9 },
-  amountLine: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }, amountLabel: { fontSize: 13, fontFamily: "Inter_500Medium" }, amountValue: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
+  amountLine: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8 }, amountLabel: { flexGrow: 1, flexBasis: 120, minWidth: 0, fontSize: 13, fontFamily: "Inter_500Medium" }, amountValue: { flexShrink: 0, maxWidth: "100%", marginLeft: "auto", fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   primaryButton: { minHeight: 52, borderRadius: 15, alignItems: "center", justifyContent: "center", paddingHorizontal: 14, marginTop: 8 },
   reviewSkippedButton: { width: "100%", marginTop: 8 },
   primaryButtonText: { fontSize: 13, fontFamily: "Inter_800ExtraBold", textAlign: "center" },
