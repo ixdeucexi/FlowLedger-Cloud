@@ -58,8 +58,10 @@ function reviewHarness(goals: any[] = [open, closed, archived], canEdit = true) 
     if (name === "react") return hooks;
     if (name === "react-native") return { ...Object.fromEntries(["View", "Text", "Pressable", "Modal", "ScrollView"].map(value => [value, value])), Alert: { alert() {} }, StyleSheet: { create: (value: any) => value, hairlineWidth: 1 } };
     const leaf = name.split("/").at(-1)!;
+    if (leaf === "BucketVisual") return { BucketThumbnail: "BucketThumbnail" };
     if (name.includes("/components/")) return { [leaf]: leaf };
     if (leaf === "BudgetContext") return { useBudget: () => budget };
+    if (leaf === "BucketPersonalizationContext") return { useBucketPersonalization: () => ({ available: true, unavailableReason: null, open() {} }) };
     if (leaf === "AuthContext") return { useAuth: () => ({ user: { id: "user" } }) };
     if (leaf === "useLocalDay") return { useLocalDay: () => "2026-10-24" };
     if (leaf === "useColors") return { useColors: () => new Proxy({}, { get: () => "#000000" }) };

@@ -173,6 +173,7 @@ test("history-only income schedules render their reason and destination without 
     new Function("exports", "require", js)(exported, (name: string) => {
       if (name === "react") return { __esModule: true, default: React, useRef: (value: unknown) => ({ current: value }), useEffect() {}, useState: (initial: unknown) => [state++ === 0 ? { id: changeId, scope } : initial, () => {}] };
       if (name === "react-native") return { View: "View", Text: "Text", Pressable: "Pressable", ActivityIndicator: "ActivityIndicator", StyleSheet: { create: (value: unknown) => value } };
+      if (name.endsWith("PrivacyPrimitives")) return { PrivacyView: "View", PrivacyText: "Text", PrivacyPressable: "Pressable" };
       if (name === "expo-router") return { useRouter: () => ({ push() {} }) };
       if (name.endsWith("BudgetContext")) return { useBudget: () => ({ canEditHousehold: true, undoRecentChange() {} }) };
       if (name.endsWith("useColors")) return { useColors: () => new Proxy({}, { get: () => "#123456" }) };

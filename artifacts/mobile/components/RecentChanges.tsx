@@ -1,7 +1,8 @@
 import Feather from "@expo/vector-icons/Feather";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet } from "react-native";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { useRecentChanges } from "@/hooks/useRecentChanges";
@@ -21,12 +22,12 @@ function FieldDifference({ field }: { field: RecentChangeField }) {
       <View style={styles.values}>
         <View style={styles.valueColumn}>
           <Text style={[styles.valueLabel, { color: c.mutedForeground }]}>BEFORE</Text>
-          <Text style={[styles.value, { color: c.mutedForeground }]}>{formatRecentChangeValue(field, field.before)}</Text>
+          <Text sensitive={field.kind === "money"} style={[styles.value, { color: c.mutedForeground }]}>{formatRecentChangeValue(field, field.before)}</Text>
         </View>
         <Feather name="arrow-right" size={15} color={c.mutedForeground} style={styles.arrow} />
         <View style={styles.valueColumn}>
           <Text style={[styles.valueLabel, { color: c.mutedForeground }]}>AFTER</Text>
-          <Text style={[styles.value, { color: c.foreground }]}>{formatRecentChangeValue(field, field.after)}</Text>
+          <Text sensitive={field.kind === "money"} style={[styles.value, { color: c.foreground }]}>{formatRecentChangeValue(field, field.after)}</Text>
         </View>
       </View>
     </View>
