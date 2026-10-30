@@ -30,6 +30,7 @@ export type InterfacePreferences = {
   calendar?: CalendarPresentationState;
   activity?: ActivityPresentationState;
   dashboard?: DashboardLayoutPreference;
+  dashboardPendingSync?: boolean;
   notifications?: NotificationCenterState;
 };
 

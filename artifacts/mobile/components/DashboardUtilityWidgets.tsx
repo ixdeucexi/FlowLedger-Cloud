@@ -11,6 +11,7 @@ type Props = {
   decisions: TodayDecision[];
   reviewCount: number;
   compact?: boolean;
+  widgetId?: "today_decisions" | "review_center" | "reports_insights";
   onNavigate: (route: string, params?: Record<string, string>) => void;
 };
 
@@ -21,12 +22,14 @@ const TONE_ICON: Record<TodayDecisionTone, React.ComponentProps<typeof Feather>[
   info: "compass",
 };
 
-export function DashboardUtilityWidgets({ layout, decisions, reviewCount, compact = false, onNavigate }: Props) {
+export function DashboardUtilityWidgets({ layout, decisions, reviewCount, compact = false, widgetId, onNavigate }: Props) {
   const c = useColors();
   const { width } = useWindowDimensions();
   const stack = compact || width < 1120;
   const [expanded, setExpanded] = useState(false);
-  const visible = useMemo(() => visibleDashboardWidgets(layout), [layout]);
+  const visible = useMemo(() => visibleDashboardWidgets(layout).filter(id =>
+    (id === "today_decisions" || id === "review_center" || id === "reports_insights") && (!widgetId || id === widgetId),
+  ), [layout, widgetId]);
   const compactDecisionLimit = 2;
   const visibleDecisions = compact && !expanded ? decisions.slice(0, compactDecisionLimit) : decisions;
 

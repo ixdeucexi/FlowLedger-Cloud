@@ -1,0 +1,321 @@
+{
+  "status": "PASS",
+  "origin": "local-export",
+  "checks": 26,
+  "results": [
+    {
+      "width": 390,
+      "checks": [
+        "actual-dashboard-default-sections-and-required-cards",
+        "preset-Simple-changes-real-dashboard-and-persists",
+        "preset-Debt Focus-changes-real-dashboard-and-persists",
+        "preset-Planning Ahead-changes-real-dashboard-and-persists",
+        "presets-have-distinct-useful-real-card-configurations",
+        "preset-selection-and-real-layout-survive-reload",
+        "hiding-optional-section-removes-actual-card",
+        "accessible-reorder-controls-change-real-card-order",
+        "required-overview-and-next-up-cannot-be-hidden",
+        "favorite-picker-enforces-four-action-limit",
+        "pinned-add-income-opens-existing-form-without-saving-finances",
+        "presentation-save-failure-is-visible-and-retry-saves-current-layout",
+        "reset-restores-dashboard-without-changing-theme-flo-haptics"
+      ],
+      "Simple": {
+        "order": [
+          "overview",
+          "snapshot",
+          "today_decisions",
+          "quick_actions",
+          "monthly_plan",
+          "review_center",
+          "reports_insights",
+          "buckets",
+          "stability_path",
+          "debt_planner",
+          "recent_activity",
+          "upcoming_payments",
+          "category_budget",
+          "savings_goals"
+        ],
+        "hidden": [
+          "review_center",
+          "reports_insights",
+          "buckets",
+          "stability_path",
+          "debt_planner",
+          "recent_activity",
+          "upcoming_payments",
+          "category_budget",
+          "savings_goals"
+        ],
+        "favoriteActions": [
+          "add-transaction",
+          "add-bill",
+          "open-calendar"
+        ]
+      },
+      "SimpleRendered": [
+        "Dashboard section: Money overview",
+        "Dashboard section: Money snapshot",
+        "Dashboard section: Today’s Decisions",
+        "Dashboard section: Favorite actions",
+        "Dashboard section: This month’s plan"
+      ],
+      "Debt Focus": {
+        "order": [
+          "overview",
+          "debt_planner",
+          "today_decisions",
+          "snapshot",
+          "quick_actions",
+          "stability_path",
+          "monthly_plan",
+          "review_center",
+          "reports_insights",
+          "buckets",
+          "recent_activity",
+          "upcoming_payments",
+          "category_budget",
+          "savings_goals"
+        ],
+        "hidden": [
+          "reports_insights",
+          "buckets",
+          "recent_activity",
+          "upcoming_payments",
+          "category_budget",
+          "savings_goals"
+        ],
+        "favoriteActions": [
+          "open-snowball",
+          "add-debt",
+          "add-transaction",
+          "open-review"
+        ]
+      },
+      "Debt FocusRendered": [
+        "Dashboard section: Money overview",
+        "Dashboard section: Debt payoff",
+        "Dashboard section: Today’s Decisions",
+        "Dashboard section: Money snapshot",
+        "Dashboard section: Favorite actions",
+        "Dashboard section: Stability Path",
+        "Dashboard section: This month’s plan",
+        "Dashboard section: Review Center"
+      ],
+      "Planning Ahead": {
+        "order": [
+          "overview",
+          "monthly_plan",
+          "buckets",
+          "stability_path",
+          "today_decisions",
+          "quick_actions",
+          "snapshot",
+          "savings_goals",
+          "upcoming_payments",
+          "review_center",
+          "reports_insights",
+          "debt_planner",
+          "recent_activity",
+          "category_budget"
+        ],
+        "hidden": [
+          "reports_insights",
+          "debt_planner",
+          "recent_activity",
+          "category_budget"
+        ],
+        "favoriteActions": [
+          "open-calendar",
+          "add-goal",
+          "add-income",
+          "add-transaction"
+        ]
+      },
+      "Planning AheadRendered": [
+        "Dashboard section: Money overview",
+        "Dashboard section: This month’s plan",
+        "Dashboard section: Spending buckets",
+        "Dashboard section: Stability Path",
+        "Dashboard section: Today’s Decisions",
+        "Dashboard section: Favorite actions",
+        "Dashboard section: Money snapshot",
+        "Dashboard section: Review Center"
+      ],
+      "status": "PASS",
+      "errors": [],
+      "unknown": [],
+      "financialWrites": 0,
+      "aiCalls": 0,
+      "knownBaselineCsp": 0,
+      "controlledSaveNetworkErrors": 1,
+      "presentationSaveCount": 14,
+      "interceptedExternalRequests": 109,
+      "bundles": [
+        {
+          "path": "/_expo/static/js/web/entry-fac551cbbbe08e3cd36b4a9a9869956c.js",
+          "sha256": "4779accdfd3d407cf565f6d432b619504125838e627e3f0a6e27e934a4aeb6e1"
+        }
+      ]
+    },
+    {
+      "width": 1200,
+      "checks": [
+        "actual-dashboard-default-sections-and-required-cards",
+        "preset-Simple-changes-real-dashboard-and-persists",
+        "preset-Debt Focus-changes-real-dashboard-and-persists",
+        "preset-Planning Ahead-changes-real-dashboard-and-persists",
+        "presets-have-distinct-useful-real-card-configurations",
+        "preset-selection-and-real-layout-survive-reload",
+        "hiding-optional-section-removes-actual-card",
+        "accessible-reorder-controls-change-real-card-order",
+        "required-overview-and-next-up-cannot-be-hidden",
+        "favorite-picker-enforces-four-action-limit",
+        "pinned-add-income-opens-existing-form-without-saving-finances",
+        "presentation-save-failure-is-visible-and-retry-saves-current-layout",
+        "reset-restores-dashboard-without-changing-theme-flo-haptics"
+      ],
+      "Simple": {
+        "order": [
+          "overview",
+          "snapshot",
+          "today_decisions",
+          "quick_actions",
+          "monthly_plan",
+          "review_center",
+          "reports_insights",
+          "buckets",
+          "stability_path",
+          "debt_planner",
+          "recent_activity",
+          "upcoming_payments",
+          "category_budget",
+          "savings_goals"
+        ],
+        "hidden": [
+          "review_center",
+          "reports_insights",
+          "buckets",
+          "stability_path",
+          "debt_planner",
+          "recent_activity",
+          "upcoming_payments",
+          "category_budget",
+          "savings_goals"
+        ],
+        "favoriteActions": [
+          "add-transaction",
+          "add-bill",
+          "open-calendar"
+        ]
+      },
+      "SimpleRendered": [
+        "Dashboard section: Money overview",
+        "Dashboard section: Money snapshot",
+        "Dashboard section: Today’s Decisions",
+        "Dashboard section: Favorite actions",
+        "Dashboard section: This month’s plan"
+      ],
+      "Debt Focus": {
+        "order": [
+          "overview",
+          "debt_planner",
+          "today_decisions",
+          "snapshot",
+          "quick_actions",
+          "stability_path",
+          "monthly_plan",
+          "review_center",
+          "reports_insights",
+          "buckets",
+          "recent_activity",
+          "upcoming_payments",
+          "category_budget",
+          "savings_goals"
+        ],
+        "hidden": [
+          "reports_insights",
+          "buckets",
+          "recent_activity",
+          "upcoming_payments",
+          "category_budget",
+          "savings_goals"
+        ],
+        "favoriteActions": [
+          "open-snowball",
+          "add-debt",
+          "add-transaction",
+          "open-review"
+        ]
+      },
+      "Debt FocusRendered": [
+        "Dashboard section: Money overview",
+        "Dashboard section: Debt payoff",
+        "Dashboard section: Today’s Decisions",
+        "Dashboard section: Money snapshot",
+        "Dashboard section: Favorite actions",
+        "Dashboard section: Stability Path",
+        "Dashboard section: This month’s plan",
+        "Dashboard section: Review Center"
+      ],
+      "Planning Ahead": {
+        "order": [
+          "overview",
+          "monthly_plan",
+          "buckets",
+          "stability_path",
+          "today_decisions",
+          "quick_actions",
+          "snapshot",
+          "savings_goals",
+          "upcoming_payments",
+          "review_center",
+          "reports_insights",
+          "debt_planner",
+          "recent_activity",
+          "category_budget"
+        ],
+        "hidden": [
+          "reports_insights",
+          "debt_planner",
+          "recent_activity",
+          "category_budget"
+        ],
+        "favoriteActions": [
+          "open-calendar",
+          "add-goal",
+          "add-income",
+          "add-transaction"
+        ]
+      },
+      "Planning AheadRendered": [
+        "Dashboard section: Money overview",
+        "Dashboard section: This month’s plan",
+        "Dashboard section: Spending buckets",
+        "Dashboard section: Stability Path",
+        "Dashboard section: Today’s Decisions",
+        "Dashboard section: Favorite actions",
+        "Dashboard section: Money snapshot",
+        "Dashboard section: Savings goals",
+        "Dashboard section: Upcoming payments",
+        "Dashboard section: Review Center"
+      ],
+      "status": "PASS",
+      "errors": [],
+      "unknown": [],
+      "financialWrites": 0,
+      "aiCalls": 0,
+      "knownBaselineCsp": 0,
+      "controlledSaveNetworkErrors": 1,
+      "presentationSaveCount": 14,
+      "interceptedExternalRequests": 105,
+      "bundles": [
+        {
+          "path": "/_expo/static/js/web/entry-fac551cbbbe08e3cd36b4a9a9869956c.js",
+          "sha256": "4779accdfd3d407cf565f6d432b619504125838e627e3f0a6e27e934a4aeb6e1"
+        }
+      ]
+    }
+  ]
+}

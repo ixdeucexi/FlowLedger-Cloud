@@ -1,3 +1,4 @@
+import { dashboardMonthlyPlan } from "@/lib/dashboardMonthlyPlan";
 import { createTransactionNameResolver } from "@/lib/transactionNames";
 import { SPENDING_BUCKETS_ROUTE } from "@/lib/settingsNavigation";
 import Feather from "@expo/vector-icons/Feather";
@@ -25,6 +26,9 @@ import Svg, {
 
 import { AddBillModal } from "@/components/AddBillModal";
 import { AppText } from "@/components/AppText";
+import { DashboardSections } from "@/components/DashboardSections";
+import { DashboardFavoriteActions } from "@/components/DashboardFavoriteActions";
+import { DashboardLayoutStatus } from "@/components/DashboardLayoutStatus";
 import { DashboardCustomizer } from "@/components/DashboardCustomizer";
 import { DashboardSnapshotStage } from "@/components/DashboardSnapshotStage";
 import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
@@ -526,6 +530,7 @@ function DesktopDashboardContent({
   const { user } = useAuth();
   const {
     addBill,
+    canEditHousehold,
     addGoal,
     addIncome,
     bills,
@@ -554,7 +559,8 @@ function DesktopDashboardContent({
   const [incomeEditorOpen, setIncomeEditorOpen] = useState(false);
   const [customizerOpen, setCustomizerOpen] = useState(false);
   const [reviewMode, setReviewMode] = useState<"info" | "payday" | null>(null);
-  const { layout: dashboardLayout, updateLayout: updateDashboardLayout, resetLayout: resetDashboardLayout } = useDashboardLayoutPreferences();
+  const dashboardPreferences = useDashboardLayoutPreferences();
+  const { layout: dashboardLayout, updateLayout: updateDashboardLayout, resetLayout: resetDashboardLayout } = dashboardPreferences;
 
   const openAddAction = useCallback((action: DesktopAddAction) => {
     setPageAddOpen(false);
@@ -597,9 +603,7 @@ function DesktopDashboardContent({
     recentActivity,
   } = dashboardSnapshot;
   const isWide = width >= WIDE_DESKTOP_BREAKPOINT;
-  const isPrimaryRow = width >= 1180;
   const metricWidth = isWide ? "23.5%" : "48%";
-  const detailWidth = isWide ? "31.5%" : width >= 1100 ? "48%" : "100%";
   const name = displayName(user);
   const firstName = name.split(/\s+/)[0] || name;
 
@@ -634,6 +638,16 @@ function DesktopDashboardContent({
     ))[0] ?? null,
     [payoffDebts],
   );
+  const {
+    planned: dashboardPlanned,
+    remaining: dashboardPlanRemaining,
+    noMoreIncomeExpected: dashboardNoMoreIncomeExpected,
+  } = dashboardMonthlyPlan({
+    plannedIncome: dashboardModel.monthlyIncome,
+    incomeStillExpected: dashboardModel.cashFlow.monthlyIncome,
+    billsDue: dashboardModel.cashFlow.totalBillsDue,
+    bucketAllocations: dashboardModel.cashFlow.goalAllocations,
+  });
   const available = algorithmSuite.safeCushion.amount;
   const progress = algorithmSuite.stability;
   const nextMilestone =
@@ -757,96 +771,9 @@ function DesktopDashboardContent({
         </View>
       ) : null}
 
-      <View style={styles.metricGrid}>
-        <MetricCard
-          label="Available to Spend"
-          value={currency(available, 2)}
-          detail={
-            algorithmSuite.safeCushion.status === "safe"
-              ? "Safe above your protection floor"
-              : "Keep building breathing room"
-          }
-          accent="green"
-          width={metricWidth}
-          variant={0}
-          onPress={() => askFlo(`Explain why I have ${currency(available)} available to spend.`)}
-        />
-        <MetricCard
-          label="Upcoming Bills"
-          value={currency(unpaidTotal, 2)}
-          detail={`${unpaidCount} ${unpaidCount === 1 ? "bill" : "bills"} remaining this month`}
-          accent="amber"
-          width={metricWidth}
-          variant={1}
-          onPress={() => openBills("bills")}
-        />
-        <MetricCard
-          label="Monthly Income"
-          value={currency(monthlyIncome, 2)}
-          detail={`${incomes.length} active income ${incomes.length === 1 ? "source" : "sources"}`}
-          accent="purple"
-          width={metricWidth}
-          variant={2}
-          onPress={() => go("/(tabs)/more", { section: "money" })}
-        />
-        {goalTotals.target > 0 ? <MetricCard
-          label="Savings Progress"
-          value={`${Math.round(goalPercent)}%`}
-          detail={`${currency(goalTotals.current)} of ${currency(goalTotals.target)} funded`}
-          accent="cyan"
-          width={metricWidth}
-          percent={goalPercent}
-          onPress={() => go("/(tabs)/more", { section: "goals" })}
-        /> : null}
-      </View>
-
-      <SurfaceCard
-        accent="purple"
-        style={styles.debtPlannerCardWrap}
-        accessibilityLabel="Open Debt Payoff Planner"
-        onPress={() => go("/snowball-plan")}
-      >
-        <View style={styles.debtPlannerCard}>
-          <View style={styles.debtPlannerIcon}>
-            <Feather name="trending-down" size={23} color="#d8b4fe" />
-          </View>
-          <View style={styles.debtPlannerCopy}>
-            <Text style={styles.debtPlannerEyebrow}>DEBT PAYOFF</Text>
-            <Text style={styles.debtPlannerTitle}>Debt Payoff Planner</Text>
-            <Text style={styles.debtPlannerDescription}>
-              See your payoff order, forecast payments, rollovers, and safe extra-payment options.
-            </Text>
-          </View>
-          <View style={styles.debtPlannerStatus}>
-            <Text style={styles.debtPlannerStatusLabel}>
-              {payoffTarget ? "CURRENT TARGET" : "GET STARTED"}
-            </Text>
-            <Text style={styles.debtPlannerStatusValue} numberOfLines={1}>
-              {payoffTarget ? payoffTarget.name : "Build your plan"}
-            </Text>
-            <Text style={styles.debtPlannerStatusMeta} numberOfLines={1}>
-              {payoffTarget
-                ? `${payoffDebts.length} active ${payoffDebts.length === 1 ? "debt" : "debts"} · ${currency(payoffBalance)} remaining`
-                : "Add a debt to preview your payoff path"}
-            </Text>
-          </View>
-          <View style={styles.debtPlannerAction}>
-            <Text style={styles.debtPlannerActionText}>Open planner</Text>
-            <Feather name="arrow-right" size={17} color="#ffffff" />
-          </View>
-        </View>
-      </SurfaceCard>
-
-      <DashboardUtilityWidgets
-        layout={dashboardLayout}
-        decisions={todayDecisions}
-        reviewCount={reviewCount}
-        onNavigate={go}
-      />
-
-      <View style={[styles.primaryGrid, !isPrimaryRow && styles.primaryGridStacked]}>
-        <View style={styles.primaryColumn}>
-          <SurfaceCard
+      {!customizerOpen ? <DashboardLayoutStatus {...dashboardPreferences} /> : null}
+      <DashboardSections desktop layout={dashboardLayout} sections={{
+overview: (<SurfaceCard
             accent="blue"
             style={styles.accountCardWrap}
             accessibilityLabel={`${checkingBalanceAccessibilityLabel}. Flow Score ${algorithmSuite.flowScore.score}.`}
@@ -912,88 +839,65 @@ function DesktopDashboardContent({
                 </Pressable>
               </View>
             </View>
-          </SurfaceCard>
-
-          <SurfaceCard accent="neutral" style={styles.recentCardWrap} accessibilityLabel="Recent activity">
-            <View style={styles.sectionCardContent}>
-              <SectionHeader
-                title="Recent Activity"
-                subtitle="The latest activity shown in your PWA"
-                action="View all"
-                onAction={() => go("/(tabs)/transactions")}
-              />
-              <View style={styles.activityList}>
-                {recentActivity.length ? (
-                  recentActivity.map((transaction, index) => {
-                    const positive = transaction.amount >= 0;
-                    const selectedDebt = transactionDebt(transaction, bills);
-                    return (
-                      <Pressable
-                        key={transaction.id}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Open ${transactionName(transaction)}`}
-                        onPress={() => router.push(desktopActivityDestination(transaction.id, String(Date.now())) as never)}
-                        style={[styles.activityRow, index > 0 && styles.rowDivider]}
-                      >
-                        <View
-                          style={[
-                            styles.activityIcon,
-                            {
-                              backgroundColor: positive
-                                ? "rgba(34,197,94,0.12)"
-                                : "rgba(47,111,255,0.12)",
-                              borderColor: positive
-                                ? "rgba(34,197,94,0.18)"
-                                : "rgba(47,111,255,0.18)",
-                            },
-                          ]}
-                        >
-                          <Feather
-                            name={positive ? "arrow-down-left" : "shopping-bag"}
-                            size={15}
-                            color={positive ? "#4ade80" : "#7cb2ff"}
-                          />
-                        </View>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={styles.activityName} numberOfLines={1}>
-                            {transactionName(transaction)}
-                          </Text>
-                          <Text style={styles.activityMeta} numberOfLines={1}>
-                            {transaction.review_status === "needs_review"
-                              ? "Needs review"
-                              : transaction.category || (positive ? "Income" : "Spending")}
-                          </Text>
-                          {selectedDebt ? (
-                            <View style={styles.activityDebtMeta}>
-                              <Feather name="credit-card" size={8} color={BRAND.purple} />
-                              <Text style={styles.activityDebtText} numberOfLines={1}>Applied to {selectedDebt.name}</Text>
-                            </View>
-                          ) : null}
-                        </View>
-                        <View style={styles.activityAmountWrap}>
-                          <Text
-                            style={[
-                              styles.activityAmount,
-                              { color: positive ? "#4ade80" : BRAND.text },
-                            ]}
-                          >
-                            {positive ? "+" : "−"}{currency(Math.abs(transaction.amount), 2)}
-                          </Text>
-                          <Text style={styles.activityDate}>{formatActivityDate(transaction.date)}</Text>
-                        </View>
-                      </Pressable>
-                    );
-                  })
-                ) : (
-                  <EmptyState icon="activity" text="Your recent activity will appear here." />
-                )}
-              </View>
-            </View>
-          </SurfaceCard>
-        </View>
-
-        <View style={styles.primaryColumn}>
-          <SurfaceCard accent="purple" style={styles.stabilityWrap} accessibilityLabel={`Stability path: ${progress.stageLabel}`}>
+          </SurfaceCard>),
+snapshot: (<View style={styles.metricGrid}>
+        <MetricCard
+          label="Available to Spend"
+          value={currency(available, 2)}
+          detail={
+            algorithmSuite.safeCushion.status === "safe"
+              ? "Safe above your protection floor"
+              : "Keep building breathing room"
+          }
+          accent="green"
+          width={metricWidth}
+          variant={0}
+          onPress={() => askFlo(`Explain why I have ${currency(available)} available to spend.`)}
+        />
+        <MetricCard
+          label="Upcoming Bills"
+          value={currency(unpaidTotal, 2)}
+          detail={`${unpaidCount} ${unpaidCount === 1 ? "bill" : "bills"} remaining this month`}
+          accent="amber"
+          width={metricWidth}
+          variant={1}
+          onPress={() => openBills("bills")}
+        />
+        <MetricCard
+          label="Monthly Income"
+          value={currency(monthlyIncome, 2)}
+          detail={`${incomes.length} active income ${incomes.length === 1 ? "source" : "sources"}`}
+          accent="purple"
+          width={metricWidth}
+          variant={2}
+          onPress={() => go("/(tabs)/more", { section: "money" })}
+        />
+        {goalTotals.target > 0 ? <MetricCard
+          label="Savings Progress"
+          value={`${Math.round(goalPercent)}%`}
+          detail={`${currency(goalTotals.current)} of ${currency(goalTotals.target)} funded`}
+          accent="cyan"
+          width={metricWidth}
+          percent={goalPercent}
+          onPress={() => go("/(tabs)/more", { section: "goals" })}
+        /> : null}
+      </View>),
+today_decisions: (<DashboardUtilityWidgets layout={dashboardLayout} widgetId="today_decisions" decisions={todayDecisions} reviewCount={reviewCount} onNavigate={go} />),
+review_center: (<DashboardUtilityWidgets layout={dashboardLayout} widgetId="review_center" decisions={todayDecisions} reviewCount={reviewCount} onNavigate={go} />),
+reports_insights: (<DashboardUtilityWidgets layout={dashboardLayout} widgetId="reports_insights" decisions={todayDecisions} reviewCount={reviewCount} onNavigate={go} />),
+monthly_plan: (<SurfaceCard accent="blue" accessibilityLabel="Open monthly plan" onPress={() => go("/(tabs)/monthly")}><View style={styles.sectionCardContent}><SectionHeader title="This month's plan" subtitle="Income still expected minus remaining bills and buckets" action="View forecast" onAction={() => go("/(tabs)/monthly")} /><View style={styles.dashboardMonthlyValueRow}><Text style={[styles.dashboardMonthlyValue, { color: dashboardPlanRemaining < 0 ? BRAND.amber : BRAND.green }]}>{dashboardModel.monthlyIncome <= 0 ? "No income planned" : dashboardNoMoreIncomeExpected ? "No more income expected" : currency(Math.abs(dashboardPlanRemaining), 2)}</Text><Text style={styles.accountMeta}>{dashboardModel.monthlyIncome <= 0 ? "Add expected income to complete the plan" : dashboardNoMoreIncomeExpected ? `${currency(dashboardPlanned, 2)} remains committed to bills and buckets` : dashboardPlanRemaining < 0 ? "short against income still expected" : "left after remaining bills and buckets"}</Text></View><View style={styles.dashboardMonthlyBreakdown}><Text style={styles.accountMeta}>Planned income {currency(dashboardModel.monthlyIncome, 2)}</Text><Text style={styles.accountMeta}>Income still expected {currency(dashboardModel.cashFlow.monthlyIncome, 2)}</Text><Text style={styles.accountMeta}>Remaining bills and buckets {currency(dashboardPlanned, 2)}</Text></View></View></SurfaceCard>),
+buckets: (<Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Open spending buckets"
+                onPress={() => router.push(SPENDING_BUCKETS_ROUTE)}
+                style={({ pressed }) => [styles.quickBucketsShortcut, { opacity: pressed ? 0.72 : 1 }]}
+              >
+                <Feather name="shopping-bag" size={17} color="#c4b5fd" />
+                <Text style={styles.quickBucketsLabel}>Buckets</Text>
+                <Text style={styles.quickBucketsHint}>View all</Text>
+                <Feather name="chevron-right" size={16} color="#9aa9be" />
+              </Pressable>),
+stability_path: (<SurfaceCard accent="purple" style={styles.stabilityWrap} accessibilityLabel={`Stability path: ${progress.stageLabel}`}>
             <View style={styles.stabilityCard}>
               <View style={styles.stabilityHeader}>
                 <View style={styles.stabilityIcon}>
@@ -1103,91 +1007,123 @@ function DesktopDashboardContent({
                 <AppText tone="button" style={styles.howItWorksText}>See how your Stability Path works</AppText>
               </Pressable>
             </View>
-          </SurfaceCard>
-
-          <SurfaceCard accent="neutral" style={styles.quickCardWrap} accessibilityLabel="Quick actions">
-            <View style={styles.sectionCardContent}>
-              <SectionHeader title="Quick Actions" />
-              <View style={styles.quickGrid}>
-                {[
-                  {
-                    label: "Add Income",
-                    icon: "arrow-down-left" as const,
-                    color: BRAND.green,
-                    onPress: () => openAddAction("income"),
-                  },
-                  {
-                    label: "Add Bill",
-                    icon: "file-plus" as const,
-                    color: "#60a5fa",
-                    onPress: () => openAddAction("bill"),
-                  },
-                  {
-                    label: "Add Debt",
-                    icon: "credit-card" as const,
-                    color: BRAND.purple,
-                    onPress: () => openAddAction("debt"),
-                  },
-                  {
-                    label: "Add Goal",
-                    icon: "target" as const,
-                    color: "#f472b6",
-                    onPress: () => openAddAction("goal"),
-                  },
-                ].map((action) => (
-                  <Pressable
-                    key={action.label}
-                    accessibilityRole="button"
-                    accessibilityLabel={action.label}
-                    onPress={action.onPress}
-                    style={({ pressed }) => [
-                      styles.quickAction,
-                      { opacity: pressed ? 0.72 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.quickIcon,
-                        {
-                          backgroundColor: `${action.color}16`,
-                          borderColor: `${action.color}36`,
-                        },
-                      ]}
-                    >
-                      <Feather name={action.icon} size={19} color={action.color} />
-                    </View>
-                    <Text style={styles.quickLabel}>{action.label}</Text>
-                  </Pressable>
-                ))}
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Open spending buckets"
-                onPress={() => router.push(SPENDING_BUCKETS_ROUTE)}
-                style={({ pressed }) => [styles.quickBucketsShortcut, { opacity: pressed ? 0.72 : 1 }]}
-              >
-                <Feather name="shopping-bag" size={17} color="#c4b5fd" />
-                <Text style={styles.quickBucketsLabel}>Buckets</Text>
-                <Text style={styles.quickBucketsHint}>View all</Text>
-                <Feather name="chevron-right" size={16} color="#9aa9be" />
-              </Pressable>
-            </View>
-          </SurfaceCard>
+          </SurfaceCard>),
+debt_planner: (<SurfaceCard
+        accent="purple"
+        style={styles.debtPlannerCardWrap}
+        accessibilityLabel="Open Debt Payoff Planner"
+        onPress={() => go("/snowball-plan")}
+      >
+        <View style={styles.debtPlannerCard}>
+          <View style={styles.debtPlannerIcon}>
+            <Feather name="trending-down" size={23} color="#d8b4fe" />
+          </View>
+          <View style={styles.debtPlannerCopy}>
+            <Text style={styles.debtPlannerEyebrow}>DEBT PAYOFF</Text>
+            <Text style={styles.debtPlannerTitle}>Debt Payoff Planner</Text>
+            <Text style={styles.debtPlannerDescription}>
+              See your payoff order, forecast payments, rollovers, and safe extra-payment options.
+            </Text>
+          </View>
+          <View style={styles.debtPlannerStatus}>
+            <Text style={styles.debtPlannerStatusLabel}>
+              {payoffTarget ? "CURRENT TARGET" : "GET STARTED"}
+            </Text>
+            <Text style={styles.debtPlannerStatusValue} numberOfLines={1}>
+              {payoffTarget ? payoffTarget.name : "Build your plan"}
+            </Text>
+            <Text style={styles.debtPlannerStatusMeta} numberOfLines={1}>
+              {payoffTarget
+                ? `${payoffDebts.length} active ${payoffDebts.length === 1 ? "debt" : "debts"} · ${currency(payoffBalance)} remaining`
+                : "Add a debt to preview your payoff path"}
+            </Text>
+          </View>
+          <View style={styles.debtPlannerAction}>
+            <Text style={styles.debtPlannerActionText}>Open planner</Text>
+            <Feather name="arrow-right" size={17} color="#ffffff" />
+          </View>
         </View>
-      </View>
-
-      {customizerOpen ? <DashboardCustomizer
-        visible={customizerOpen}
-        layout={dashboardLayout}
-        onChange={updateDashboardLayout}
-        onReset={resetDashboardLayout}
-        onClose={() => setCustomizerOpen(false)}
-      /> : null}
-
-      <View style={styles.detailGrid}>
-        <SurfaceCard
+      </SurfaceCard>),
+quick_actions: (<DashboardFavoriteActions layout={dashboardLayout} canEdit={canEditHousehold} onCustomize={() => setCustomizerOpen(true)} onNavigate={go} />),
+recent_activity: (<SurfaceCard accent="neutral" style={styles.recentCardWrap} accessibilityLabel="Recent activity">
+            <View style={styles.sectionCardContent}>
+              <SectionHeader
+                title="Recent Activity"
+                subtitle="The latest activity shown in your PWA"
+                action="View all"
+                onAction={() => go("/(tabs)/transactions")}
+              />
+              <View style={styles.activityList}>
+                {recentActivity.length ? (
+                  recentActivity.map((transaction, index) => {
+                    const positive = transaction.amount >= 0;
+                    const selectedDebt = transactionDebt(transaction, bills);
+                    return (
+                      <Pressable
+                        key={transaction.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Open ${transactionName(transaction)}`}
+                        onPress={() => router.push(desktopActivityDestination(transaction.id, String(Date.now())) as never)}
+                        style={[styles.activityRow, index > 0 && styles.rowDivider]}
+                      >
+                        <View
+                          style={[
+                            styles.activityIcon,
+                            {
+                              backgroundColor: positive
+                                ? "rgba(34,197,94,0.12)"
+                                : "rgba(47,111,255,0.12)",
+                              borderColor: positive
+                                ? "rgba(34,197,94,0.18)"
+                                : "rgba(47,111,255,0.18)",
+                            },
+                          ]}
+                        >
+                          <Feather
+                            name={positive ? "arrow-down-left" : "shopping-bag"}
+                            size={15}
+                            color={positive ? "#4ade80" : "#7cb2ff"}
+                          />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={styles.activityName} numberOfLines={1}>
+                            {transactionName(transaction)}
+                          </Text>
+                          <Text style={styles.activityMeta} numberOfLines={1}>
+                            {transaction.review_status === "needs_review"
+                              ? "Needs review"
+                              : transaction.category || (positive ? "Income" : "Spending")}
+                          </Text>
+                          {selectedDebt ? (
+                            <View style={styles.activityDebtMeta}>
+                              <Feather name="credit-card" size={8} color={BRAND.purple} />
+                              <Text style={styles.activityDebtText} numberOfLines={1}>Applied to {selectedDebt.name}</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        <View style={styles.activityAmountWrap}>
+                          <Text
+                            style={[
+                              styles.activityAmount,
+                              { color: positive ? "#4ade80" : BRAND.text },
+                            ]}
+                          >
+                            {positive ? "+" : "−"}{currency(Math.abs(transaction.amount), 2)}
+                          </Text>
+                          <Text style={styles.activityDate}>{formatActivityDate(transaction.date)}</Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })
+                ) : (
+                  <EmptyState icon="activity" text="Your recent activity will appear here." />
+                )}
+              </View>
+            </View>
+          </SurfaceCard>),
+upcoming_payments: (<SurfaceCard
           accent="amber"
-          style={{ flexBasis: detailWidth as never, flexGrow: 1, minWidth: 0 }}
+          style={{ minWidth: 0 }}
           accessibilityLabel="Upcoming bills timeline"
         >
           <View style={styles.sectionCardContent}>
@@ -1234,11 +1170,10 @@ function DesktopDashboardContent({
               )}
             </View>
           </View>
-        </SurfaceCard>
-
-        <SurfaceCard
+        </SurfaceCard>),
+category_budget: (<SurfaceCard
           accent="blue"
-          style={{ flexBasis: detailWidth as never, flexGrow: 1, minWidth: 0 }}
+          style={{ minWidth: 0 }}
           accessibilityLabel="Budget categories"
         >
           <View style={styles.sectionCardContent}>
@@ -1292,11 +1227,10 @@ function DesktopDashboardContent({
               )}
             </View>
           </View>
-        </SurfaceCard>
-
-        <SurfaceCard
+        </SurfaceCard>),
+savings_goals: (<SurfaceCard
           accent="green"
-          style={{ flexBasis: detailWidth as never, flexGrow: 1, minWidth: 0 }}
+          style={{ minWidth: 0 }}
           accessibilityLabel="Goal progress"
         >
           <View style={styles.sectionCardContent}>
@@ -1353,8 +1287,21 @@ function DesktopDashboardContent({
               )}
             </View>
           </View>
-        </SurfaceCard>
-      </View>
+        </SurfaceCard>),
+}} />
+      {customizerOpen ? <DashboardCustomizer
+        visible={customizerOpen}
+        layout={dashboardLayout}
+        loading={dashboardPreferences.loading}
+        saving={dashboardPreferences.saving}
+        saveError={dashboardPreferences.saveError}
+        loadError={dashboardPreferences.loadError}
+        onRetrySave={dashboardPreferences.retrySave}
+        onRetryLoad={dashboardPreferences.retryLoad}
+        onChange={updateDashboardLayout}
+        onReset={resetDashboardLayout}
+        onClose={() => setCustomizerOpen(false)}
+      /> : null}
 
       <View style={styles.footer}>
         <Text style={styles.footerText}>© {now.getFullYear()} FlowLedger Algo. All rights reserved.</Text>
@@ -1535,6 +1482,9 @@ const styles = StyleSheet.create({
     shadowRadius: 45,
     shadowOffset: { width: 0, height: 0 },
   },
+  dashboardMonthlyValueRow: { gap: 5, marginTop: 12 },
+  dashboardMonthlyValue: { fontFamily: "Inter_800ExtraBold", fontSize: 32 },
+  dashboardMonthlyBreakdown: { gap: 5, marginTop: 14 },
   metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 16 },
   metricCard: { minHeight: 148, paddingHorizontal: 19, paddingTop: 18, paddingBottom: 14 },
   metricLabel: {

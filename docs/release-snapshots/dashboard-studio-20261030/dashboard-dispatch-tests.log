@@ -1,0 +1,22 @@
+✔ remote layout dispatch rejects an SDK account different from the captured owner (1.383744ms)
+✔ scope changes while SDK session resolves cancel dispatch before the RPC (0.197377ms)
+✔ valid layout dispatch binds the checked session rather than later SDK auth state (0.316206ms)
+✔ a disposed controller waiting for auth neither sends an RPC nor publishes another scope's error (5.694979ms)
+✔ late hydration cannot replace a new user edit, even after its save finishes (1.589013ms)
+✔ local unsynced layout wins a stale remote record after reload and retries sync (0.27234ms)
+✔ new local edit is persisted while an older remote request is still waiting (1.101759ms)
+✔ account or household invalidation cancels queued remote saves and old UI updates (0.548756ms)
+✔ remote save failure keeps local layout pending and retry saves latest choices (0.773775ms)
+✔ retry loading cannot discard dirty on-screen choices after a failed save (0.457599ms)
+✔ local quota failure is visible immediately while an earlier remote save is pending (1.35459ms)
+✔ failed hydration is recoverable and never writes over unreadable local preferences (0.643559ms)
+✔ stale local completion is guarded inside the queued device write (0.189465ms)
+✔ demo layouts save on device without any remote access (0.167502ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 69.00394

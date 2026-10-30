@@ -201,6 +201,8 @@
     ,"lib/desktopActivity.test.ts"
     ,"lib/dashboardCustomization.ts"
     ,"lib/dashboardCustomization.test.ts"
+    ,"lib/dashboardLayoutPersistence.test.ts"
+    ,"lib/dashboardMonthlyPlan.test.ts"
     ,"lib/todaysDecisions.ts"
     ,"lib/todaysDecisions.test.ts"
     ,"lib/monthlyDebtCheckIn.ts"

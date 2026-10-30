@@ -7,10 +7,17 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
+import { DashboardLayoutStatus } from "@/components/DashboardLayoutStatus";
 import {
+  DASHBOARD_FAVORITE_ACTIONS,
+  DASHBOARD_LAYOUT_PRESETS,
   DASHBOARD_WIDGETS,
+  MAX_DASHBOARD_FAVORITES,
+  applyDashboardLayoutPreset,
+  dashboardLayoutPreset,
   moveDashboardWidget,
   setDashboardWidgetVisible,
+  toggleDashboardFavoriteAction,
   type DashboardLayoutPreference,
   type DashboardWidgetId,
 } from "@/lib/dashboardCustomization";
@@ -21,14 +28,23 @@ type Props = {
   onChange: (layout: DashboardLayoutPreference) => void;
   onReset: () => void;
   onClose: () => void;
+  availableWidgetIds?: readonly DashboardWidgetId[];
+  loading?: boolean;
+  saving?: boolean;
+  saveError?: string | null;
+  loadError?: string | null;
+  onRetrySave?: () => void;
+  onRetryLoad?: () => void;
 };
 
-export function DashboardCustomizer({ visible, layout, onChange, onReset, onClose }: Props) {
+export function DashboardCustomizer({ visible, layout, onChange, onReset, onClose, availableWidgetIds, loading = false, saving = false, saveError, loadError, onRetrySave, onRetryLoad }: Props) {
   const c = useColors();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const compact = width < 700;
   const reduceMotion = useReducedMotion();
+  const selectedPreset = dashboardLayoutPreset(layout);
+  const widgetOrder = layout.order.filter(id => !availableWidgetIds || availableWidgetIds.includes(id));
   useBackDismiss(visible, onClose);
 
   useEffect(() => {
@@ -41,7 +57,7 @@ export function DashboardCustomizer({ visible, layout, onChange, onReset, onClos
   }, [onClose, visible]);
 
   const move = (id: DashboardWidgetId, direction: "up" | "down") => {
-    onChange(moveDashboardWidget(layout, id, direction));
+    onChange(moveDashboardWidget(layout, id, direction, availableWidgetIds));
   };
 
   return (
@@ -77,8 +93,34 @@ export function DashboardCustomizer({ visible, layout, onChange, onReset, onClos
           </View>
 
           <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+            <DashboardLayoutStatus loading={loading} saving={saving} saveError={saveError} loadError={loadError} retrySave={onRetrySave} retryLoad={onRetryLoad} />
+            <View style={styles.sectionHeading}>
+              <Text accessibilityRole="header" style={[styles.sectionTitle, { color: c.foreground }]}>Start with a layout</Text>
+              <Text style={[styles.currentLayout, { color: c.primary }]}>Selected: {selectedPreset?.name ?? "Custom"}</Text>
+            </View>
+            <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Pick a starting point, then arrange cards and pin the actions you use most.</Text>
+            <View style={styles.presetList}>
+              {DASHBOARD_LAYOUT_PRESETS.map(preset => {
+                const selected = selectedPreset?.id === preset.id;
+                return <Pressable
+                  key={preset.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Apply ${preset.name} dashboard layout`}
+                  accessibilityState={{ selected, disabled: loading }}
+                  aria-pressed={selected}
+                  disabled={loading}
+                  onPress={() => onChange(applyDashboardLayoutPreset(preset.id))}
+                  style={({ pressed }) => [styles.preset, { backgroundColor: c.card, borderColor: selected ? c.primary : c.border, borderWidth: selected ? 2 : 1, opacity: loading ? 0.5 : pressed ? 0.78 : 1 }]}
+                >
+                  <View style={styles.presetHeading}><Text style={[styles.presetTitle, { color: c.foreground }]}>{preset.name}</Text>{selected ? <Feather name="check-circle" size={18} color={c.primary} /> : null}</View>
+                  <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>{preset.description}</Text>
+                </Pressable>;
+              })}
+            </View>
+            <Text accessibilityRole="header" style={[styles.sectionTitle, { color: c.foreground }]}>Arrange your cards</Text>
+            <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Use the arrows to move cards. Hide optional cards without changing your plan.</Text>
             <FloLauncherSetting />
-            {layout.order.map((id, index) => {
+            {widgetOrder.map((id, index) => {
               const widget = DASHBOARD_WIDGETS[id];
               const visibleWidget = !layout.hidden.includes(id);
               return (
@@ -96,8 +138,8 @@ export function DashboardCustomizer({ visible, layout, onChange, onReset, onClos
                       <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={`Move ${widget.label} up`}
-                        accessibilityState={{ disabled: index === 0 }}
-                        disabled={index === 0}
+                        accessibilityState={{ disabled: loading || index === 0 }}
+                        disabled={loading || index === 0}
                         onPress={() => move(id, "up")}
                         style={[styles.smallButton, { borderColor: c.border, opacity: index === 0 ? 0.35 : 1 }]}
                       >
@@ -106,10 +148,10 @@ export function DashboardCustomizer({ visible, layout, onChange, onReset, onClos
                       <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={`Move ${widget.label} down`}
-                        accessibilityState={{ disabled: index === layout.order.length - 1 }}
-                        disabled={index === layout.order.length - 1}
+                        accessibilityState={{ disabled: loading || index === widgetOrder.length - 1 }}
+                        disabled={loading || index === widgetOrder.length - 1}
                         onPress={() => move(id, "down")}
-                        style={[styles.smallButton, { borderColor: c.border, opacity: index === layout.order.length - 1 ? 0.35 : 1 }]}
+                        style={[styles.smallButton, { borderColor: c.border, opacity: index === widgetOrder.length - 1 ? 0.35 : 1 }]}
                       >
                         <Feather name="arrow-down" size={16} color={c.foreground} />
                       </Pressable>
@@ -117,8 +159,8 @@ export function DashboardCustomizer({ visible, layout, onChange, onReset, onClos
                     <Pressable
                       accessibilityRole="switch"
                       accessibilityLabel={`${visibleWidget ? "Hide" : "Show"} ${widget.label}`}
-                      accessibilityState={{ checked: visibleWidget, disabled: Boolean(widget.required) }}
-                      disabled={widget.required}
+                      accessibilityState={{ checked: visibleWidget, disabled: loading || Boolean(widget.required) }}
+                      disabled={loading || widget.required}
                       onPress={() => onChange(setDashboardWidgetVisible(layout, id, !visibleWidget))}
                       style={[
                         styles.switch,
@@ -131,15 +173,37 @@ export function DashboardCustomizer({ visible, layout, onChange, onReset, onClos
                 </View>
               );
             })}
+            <View style={styles.sectionHeading}>
+              <Text accessibilityRole="header" style={[styles.sectionTitle, { color: c.foreground }]}>Favorite actions</Text>
+              <Text style={[styles.currentLayout, { color: c.mutedForeground }]}>{layout.favoriteActions.length}/{MAX_DASHBOARD_FAVORITES} pinned</Text>
+            </View>
+            <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Pin up to four shortcuts to your Favorite actions card.</Text>
+            {DASHBOARD_FAVORITE_ACTIONS.map(command => {
+              const pinned = layout.favoriteActions.includes(command.id);
+              const disabled = loading || (!pinned && layout.favoriteActions.length >= MAX_DASHBOARD_FAVORITES);
+              return <Pressable
+                key={command.id}
+                accessibilityRole="checkbox"
+                accessibilityLabel={`${pinned ? "Unpin" : "Pin"} ${command.title}`}
+                accessibilityState={{ checked: pinned, disabled }}
+                disabled={disabled}
+                onPress={() => onChange(toggleDashboardFavoriteAction(layout, command.id))}
+                style={({ pressed }) => [styles.favoriteRow, { backgroundColor: c.card, borderColor: pinned ? c.primary : c.border, opacity: disabled && !pinned ? 0.45 : pressed ? 0.78 : 1 }]}
+              >
+                <Feather name={command.icon as React.ComponentProps<typeof Feather>["name"]} size={18} color={c.primary} />
+                <View style={styles.rowCopy}><Text style={[styles.rowTitle, { color: c.foreground }]}>{command.title.replace(/^Open /, "")}</Text><Text style={[styles.rowDescription, { color: c.mutedForeground }]}>{command.subtitle}</Text></View>
+                <Feather name={pinned ? "check-square" : "square"} size={20} color={pinned ? c.primary : c.mutedForeground} />
+              </Pressable>;
+            })}
           </ScrollView>
 
           <View style={[styles.footer, { borderTopColor: c.border }]}>
-            <Pressable accessibilityRole="button" onPress={onReset} style={[styles.resetButton, { borderColor: c.border }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Reset dashboard layout" disabled={loading} onPress={onReset} style={[styles.resetButton, { borderColor: c.border, opacity: loading ? 0.5 : 1 }]}>
               <Feather name="rotate-ccw" size={16} color={c.foreground} />
               <Text style={[styles.resetText, { color: c.foreground }]}>Reset default</Text>
             </Pressable>
             <Pressable accessibilityRole="button" onPress={onClose} style={[styles.doneButton, { backgroundColor: c.primary }]}>
-              <Text style={styles.doneText}>Done</Text>
+              <Text style={[styles.doneText, { color: c.primaryForeground }]}>Done</Text>
             </Pressable>
           </View>
         </Pressable>
@@ -159,6 +223,15 @@ const styles = StyleSheet.create({
   subtitle: { fontFamily: "Inter_500Medium", fontSize: 14, lineHeight: 20, marginTop: 5 },
   iconButton: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
   list: { padding: 18, gap: 12 },
+  sectionHeading: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 4 },
+  sectionTitle: { fontFamily: "Inter_700Bold", fontSize: 16 },
+  currentLayout: { fontFamily: "Inter_600SemiBold", fontSize: 12 },
+  sectionCopy: { fontFamily: "Inter_500Medium", fontSize: 12, lineHeight: 18 },
+  presetList: { gap: 8, marginBottom: 8 },
+  preset: { borderRadius: 14, padding: 13, gap: 4 },
+  presetHeading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  presetTitle: { fontFamily: "Inter_700Bold", fontSize: 14 },
+  favoriteRow: { minHeight: 64, flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 14, padding: 13 },
   row: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 16, padding: 14 },
   dragIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   rowCopy: { flex: 1, minWidth: 0 },

@@ -1202,12 +1202,16 @@ test("canonical planned income respects effective amounts, active start, exclude
   }
 });
 
-import { transpileModule, ModuleKind } from "typescript";
+import { dashboardMonthlyPlan } from "./dashboardMonthlyPlan";
 test("monthly plan card separates full plan from remaining arithmetic and handles no-more-expected versus zero income", () => {
   const source = readFileSync("app/(tabs)/index.tsx", "utf8");
-  const calculations = source.slice(source.indexOf("  const dashboardPlanned ="), source.indexOf("  return (", source.indexOf("  const dashboardPlanned =")));
-  const js = transpileModule(calculations, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
-  const evaluate = (planned: number, expected: number, bills: number) => new Function("dashboardModel", "cashFlow", `${js}; return {dashboardNoMoreIncomeExpected, dashboardPlanRemaining, dashboardCommitmentPercent, dashboardProgress};`)({ monthlyIncome: planned }, { monthlyIncome: expected, totalBillsDue: bills, goalAllocations: 0 });
+  const evaluate = (planned: number, expected: number, bills: number) => {
+    const value = dashboardMonthlyPlan({ plannedIncome: planned, incomeStillExpected: expected, billsDue: bills, bucketAllocations: 0 });
+    return { dashboardNoMoreIncomeExpected: value.noMoreIncomeExpected, dashboardPlanRemaining: value.remaining, dashboardCommitmentPercent: value.commitmentPercent, dashboardProgress: value.progress };
+  };
+  for (const surface of [source, readFileSync("components/desktop/DesktopDashboard.tsx", "utf8")]) {
+    assert.match(surface, /dashboardMonthlyPlan\(\{/);
+  }
   assert.deepEqual(evaluate(7276.08, 0, 1000), { dashboardNoMoreIncomeExpected: true, dashboardPlanRemaining: -1000, dashboardCommitmentPercent: 0, dashboardProgress: 0 });
   assert.equal(evaluate(0, 0, 1000).dashboardNoMoreIncomeExpected, false);
   assert.equal(evaluate(7276.08, 5000, 1000).dashboardPlanRemaining, 4000);

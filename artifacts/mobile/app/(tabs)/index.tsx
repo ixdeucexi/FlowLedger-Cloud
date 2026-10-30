@@ -1,3 +1,4 @@
+import { dashboardMonthlyPlan } from "@/lib/dashboardMonthlyPlan";
 import { SPENDING_BUCKETS_ROUTE } from "@/lib/settingsNavigation";
 import { parseMoneyInput } from "@/lib/moneyFormInput";
 import Feather from "@expo/vector-icons/Feather";
@@ -13,6 +14,9 @@ import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from "re
 
 import { AddBillModal } from "@/components/AddBillModal";
 import { AppText } from "@/components/AppText";
+import { DashboardSections, MOBILE_DASHBOARD_WIDGET_IDS } from "@/components/DashboardSections";
+import { DashboardFavoriteActions } from "@/components/DashboardFavoriteActions";
+import { DashboardLayoutStatus } from "@/components/DashboardLayoutStatus";
 import { DashboardCustomizer } from "@/components/DashboardCustomizer";
 import { DashboardSnapshotStage } from "@/components/DashboardSnapshotStage";
 import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
@@ -340,7 +344,8 @@ function MobileDashboardContent({
   const [flowmentumAdminPreview, setFlowmentumAdminPreview] = useState(false);
   const [pendingFloCharge, setPendingFloCharge] = useState<PendingBankTransaction | null>(null);
   const [customizerOpen, setCustomizerOpen] = useState(false);
-  const { layout: dashboardLayout, updateLayout: updateDashboardLayout, resetLayout: resetDashboardLayout } = useDashboardLayoutPreferences();
+  const dashboardPreferences = useDashboardLayoutPreferences();
+  const { layout: dashboardLayout, updateLayout: updateDashboardLayout, resetLayout: resetDashboardLayout } = dashboardPreferences;
   const checkedPendingSignatureRef = useRef("");
 
   useEffect(
@@ -851,16 +856,19 @@ function MobileDashboardContent({
   const dashboardSafeToSpend = Math.max(0, algorithmSuite.safeCushion.amount);
   const dashboardNextPaydayFull = algorithmSuite.stability.nextPaycheckLabel || "Not scheduled";
   const dashboardNextPayday = compactDateLabel(dashboardNextPaydayFull);
-  const dashboardPlanned = Math.max(0, cashFlow.totalBillsDue + cashFlow.goalAllocations);
-  const dashboardNoMoreIncomeExpected = dashboardModel.monthlyIncome > 0 && cashFlow.monthlyIncome <= 0;
-  const dashboardPlanRemaining = cashFlow.monthlyIncome - dashboardPlanned;
-  const dashboardPlanIsShort = dashboardPlanRemaining < 0;
-  const dashboardCommitmentPercent = cashFlow.monthlyIncome > 0
-    ? Math.max(0, Math.round((dashboardPlanned / cashFlow.monthlyIncome) * 100))
-    : 0;
-  const dashboardProgress = cashFlow.monthlyIncome > 0
-    ? Math.max(0, Math.min(1, dashboardPlanned / cashFlow.monthlyIncome))
-    : 0;
+  const {
+    planned: dashboardPlanned,
+    remaining: dashboardPlanRemaining,
+    noMoreIncomeExpected: dashboardNoMoreIncomeExpected,
+    isShort: dashboardPlanIsShort,
+    commitmentPercent: dashboardCommitmentPercent,
+    progress: dashboardProgress,
+  } = dashboardMonthlyPlan({
+    plannedIncome: dashboardModel.monthlyIncome,
+    incomeStillExpected: cashFlow.monthlyIncome,
+    billsDue: cashFlow.totalBillsDue,
+    bucketAllocations: cashFlow.goalAllocations,
+  });
   return (
     <ScrollView
       style={[styles.screen, styles.dashboardStage, { backgroundColor: dashboardTheme.screen }]}
@@ -1076,7 +1084,9 @@ function MobileDashboardContent({
         onReset={resetSavingsAccountName}
       /> : null}
 
-      <View
+      {!customizerOpen ? <DashboardLayoutStatus {...dashboardPreferences} /> : null}
+      <DashboardSections layout={dashboardLayout} sections={{
+overview: (<View
         style={[
           styles.referenceCommandHeroFlipShell,
           { minHeight: flipped ? heroBackCardHeight : heroFrontCardHeight },
@@ -1283,9 +1293,8 @@ function MobileDashboardContent({
               </Pressable>
             )}
           </Animated.View>
-      </View>
-
-      <View style={[styles.dashboardSnapshotCard, { backgroundColor: c.card, borderColor: c.border }]}>
+      </View>),
+snapshot: (<View style={[styles.dashboardSnapshotCard, { backgroundColor: c.card, borderColor: c.border }]}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Open bills. ${formatDashboardCurrency(dashboardBillsLeft)} left this month.`}
@@ -1322,17 +1331,11 @@ function MobileDashboardContent({
           <AppText style={[styles.dashboardSnapshotLabel, { color: c.mutedForeground }]}>Next payday</AppText>
           <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.dashboardSnapshotValue, { color: c.foreground }]}>{dashboardNextPayday}</AppText>
         </Pressable>
-      </View>
-
-      <DashboardUtilityWidgets
-        layout={dashboardLayout}
-        decisions={todayDecisions}
-        reviewCount={reviewCenterCount}
-        compact
-        onNavigate={(pathname, params) => router.push({ pathname: pathname as any, params } as any)}
-      />
-
-      <Pressable
+      </View>),
+today_decisions: (<DashboardUtilityWidgets layout={dashboardLayout} widgetId="today_decisions" decisions={todayDecisions} reviewCount={reviewCenterCount} compact onNavigate={(pathname, params) => router.push({ pathname: pathname as any, params } as any)} />),
+review_center: (<DashboardUtilityWidgets layout={dashboardLayout} widgetId="review_center" decisions={todayDecisions} reviewCount={reviewCenterCount} compact onNavigate={(pathname, params) => router.push({ pathname: pathname as any, params } as any)} />),
+reports_insights: (<DashboardUtilityWidgets layout={dashboardLayout} widgetId="reports_insights" decisions={todayDecisions} reviewCount={reviewCenterCount} compact onNavigate={(pathname, params) => router.push({ pathname: pathname as any, params } as any)} />),
+monthly_plan: (<Pressable
         accessibilityRole="button"
         accessibilityLabel={`Open monthly plan. ${formatDashboardCurrency(dashboardModel.monthlyIncome)} planned income, ${formatDashboardCurrency(cashFlow.monthlyIncome)} income still expected, ${formatDashboardCurrency(dashboardPlanned)} remaining bills and buckets. ${dashboardModel.monthlyIncome <= 0 ? "No income is planned yet." : dashboardNoMoreIncomeExpected ? "No more income expected." : `${formatDashboardCurrency(Math.abs(dashboardPlanRemaining))} ${dashboardPlanIsShort ? "short against income still expected" : "left after remaining bills and buckets"}.`}`}
         onPress={() => router.push("/(tabs)/monthly" as any)}
@@ -1407,9 +1410,8 @@ function MobileDashboardContent({
             </AppText>
           </View>
         </View>
-      </Pressable>
-
-      <Pressable
+      </Pressable>),
+buckets: (<Pressable
         accessibilityRole="button"
         accessibilityLabel="Open spending buckets"
         onPress={() => router.push(SPENDING_BUCKETS_ROUTE)}
@@ -1419,17 +1421,30 @@ function MobileDashboardContent({
         <AppText style={{ color: c.foreground, fontFamily: "Inter_700Bold", fontSize: 15, flex: 1 }}>Buckets</AppText>
         <AppText style={{ color: c.mutedForeground, fontSize: 12 }}>View all</AppText>
         <Feather name="chevron-right" size={17} color={c.primary} />
-      </Pressable>
-
-      <StabilityPathCard
+      </Pressable>),
+stability_path: (<StabilityPathCard
         progress={algorithmSuite.stability}
         balanceAvailable={dashboardModel.bankCurrentCheckingBalance !== null}
         onViewGuide={() => openStabilityGuide()}
-      />
+      />),
+debt_planner: (<Pressable accessibilityRole="button" accessibilityLabel="Open Debt Payoff Planner" onPress={() => router.push("/snowball-plan" as any)} style={({ pressed }) => [styles.dashboardProgressCard, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.78 : 1 }]}>
+  <View style={styles.dashboardProgressHeader}><View style={styles.dashboardProgressHeaderCopy}><AppText tone="title" style={[styles.dashboardProgressTitle, { color: c.foreground }]}>Debt Payoff Planner</AppText><AppText style={[styles.dashboardProgressCopy, { color: c.mutedForeground }]}>Your payoff order and upcoming debt payments</AppText></View><Feather name="trending-down" size={22} color={c.primary} /></View>
+  {dashboardSnapshot.upcoming.filter(payment => payment.isDebt).slice(0, 2).map(payment => <View key={payment.key} style={styles.dashboardPlanBreakdownRow}><AppText style={{ color: c.mutedForeground, flex: 1 }}>{payment.name}</AppText><AppText tone="number" style={{ color: c.foreground, fontFamily: "Inter_700Bold" }}>{formatDashboardCurrency(payment.amount)}</AppText></View>)}
+  <AppText style={{ color: c.primary, fontFamily: "Inter_700Bold", marginTop: 8 }}>Open planner →</AppText>
+</Pressable>),
+quick_actions: (<DashboardFavoriteActions layout={dashboardLayout} canEdit={canEditHousehold} onCustomize={() => setCustomizerOpen(true)} onNavigate={(pathname, params) => router.push({ pathname: pathname as any, params } as any)} />),
+}} />
 
       {customizerOpen ? <DashboardCustomizer
         visible={customizerOpen}
         layout={dashboardLayout}
+        availableWidgetIds={MOBILE_DASHBOARD_WIDGET_IDS}
+        loading={dashboardPreferences.loading}
+        saving={dashboardPreferences.saving}
+        saveError={dashboardPreferences.saveError}
+        loadError={dashboardPreferences.loadError}
+        onRetrySave={dashboardPreferences.retrySave}
+        onRetryLoad={dashboardPreferences.retryLoad}
         onChange={updateDashboardLayout}
         onReset={resetDashboardLayout}
         onClose={() => setCustomizerOpen(false)}
