@@ -1,0 +1,34 @@
+{
+  "case": "viewer-privacy",
+  "width": 1200,
+  "checks": [
+    "Private membership hides price amounts and viewer cannot start checkout",
+    "Viewer can read private Pro planning but cannot dispatch shared household writes",
+    "Supported Recent Changes/recovery remains accessible and private without enabling viewer Undo"
+  ],
+  "bundles": [
+    {
+      "path": "/_expo/static/js/web/entry-b50e2278d1022d345c081580671687bb.js",
+      "sha256": "2d50dc5b68ccd5be7cab23cbbb7830907a4d2c5a9850ad6cecfb7d7294a3a9be",
+      "bytes": 5097994
+    },
+    {
+      "path": "/_expo/static/js/web/entry-b50e2278d1022d345c081580671687bb.js",
+      "sha256": "2d50dc5b68ccd5be7cab23cbbb7830907a4d2c5a9850ad6cecfb7d7294a3a9be",
+      "bytes": 5097994
+    },
+    {
+      "path": "/_expo/static/js/web/entry-b50e2278d1022d345c081580671687bb.js",
+      "sha256": "2d50dc5b68ccd5be7cab23cbbb7830907a4d2c5a9850ad6cecfb7d7294a3a9be",
+      "bytes": 5097994
+    }
+  ],
+  "errors": [],
+  "unknown": [],
+  "knownConsole": [],
+  "mockFinancialWrites": [],
+  "mockAiCalls": 0,
+  "mockCloudWrites": 0,
+  "realCustomerOrProviderWrites": 0,
+  "status": "PASS"
+}

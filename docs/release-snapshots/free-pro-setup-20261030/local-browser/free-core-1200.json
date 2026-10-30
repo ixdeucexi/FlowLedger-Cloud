@@ -1,0 +1,75 @@
+{
+  "case": "free-core",
+  "width": 1200,
+  "checks": [
+    "Free Dashboard customization is accessible",
+    "Free manual bills, income, buckets and normal Forecast remain available",
+    "Free manual Add transaction opens its actual input form",
+    "Free manual reconciliation retains its bucket filter without a paid matching gate",
+    "Compact bank/matching readiness gate contains all copy/actions and preserves current public restrictions",
+    "Compact report gate contains its full copy and reachable action",
+    "Monthly reporting stays Free while historical trends cannot be activated",
+    "Compact debt gate contains its full copy and reachable action",
+    "Basic debt target/payoff plan stays Free while advanced strategy comparisons are gated"
+  ],
+  "bundles": [
+    {
+      "path": "/_expo/static/js/web/entry-b50e2278d1022d345c081580671687bb.js",
+      "sha256": "2d50dc5b68ccd5be7cab23cbbb7830907a4d2c5a9850ad6cecfb7d7294a3a9be",
+      "bytes": 5097994
+    },
+    {
+      "path": "/_expo/static/js/web/entry-b50e2278d1022d345c081580671687bb.js",
+      "sha256": "2d50dc5b68ccd5be7cab23cbbb7830907a4d2c5a9850ad6cecfb7d7294a3a9be",
+      "bytes": 5097994
+    },
+    {
+      "path": "/_expo/static/js/web/entry-b50e2278d1022d345c081580671687bb.js",
+      "sha256": "2d50dc5b68ccd5be7cab23cbbb7830907a4d2c5a9850ad6cecfb7d7294a3a9be",
+      "bytes": 5097994
+    },
+    {
+      "path": "/_expo/static/js/web/entry-b50e2278d1022d345c081580671687bb.js",
+      "sha256": "2d50dc5b68ccd5be7cab23cbbb7830907a4d2c5a9850ad6cecfb7d7294a3a9be",
+      "bytes": 5097994
+    },
+    {
+      "path": "/_expo/static/js/web/entry-b50e2278d1022d345c081580671687bb.js",
+      "sha256": "2d50dc5b68ccd5be7cab23cbbb7830907a4d2c5a9850ad6cecfb7d7294a3a9be",
+      "bytes": 5097994
+    },
+    {
+      "path": "/_expo/static/js/web/entry-b50e2278d1022d345c081580671687bb.js",
+      "sha256": "2d50dc5b68ccd5be7cab23cbbb7830907a4d2c5a9850ad6cecfb7d7294a3a9be",
+      "bytes": 5097994
+    },
+    {
+      "path": "/_expo/static/js/web/entry-b50e2278d1022d345c081580671687bb.js",
+      "sha256": "2d50dc5b68ccd5be7cab23cbbb7830907a4d2c5a9850ad6cecfb7d7294a3a9be",
+      "bytes": 5097994
+    },
+    {
+      "path": "/_expo/static/js/web/entry-b50e2278d1022d345c081580671687bb.js",
+      "sha256": "2d50dc5b68ccd5be7cab23cbbb7830907a4d2c5a9850ad6cecfb7d7294a3a9be",
+      "bytes": 5097994
+    },
+    {
+      "path": "/_expo/static/js/web/entry-b50e2278d1022d345c081580671687bb.js",
+      "sha256": "2d50dc5b68ccd5be7cab23cbbb7830907a4d2c5a9850ad6cecfb7d7294a3a9be",
+      "bytes": 5097994
+    },
+    {
+      "path": "/_expo/static/js/web/entry-b50e2278d1022d345c081580671687bb.js",
+      "sha256": "2d50dc5b68ccd5be7cab23cbbb7830907a4d2c5a9850ad6cecfb7d7294a3a9be",
+      "bytes": 5097994
+    }
+  ],
+  "errors": [],
+  "unknown": [],
+  "knownConsole": [],
+  "mockFinancialWrites": [],
+  "mockAiCalls": 0,
+  "mockCloudWrites": 0,
+  "realCustomerOrProviderWrites": 0,
+  "status": "PASS"
+}

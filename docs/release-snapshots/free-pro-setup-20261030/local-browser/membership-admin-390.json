@@ -1,0 +1,24 @@
+{
+  "case": "membership-admin",
+  "width": 390,
+  "checks": [
+    "Selected annual/monthly cadence and approved USD prices are visible for the whole household",
+    "Unconfigured web/store checkout cannot dispatch purchases and does not advertise an unverified introductory price",
+    "Correct Free, paid, Founding, permanent grandfathered or admin status/allowance is shown"
+  ],
+  "bundles": [
+    {
+      "path": "/_expo/static/js/web/entry-b50e2278d1022d345c081580671687bb.js",
+      "sha256": "2d50dc5b68ccd5be7cab23cbbb7830907a4d2c5a9850ad6cecfb7d7294a3a9be",
+      "bytes": 5097994
+    }
+  ],
+  "errors": [],
+  "unknown": [],
+  "knownConsole": [],
+  "mockFinancialWrites": [],
+  "mockAiCalls": 0,
+  "mockCloudWrites": 0,
+  "realCustomerOrProviderWrites": 0,
+  "status": "PASS"
+}

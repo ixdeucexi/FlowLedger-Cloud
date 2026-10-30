@@ -1,0 +1,25 @@
+{
+  "case": "simulator-pro",
+  "width": 1200,
+  "checks": [
+    "Temporary scenario is editable and opens the actual change editor without touching the financial plan",
+    "Current working change computes a visible result beside the real baseline for every tier, including Free",
+    "Pro/Founder named save runs the actual device persistence handler",
+    "Actual Pro can save a fake household copy through the scoped token-bound persistence handler"
+  ],
+  "bundles": [
+    {
+      "path": "/_expo/static/js/web/entry-b50e2278d1022d345c081580671687bb.js",
+      "sha256": "2d50dc5b68ccd5be7cab23cbbb7830907a4d2c5a9850ad6cecfb7d7294a3a9be",
+      "bytes": 5097994
+    }
+  ],
+  "errors": [],
+  "unknown": [],
+  "knownConsole": [],
+  "mockFinancialWrites": [],
+  "mockAiCalls": 0,
+  "mockCloudWrites": 1,
+  "realCustomerOrProviderWrites": 0,
+  "status": "PASS"
+}

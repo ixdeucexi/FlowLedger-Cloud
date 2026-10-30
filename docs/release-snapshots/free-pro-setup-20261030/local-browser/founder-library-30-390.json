@@ -1,0 +1,24 @@
+{
+  "case": "founder-library-30",
+  "width": 390,
+  "checks": [
+    "Founder retains 30 local saves and an excess save preserves every stored byte",
+    "Founder can execute a two-saved-option comparison with the live baseline",
+    "Protected founder library and comparison confer no household cloud write"
+  ],
+  "bundles": [
+    {
+      "path": "/_expo/static/js/web/entry-b50e2278d1022d345c081580671687bb.js",
+      "sha256": "2d50dc5b68ccd5be7cab23cbbb7830907a4d2c5a9850ad6cecfb7d7294a3a9be",
+      "bytes": 5097994
+    }
+  ],
+  "errors": [],
+  "unknown": [],
+  "knownConsole": [],
+  "mockFinancialWrites": [],
+  "mockAiCalls": 0,
+  "mockCloudWrites": 0,
+  "realCustomerOrProviderWrites": 0,
+  "status": "PASS"
+}

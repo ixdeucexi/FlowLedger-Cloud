@@ -1,0 +1,31 @@
+{
+  "mode": "metadata-only read; no customer financial rows or hosted writes",
+  "checks": [
+    {
+      "name": "canonical_creation_before_body",
+      "passed": true
+    },
+    {
+      "name": "canonical_proposal_before_body",
+      "passed": true
+    },
+    {
+      "name": "migration_not_applied",
+      "passed": true
+    },
+    {
+      "name": "new_functions_absent",
+      "passed": true
+    },
+    {
+      "name": "new_tables_absent",
+      "passed": true
+    }
+  ],
+  "linkId": "link_6a503490139c819193052154d4922f3d",
+  "allPassed": true,
+  "projectId": "imqmhfdquqlqxgtcdbvc",
+  "checkCount": 5,
+  "observedAtUtc": "2026-10-30 13:04:04",
+  "reviewedMigrationSha256": "19052bed56c99dbb33fc20c48e59737adc17837ab47f89b5a21e89cc2455ee37"
+}

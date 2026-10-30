@@ -1,0 +1,57 @@
+$ node --test scripts/seed-reviewer-fixture.test.mjs scripts/startup-shell-contract.test.cjs scripts/startup-icon-imports.test.cjs scripts/production-route-contract.test.cjs scripts/push-sw.test.cjs scripts/package-flo-edge.test.mjs
+file:///workspace/FlowLedger-Cloud/scripts/package-flo-edge.mjs:7
+if(!allowedFunctions.has(functionName))throw new Error(`Unsupported Flo function: ${functionName}`);
+                                             ^
+
+Error: Unsupported Flo function: ../billing-dispatcher
+    at file:///workspace/FlowLedger-Cloud/scripts/package-flo-edge.mjs:7:46
+    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)
+    at async node:internal/modules/esm/loader:643:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.19.0
+✔ Flo edge packaging defaults to v3 and allowlists isolated v4 (2550.753709ms)
+✔ Flo edge packaging rejects arbitrary function paths (369.690248ms)
+✔ SPA success and incidental route text cannot prove a required route exists (2.371302ms)
+✔ temporary gate defers legal/privacy without claiming those routes are verified (2.409886ms)
+✔ absent source tree is rejected rather than inferred from a SPA shell (0.300743ms)
+✔ health JSON contract rejects HTML, stale responses and extra private fields (32.943839ms)
+✔ missing API and bundle probes reject soft 200 and redirects (0.429897ms)
+✔ Vercel SPA fallback excludes API and Expo assets without blocking app routes (0.47098ms)
+✔ online navigation returns the live response unchanged; errors are not concealed (86.779337ms)
+✔ offline navigation shows a static retry page without any financial cache (11.528871ms)
+✔ API, cross-origin, mutations and static assets are never intercepted (1.285207ms)
+✔ reviewer fixture is explicitly fictional, guarded and credential-free (2.540028ms)
+✔ all fail-closed reads and validation complete before the first mutation (2.102808ms)
+✔ missing reviewer auth metadata fails before snapshot reads or writes (0.688107ms)
+✔ Pro, grandfathered, admin or billing plans fail closed before writes (0.653965ms)
+✔ any Plaid item, account or transaction fails closed before writes (0.991304ms)
+✔ non-fixture financial data and household contamination fail closed (0.639744ms)
+✔ pre-existing onboarding metadata without a known fixture fails closed (0.347053ms)
+✔ the database-triggered pristine household settings row is safe to initialize (1.450305ms)
+✔ non-pristine household planning settings fail closed (0.689088ms)
+✔ billing history fails closed even when the plan row still says Free (0.644ms)
+✔ an exact or partial known fixture can be rerun idempotently (0.734677ms)
+✔ Founding Free fixture never grants Pro or administrator access (0.818954ms)
+✔ reviewer fixture activates a fully onboarded household-scoped budget (0.267443ms)
+✔ mobile icon imports do not bundle unused icon families through the barrel (46.015519ms)
+✔ the release shell contract accepts the real template structure (10.696597ms)
+✔ the approved floating-logo shell cannot silently restore the old tile (3.499313ms)
+✔ commented-out atomic hiding cannot satisfy the release shell contract (0.785934ms)
+✔ a commented inert root cannot satisfy the release shell contract (0.291469ms)
+✔ the controller must precede a real deferred bundle element (0.647726ms)
+✔ commented or string-only rearm statements cannot satisfy the controller contract (1.083262ms)
+✔ inactive containers and startup-style overrides fail closed (0.614496ms)
+✔ unreviewed controller flow and non-executable or duplicate bundles fail closed (2.712357ms)
+✔ the complete active document rejects unbalanced cover and page-level overrides (22.81666ms)
+✔ the optional Cloudflare beacon is accepted only in its reviewed post-bundle slot (7.611288ms)
+✔ entry hashes use the exact Expo format and document boundaries preserve browser parsing mode (6.6895ms)
+✔ artifact containment follows real paths and live bundles cannot redirect or return HTML (3.526334ms)
+ℹ tests 37
+ℹ suites 0
+ℹ pass 37
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3015.517301

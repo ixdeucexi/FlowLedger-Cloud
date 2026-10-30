@@ -1,0 +1,10 @@
+{
+  "projectId": "imqmhfdquqlqxgtcdbvc",
+  "appliedMigration": {
+    "version": "20261030130824",
+    "name": "free_pro_feature_access"
+  },
+  "reviewedLocalMigration": "20261030121749_free_pro_feature_access.sql",
+  "reviewedSqlSha256": "19052bed56c99dbb33fc20c48e59737adc17837ab47f89b5a21e89cc2455ee37",
+  "note": "Hosted migration version assigned by Supabase MCP; 55-check catalog postflight verifies the reviewed resulting definitions."
+}

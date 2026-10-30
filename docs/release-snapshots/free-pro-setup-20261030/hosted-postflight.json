@@ -1,0 +1,230 @@
+{
+  "checks": [
+    {
+      "name": "canonical.private.confirm_flo_recurring_bill_proposal(uuid).exact_authorized_transform",
+      "passed": true
+    },
+    {
+      "name": "canonical.private.confirm_flo_recurring_bill_proposal(uuid).replay_before_new_guard",
+      "passed": true
+    },
+    {
+      "name": "canonical.private.create_flo_entity(uuid,text,jsonb,uuid,uuid).exact_authorized_transform",
+      "passed": true
+    },
+    {
+      "name": "canonical.private.create_flo_entity(uuid,text,jsonb,uuid,uuid).replay_before_new_guard",
+      "passed": true
+    },
+    {
+      "name": "function.private.feature_access_for_user.execute_acl",
+      "passed": true
+    },
+    {
+      "name": "function.private.feature_access_for_user.shape_and_body",
+      "passed": true
+    },
+    {
+      "name": "function.private.get_household_feature_access.execute_acl",
+      "passed": true
+    },
+    {
+      "name": "function.private.get_household_feature_access.shape_and_body",
+      "passed": true
+    },
+    {
+      "name": "function.private.lock_feature_scope.execute_acl",
+      "passed": true
+    },
+    {
+      "name": "function.private.lock_feature_scope.shape_and_body",
+      "passed": true
+    },
+    {
+      "name": "function.private.refund_flo_plan_request.execute_acl",
+      "passed": true
+    },
+    {
+      "name": "function.private.refund_flo_plan_request.shape_and_body",
+      "passed": true
+    },
+    {
+      "name": "function.private.reserve_flo_plan_request.execute_acl",
+      "passed": true
+    },
+    {
+      "name": "function.private.reserve_flo_plan_request.shape_and_body",
+      "passed": true
+    },
+    {
+      "name": "function.public.get_household_feature_access.execute_acl",
+      "passed": true
+    },
+    {
+      "name": "function.public.get_household_feature_access.shape_and_body",
+      "passed": true
+    },
+    {
+      "name": "function.public.refund_flo_plan_request.execute_acl",
+      "passed": true
+    },
+    {
+      "name": "function.public.refund_flo_plan_request.shape_and_body",
+      "passed": true
+    },
+    {
+      "name": "function.public.reserve_flo_plan_request.execute_acl",
+      "passed": true
+    },
+    {
+      "name": "function.public.reserve_flo_plan_request.shape_and_body",
+      "passed": true
+    },
+    {
+      "name": "functions.exact_expected_overloads",
+      "passed": true
+    },
+    {
+      "name": "index.private.flo_monthly_usage_pkey",
+      "passed": true
+    },
+    {
+      "name": "index.private.flo_plan_reservations_month_idx",
+      "passed": true
+    },
+    {
+      "name": "index.private.flo_plan_reservations_pkey",
+      "passed": true
+    },
+    {
+      "name": "index.private.flo_plan_reservations_user_idx",
+      "passed": true
+    },
+    {
+      "name": "index.private.founding_planning_access_pkey",
+      "passed": true
+    },
+    {
+      "name": "safeguard.default_plan_trigger",
+      "passed": true
+    },
+    {
+      "name": "safeguard.plan_is_server_owned",
+      "passed": true
+    },
+    {
+      "name": "safeguard.review_center_stays_free",
+      "passed": true
+    },
+    {
+      "name": "safeguard.unchanged.assign_default_household_plan",
+      "passed": true
+    },
+    {
+      "name": "safeguard.unchanged.has_review_center_entitlement",
+      "passed": true
+    },
+    {
+      "name": "safeguard.unchanged.protect_plan_simulation_definition",
+      "passed": true
+    },
+    {
+      "name": "scenarios.exact_four_policies",
+      "passed": true
+    },
+    {
+      "name": "scenarios.policy.plan simulations: editors delete saved data",
+      "passed": true
+    },
+    {
+      "name": "scenarios.policy.plan simulations: members read saved data",
+      "passed": true
+    },
+    {
+      "name": "scenarios.policy.plan simulations: pro editors insert",
+      "passed": true
+    },
+    {
+      "name": "scenarios.policy.plan simulations: pro editors update",
+      "passed": true
+    },
+    {
+      "name": "scenarios.rls_and_protected_definition_trigger",
+      "passed": true
+    },
+    {
+      "name": "schema.private_usage",
+      "passed": true
+    },
+    {
+      "name": "table.private.flo_monthly_usage.constraint.flo_monthly_usage_household_id_fkey",
+      "passed": true
+    },
+    {
+      "name": "table.private.flo_monthly_usage.constraint.flo_monthly_usage_pkey",
+      "passed": true
+    },
+    {
+      "name": "table.private.flo_monthly_usage.constraint.flo_monthly_usage_request_count_check",
+      "passed": true
+    },
+    {
+      "name": "table.private.flo_monthly_usage.constraint.flo_monthly_usage_request_month_check",
+      "passed": true
+    },
+    {
+      "name": "table.private.flo_monthly_usage.deny_all_rls",
+      "passed": true
+    },
+    {
+      "name": "table.private.flo_plan_reservations.constraint.flo_plan_reservations_household_id_fkey",
+      "passed": true
+    },
+    {
+      "name": "table.private.flo_plan_reservations.constraint.flo_plan_reservations_household_id_request_month_fkey",
+      "passed": true
+    },
+    {
+      "name": "table.private.flo_plan_reservations.constraint.flo_plan_reservations_pkey",
+      "passed": true
+    },
+    {
+      "name": "table.private.flo_plan_reservations.constraint.flo_plan_reservations_status_check",
+      "passed": true
+    },
+    {
+      "name": "table.private.flo_plan_reservations.constraint.flo_plan_reservations_user_id_fkey",
+      "passed": true
+    },
+    {
+      "name": "table.private.flo_plan_reservations.deny_all_rls",
+      "passed": true
+    },
+    {
+      "name": "table.private.founding_planning_access.constraint.founding_planning_access_feature_version_check",
+      "passed": true
+    },
+    {
+      "name": "table.private.founding_planning_access.constraint.founding_planning_access_household_id_fkey",
+      "passed": true
+    },
+    {
+      "name": "table.private.founding_planning_access.constraint.founding_planning_access_pkey",
+      "passed": true
+    },
+    {
+      "name": "table.private.founding_planning_access.deny_all_rls",
+      "passed": true
+    },
+    {
+      "name": "tables.exact_constraint_count",
+      "passed": true
+    }
+  ],
+  "failures": [],
+  "allPassed": true,
+  "projectId": "imqmhfdquqlqxgtcdbvc",
+  "checkCount": 55,
+  "backendCommit": "06e0459e40f0b647b3bfecc97130e3d17e7029b4",
+  "migrationSha256": "19052bed56c99dbb33fc20c48e59737adc17837ab47f89b5a21e89cc2455ee37"
+}

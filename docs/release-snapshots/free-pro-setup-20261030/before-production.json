@@ -1,0 +1,10 @@
+{
+  "observedAtUtc": "2026-10-30 12:17:35 UTC",
+  "rollback": "rollback/prod-before-free-pro-setup-20261030-1217",
+  "deploymentId": "dpl_3zXzR5XExRZyHhYxeAKw3cEmajej",
+  "source": "e77f5e6b48bb62baf097aa0ecece9e9344646996",
+  "url": "flow-ledger-cloud-hv5hvvv29-flow-ledger-s-projects.vercel.app",
+  "state": "READY",
+  "project": "prj_nOlgvktXdfLErqQvmESnvyLFnMj2",
+  "team": "team_jIrgjLphz4oeVh6WuFHaiWKq"
+}

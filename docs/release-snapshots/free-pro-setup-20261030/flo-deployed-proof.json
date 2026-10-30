@@ -1,0 +1,17 @@
+{
+  "status": "PASS",
+  "project": "imqmhfdquqlqxgtcdbvc",
+  "function": "flo-chat",
+  "version": 43,
+  "verify_jwt": true,
+  "ezbr_sha256": "2f39cae69751e4ad4892b2c6604fefea7447f54492baa36c1fdd6411af968bb4",
+  "submittedFiles": 53,
+  "deployedFiles": 52,
+  "exactDeployedFileContents": true,
+  "prunedTypeOnlyFiles": [
+    "artifacts/mobile/lib/financialProjectionTypes.ts"
+  ],
+  "prunedModuleRuntime": "export {};",
+  "entrypoint": "supabase/functions/flo-chat/index.ts",
+  "anonymousAuthSmoke": 401
+}

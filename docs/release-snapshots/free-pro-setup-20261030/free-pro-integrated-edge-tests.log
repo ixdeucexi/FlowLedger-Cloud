@@ -1,0 +1,855 @@
+$ node --import ./scripts/flo-node-loader.mjs --test --experimental-strip-types supabase/functions/flo-chat/*.test.mjs supabase/functions/flo-chat-v4/*.test.mjs supabase/functions/billing-dispatcher/contract.test.mjs
+(node:239957) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/billing-dispatcher/contract.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ normalizes an identified RevenueCat lifecycle event (4.641053ms)
+✔ normalizes only the exact Google Play subscription and base-plan identifiers (0.229787ms)
+✔ rejects wrong-user aliases and restore transfers (1.078155ms)
+✔ rejects unknown products, entitlements, and anonymous identities (0.22539ms)
+✔ maps cancellation, grace, expiry and refund without treating cancellation as expiry (6.527826ms)
+✔ only owners may create household purchase intents (0.18621ms)
+✔ parses RevenueCat HMAC headers and rejects malformed values (0.357309ms)
+✔ billing action router is allowlisted (0.207483ms)
+✔ normalizes an authoritative RevenueCat subscriber after a missed webhook (4.883038ms)
+✔ authoritative restore distinguishes invalid data from no active access (0.616439ms)
+✔ restore ordering uses the RevenueCat snapshot time rather than later local completion time (0.258439ms)
+✔ restore rejects family sharing, missing ownership proof, and malformed lifecycle dates (0.361926ms)
+(node:239958) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat-v4/core.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ v4 accepts only the closed history-off request contract (30.506395ms)
+✔ authorization is exact, sequential, admin-only, active-household, and owner-only (0.819384ms)
+✔ v4 has one analysis pipeline and a bounded null-result response (0.353904ms)
+✔ audit metadata and public errors exclude prompt and financial payloads (0.561947ms)
+✔ edge source cannot fall back to agents, proposals, history, or service-scoped analysis (1.887564ms)
+✔ handler authenticates before consuming or validating an unauthenticated body (0.444199ms)
+✔ simple intents remain behind auth abuse controls and bypass only model credentials and quota (0.443689ms)
+✔ v4 optional temporary context is strict bounded untrusted data and never enables persistence (2.255048ms)
+(node:239959) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat-v4/simpleIntents.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ strict greetings and simple intents never consume compound financial prompts (11.018813ms)
+✔ household date and time use only exact RLS-scoped saved timezone across DST and day boundaries (19.324998ms)
+✔ missing errored invalid or cross-household timezone fails closed (0.513483ms)
+✔ weather requires explicit bounded location and server-only configured provider (19.313241ms)
+✔ configured weather validates provider data and returns source freshness without identity headers (36.031902ms)
+✔ weather ambiguity missing timeout non-2xx malformed and stale responses stay bounded (115.129535ms)
+✔ weather rejects unsafe labels and treats duplicate labels at different coordinates as ambiguous (7.069632ms)
+✔ simple runner returns zero-token greeting without household or weather reads (0.367083ms)
+(node:240016) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisSpending.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240016) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/financialProjection.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ calendar validation and household midnight (32.668904ms)
+✔ forecast minimum and threshold lead with the requested result (58.755701ms)
+✔ spending excludes transfers and credit repayments, refunds reduce spending (1.37373ms)
+✔ established transaction links dedupe without discarding same-amount real purchases (0.355816ms)
+✔ unknown accounts and positive unidentified inflows are not fabricated income (0.483028ms)
+✔ forecast arithmetic uses expected paychecks and scheduled bills (6.280554ms)
+✔ missing balance and incomplete source fail closed rather than turn into zero (7.566821ms)
+✔ what-if calculations are immutable and conserve a one-time cash change (3.773065ms)
+✔ credit utilization requires positive limits; does not fabricate missing cards (2.438344ms)
+✔ exact household predicate stays on every paginated read and mismatched rows fail (2.315268ms)
+✔ fee matches and merchant searches preserve exact pennies (1.524847ms)
+✔ moving a bill later changes the next occurrence, not the following month (6.104348ms)
+✔ null goal funding and savings are unavailable, not zero (0.950742ms)
+✔ expense baselines do not add card purchases and repayments together (0.408866ms)
+✔ debt target respects exclusion and future start (3.376298ms)
+✔ monthly payoff preserves every minimum and delays future extra payments (2.098692ms)
+✔ paycheck income scenario keeps the named source filter (3.116536ms)
+✔ comparisons include categories that disappeared and merchant grouping (1.319939ms)
+✔ bill cancellation and increases start at their effective date, not earlier occurrences (8.33596ms)
+✔ incomplete expenses return retained observations without a fabricated emergency target (1.362634ms)
+✔ pre-payday diagnosis deduplicates same-date paychecks and requires complete closes (29.340921ms)
+✔ unresolved prior comparison transactions prevent a definitive difference (0.808738ms)
+✔ multi-month budgets use each month's own transactions (0.800987ms)
+✔ safe-extra-debt calculator accepts nonempty app income history and exclusions without writes (3.67025ms)
+(node:240034) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisAccounts.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240034) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/plaidActivity.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ inventory dispatch retains every active manual identity and only canonical connected identities (92.948903ms)
+✔ inventory recognizes only self-contained present lists and rejects projection or mutation scopes (1.79193ms)
+✔ provider schema expresses inventory but rejects incoherent domain operation name and scenario (9.009836ms)
+✔ exact aliases win; unique token names work; digits and ambiguity never guess a balance (1.277555ms)
+✔ actual named-balance dispatcher preserves abbreviated phrase and clarifies shared saved names (22.244087ms)
+✔ model interpretation cannot expand a simple ambiguous phrase to its chosen saved name (2.484123ms)
+✔ missing names, inactive records, missing/future dates and null balances never fall back to a group (9.706385ms)
+✔ group precedence, savings separation, mixed dates and missing inventory observations stay explicit (6.122125ms)
+✔ generic named connected credit and configured debt balances keep owed sources and review dates distinct (3.997694ms)
+✔ named balances check account and configured debt collisions without adding duplicate sources (3.120102ms)
+✔ incomplete source inventory remains partial, missing account types are not guessed (3.546955ms)
+✔ malicious saved labels remain bounded data and cannot alter balance or source scope (2.165412ms)
+✔ inventory runs with zero model calls and only scoped account/date sources, including existing history context (8.926971ms)
+✔ active-only name catalog does not offer inactive accounts and still exposes no balance fields (15.314195ms)
+✔ natural interpreted references retain literal account words and clarify ambiguous catalog expansion (12.011198ms)
+✔ signed credit observations distinguish debt owed, zero and account credit without implying spendable cash (9.294294ms)
+✔ interpreted numbered references survive dropped model suffixes, including when only a different account exists (8.115488ms)
+✔ numeric identity guard does not turn currency percentages decimal amounts or dates into account suffixes (6.544051ms)
+✔ numbered account marker variants cannot select another numbered account and retain the correct explicit target (45.119805ms)
+✔ wrong inventory purpose cannot satisfy a recognized named balance or bypass account-name ambiguity (20.566069ms)
+✔ named-balance inventory repair preserves legitimate inventories independent requests and qualified financial routes (2.57516ms)
+(node:240047) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisPlanner.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240047) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/financialProjection.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ fresh read-only multi-turn reference: account-reference (97.269399ms)
+✔ fresh read-only multi-turn reference: fresh-reference (9.197429ms)
+✔ fresh read-only multi-turn reference: explicit-group (8.114175ms)
+✔ fresh read-only multi-turn reference: explicit-number (10.989669ms)
+✔ fresh read-only multi-turn reference: missing-number (6.537952ms)
+✔ fresh read-only multi-turn reference: ambiguous-reference (12.976683ms)
+✔ fresh read-only multi-turn reference: configured-debt-reference (6.727898ms)
+✔ fresh read-only multi-turn reference: credit-reference (8.223401ms)
+✔ fresh read-only multi-turn reference: provider-alias-reference (6.442798ms)
+✔ fresh read-only multi-turn reference: inventory-reference (18.341576ms)
+✔ fresh read-only multi-turn reference: assistant-not-facts (14.089009ms)
+✔ fresh read-only multi-turn reference: reset-reference (8.735082ms)
+✔ reference grammar handles phone punctuation but excludes explicit names dates groups and scenarios (1.040077ms)
+✔ reference provenance is separate from literal scope and cannot authorize another household or override current digits (6.361315ms)
+✔ an inventory or unrelated latest user turn cannot revive an older account reference (3.594045ms)
+(node:240059) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisSemantics.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240059) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/plaidActivity.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ savings question reaches savings through the actual dispatcher: How much money do I have in savings? (43.598088ms)
+✔ savings question reaches savings through the actual dispatcher: What is my savings account balance? (10.483036ms)
+✔ savings question reaches savings through the actual dispatcher: Show me my current savings balance (0.644801ms)
+✔ generic savings model output cannot become checking (3.434395ms)
+✔ qualified dates, spending, and named balances never use the raw balance shortcut (0.257498ms)
+✔ simple savings query completes without a model call or unrelated tables (25.300742ms)
+(node:240070) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisAccounts.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240070) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/plaidActivity.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ named checking and savings resolve exact normalized names, not household total (28.727296ms)
+✔ connected precedence and canonical reconnect identity avoid duplicate totals; savings separate (1.178666ms)
+✔ ambiguous names and inactive accounts never silently pick a balance (1.94489ms)
+✔ invalid balances never become zero; numeric zero is valid (1.286369ms)
+✔ dates and source gaps explicit; future named projection never returns aggregate (0.303848ms)
+✔ mixed observation dates disclosed and balance never advertised as safe funds (0.571522ms)
+✔ manual operating group excludes savings and settings fallback is dated, never named (0.739474ms)
+(node:240084) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisPlanner.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240084) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/financialProjection.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ bare Yes without a resolvable question is a structured zero-claim clarification, with no reads/writes/provider calls (7.902076ms)
+✔ acknowledgement grammar is bounded and preserves potentially meaningful contextual follow-ups (0.402466ms)
+✔ unavailable saved context produces clarification for bare Yes instead of an empty interpreted plan (26.053341ms)
+(node:240091) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisRecurring.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240091) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/schedule.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ after-payday bills use the strict next-to-following payday window and reconcile unpaid detail totals (42.0341ms)
+✔ after-payday detail shows every normal occurrence through 50 rather than truncating at 12 (4.148071ms)
+✔ after-payday window does not guess an ending date without a second distinct positive payday (0.870011ms)
+✔ after-payday window crosses months while excluding both payday dates (1.439509ms)
+✔ after-payday boundaries require net-positive aggregate household income on the date (5.664885ms)
+✔ reviewed earlier weekly payment cannot spill into the live after-payday window (2.702101ms)
+✔ reviewed exact and partial weekly allocations are authoritative per occurrence (3.003456ms)
+✔ legacy dated weekly payments apply only to their matching occurrence and are capped (3.087643ms)
+✔ ambiguous weekly month payment keeps review rows separate while unrelated verified bills remain totaled (2.963044ms)
+✔ pending weekly payment remains unpaid (1.617337ms)
+✔ more than 50 unpaid occurrences is explicitly partial while totals retain full coverage (6.352302ms)
+(node:240102) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisPlanner.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240102) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/financialProjection.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ whole-debt questions cannot label a configured-plan subtotal complete (2.230643ms)
+✔ explicit plan, payment and snowball questions retain their own coverage (0.242856ms)
+✔ dedup removes only exact repeated paragraphs, preserving different amounts and warnings (0.38459ms)
+✔ total debt cannot route to cash, but a separate checking question is preserved (23.046629ms)
+(node:240109) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisBuckets.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240109) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/spendingBuckets.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ deterministic Phase3 receipt: bucket-summary (59.227639ms)
+✔ deterministic Phase3 receipt: bucket-purchases (11.770635ms)
+✔ deterministic Phase3 receipt: bucket-closed (2.475432ms)
+✔ deterministic Phase3 receipt: bucket-overspent (1.63841ms)
+✔ deterministic Phase3 receipt: bucket-pending-removed (17.843449ms)
+✔ deterministic Phase3 receipt: bucket-null (1.675546ms)
+✔ deterministic Phase3 receipt: bucket-invalid-allocation (1.364137ms)
+✔ deterministic Phase3 receipt: bucket-ambiguous (1.475094ms)
+✔ deterministic Phase3 receipt: bucket-source-gap (1.332018ms)
+✔ deterministic Phase3 receipt: bucket-year-scope (3.735522ms)
+✔ deterministic Phase3 receipt: bucket-date-scope (1.451127ms)
+✔ deterministic Phase3 receipt: bucket-period-scope (3.424403ms)
+✔ deterministic Phase3 receipt: bucket-past-scope (1.436175ms)
+✔ deterministic Phase3 receipt: bucket-numeric-date (4.562253ms)
+✔ deterministic Phase3 receipt: bucket-relative-period (5.197165ms)
+✔ deterministic Phase3 receipt: inventory-followups (5.760294ms)
+✔ deterministic Phase3 receipt: credit-followup (6.83197ms)
+✔ bucket math uses canonical saved spent including legacy spending, not visible purchase sum (2.718419ms)
+✔ bucket raw money dates allocations and purpose cannot be coerced into fake zero or affordability (75.640436ms)
+✔ limited retained history is counted and labeled without truncating spending or hiding overage warnings (1.846254ms)
+✔ duplicate or truncated bucket names do not create looping ambiguity questions (4.816361ms)
+✔ natural bucket question retains one typed read and goal catalog identifies buckets without exposing financial amounts (5.89652ms)
+✔ typed followups preserve exact numbered choices and suppress repeats partial promises and duplicate names (0.716851ms)
+✔ source mapping distinguishes observations liabilities bucket budgets forecasts and affordability (0.117237ms)
+✔ pure friendly greeting thanks and help use the exact endpoint dispatcher without database calls (3.29059ms)
+✔ bucket calendar qualifiers cannot return current numbers when model omits date fields (8.393083ms)
+✔ noncurrent bucket qualifier grammar rejects a matrix of cutoffs and periods while literal calendar names remain current (14.641533ms)
+(node:240116) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisSnapshot.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240116) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/snowball.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ current-month budget reports posted spending through today rather than the future requested end (34.973605ms)
+✔ future category budget remains visible without fabricating zero spending or full remaining balance (2.682434ms)
+(node:240123) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisPresentation.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240123) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/plaidActivity.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ default answer uses typed exact dates/money without duplicating assumptions or raw missing paragraphs (22.172767ms)
+✔ explicit detail, numeric account ambiguity and liability sign remain intact (0.478852ms)
+✔ forecast preserves low/negative cushion warning and does not turn missing everyday costs into safe cash (0.750131ms)
+✔ bucket summary preserves closed/released/overage semantics and keeps purchases on explicit request (0.569478ms)
+✔ available schedules survive missing balance without invented remaining cash or allocations (16.792035ms)
+✔ no-history forecast and paycheck guidance report schedule facts without requiring a history baseline first (12.615239ms)
+✔ settings/context failures do not block a self-contained savings observation, but references and dated plans remain guarded (60.665857ms)
+✔ missing settings permits stored debt balance but never default-month obligations or dated debt scope (7.145082ms)
+✔ non-summary metric requests preserve calculator answers instead of substituting a different typed total (0.503299ms)
+✔ partial schedule fallback and absent typed money never become a zero or lose the cash-anchor qualification (0.758814ms)
+(node:240141) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisContext.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ conversation includes assistant replies, bounds content and excludes privileged roles (2.456894ms)
+✔ history-off context is used in memory without a database history read (0.308856ms)
+✔ saved history is household-scoped, excludes current message and keeps both roles (0.381065ms)
+✔ catalog selects names only and scopes every table to the authorized household (2.328771ms)
+✔ catalog offers actual budget category and connected-account aliases without financial values (0.710401ms)
+(node:240148) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisSnapshot.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240148) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/snowball.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ configured debt-plan total does not silently include or double-count connected credit balances (48.46941ms)
+(node:240175) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisRanking.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240175) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/plaidActivity.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ unidentified named debt does not emit unrelated whole-plan payoff dates (2.499723ms)
+✔ fee ranking keeps same-name accounts separate and unassigned charges unranked (22.371702ms)
+✔ fee totals aggregate cents by recorded account (0.971615ms)
+✔ APR ranking includes records beyond five and does not require credit limits (1.421303ms)
+✔ rank ties retained, unknown APR disclosed, utilization uses each limit (0.349147ms)
+✔ last merchant payment searches retained older history, not just current month (0.847448ms)
+✔ payoff metadata distinguishes debt ids even if display names coincide (1.700804ms)
+✔ named debt payoff date precedes whole-plan date when its balance clears earlier (15.646448ms)
+✔ all-paid check reconciles occurrences rather than merely finding one payment (3.746127ms)
+✔ overdue backlog includes earlier months while excluding future bills (1.19393ms)
+✔ empty or beyond-retention settlement ranges never assert all normal bills paid (2.426669ms)
+(node:240186) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisSnapshot.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240186) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/snowball.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ emergency target does not ignore paid bills absent from transaction history (37.833686ms)
+✔ matched bill payments are counted once and complete-month boundaries retain early spending (5.966039ms)
+✔ bill-linked transfers cannot reconcile expense obligations excluded from the baseline (3.918928ms)
+✔ bill-linked unresolved charges and refunds are not proof of expense settlement (15.213736ms)
+✔ invalid in-window settlement money cannot disappear because actual payment is present (21.313601ms)
+✔ invalid settlement period cannot silently fall outside the expense window (3.572736ms)
+(node:240197) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisExplanation.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ adds a fact-gated relationship without duplicating or mutating the authoritative answer (5.487473ms)
+✔ model cannot invent numbers dates statuses or reinterpret a real number as spendable (0.755239ms)
+✔ can prioritize compound relationships only within each referenced result (0.346652ms)
+✔ partial data cannot acquire full-data recommendations or hypothetical certainty (0.250848ms)
+✔ recorded balance cannot become permission to spend while neutral interpretation survives (0.234624ms)
+✔ SENTINEL adverse prose cannot cross the strict typed relationship boundary (0.425832ms)
+✔ positive or unverified forecasts cannot acquire a shortfall relationship (0.55718ms)
+✔ no useful insight leaves only relevant followups and duplicate insights render once (0.449348ms)
+✔ followups do not re-ask the current question or include unsupported free-form questions (0.525372ms)
+✔ never clips a paragraph ending in a financial restriction (0.252822ms)
+✔ one bounded composition receives current evidence and both conversation roles (1.636768ms)
+✔ timeout aborts a stalled composer and preserves the caller budget (27.717175ms)
+✔ provider failures and ungrounded selections return null without retrying or modifying results (1.185246ms)
+✔ spending comparison insight requires an actual comparison, not common spending fields on other tools (0.313453ms)
+✔ production composition uses existing provider model no storage no retry and strict structured selection (0.52418ms)
+(node:240204) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisWealth.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240204) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/snowball.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ goal paycheck count requires a paycheck contribution, not a monthly substitute (29.413422ms)
+✔ goal paycheck count preserves known contribution and earmarked funding (1.661004ms)
+✔ requested goal months remain partial when only paycheck contribution count is known (0.904734ms)
+✔ monthly goal contributions and already-reached goals retain supported unit results (1.40654ms)
+(node:240215) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisGuidance.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240215) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/financialProjection.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ next paycheck allocation conserves dollars and has one shared optional capacity (34.522414ms)
+✔ paycheck-alone gap is distinguished from household shortfall (4.710111ms)
+✔ missing living history or stale anchor does not produce a numeric allocation (6.99155ms)
+✔ missing core data still returns dated schedule checklist rather than fabricated safe capacity (3.31708ms)
+✔ 30 and90day action plans preserve horizon and never promise a debt escape date (10.518057ms)
+✔ budget draft includes mandatory reserves and shows income deficit without invented cuts (2.836066ms)
+✔ known unlinked bill overlap blocks combining bill reserve and living allowance (2.622704ms)
+✔ requests beyond configured forecast do not truncate the requested plan silently (0.532132ms)
+✔ action checklist discloses omitted due items and paydays with full counts and income totals (6.793282ms)
+✔ category allowances use classified net history and conserve the aggregate to cents (4.262375ms)
+✔ bill-linked consumption is not allocated again to living categories (1.600433ms)
+✔ debt-versus-savings choice uses one capacity and never invents an optimal split (6.267258ms)
+(node:240222) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisSnapshot.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240222) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/financialProjection.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ unmatched paid bills prevent historical surplus, days-ahead and inferred buffer timeline, not current forecast capacity (88.516673ms)
+✔ reconciled spending is counted once in sustainable historical surplus (10.635844ms)
+✔ explicit contribution stays a labeled count scenario when historical coverage is partial (10.396964ms)
+✔ shared historical coverage requires a complete settlement source and ignores known out-of-window invalid money (11.193335ms)
+(node:240229) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisHistory.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ manual savings observed change does not add current balances or goal contributions (23.108206ms)
+✔ checking scope includes retained checking/cash but excludes savings (0.655588ms)
+✔ partial observed window is explicit and no earlier balance is filled forward (0.652714ms)
+✔ one observation never becomes two by using current balance (0.283527ms)
+✔ different per-account dates are not summed into a household delta (0.879697ms)
+✔ latest same-day correction selected; null and conflicting equal-time values rejected (0.840727ms)
+✔ exact ambiguous names, connected bank history and debt principal are honest limits (0.49772ms)
+✔ incomplete source, foreign history, future range fail without numeric deltas (0.222555ms)
+✔ history loader uses explicit safe columns and household predicate (1.101911ms)
+(node:240236) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisSemantics.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240236) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/plaidActivity.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ actual ambiguous arithmetic-income phrase returns a concise clarification without a model, scenario or creation (20.375447ms)
+✔ clarifier is limited to unresolved income arithmetic, preserving clear-period saved sums and creation/forecast questions (0.7893ms)
+✔ an explicit saved-income period still uses the canonical occurrence sum, without any baseline or literal-amount override (54.62891ms)
+(node:240247) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisSemantics.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240247) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/plaidActivity.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ named income forecast is valid and preserves entity through language interpretation (20.819891ms)
+✔ prompt distinguishes named income cutoff from allocation and named bank account scope (0.705042ms)
+✔ named income determines cutoff even when another household income arrives first (118.171163ms)
+✔ income schedule misroute becomes a balance after the same named income, not a generic payday (22.142404ms)
+✔ missing income name cannot silently become all incomes or a named bank account forecast (17.121248ms)
+✔ unqualified pay reductions default once without changing the signed amount or payday cutoff (4.50617ms)
+✔ single bill date move does not inherit its monthly bill recurrence (13.35967ms)
+✔ next-weekday future money balance corrects domain and date without dropping scope (1.504277ms)
+✔ literal timeline unit is preserved separately from target and contribution (1.467251ms)
+✔ explicit future savings and combined groups cannot be dropped by a null model accountGroup (2.464223ms)
+✔ savings balance history retains its group without permitting mismatched or combined history (0.413403ms)
+✔ explicit trailing month review cannot collapse to a current-month default or action-plan days (29.431066ms)
+✔ full subscription cancellation covers future occurrences while explicit skips remain single (31.396423ms)
+✔ current health assessment retains forward and historical risk evidence, not a one-day checklist (15.594508ms)
+✔ purchase-date search rejects scenario precedence and repair preserves the earliest-date calculation (14.732609ms)
+✔ condition assessments reject current money or a checklist but preserve independently requested plans (1.491978ms)
+✔ required debt minimums cannot masquerade as principal history, while compound history survives (7.140259ms)
+✔ merchant amount questions aggregate beyond the eight-row transaction display limit (6.883192ms)
+✔ present buffer questions use the available-buffer assessment, never an unstated target timeline (31.211749ms)
+✔ ordinary bill-price changes apply to the schedule while explicitly temporary changes apply once (70.776746ms)
+(node:240253) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisSemantics.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240253) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/plaidActivity.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ actual failed income-sources phrase deterministically selects saved income, never account inventory (20.938981ms)
+✔ schema-valid model account-inventory mistake is normalized and cannot satisfy the income-source question (1.779712ms)
+✔ no-context/history-off income inventory completes without a model, balance, spending history or current-month deposit (43.063047ms)
+✔ unavailable income source read remains unknown, not an empty or account-backed inventory (0.795979ms)
+(node:240261) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisSnapshot.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240261) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/snowball.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ future planned income is not received income (21.086883ms)
+✔ unbalanced split cannot become verified consumption (0.588536ms)
+✔ linked savings contributions are not consumption and ambiguous savings need review (0.457469ms)
+✔ missing linked goal is unresolved even with a user-edited category (0.404249ms)
+✔ weekly review compares equal elapsed periods (1.514192ms)
+✔ monthly required snapshot stays distinct from ongoing extra plan (17.176586ms)
+(node:240276) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisSpending.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240276) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/plaidActivity.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ initial valid interpretation can use existing repair allowance without enlarging total budget (7.500592ms)
+✔ integrated allocation instruction preserves independent compound analyses (0.587906ms)
+✔ one allocation remains one call and independent named payoff survives validation (14.526328ms)
+✔ provider timeout is not retried as a semantic repair (0.542227ms)
+✔ fee cost question rejects generic transaction output and accepts classified fees (2.712016ms)
+✔ ninety-day action plan is inclusive and does not accept a ninety-one-day window (2.897126ms)
+✔ scenario amount does not require an outer amount and forecast extrema are not timelines (0.968039ms)
+✔ explicit checking threshold is not an additional buffer above cushion (0.655147ms)
+✔ today plan preserves a one-day window while independent future requests remain possible (1.980565ms)
+✔ a start-only dated balance cannot become a month-end forecast (0.436618ms)
+✔ balance observation date is not an unrelated last-payment request (0.615067ms)
+✔ before-paycheck cutoff must exclude payday income without suppressing after-payday compound (0.404379ms)
+✔ bill due cutoff cannot be consumed by elapsed settlement and next paycheck facts need income schedule (0.828268ms)
+✔ after-payday bill questions deterministically select the future payday-bounded schedule (2.605446ms)
+✔ minimum payments and last-month merchant totals preserve their own readers (0.868709ms)
+✔ built-in utilization threshold and transaction dollar filter do not become payment scenarios (0.616469ms)
+✔ semantic failure telemetry exports only bounded static codes, never model or question text (1.415113ms)
+✔ bill amount rising to a new total cannot be passed as an added delta (0.242625ms)
+✔ undated lower paycheck applies at payday while explicit future income keeps its date (0.741387ms)
+✔ weekly financial review uses shared review and seven inclusive dates (0.745883ms)
+✔ last-month review retains full historical window and independent focus; specific reviews untouched (0.381264ms)
+✔ next weekday uses deterministic household-calendar dates across week month and leap boundaries (0.219821ms)
+✔ runtime corrects wrong weekday without another model call and preserves request filters (2.122659ms)
+✔ generic checking threshold is not an invented named account; exact account names remain (0.591982ms)
+✔ future month-edge comparison rejects elapsed review and preserves deterministic two-window dates (0.612112ms)
+✔ unambiguous current spending comparison uses corresponding elapsed days without a repair call (0.586634ms)
+✔ exact transaction amount lookup repairs incompatible last-purpose locally without losing filters (0.447544ms)
+✔ repair timeout keeps timeout identity and only the safe first-pass violation codes (0.42485ms)
+✔ built-in credit utilization payment is not a debt timeline and preserves named card (0.31833ms)
+✔ existing remaining category budget is not a new household budget draft (0.683821ms)
+✔ bill move forecast purpose is compatible with canonical scenario dispatch but calendar guards remain (0.429547ms)
+✔ emergency reserve months never become dollar amounts or contribution schedules (0.660195ms)
+✔ self-contained deterministic plans preserve typed intent slots and avoid dependence on model output (2.900521ms)
+✔ runtime preserves conversational scope except explicit self-contained current balances or inventory and clarifies orphan before interpretation (0.696349ms)
+✔ runtime rechecks calculation dependencies rather than narrower presentation evidence (0.350759ms)
+✔ orphan contribution asks its target without invented financial facts and preserves conversation followups (0.509197ms)
+✔ bare contribution followup adds literal cadence while preserving model-resolved target and named goal (0.734046ms)
+✔ after-bill balance uses canonical bill selector and current purchase safety is not a future date search (1.097143ms)
+✔ undated average income defaults complete months and incomplete history still stays unavailable (20.275882ms)
+✔ where spending rose comparison never overlaps current and previous windows (0.774196ms)
+✔ orphan how-much-faster contribution asks for target but retains existing conversation path (0.2057ms)
+✔ generic bill-protected safe spending uses affordability, not a timeline, without dropping contextual scope (0.682759ms)
+✔ generic safe extra-debt capacity has no invented payment and retains qualified fallback scopes (0.546594ms)
+✔ null outer amount coherently uses none while nested scenario amount and missing target safeguards survive (0.508606ms)
+(node:240282) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisSnapshot.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240282) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/financialProjection.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ shiftMonth resolves full calendar month boundaries from a mid-month day (1.38713ms)
+✔ buffer baseline retains June 5 income and next-month target retains October 1 and 5 bills (41.115212ms)
+✔ history-based budget draft includes early-month spending in all three complete months (2.000795ms)
+(node:240290) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisProjection.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240290) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/financialProjection.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ complete snapshot uses canonical engine and preserves observed versus projected balance (43.020864ms)
+✔ today safe-to-spend reserves tomorrow obligations independently of the balance reporting date (31.163332ms)
+✔ requested start filters totals and minimum search, never clamps historical windows (3.367815ms)
+✔ named incomes resolve exactly, and date-relative questions honor named source (8.071972ms)
+✔ after-bill excludes unrelated outflows and exact matches are required (5.283581ms)
+✔ strict raw money guards reject null, blanks, booleans and objects before normalization (3.464461ms)
+✔ override, allocation, income history and goal amounts cannot silently default (1.505248ms)
+✔ invalid dates and horizons fail closed, and 24 months is supported (2.257502ms)
+✔ missing history cannot affirm a purchase or advertise a numeric safe amount (3.447735ms)
+✔ incomplete source coverage blocks projection (1.545118ms)
+✔ safe spending is capped by observed available funds after pending outflows, never future paychecks (5.178583ms)
+✔ paid overrides remove settled obligations and future-only windows exclude earlier bills (2.715111ms)
+✔ no next paycheck is not silently replaced by end of month (1.819452ms)
+✔ a single old transaction cannot establish a three-month baseline (1.491357ms)
+✔ purchase planning waits for a date that survives later obligations, without spending savings (5.713869ms)
+✔ purchase planning cannot affirm without history or a fresh observation (5.253285ms)
+✔ purchase planning respects requested horizon and reports no suitable date (2.823425ms)
+✔ response leads with the requested current or target balance (4.586722ms)
+✔ single-date balance keeps target amount but reports today-to-target context (2.281538ms)
+✔ explicit single-day minimum and multi-day ranges keep only requested context (8.20954ms)
+✔ older unpaid obligations suppress spending approval without rewriting forecast balances (2.947241ms)
+✔ short weekend or pre-payday purchase windows check later rent risk too (7.873233ms)
+✔ maximum answers the requested peak early with its actual date (2.613738ms)
+✔ future window comparison reports each end and low with differences (3.594377ms)
+✔ historical or invalid comparator is unavailable rather than a generic projection (0.353443ms)
+✔ named-account forecast cannot silently become household forecast (0.211709ms)
+✔ creation day does not hide an earlier unpaid canonical occurrence in the same month (2.542591ms)
+✔ income field validators accept app month precision and strict exclusion timestamps only (0.463157ms)
+✔ projection preserves app income month history and exclusion calendar prefix (2.781291ms)
+✔ null income history entry fails closed without throwing from prevalidation (0.843681ms)
+(node:240297) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisSemantics.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240297) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/plaidActivity.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ wrong savings answer is corrected before execution: How long will it take to have 1000 buffer (18.69497ms)
+✔ wrong savings answer is corrected before execution: When can I build a $1,000 cushion? (1.004604ms)
+✔ wrong savings answer is corrected before execution: How many paychecks until I have a thousand-dollar buffer? (0.698732ms)
+✔ repeated incorrect interpretation is rejected, never executed as a balance (3.764458ms)
+✔ valid interpretation does not spend a second model call (4.105606ms)
+✔ buffer target cannot become a savings contribution or numeric entity (0.515357ms)
+✔ current buffer and threshold crossing are not forced into funding timelines (2.81348ms)
+✔ financial questions containing add do not bypass the analyst (1.161791ms)
+✔ debt-free timing cannot be satisfied by listing balances (11.252075ms)
+(node:240304) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisRanking.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240304) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/plaidActivity.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ unknown debt balance is retained in known APR ranking with eligibility caveat (1.857158ms)
+✔ unknown debt balance cannot disappear from balance-ranking completeness (11.636314ms)
+✔ known zero debt is excluded while incomplete scope still flagged (0.966156ms)
+✔ overdue display filters paid rows before the twelve-item display limit (6.398191ms)
+✔ overdue cap retains complete unpaid totals and discloses omitted entries (1.705049ms)
+✔ record creation cannot establish complete prior-month overdue coverage (5.071131ms)
+(node:240310) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisRecurring.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240310) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/schedule.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ payday-relative bills retain the income evidence used for their cutoff (25.288625ms)
+✔ no recurring history is an unavailable comparison, not unchanged prices (0.904613ms)
+✔ recurring increases use observed comparable merchant charges (1.981465ms)
+✔ complete calendar window with absent income history identifies missing observations (1.191465ms)
+(node:240318) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisSchedule.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240318) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/schedule.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ income schedule requires only incomes, not balances, goals, bills or APR (33.556632ms)
+✔ exact named income, amount history and excluded dates preserve requested window (1.096402ms)
+✔ next named payday resolves scheduled date, and before payday resolves day before (0.585683ms)
+✔ incomplete or malformed relevant income cannot become zero (1.572289ms)
+✔ empty income is verified zero but missing next event is unavailable (0.38544ms)
+✔ bill due schedule works with missing account balance, debt balance and APR (4.165136ms)
+✔ canonical monthly debt settlement handles paid configured minimum (0.768278ms)
+✔ canonical non-debt settlement and moved occurrence keep dates and status (5.617064ms)
+✔ qualified bill windows exclude earlier bills and unrelated invalid records (0.88975ms)
+✔ invalid relevant settlements do not become paid zero (0.326332ms)
+✔ historical schedule is not represented as income received (0.638532ms)
+✔ invalid or excessive date windows fail closed (0.21889ms)
+✔ zero effective income is descriptive but cannot be the next payday (0.536198ms)
+✔ saved month history and ISO exclusions work through schedule answers (0.612232ms)
+✔ invalid history and exclusions still block schedule output (4.64613ms)
+(node:240325) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisSchema.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ provider schema forbids the incoherent purpose/domain combinations seen in real evaluations (8.839049ms)
+✔ household-only purposes reject a named scope and hypothetical rather than dropping them (3.586374ms)
+✔ flattening validated wire format preserves all amounts dates scope and explicit repetition (2.383973ms)
+✔ named income balance and actual income schedule remain distinct valid routes (0.409657ms)
+✔ coherent specialized operations remain expressible without schema coercion (1.290314ms)
+✔ general route retains legitimate operations and scenarios; debt payoff accepts only extra-debt scenario (1.137353ms)
+✔ earliest purchase-date schema cannot dispatch to a single purchase scenario (0.705243ms)
+✔ strict wire shape rejects flat output, injected dispatch fields and missing selectors (0.541446ms)
+✔ JSON schema stays object-rooted and compact with nested purpose alternatives and required strict objects (1.748625ms)
+(node:240331) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisAccounts.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240331) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/plaidActivity.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ current balance scope distinguishes checking, savings and combined assets using one domain (16.593453ms)
+✔ combined account group applies bank precedence separately without adding manual duplicates (4.558148ms)
+✔ targeted snapshots read only requested sources plus household date settings (16.631239ms)
+✔ default snapshots preserve full coverage; unavailable selected sources never become empty success (2.220566ms)
+✔ source dependencies keep simple balances independent while preserving cash-flow and classification inputs (0.385751ms)
+✔ irrelevant removed activity and closed buckets do not block a valid forecast (6.758364ms)
+✔ active invalid money and hidden posted bank cash movements still block unverifiable projections (6.065825ms)
+✔ open bucket obligations and incomplete data remain visible even when archive flags disagree (3.765313ms)
+(node:240345) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisSpending.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ missing bank identifiers never turn manual checking salary into a connected-card refund (3.077398ms)
+✔ a bank transaction without a provider ID cannot supply identity or classification to unrelated manual income (0.336677ms)
+✔ valid local, provider and linked bank identities still classify card refunds (0.451209ms)
+✔ unidentified bank activity stays unresolved and unassigned manual records stay unassigned (0.246732ms)
+✔ missing linked-goal identities do not invent a savings transfer (0.21207ms)
+✔ representative mixed manual/credit household retains its actual income average (26.283083ms)
+(node:240356) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisSnapshot.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ multi-month comparison cannot treat older unavailable months as zero spending (37.912677ms)
+✔ classified income covers a legitimate zero-spending comparison period (3.38478ms)
+✔ partial-month comparison cannot borrow coverage from later in the same month (0.726786ms)
+✔ an unresolved row alone is not proof of a covered zero-spending month (0.632543ms)
+(node:240363) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisPlanner.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240363) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/financialProjection.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ paycheck reduction resolves the income occurrence rather than withdrawing cash today (49.780037ms)
+✔ bill price-to scenario replaces the occurrence price instead of adding it (9.172672ms)
+✔ absolute bill price preserves partial settlement and never invents a refund (8.883476ms)
+✔ undated single bill scenario reports the canonical affected occurrence, preserving explicit windows and move endpoints (22.300432ms)
+✔ month-ahead target is not a complete reserve without living history (4.04174ms)
+✔ question-level seam retries savings misroute then calculators produce a buffer duration (7.316084ms)
+✔ buffer already reached returns zero duration, not generic savings (2.817105ms)
+✔ requested paycheck count asks for per-paycheck contribution instead of answering in months (2.958027ms)
+✔ requested paycheck count uses the stated contribution while preserving the existing buffer (3.009124ms)
+✔ monthly contribution is not silently recast as a per-paycheck contribution (3.210127ms)
+✔ requested buffer months do not silently become a paycheck contribution count (4.394211ms)
+✔ paycheck-count questions need no contribution when the buffer is already reached (2.2368ms)
+✔ unknown buffer and no contribution capacity have explicit non-estimable outcomes (6.285762ms)
+✔ unknown buffer acknowledges proposed contribution without claiming capacity or a date (2.18405ms)
+✔ missing buffer target is not silently replaced with next paycheck (0.277288ms)
+✔ goal target1000 never becomes a1000 per-contribution scenario (1.52009ms)
+✔ named-goal explicit contribution duration uses only goal earmark, not all savings (0.850161ms)
+✔ incompatible typed purpose cannot reach wrong calculator (0.131969ms)
+✔ wrong model plans are rejected after one repair, no financial answer substituted (1.182121ms)
+✔ compound purposes preserved and invented target-goal mapping rejected (1.025645ms)
+✔ financial add phrasing is not intercepted as app navigation (0.854988ms)
+✔ unnamed savings target cannot take an arbitrary sole goal funding balance (0.68372ms)
+✔ early projection validation failure still returns a timeline outcome (1.192197ms)
+✔ unmatched named debt timeline cannot present whole-plan payoff date (0.125218ms)
+✔ credit percentage threshold and debt target cannot be consumed as payments (0.168944ms)
+✔ no positive future paycheck leaves paycheck-sized target unknown, never already reached (1.775605ms)
+✔ explicit already-reached buffer target does not require an unrelated future paycheck (3.305315ms)
+✔ compound goal and debt timelines each require their own purpose (0.811723ms)
+✔ explicit numeric buffer target cannot disappear or change in model plan (0.71709ms)
+(node:240374) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/analysisPlanner.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240374) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/financialProjection.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ unsupported savings forecast explains the limit without model or financial data reads (20.342968ms)
+✔ unsupported all forecast explains the limit without model or financial data reads (1.417606ms)
+(node:240385) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/snowballTarget.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240385) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/snowball.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+✔ snowball target routes advertised current requests but preserves historical and compound questions (10.132036ms)
+✔ named debt balance and minimum question returns configured facts without fabricating lender minimums (26.934435ms)
+✔ target selection uses canonical order across ten debts, APR ties and record ID ties (2.16975ms)
+✔ snowball eligibility excludes stopped, future, excluded and paid-off debt without treating missing balances as zero (0.774046ms)
+✔ month selection respects local timezone at UTC month boundary and rejects unknown zones (6.893778ms)
+✔ canonical moved occurrences include inactive debts without blocking ordinary active overrides (0.831613ms)
+✔ target answer names the exact verified debt and never substitutes saved-plan history (0.760336ms)
+✔ actual snowball tool scopes every query and feeds complete canonical selection into the grounded answer (29.775336ms)
+(node:240385) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+✔ income how-to is immediate static guidance with the existing Income settings route (16.263155ms)
+✔ today's briefing requests current account, bill, income and settings records only (0.70365ms)
+✔ current-plan briefing stays grounded with debt, negative checking and a chosen cushion (1.147629ms)
+✔ bundled launcher prompts use precise current overview aliases (0.246271ms)
+✔ saved plan tools require explicit historical or hypothetical intent (7.923579ms)
+✔ unsafe optional followups are dropped independently without weakening claim checks (0.967948ms)
+✔ proven empty results get exact server-owned scoped text, not unchecked model prose (0.415186ms)
+✔ failure telemetry classifies only safe enums without copying provider details (0.291049ms)
+✔ published evidence follows exact rendered claims while every claim remains validated (0.249066ms)
+✔ runtime handles proven-empty tools before model output and validates all nonempty claims (3.826746ms)
+✔ card balance, minimum and rate questions require the configured debt source (0.96899ms)
+✔ account tool descriptions prevent cash accounts substituting for manual cards (1.384386ms)
+✔ invalid money stays unknown instead of becoming zero (0.277668ms)
+✔ missing balances cannot support a fabricated zero claim or overview (0.439432ms)
+✔ debt aggregates require every operand and complete row coverage (0.447074ms)
+✔ debt query retains unknown balances and marks unavailable totals partial (3.21886ms)
+✔ grounded answer accepts exact structured account claims (0.40503ms)
+✔ grounding rejects unsupported and unstructured financial claims (0.176747ms)
+✔ grounding rejects cross-record evidence misattribution (0.167502ms)
+✔ aggregate evidence is scoped to its exact tool source even when summary record ids repeat (0.169446ms)
+✔ zero-result deterministic aggregate is grounded as zero (0.178349ms)
+✔ object keys and false flags cannot support entity or status claims (0.174003ms)
+✔ numeric claims are bound to the asserted field rather than any number in a record (0.179951ms)
+✔ coverage and client context remain bounded (0.250117ms)
+✔ missing source timestamps stay unknown instead of becoming request time (0.097637ms)
+✔ date-only source precision survives evidence, envelopes, and aggregate coverage (8.157471ms)
+✔ safe claim labels distinguish rates, recurrence anchors, and source dates (1.459189ms)
+✔ other-household requests use the refusal guard instead of own-account fallback (1.626781ms)
+✔ actual tool evidence emits date-only asOf through mixed-source aggregation (2.064971ms)
+✔ qualified-question recovery preserves checked ranges and admits incomplete detail coverage (0.746384ms)
+✔ unsupported canonical calculations return immediate truthful app guidance (0.356908ms)
+✔ simple account questions use deterministic read routes without model synthesis (0.352522ms)
+✔ qualified and compound requests never lose their constraints to overview shortcuts (0.199751ms)
+✔ past income anchors are never presented as verified next paydays (0.712393ms)
+✔ evidence links open actual goal and budget destinations with mixed record kinds (3.989001ms)
+✔ qualified APR and all-debt recovery retain verified card rows (1.00906ms)
+✔ simple bill overview lists configured bill facts without computing a forecast total (0.402606ms)
+✔ saved debt-plan history uses the verified plan rows without model synthesis (0.37144ms)
+✔ forecast fast path summarizes only validated server-side forecast inputs (0.699424ms)
+✔ forecast fast path still answers from successful tools when one source is unavailable (0.333513ms)
+✔ Activity fast path reports only bounded verified cash records (0.558912ms)
+✔ budget, goal, and connection fast paths stay grounded to exact server records (0.675719ms)
+✔ a completed account tool provides a verified recovery answer (0.480604ms)
+✔ multi-tool recovery summarizes verified income and activity instead of generic failure copy (0.894287ms)
+✔ multi-tool recovery preserves every verified source without synthesizing new facts (0.633996ms)
+✔ account recovery returns verified balances without waiting for model prose (0.598041ms)
+✔ empty query evidence keeps a null timestamp (5.498415ms)
+✔ every account tool uses exact active-household filters and never legacy null scope (1.119377ms)
+✔ followups cannot carry ungrounded financial figures or judgments (0.209946ms)
+✔ v3 endpoint enforces privacy, legacy rejection, and server-owned persistence (3.120532ms)
+(node:240396) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/floCreation.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ create_bill: complete explicit command emits ready without writes (8.400087ms)
+✔ create_debt: complete explicit command emits ready without writes (1.384015ms)
+✔ create_income: complete explicit command emits ready without writes (0.414114ms)
+✔ create_manual_transaction: complete explicit command emits ready without writes (0.579283ms)
+✔ create_bucket: complete explicit command emits ready without writes (0.452913ms)
+✔ create_savings_goal: complete explicit command emits ready without writes (0.339852ms)
+✔ capability bill asks fields and creates a scoped draft (0.477179ms)
+✔ capability debt asks fields and creates a scoped draft (0.274623ms)
+✔ capability income asks fields and creates a scoped draft (0.244789ms)
+✔ capability manual transaction asks fields and creates a scoped draft (0.342055ms)
+✔ capability bucket asks fields and creates a scoped draft (0.17309ms)
+✔ capability savings goal asks fields and creates a scoped draft (0.134563ms)
+✔ nonauthorization: What if I create a bill for $80? (0.389557ms)
+✔ nonauthorization: Should I add income? (0.169746ms)
+✔ nonauthorization: Show my income (0.07973ms)
+✔ nonauthorization: Open income settings (0.112861ms)
+✔ nonauthorization: Create a bill named Internet for $80 monthly on 2026-11-01, but do not save it (0.069574ms)
+✔ nonauthorization: Create an example bill named Internet for $80 monthly on 2026-11-01 (0.061322ms)
+✔ nonauthorization: Create a draft income $500 weekly starting 2026-11-01 (0.058738ms)
+✔ nonauthorization: Create a bill for $80, just show a preview (0.067501ms)
+✔ declared object wins over names containing income or credit card (0.15243ms)
+✔ multi-turn capability then supplied details completes, bare yes never does (1.873543ms)
+✔ multi-turn incomplete explicit draft retains original user fields and asks all missing together (0.978945ms)
+✔ foreign/expired drafts cannot authorize a details-only continuation (0.373884ms)
+✔ unknown APR remains missing rather than inventing zero (0.327123ms)
+✔ signed negative amounts cannot become positive-only income or bill amounts (1.833542ms)
+✔ numeric substring and unrelated date digits cannot supply amounts or APR (1.022151ms)
+✔ enum mismatch cannot replace weekly with monthly (0.214754ms)
+✔ ISO date evidence must match actual extracted date (0.243967ms)
+✔ relative-date interpreter uses local calendar day across midnight (17.368651ms)
+✔ one-time bill maps canonical monthly storage with recurrence disabled only on explicit evidence (0.508266ms)
+✔ viewers cannot produce ready commands (0.324799ms)
+✔ ambiguous active account never silently picks one (0.387864ms)
+✔ unsupported actions are truthful; v3 recurring bill edits retain existing workflow (0.81614ms)
+✔ income capability names take-home amount and first payday; partial yes asks only missing fields (0.565121ms)
+✔ numeric evidence cannot strip original negative signs or accounting parentheses (0.587425ms)
+✔ draft parser rejects unknown/nested/nonfinite/oversized fields and mismatched authorization kind (0.370619ms)
+✔ recurrence adjectives do not let bill names override the declared kind (0.103706ms)
+✔ modal read-only income and debt questions never become creation capability prompts (0.20536ms)
+✔ add-up, add-together and total arithmetic instructions never authorize creation (0.33846ms)
+✔ word minus and negative amounts retain their sign inside or outside exact evidence (0.612042ms)
+✔ known fields survive null/omitted extraction in later detail-only replies with original provenance (0.354524ms)
+✔ equivalent named manual description and one-off date aliases keep exact source evidence (0.502507ms)
+✔ new declared creations never borrow previous entities or kind fields (0.601586ms)
+✔ explicit unknown or invalid signed correction clears an older amount instead of reusing it (0.628316ms)
+✔ provider schema exposes only applicable fields with strict ISO dates and recurrence enums (30.456072ms)
+✔ long manual descriptions remain exact while ready display prompt stays bounded (0.45813ms)
+✔ negative words without whitespace still preserve signs in full or stripped proofs (1.797068ms)
+✔ unsupported edits state the inability while legacy v3 recurring bill review stays available (0.35866ms)
+✔ monthly due-day and different or unclear tracking start ask only the real first payment date (2.033754ms)
+✔ explicit first-payment dates and matching one-date monthly schedules remain ready (0.301394ms)
+✔ an unclear tracking start is not substituted for the stated monthly due day (0.234624ms)
+(node:240403) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/floCreation.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ create_bill explicit form produces canonical ready without any LLM or write (3.557661ms)
+✔ create_debt explicit form produces canonical ready without any LLM or write (0.361544ms)
+✔ create_income explicit form produces canonical ready without any LLM or write (1.899833ms)
+✔ create_manual_transaction explicit form produces canonical ready without any LLM or write (0.429397ms)
+✔ create_bucket explicit form produces canonical ready without any LLM or write (0.270808ms)
+✔ create_savings_goal explicit form produces canonical ready without any LLM or write (0.302165ms)
+✔ blank required fields produce inline feedback preserving exact raw values (1.371156ms)
+✔ negative and malformed money never turns positive or silently defaults to zero (1.32059ms)
+✔ zero APR, zero debt balance and optional zero savings are accepted only where allowed (0.5309ms)
+✔ APR precision and range follow the normal debt form (0.746014ms)
+✔ invalid, natural-language and noncanonical calendar dates remain field errors (0.600635ms)
+✔ recurrences are closed and quarterly income is never substituted (0.746785ms)
+✔ explicit nonrecurring bill receives the canonical monthly placeholder and stays nonrecurring (0.28564ms)
+✔ booleans cannot be strings and last-day payday requires monthly income (4.868636ms)
+✔ malformed or unsupported forms never fall through to analysis or model extraction (1.50628ms)
+✔ view-only, nonauthenticated/demo identities and stale households cannot produce ready (0.284539ms)
+✔ manual account selection is exact active household/default-budget eligible identity (0.362807ms)
+✔ label length rules preserve exact valid long notes and reject oversized item names (0.296287ms)
+✔ text instructions inside a form value remain ordinary literal data with no new action rights (0.785489ms)
+✔ same form command retries keep exact normalized ready payload and UUID (0.335656ms)
+✔ actual V3/V4 request builders carry explicit form data through the common form dispatcher (69.145212ms)
+✔ V4 retains malformed explicit form presence for validation instead of treating it as absent (0.354855ms)
+✔ oversized aggregate form input rejects before producing unparseable feedback (0.203126ms)
+✔ all supported editor roles retain structured creation access (0.210437ms)
+(node:240409) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/supabase/functions/flo-chat/planAccess.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240409) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+✔ access parsing is scoped and fails closed for malformed or contradictory usage (1.759861ms)
+✔ RPC inputs contain scope and verified preview, never caller-provided quota limits (0.925484ms)
+✔ refund is scope-bound and single flight, including repeated failures and legacy no-op (1.445058ms)
+✔ completed response replay stays available without spending quota or calling provider (35.130345ms)
+✔ monthly exhaustion rejects before provider and before message writes (6.059951ms)
+✔ ephemeral persistence failure refunds exactly once without any provider request (3.706315ms)
+✔ provider failure refunds once; finalized verified answer remains charged (7.449855ms)
+✔ Free creation questions give truthful Pro/manual guidance without provider or mutation dispatch and refund preview (8.737235ms)
+✔ a paused provider cannot return Response early or refund an in-flight successful answer (8.846991ms)
+✔ evaluation inventory retains all 30 requested financial question headings (5.564855ms)
+✔ coverage inventory is not mislabeled as successful model evaluation (0.469517ms)
+ℹ tests 572
+ℹ suites 0
+ℹ pass 572
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7147.345491

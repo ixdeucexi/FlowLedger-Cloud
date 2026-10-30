@@ -1,0 +1,25 @@
+{
+  "case": "flo-pro-0",
+  "width": 390,
+  "checks": [
+    "Opening Flo does not automatically ask a question",
+    "Unlimited useful local Essentials answers do not invoke a provider",
+    "Pro conversational answer uses exactly one intercepted V3 request",
+    "Authoritative household allowance refreshes after the request and displays the reduced remaining count"
+  ],
+  "bundles": [
+    {
+      "path": "/_expo/static/js/web/entry-b50e2278d1022d345c081580671687bb.js",
+      "sha256": "2d50dc5b68ccd5be7cab23cbbb7830907a4d2c5a9850ad6cecfb7d7294a3a9be",
+      "bytes": 5097994
+    }
+  ],
+  "errors": [],
+  "unknown": [],
+  "knownConsole": [],
+  "mockFinancialWrites": [],
+  "mockAiCalls": 1,
+  "mockCloudWrites": 0,
+  "realCustomerOrProviderWrites": 0,
+  "status": "PASS"
+}

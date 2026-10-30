@@ -1,0 +1,9 @@
+{
+  "id": "e22bffba-a6c6-40fd-b285-9f711f01c552",
+  "slug": "flo-chat",
+  "status": "ACTIVE",
+  "version": 42,
+  "verify_jwt": true,
+  "entrypoint_path": "/tmp/user_fn_imqmhfdquqlqxgtcdbvc_e22bffba-a6c6-40fd-b285-9f711f01c552_42/source/supabase/functions/flo-chat/index.ts",
+  "ezbr_sha256": "4dcf9900f396342c3387d3f2933f21228c99869804b494ab215792ff83fe6baf"
+}

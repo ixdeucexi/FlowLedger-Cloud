@@ -1,0 +1,170 @@
+{
+  "projectId": "imqmhfdquqlqxgtcdbvc",
+  "passed": true,
+  "findingCounts": {
+    "INFO": 18
+  },
+  "baselineFindingCounts": {
+    "INFO": 15,
+    "WARN": 0,
+    "ERROR": 0
+  },
+  "expectedDelta": {
+    "INFO": 3,
+    "WARN": 0,
+    "ERROR": 0
+  },
+  "newIntentionalDenyAllPrivateTables": [
+    {
+      "level": "INFO",
+      "lint": "rls_enabled_no_policy",
+      "schema": "private",
+      "name": "flo_monthly_usage",
+      "observedAt": "2026-10-30T13:08:56.396Z"
+    },
+    {
+      "level": "INFO",
+      "lint": "rls_enabled_no_policy",
+      "schema": "private",
+      "name": "flo_plan_reservations",
+      "observedAt": "2026-10-30T13:08:56.396Z"
+    },
+    {
+      "level": "INFO",
+      "lint": "rls_enabled_no_policy",
+      "schema": "private",
+      "name": "founding_planning_access",
+      "observedAt": "2026-10-30T13:08:56.396Z"
+    }
+  ],
+  "findings": [
+    {
+      "level": "INFO",
+      "lint": "rls_enabled_no_policy",
+      "schema": "private",
+      "name": "flo_creation_receipts",
+      "observedAt": "2026-10-30T13:08:56.396Z"
+    },
+    {
+      "level": "INFO",
+      "lint": "rls_enabled_no_policy",
+      "schema": "private",
+      "name": "flo_monthly_usage",
+      "observedAt": "2026-10-30T13:08:56.396Z"
+    },
+    {
+      "level": "INFO",
+      "lint": "rls_enabled_no_policy",
+      "schema": "private",
+      "name": "flo_plan_reservations",
+      "observedAt": "2026-10-30T13:08:56.396Z"
+    },
+    {
+      "level": "INFO",
+      "lint": "rls_enabled_no_policy",
+      "schema": "private",
+      "name": "founding_planning_access",
+      "observedAt": "2026-10-30T13:08:56.396Z"
+    },
+    {
+      "level": "INFO",
+      "lint": "rls_enabled_no_policy",
+      "schema": "private",
+      "name": "recent_change_versions",
+      "observedAt": "2026-10-30T13:08:56.396Z"
+    },
+    {
+      "level": "INFO",
+      "lint": "rls_enabled_no_policy",
+      "schema": "private",
+      "name": "recent_changes",
+      "observedAt": "2026-10-30T13:08:56.396Z"
+    },
+    {
+      "level": "INFO",
+      "lint": "rls_enabled_no_policy",
+      "schema": "private",
+      "name": "release_feature_entitlements",
+      "observedAt": "2026-10-30T13:08:56.396Z"
+    },
+    {
+      "level": "INFO",
+      "lint": "rls_enabled_no_policy",
+      "schema": "public",
+      "name": "billing_entitlements",
+      "observedAt": "2026-10-30T13:08:56.396Z"
+    },
+    {
+      "level": "INFO",
+      "lint": "rls_enabled_no_policy",
+      "schema": "public",
+      "name": "billing_events",
+      "observedAt": "2026-10-30T13:08:56.396Z"
+    },
+    {
+      "level": "INFO",
+      "lint": "rls_enabled_no_policy",
+      "schema": "public",
+      "name": "billing_purchase_bindings",
+      "observedAt": "2026-10-30T13:08:56.396Z"
+    },
+    {
+      "level": "INFO",
+      "lint": "rls_enabled_no_policy",
+      "schema": "public",
+      "name": "billing_purchase_intents",
+      "observedAt": "2026-10-30T13:08:56.396Z"
+    },
+    {
+      "level": "INFO",
+      "lint": "rls_enabled_no_policy",
+      "schema": "public",
+      "name": "billing_sandbox_testers",
+      "observedAt": "2026-10-30T13:08:56.396Z"
+    },
+    {
+      "level": "INFO",
+      "lint": "rls_enabled_no_policy",
+      "schema": "public",
+      "name": "flo_audit_events",
+      "observedAt": "2026-10-30T13:08:56.396Z"
+    },
+    {
+      "level": "INFO",
+      "lint": "rls_enabled_no_policy",
+      "schema": "public",
+      "name": "flo_daily_limits",
+      "observedAt": "2026-10-30T13:08:56.396Z"
+    },
+    {
+      "level": "INFO",
+      "lint": "rls_enabled_no_policy",
+      "schema": "public",
+      "name": "flo_rate_limits",
+      "observedAt": "2026-10-30T13:08:56.396Z"
+    },
+    {
+      "level": "INFO",
+      "lint": "rls_enabled_no_policy",
+      "schema": "public",
+      "name": "flo_usage",
+      "observedAt": "2026-10-30T13:08:56.396Z"
+    },
+    {
+      "level": "INFO",
+      "lint": "rls_enabled_no_policy",
+      "schema": "public",
+      "name": "native_push_devices",
+      "observedAt": "2026-10-30T13:08:56.396Z"
+    },
+    {
+      "level": "INFO",
+      "lint": "rls_enabled_no_policy",
+      "schema": "public",
+      "name": "native_push_receipts",
+      "observedAt": "2026-10-30T13:08:56.396Z"
+    }
+  ],
+  "remediationUrl": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+  "note": "Three new INFO findings are intentional RLS/no-policy server-only tables; independent catalog gate verified no client/PUBLIC/service direct grants."
+}

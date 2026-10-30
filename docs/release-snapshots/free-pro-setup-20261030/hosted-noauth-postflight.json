@@ -1,0 +1,8 @@
+{
+  "projectId": "imqmhfdquqlqxgtcdbvc",
+  "passed": true,
+  "executeAclDenials": 6,
+  "noAuthSessionGuard": true,
+  "mode": "Explicit READ ONLY; empty JWT; no service quota execution or customer financial records",
+  "proof": "No SQL error: prepared DO block raises on any unexpected execute permission or missing no-auth guard; tool returned empty result."
+}

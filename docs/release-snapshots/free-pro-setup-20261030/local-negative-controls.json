@@ -1,0 +1,14 @@
+[
+  {
+    "label": "private RLS disabled",
+    "passed": true
+  },
+  {
+    "label": "client quota RPC grant",
+    "passed": true
+  },
+  {
+    "label": "canonical security mode drift",
+    "passed": true
+  }
+]

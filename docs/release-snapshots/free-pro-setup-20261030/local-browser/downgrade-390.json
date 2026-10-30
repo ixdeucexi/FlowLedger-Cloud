@@ -1,0 +1,30 @@
+{
+  "case": "downgrade",
+  "width": 390,
+  "checks": [
+    "Downgrade preserves and opens existing local scenarios with export/delete controls while blocking premium saves",
+    "Free actual scenario export preserves stored information",
+    "Existing household scenarios also remain readable/exportable after downgrade without enabling premium updates",
+    "Downgrade dispatched no cloud mutation or financial write"
+  ],
+  "bundles": [
+    {
+      "path": "/_expo/static/js/web/entry-b50e2278d1022d345c081580671687bb.js",
+      "sha256": "2d50dc5b68ccd5be7cab23cbbb7830907a4d2c5a9850ad6cecfb7d7294a3a9be",
+      "bytes": 5097994
+    },
+    {
+      "path": "/_expo/static/js/web/entry-b50e2278d1022d345c081580671687bb.js",
+      "sha256": "2d50dc5b68ccd5be7cab23cbbb7830907a4d2c5a9850ad6cecfb7d7294a3a9be",
+      "bytes": 5097994
+    }
+  ],
+  "errors": [],
+  "unknown": [],
+  "knownConsole": [],
+  "mockFinancialWrites": [],
+  "mockAiCalls": 0,
+  "mockCloudWrites": 0,
+  "realCustomerOrProviderWrites": 0,
+  "status": "PASS"
+}
