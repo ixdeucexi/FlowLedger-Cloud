@@ -134,6 +134,10 @@ export function parseAppearance(
 }
 export function appearancePreset(p: AppearancePreferences) {
   if (p.calendarColors && Object.keys(p.calendarColors).length) return null;
+  return appearanceBasePreset(p);
+}
+/** Calendar colors are independent of the selected app preset. */
+export function appearanceBasePreset(p: AppearancePreferences) {
   return (
     APPEARANCE_PRESETS.find(
       (x) =>

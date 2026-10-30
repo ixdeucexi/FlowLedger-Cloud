@@ -19,6 +19,7 @@ const {
   parseAppearance,
   normalizeAppearance,
   appearancePreset,
+  appearanceBasePreset,
   appearancePalette,
   contrastRatio,
   createAppearanceWriter,
@@ -212,6 +213,46 @@ test("presets are complete atomic bundles; customization and reset report accura
     );
   }
   assert.equal(appearancePreset({ ...DEFAULT_APPEARANCE })?.name, "FlowLedger");
+});
+test("each app preset remains selected with independent calendar colors", () => {
+  for (const preset of APPEARANCE_PRESETS) {
+    const value = Object.freeze({
+      ...preset.preferences,
+      calendarColors: Object.freeze({
+        income: "blue" as const,
+        risk: "teal" as const,
+      }),
+    });
+    const before = JSON.stringify(value);
+    assert.equal(appearanceBasePreset(value)?.id, preset.id);
+    assert.equal(
+      appearancePreset(value),
+      null,
+      "whole appearance remains customized",
+    );
+    assert.equal(
+      JSON.stringify(value),
+      before,
+      "selection does not mutate preferences",
+    );
+    assert.equal(appearanceBasePreset(preset.preferences)?.id, preset.id);
+  }
+});
+test("individual app settings remain honestly Custom when no base preset matches", () => {
+  for (const change of [
+    { themeMode: "auto" as const },
+    { accent: "amber" as const },
+    { backdrop: "subtle" as const },
+    { contrast: "high" as const },
+  ]) {
+    const value = {
+      ...DEFAULT_APPEARANCE,
+      ...change,
+      calendarColors: { income: "blue" as const },
+    };
+    assert.equal(appearanceBasePreset(value), null);
+    assert.equal(appearancePreset(value), null);
+  }
 });
 test("custom accents keep white button text readable in both modes and preserve financial colors", () => {
   for (const mode of ["dark", "light"] as const)

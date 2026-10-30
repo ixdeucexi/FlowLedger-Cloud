@@ -1,0 +1,25 @@
+✔ appearance parser bounds storage, migrates legacy mode, and rejects injected fields (1.966551ms)
+✔ presets are complete atomic bundles; customization and reset report accurate names (0.332911ms)
+✔ each app preset remains selected with independent calendar colors (0.185329ms)
+✔ individual app settings remain honestly Custom when no base preset matches (0.243096ms)
+✔ custom accents keep white button text readable in both modes and preserve financial colors (0.858103ms)
+✔ writer serializes snapshots and continues after rejection (0.820575ms)
+✔ provider preserves explicit user changes over late hydration and persists only complete bundles (48.815448ms)
+✔ read failure settles startup; load retry never writes defaults or overwrites a newer choice (17.192142ms)
+✔ load retry restores the saved look without performing a write (14.909514ms)
+✔ write failure leaves the applied look with a recoverable error; retry stores the latest selection (14.298103ms)
+✔ both settings paths share controls; background and desktop tokens consume the same preference (1.888685ms)
+✔ calendar preferences validate closed keys and migrate old five-field records (0.351759ms)
+✔ all calendar colors stay legible across themes and share category mappings (15.970462ms)
+✔ calendar overrides survive app presets and mode changes; reset clears only what was requested (12.432884ms)
+✔ queued writes snapshot nested calendar choices (0.14636ms)
+✔ both calendar views use shared tones and retain text risk signals (0.502497ms)
+✔ desktop Original Light calendar fills match their computed foreground (8.832582ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 433.781366

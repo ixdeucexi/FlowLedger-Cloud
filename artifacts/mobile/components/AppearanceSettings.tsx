@@ -8,6 +8,7 @@ import colors from "@/constants/colors";
 import {
   ACCENT_CHOICES,
   APPEARANCE_PRESETS,
+  appearanceBasePreset,
   appearancePalette,
   type ThemeMode,
   type BackdropChoice,
@@ -29,6 +30,10 @@ export function AppearanceSettings() {
     loadError,
     retryLoad,
   } = useThemeMode();
+  const basePreset = appearanceBasePreset(appearance);
+  const currentLabel = basePreset
+    ? `${basePreset.name}${presetName === "Custom" ? " · Custom colors" : ""}`
+    : "Custom";
   const option = (
     label: string,
     selected: boolean,
@@ -68,7 +73,7 @@ export function AppearanceSettings() {
   return (
     <View style={styles.root}>
       <View style={styles.headingRow}>
-        <View style={styles.flex}>
+        <View style={styles.headingCopy}>
           <Text
             accessibilityRole="header"
             style={[styles.title, { color: c.foreground }]}
@@ -79,9 +84,17 @@ export function AppearanceSettings() {
             Start with a preset, then fine-tune your look.
           </Text>
         </View>
-        <View style={[styles.currentPill, { backgroundColor: c.secondary }]}>
+        <View
+          accessibilityLabel={`Current appearance: ${currentLabel}`}
+          style={[styles.currentPill, { backgroundColor: c.secondary }]}
+        >
+          <Feather
+            name="check-circle"
+            size={14}
+            color={c.secondaryForeground}
+          />
           <Text style={[styles.pillText, { color: c.secondaryForeground }]}>
-            {presetName}
+            Selected: {currentLabel}
           </Text>
         </View>
       </View>
@@ -157,9 +170,14 @@ export function AppearanceSettings() {
       >
         Presets
       </Text>
+      {!basePreset ? (
+        <Text style={[styles.copy, { color: c.mutedForeground }]}>
+          Custom look selected. Your individual settings are active.
+        </Text>
+      ) : null}
       <View style={styles.presets}>
         {APPEARANCE_PRESETS.map((p) => {
-          const selected = presetName === p.name;
+          const selected = basePreset?.id === p.id;
           const palette = appearancePalette(
             p.preferences.themeMode === "light" ? "light" : "dark",
             p.preferences,
@@ -228,9 +246,28 @@ export function AppearanceSettings() {
                   </View>
                 ) : null}
               </View>
-              <Text style={[styles.presetName, { color: c.foreground }]}>
-                {p.name}
-              </Text>
+              <View style={styles.presetNameRow}>
+                <Text style={[styles.presetName, { color: c.foreground }]}>
+                  {p.name}
+                </Text>
+                {selected ? (
+                  <View
+                    style={[
+                      styles.selectedBadge,
+                      { backgroundColor: c.primary },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.selectedText,
+                        { color: c.primaryForeground },
+                      ]}
+                    >
+                      Selected
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
               <Text
                 style={[styles.presetDescription, { color: c.mutedForeground }]}
               >
@@ -396,10 +433,18 @@ export function AppearanceSettings() {
 const styles = StyleSheet.create({
   root: { gap: 12 },
   flex: { flex: 1, minWidth: 0 },
-  headingRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  headingRow: { alignItems: "flex-start", gap: 10 },
+  headingCopy: { alignSelf: "stretch" },
   title: { fontFamily: "Inter_700Bold", fontSize: 20, lineHeight: 26 },
   copy: { fontFamily: "Inter_400Regular", fontSize: 13, lineHeight: 19 },
-  currentPill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
+  currentPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
   pillText: { fontFamily: "Inter_600SemiBold", fontSize: 11 },
   preview: {
     borderWidth: 1,
@@ -487,7 +532,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  presetName: { fontFamily: "Inter_700Bold", fontSize: 13, marginTop: 8 },
+  presetNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 5,
+    marginTop: 8,
+  },
+  presetName: { fontFamily: "Inter_700Bold", fontSize: 13 },
+  selectedBadge: { paddingHorizontal: 6, paddingVertical: 3, borderRadius: 7 },
+  selectedText: { fontFamily: "Inter_600SemiBold", fontSize: 9 },
   presetDescription: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
