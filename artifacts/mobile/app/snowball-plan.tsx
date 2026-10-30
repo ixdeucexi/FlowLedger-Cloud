@@ -400,7 +400,7 @@ function SnowballPlanScreen() {
               <View style={[styles.heroLogo, { backgroundColor: c.primary + "13" }]}>
                 <FloLogo size={isDesktop ? 64 : 52} />
               </View>
-              <View style={styles.heroCopyWrap}>
+              <View style={[styles.heroCopyWrap, !isDesktop && styles.heroCopyWrapMobile]}>
                 <Text style={[styles.heroLabel, { color: c.primary }]}>CURRENT TARGET</Text>
                 <Text style={[styles.heroTitle, isDesktop && styles.heroTitleDesktop, { color: c.foreground }]}>{target?.name ?? "No active target"}</Text>
                 <Text style={[styles.heroCopy, { color: c.mutedForeground }]}>Your required payments stay intact. When one debt closes, unused money moves to the next debt on the same date.</Text>
@@ -789,6 +789,7 @@ const styles = StyleSheet.create({
   heroTop: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 14 },
   heroLogo: { width: 72, height: 72, borderRadius: 22, alignItems: "center", justifyContent: "center" },
   heroCopyWrap: { flex: 1 },
+  heroCopyWrapMobile: { minWidth: 120 },
   heroLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1 },
   heroTitle: { fontSize: 24, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.5, marginTop: 2 },
   heroTitleDesktop: { fontSize: 31 },
