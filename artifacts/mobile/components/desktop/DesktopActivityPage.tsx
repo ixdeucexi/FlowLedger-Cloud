@@ -672,7 +672,7 @@ export function DesktopActivityPage({
                         </View>
                       </View>
                       <View style={styles.colCategory}>
-                        <StatusBadge label={row.category} tone="gray" />
+                        <StatusBadge label={row.category} tone="gray" truncate />
                       </View>
                       <Text
                         style={[table.cellText, styles.colAccount]}

@@ -2509,7 +2509,7 @@ const styles = StyleSheet.create({
   },
   metaText: {
     flex: 1,
-    minWidth: 0,
+    minWidth: 64,
     fontSize: 10,
     lineHeight: 15,
     fontFamily: "Inter_400Regular",

@@ -272,9 +272,11 @@ export function CardHeader({
 export function StatusBadge({
   label,
   tone = "purple",
+  truncate = false,
 }: {
   label: string;
   tone?: "purple" | "green" | "red" | "amber" | "blue" | "gray";
+  truncate?: boolean;
 }) {
   const colors = {
     purple: [desktopPalette.purpleSoft, desktopPalette.purpleDark],
@@ -285,8 +287,8 @@ export function StatusBadge({
     gray: [desktopPalette.surfaceMuted, desktopPalette.textSecondary],
   }[tone];
   return (
-    <View style={[styles.badge, { backgroundColor: colors[0] }]}>
-      <Text style={[styles.badgeText, { color: colors[1] }]}>{label}</Text>
+    <View style={[styles.badge, truncate && styles.badgeConstrained, { backgroundColor: colors[0] }]}>
+      <Text numberOfLines={truncate ? 1 : undefined} style={[styles.badgeText, truncate && styles.badgeTextConstrained, { color: colors[1] }]}>{label}</Text>
     </View>
   );
 }
@@ -597,6 +599,8 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   badgeText: { fontSize: 11, fontFamily: "Inter_700Bold" },
+  badgeConstrained: { minWidth: 0, maxWidth: "100%" },
+  badgeTextConstrained: { minWidth: 0, flexShrink: 1 },
   desktopSearch: {
     flex: 1,
     minWidth: 180,
