@@ -75,4 +75,35 @@ PASS founder keeps confirmed recurring-proposal access
 PASS downgraded confirmed recurring-proposal retry creates no second mutation/audit
 PASS new Free keeps the existing Review Center/bucket recovery entitlement
 PASS migration leaves the proven free bucket/reversal entitlement helper unchanged
-PASS 80 actual PostgreSQL Free/Pro assertions
+PASS proposal confirmation and plan-first account cleanup both commit without a lock cycle
+PASS request-start Pro confirmation commits one complete bill mutation and audit before cleanup
+PASS available quota reservation fails fast while plan-first account cleanup deletes membership
+PASS member cleanup commits without a partial quota receipt or consumed credit
+PASS retry after member cleanup rechecks current membership
+PASS exhausted quota reservation fails fast while plan-first account cleanup deletes membership
+PASS member cleanup commits without a partial quota receipt or consumed credit
+PASS retry after member cleanup rechecks current membership
+PASS request-start Pro creation and concurrent downgrade commit one atomic item and receipt
+PASS new creation after committed downgrade enforces current Free eligibility
+PASS post-downgrade rejection leaves no partial financial item or creation receipt
+PASS account-first lifecycle and canonical creation commit without deadlock or partial receipt
+PASS committed proposal replay remains available while the plan row is busy
+PASS reservation fails fast on a busy actor root row
+PASS busy actor root does not leave a provider replay receipt
+PASS reservation fails fast on a busy household root row
+PASS busy household root does not leave a provider replay receipt
+PASS reservation fails fast on a busy active household row
+PASS busy active household does not leave a provider replay receipt
+PASS reservation fails fast on a busy membership row
+PASS busy membership does not leave a provider replay receipt
+PASS reservation fails fast on a busy founding grant row
+PASS busy founding grant does not leave a provider replay receipt
+PASS actor deletion fixture has one charged monthly request
+PASS refund fails fast before receipt/counter locks while actor cascade owns its parent
+PASS actor cascade completes without a refund lock cycle or dangling receipt
+PASS refund after actor deletion safely returns false
+PASS household deletion fixture has one charged monthly request
+PASS refund fails fast before receipt/counter locks while household cascade owns its parent
+PASS household cascade completes without a refund lock cycle or dangling receipt
+PASS refund after household deletion safely returns false
+PASS 111 actual PostgreSQL Free/Pro assertions

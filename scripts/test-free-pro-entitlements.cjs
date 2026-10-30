@@ -52,12 +52,32 @@ function rejects(statement, pattern, label) {
 }
 function session(statement) {
   return new Promise(resolve => {
-    const p = spawn('docker', [...base, container, 'psql', '-X', '-At', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', database, '-c', statement], { env });
+    const p = spawn('docker', [...base, container, 'psql', '-X', '-At', '-v', 'ON_ERROR_STOP=1', '-v', 'VERBOSITY=verbose', '-U', 'postgres', '-d', database, '-c', statement], { env });
     let output = '';
     p.stdout.on('data', chunk => { output += chunk; });
     p.stderr.on('data', chunk => { output += chunk; });
     p.on('close', code => resolve({ code, output }));
   });
+}
+async function whileLocked(writerSql, requestSql) {
+  const marker = `free_pro_lock_${randomUUID()}`;
+  const writer = session(`set application_name='${marker}';set statement_timeout='5s';set lock_timeout='2s';begin;${writerSql.before}select pg_sleep(1);${writerSql.after || ''}commit;`);
+  let ready = false;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    if (scalar(`select exists(select 1 from pg_stat_activity where datname=current_database()and application_name='${marker}'and wait_event='PgSleep')`) === 't') {
+      ready = true;
+      break;
+    }
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+  assert(ready, 'Concurrent writer reached its lock-held marker');
+  const request = session(`set statement_timeout='3s';${requestSql}`);
+  const [writerResult, requestResult] = await Promise.all([writer, request]);
+  assert.equal(writerResult.code, 0, `Existing lifecycle/plan writer must commit: ${writerResult.output}`);
+  return requestResult;
+}
+function busy(result, label) {
+  ok(result.code !== 0 && /55P03:/.test(result.output) && !/deadlock detected/.test(result.output), label);
 }
 const access = (who, home, preview = null) => json(`${claims(who)}select public.get_household_feature_access('${home}',${preview ? `'${preview}'` : 'null'})`);
 const reserveSql = (who, home, receipt = randomUUID(), preview = null) => `select public.reserve_flo_plan_request('${who}','${home}','${receipt}',${preview ? `'${preview}'` : 'null'})`;
@@ -274,6 +294,88 @@ values('${id}','${home}','${conversation}','${message}','${actor}','recurring_bi
     ok(scalar("select count(*)from public.flo_audit_events where parameters->>'kind'='recurring_bill_change'and household_id='" + homes.paid + "'") === '1', 'downgraded confirmed recurring-proposal retry creates no second mutation/audit');
     ok(scalar(`select private.has_review_center_entitlement('${homes.free}')`) === 't', 'new Free keeps the existing Review Center/bucket recovery entitlement');
     ok(scalar("select pg_get_functiondef('private.has_review_center_entitlement(uuid)'::regprocedure)") === reviewDefinition, 'migration leaves the proven free bucket/reversal entitlement helper unchanged');
+
+    // Reproduce the existing account-deletion lock order (billing plan first,
+    // followed by proposal/member cleanup) against real guarded RPCs. Financial
+    // authorization reads the committed tier at request start; quota pins it.
+    const cleanupProposal = randomUUID();
+    sql(`update public.household_plans set tier='pro',source='billing'where household_id='${homes.paid}';` + proposal(ids.paid, homes.paid, budgets.paid, 'cleanup-recurring', cleanupProposal));
+    const auditBeforeCleanup = scalar('select count(*)from public.flo_audit_events');
+    const cleanupConfirmation = await whileLocked({
+      before: `update public.household_plans set tier='free',source='default'where household_id='${homes.paid}';`,
+      after: `delete from public.flo_proposals where id='${cleanupProposal}';`,
+    }, `${claims(ids.paid)}select public.confirm_flo_recurring_bill_proposal('${cleanupProposal}')`);
+    ok(cleanupConfirmation.code === 0, 'proposal confirmation and plan-first account cleanup both commit without a lock cycle');
+    ok(scalar(`select count(*)from public.flo_proposals where id='${cleanupProposal}'`) === '0' && scalar("select amount from public.bills where id='cleanup-recurring'") === '60' && Number(scalar('select count(*)from public.flo_audit_events')) === Number(auditBeforeCleanup) + 1, 'request-start Pro confirmation commits one complete bill mutation and audit before cleanup');
+
+    for (const used of [0, 300]) {
+      const quotaCommand = randomUUID();
+      sql(`update public.household_plans set tier='pro',source='billing'where household_id='${homes.paid}';
+        update private.flo_monthly_usage set request_count=${used} where household_id='${homes.paid}'and request_month=date_trunc('month',now()at time zone'UTC')::date;`);
+      busy(await whileLocked({
+        before: `update public.household_plans set tier='free',source='default'where household_id='${homes.paid}';`,
+        after: `delete from public.household_members where household_id='${homes.paid}'and user_id='${ids.paid}';`,
+      }, service + reserveSql(ids.paid, homes.paid, quotaCommand)), `${used ? 'exhausted' : 'available'} quota reservation fails fast while plan-first account cleanup deletes membership`);
+      ok(scalar(`select count(*)from public.household_members where household_id='${homes.paid}'and user_id='${ids.paid}'`) === '0' && scalar(`select count(*)from private.flo_plan_reservations where id='${quotaCommand}'`) === '0' && scalar(`select request_count from private.flo_monthly_usage where household_id='${homes.paid}'and request_month=date_trunc('month',now()at time zone'UTC')::date`) === String(used), 'member cleanup commits without a partial quota receipt or consumed credit');
+      rejects(service + reserveSql(ids.paid, homes.paid, quotaCommand), /feature_household_access_denied/, 'retry after member cleanup rechecks current membership');
+      sql(`insert into public.household_members(household_id,user_id,role)values('${homes.paid}','${ids.paid}','owner')`);
+    }
+
+    const downgradeCommand = randomUUID();
+    const incomeBeforeDowngrade = Number(scalar(`select count(*)from public.incomes where household_id='${homes.paid}'`));
+    sql(`update public.household_plans set tier='pro',source='billing'where household_id='${homes.paid}'`);
+    const duringDowngrade = await whileLocked({ before: `update public.household_plans set tier='free',source='default'where household_id='${homes.paid}';` }, creationSql(ids.paid, homes.paid, budgets.paid, downgradeCommand));
+    ok(duringDowngrade.code === 0 && Number(scalar(`select count(*)from public.incomes where household_id='${homes.paid}'`)) === incomeBeforeDowngrade + 1 && scalar(`select count(*)from private.flo_creation_receipts where command_id='${downgradeCommand}'`) === '1', 'request-start Pro creation and concurrent downgrade commit one atomic item and receipt');
+    const afterDowngrade = randomUUID();
+    rejects(creationSql(ids.paid, homes.paid, budgets.paid, afterDowngrade), /flo_creation_pro_required/, 'new creation after committed downgrade enforces current Free eligibility');
+    ok(Number(scalar(`select count(*)from public.incomes where household_id='${homes.paid}'`)) === incomeBeforeDowngrade + 1 && scalar(`select count(*)from private.flo_creation_receipts where command_id='${afterDowngrade}'`) === '0', 'post-downgrade rejection leaves no partial financial item or creation receipt');
+
+    // The reverse lifecycle order is also real: shared-plan reassignment locks
+    // an account before billing cleanup updates the plan. A capability read
+    // must not hold a new plan lock while the proven account guard waits.
+    sql(`update public.household_plans set tier='pro',source='billing'where household_id='${homes.paid}';
+      insert into public.accounts(id,user_id,household_id,budget_id,name,account_type)values('cleanup-account','${ids.paid}','${homes.paid}','${budgets.paid}','Fictional cleanup account','checking');`);
+    const accountCommand = randomUUID();
+    const manualPayload = JSON.stringify({ amount: 1, direction: 'expense', date: '2026-11-01', category: 'Other', note: 'Fictional lock regression', account_id: 'cleanup-account' });
+    const accountResult = await whileLocked({
+      before: "update public.accounts set name=name||' changed'where id='cleanup-account';",
+      after: `update public.household_plans set tier='free',source='default'where household_id='${homes.paid}';`,
+    }, `${claims(ids.paid)}select public.create_flo_entity('${accountCommand}','create_manual_transaction','${manualPayload}'::jsonb,'${homes.paid}','${budgets.paid}')`);
+    ok(accountResult.code === 0 && scalar(`select count(*)from private.flo_creation_receipts where command_id='${accountCommand}'`) === '1' && scalar("select count(*)from public.transactions where account_id='cleanup-account'") === '1', 'account-first lifecycle and canonical creation commit without deadlock or partial receipt');
+
+    const replayWhileBusy = await whileLocked({ before: `update public.household_plans set updated_at=now()where household_id='${homes.paid}';` }, `${claims(ids.paid)}select public.confirm_flo_recurring_bill_proposal('${paidProposal}')`);
+    ok(replayWhileBusy.code === 0 && JSON.parse(replayWhileBusy.output.trim().split('\n').at(-1)).auditId === confirmedProposal.auditId, 'committed proposal replay remains available while the plan row is busy');
+
+    // Every newly added scope lock must fail fast, including the earlier rows
+    // and founding grant. A later lifecycle writer may already own any of them.
+    const scopeLocks = [
+      ['actor root', `select 1 from auth.users where id='${ids.founder}'for update;`],
+      ['household root', `select 1 from public.households where id='${homes.founder}'for update;`],
+      ['active household', `update public.user_preferences set active_household_id=active_household_id where user_id='${ids.founder}';`],
+      ['membership', `update public.household_members set role=role where household_id='${homes.founder}'and user_id='${ids.founder}';`],
+      ['founding grant', `update private.founding_planning_access set granted_at=granted_at where household_id='${homes.founder}';`],
+    ];
+    for (const [label, before] of scopeLocks) {
+      const reservation = randomUUID();
+      busy(await whileLocked({ before }, service + reserveSql(ids.founder, homes.founder, reservation)), `reservation fails fast on a busy ${label} row`);
+      ok(scalar(`select count(*)from private.flo_plan_reservations where id='${reservation}'`) === '0', `busy ${label} does not leave a provider replay receipt`);
+    }
+
+    for (const target of ['actor', 'household']) {
+      const actor = randomUUID(), home = randomUUID(), receipt = randomUUID();
+      sql(`insert into auth.users values('${actor}');insert into public.households(id,created_by,is_personal)values('${home}','${actor}',false);
+        insert into public.household_members(household_id,user_id,role)values('${home}','${actor}','owner');
+        insert into public.user_preferences(user_id,active_household_id)values('${actor}','${home}');`);
+      ok(reserve(actor, home, receipt).allowed, `${target} deletion fixture has one charged monthly request`);
+      const table = target === 'actor' ? 'auth.users' : 'public.households';
+      const rootId = target === 'actor' ? actor : home;
+      busy(await whileLocked({
+        before: `select 1 from ${table} where id='${rootId}'for update;`,
+        after: `delete from ${table} where id='${rootId}';`,
+      }, `${service}select public.refund_flo_plan_request('${actor}','${home}','${receipt}')`), `refund fails fast before receipt/counter locks while ${target} cascade owns its parent`);
+      ok(scalar(`select count(*)from ${table} where id='${rootId}'`) === '0' && scalar(`select count(*)from private.flo_plan_reservations where id='${receipt}'`) === '0', `${target} cascade completes without a refund lock cycle or dangling receipt`);
+      ok(refund(actor, home, receipt) === 'f', `refund after ${target} deletion safely returns false`);
+    }
 
     console.log(`PASS ${checks} actual PostgreSQL Free/Pro assertions`);
   } finally {

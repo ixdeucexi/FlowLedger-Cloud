@@ -97,25 +97,30 @@ end;
 $$;
 revoke all on function private.feature_access_for_user(uuid,uuid,text) from public,anon,authenticated,service_role;
 
--- Mutation guards pin current active scope, membership and plan for the whole
--- reservation/financial transaction. The read RPC itself remains read-only.
+-- Quota reservations pin the actor/household roots, active scope and plan.
+-- All locks fail fast to avoid reversing the existing account lifecycle order.
+-- SQLSTATE 55P03 rolls the request back; a retry revalidates current scope.
+-- Financial functions keep their proven role/scope checks and use a capability
+-- read at the new-write boundary, without holding new locks across financial
+-- row waits. The read RPC itself remains read-only.
 create function private.lock_feature_scope(p_user_id uuid,p_household_id uuid)
 returns void language plpgsql security definer set search_path='' as $$
 declare v_active uuid;v_role text;
 begin
-  if p_user_id is null or not exists(select 1 from auth.users where id=p_user_id) then
-    raise exception using errcode='42501',message='feature_session_required';
-  end if;
-  select active_household_id into v_active from public.user_preferences where user_id=p_user_id for share;
+  perform 1 from auth.users where id=p_user_id for key share nowait;
+  if not found then raise exception using errcode='42501',message='feature_session_required';end if;
+  perform 1 from public.households where id=p_household_id for key share nowait;
+  if not found then raise exception using errcode='42501',message='feature_household_required';end if;
+  select active_household_id into v_active from public.user_preferences where user_id=p_user_id for share nowait;
   if p_household_id is null or v_active is distinct from p_household_id then
     raise exception using errcode='42501',message='feature_active_household_required';
   end if;
-  select role into v_role from public.household_members where user_id=p_user_id and household_id=p_household_id for share;
+  select role into v_role from public.household_members where user_id=p_user_id and household_id=p_household_id for share nowait;
   if v_role is null or v_role not in ('owner','manager','editor','viewer') then
     raise exception using errcode='42501',message='feature_household_access_denied';
   end if;
-  perform 1 from public.household_plans where household_id=p_household_id for share;
-  perform 1 from private.founding_planning_access where household_id=p_household_id for share;
+  perform 1 from public.household_plans where household_id=p_household_id for share nowait;
+  perform 1 from private.founding_planning_access where household_id=p_household_id for share nowait;
 end;
 $$;
 revoke all on function private.lock_feature_scope(uuid,uuid) from public,anon,authenticated,service_role;
@@ -185,8 +190,13 @@ create function private.refund_flo_plan_request(p_user_id uuid,p_household_id uu
 returns boolean language plpgsql security definer set search_path='' as $$
 declare v_receipt private.flo_plan_reservations%rowtype;
 begin
-  -- Scope is the immutable receipt's captured actor/household. A legitimate
-  -- switch/revocation during a failed provider call must not burn its credit.
+  -- Pin parent roots before receipt/counter locks, so Auth/household cascades
+  -- cannot hold a counter while waiting for this receipt. No active/member
+  -- check: a legitimate switch/revocation must not burn its captured credit.
+  perform 1 from auth.users where id=p_user_id for key share nowait;
+  if not found then return false;end if;
+  perform 1 from public.households where id=p_household_id for key share nowait;
+  if not found then return false;end if;
   select * into v_receipt from private.flo_plan_reservations
     where id=p_reservation_id and user_id=p_user_id and household_id=p_household_id for update;
   if not found or v_receipt.status<>'charged' or v_receipt.request_month is null then return false;end if;
@@ -210,7 +220,7 @@ grant execute on function public.refund_flo_plan_request(uuid,uuid,uuid) to serv
 do $guard$
 declare v_oid oid:=to_regprocedure('private.create_flo_entity(uuid,text,jsonb,uuid,uuid)');v_definition text;
   v_needle text:=E'  if p_kind=''create_manual_transaction'' then\n    perform 1 from public.accounts';
-  v_guard text:=E'  perform private.lock_feature_scope(v_actor,v_household);\n  if not coalesce((private.feature_access_for_user(v_actor,v_household,null)->''flo''->>''canCreate'')::boolean,false) then\n    raise exception using errcode=''P0001'',message=''flo_creation_pro_required'';\n  end if;\n';
+  v_guard text:=E'  if not coalesce((private.feature_access_for_user(v_actor,v_household,null)->''flo''->>''canCreate'')::boolean,false) then\n    raise exception using errcode=''P0001'',message=''flo_creation_pro_required'';\n  end if;\n';
 begin
   if v_oid is null then raise exception 'Canonical Flo creation function is missing';end if;
   v_definition:=pg_get_functiondef(v_oid);
@@ -226,7 +236,7 @@ $guard$;
 do $proposal_guard$
 declare v_oid oid:=to_regprocedure('private.confirm_flo_recurring_bill_proposal(uuid)');v_definition text;
   v_needle text:=E'  if not exists (select 1 from public.household_plans where household_id = v_proposal.household_id and tier = ''pro'')\n    then raise exception using errcode = ''42501'', message = ''proposal_pro_required''; end if;\n  if v_proposal.status = ''confirmed'' then return v_proposal.result; end if;';
-  v_guard text:=E'  perform private.lock_feature_scope(v_user_id,v_proposal.household_id);\n  if v_proposal.status = ''confirmed'' then return v_proposal.result; end if;\n  if not coalesce((private.feature_access_for_user(v_user_id,v_proposal.household_id,null)->''flo''->>''canCreate'')::boolean,false) then\n    raise exception using errcode=''P0001'',message=''flo_creation_pro_required'';\n  end if;';
+  v_guard text:=E'  if v_proposal.status = ''confirmed'' then return v_proposal.result; end if;\n  if not coalesce((private.feature_access_for_user(v_user_id,v_proposal.household_id,null)->''flo''->>''canCreate'')::boolean,false) then\n    raise exception using errcode=''P0001'',message=''flo_creation_pro_required'';\n  end if;';
 begin
   if v_oid is null then raise exception 'Canonical Flo proposal function is missing';end if;
   v_definition:=pg_get_functiondef(v_oid);
