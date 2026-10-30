@@ -132,7 +132,7 @@ endobj
 endobj
 16 0 obj
 <<
-/Author (FlowLedger) /CreationDate (D:20261030144109+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:0cd66732bf9bf110de9bb8ce6203d14e9718a3f4ea18b0e50051ac391704a8f1) /ModDate (D:20261030144109+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+/Author (FlowLedger) /CreationDate (D:20261030145318+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:29d6c103c9632dd722ed9621aa6d0f54b3644c130feee1e180e2ade8a430c99f) /ModDate (D:20261030145318+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
   /Subject (Current Dashboard, Activity, Bills, Forecast, payoff, Flo, and Settings guidance) /Title (FlowLedger User Guide) /Trapped /False
 >>
 endobj
@@ -1205,7 +1205,7 @@ endstream
 endobj
 23 0 obj
 <<
-/Length 6800
+/Length 6804
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -1306,8 +1306,8 @@ BT /F2 9.5 Tf 11.4 TL ET
 BT 1 0 0 1 67 530 Tm (Open the day) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 515 Tm (Large calendar values use K/M/B to fit. Tap a date for the) Tj T* ET
-BT 1 0 0 1 56 504 Tm (full amount and every item behind its closing balance.) Tj T* ET
+BT 1 0 0 1 56 515 Tm (Large calendar values are rounded to K/M/B. Tap a date for) Tj T* ET
+BT 1 0 0 1 56 504 Tm (the full amount and every item behind its closing balance.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
@@ -2988,15 +2988,15 @@ xref
 0000017693 00000 n 
 0000022678 00000 n 
 0000028928 00000 n 
-0000035780 00000 n 
-0000042882 00000 n 
-0000049514 00000 n 
-0000057630 00000 n 
-0000063090 00000 n 
+0000035784 00000 n 
+0000042886 00000 n 
+0000049518 00000 n 
+0000057634 00000 n 
+0000063094 00000 n 
 trailer
 <<
 /ID 
-[<92a43f247d88fa314b0a0fcc4895b92c><92a43f247d88fa314b0a0fcc4895b92c>]
+[<20e10823fffafe3d6d7d556723a6888e><20e10823fffafe3d6d7d556723a6888e>]
 % ReportLab generated PDF document -- digest (opensource)
 
 /Info 16 0 R
@@ -3004,5 +3004,5 @@ trailer
 /Size 29
 >>
 startxref
-72542
+72546
 %%EOF

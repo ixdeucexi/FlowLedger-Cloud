@@ -129,7 +129,7 @@
         "title": "Read the calendar",
         "items": [
           { "title": "Inflows and outflows", "body": "Calendar colors separate money coming in from bills and debts going out.", "icon": "shuffle" },
-          { "title": "Open the day", "body": "Large calendar values use K/M/B to fit. Tap a date for the full amount and every item behind its closing balance.", "icon": "search" },
+          { "title": "Open the day", "body": "Large calendar values are rounded to K/M/B. Tap a date for the full amount and every item behind its closing balance.", "icon": "search" },
           { "title": "Verify status", "body": "When bank sync is available, matched pending payments should appear once with their current status.", "icon": "check-square" },
           { "title": "Sync is not cash activity", "body": "When bank sync is available, a refresh updates data but is not itself a calendar cash event.", "icon": "refresh-cw" }
         ]
