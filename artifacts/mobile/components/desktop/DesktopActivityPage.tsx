@@ -347,6 +347,9 @@ export function DesktopActivityPage({
                       visibleSummary.net >= 0 ? palette.green : palette.red,
                   },
                 ]}
+
+
+
               >
                 {money(visibleSummary.net, true)}
               </Text>
@@ -379,6 +382,9 @@ export function DesktopActivityPage({
                   <Text style={styles.flowSupportLabel}>INFLOWS</Text>
                   <Text
                     style={[styles.flowSupportValue, { color: palette.green }]}
+
+
+
                   >
                     {money(visibleSummary.income)}
                   </Text>
@@ -401,6 +407,9 @@ export function DesktopActivityPage({
                   <Text style={styles.flowSupportLabel}>OUTFLOWS</Text>
                   <Text
                     style={[styles.flowSupportValue, { color: palette.red }]}
+
+
+
                   >
                     {money(visibleSummary.out)}
                   </Text>

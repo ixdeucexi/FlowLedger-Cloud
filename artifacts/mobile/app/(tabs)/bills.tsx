@@ -785,6 +785,9 @@ export default function BillsScreen() {
             <View style={styles.cardRight}>
               <Text
                 style={[styles.amount, { color: c.foreground }]}
+
+
+
               >
                 ${item.amount.toFixed(2)}
               </Text>
@@ -931,6 +934,9 @@ export default function BillsScreen() {
                     color: isPaidOff ? c.success : c.destructive,
                   },
                 ]}
+
+
+
                 sensitive={!isPaidOff}
               >
                 {isPaidOff
@@ -1084,6 +1090,7 @@ export default function BillsScreen() {
                 />
               </View>
               <DataFreshnessLabel inset compact />
+
               {/* Keep the Bills / Debt switch in one stable location for both views. */}
               <View
                 style={[
@@ -1137,6 +1144,7 @@ export default function BillsScreen() {
                   ))}
                 </View>
               </View>
+
               {activeTab === "bills" && visibleOverdueAlerts.length > 0 ? (
                 <View style={styles.overdueAlerts}>
                   {visibleOverdueAlerts.map((overdueBill) => (
@@ -1238,6 +1246,7 @@ export default function BillsScreen() {
                   ))}
                 </View>
               ) : null}
+
               {activeTab === "bills" ? (
                 <View
                   style={[
@@ -1310,6 +1319,9 @@ export default function BillsScreen() {
                                 : c.success,
                           },
                         ]}
+
+
+
                       >
                         ${currentBillRemaining.toFixed(0)}
                       </Text>
@@ -1465,6 +1477,7 @@ export default function BillsScreen() {
                   </View>
                 </View>
               ) : null}
+
               {/* ════════════════════ BILLS VIEW ════════════════════ */}
               {activeTab === "bills" && (
                 <>
@@ -1530,6 +1543,7 @@ export default function BillsScreen() {
                       </Pressable>
                     ))}
                   </View>
+
                   <View
                     style={[
                       styles.searchRow,
@@ -1601,6 +1615,7 @@ export default function BillsScreen() {
                   </View>
                 </>
               )}
+
               {/* ════════════════════ DEBT VIEW ════════════════════ */}
               {activeTab === "debt" && !debtWorkEnabled ? (
                 <View
@@ -1659,6 +1674,9 @@ export default function BillsScreen() {
                         styles.debtOverviewAmount,
                         { color: c.foreground },
                       ]}
+
+
+
                     >
                       $
                       {totalDebt.toLocaleString(undefined, {
@@ -1681,6 +1699,9 @@ export default function BillsScreen() {
                             styles.debtOverviewStatValue,
                             { color: c.foreground },
                           ]}
+
+
+
                         >
                           ${totalMinPayments.toFixed(0)}
                         </Text>
@@ -1707,6 +1728,9 @@ export default function BillsScreen() {
                             styles.debtOverviewStatValue,
                             { color: c.success },
                           ]}
+
+
+
                         >
                           +${debtPaymentPlan.extraPayment.toFixed(0)}
                         </Text>
@@ -1851,6 +1875,9 @@ export default function BillsScreen() {
                                     styles.debtPaymentStatValue,
                                     { color: c.primary },
                                   ]}
+
+
+
                                 >
                                   +${debtPaymentPlan.extraPayment.toFixed(0)}
                                 </Text>
@@ -1875,6 +1902,9 @@ export default function BillsScreen() {
                                     styles.debtPaymentStatValue,
                                     { color: c.success },
                                   ]}
+
+
+
                                 >
                                   ${debtPaymentPlan.totalPlanned.toFixed(0)}
                                 </Text>
@@ -1925,6 +1955,7 @@ export default function BillsScreen() {
                           ) : null}
                         </View>
                       )}
+
                       {settings.debtPayoffEnabled && (
                         <View
                           style={[
@@ -2012,7 +2043,10 @@ export default function BillsScreen() {
             </View>
           </>
         }
-      />     animationType="fade"
+      />
+
+      <Modal
+        animationType="fade"
         transparent
         visible={debtInfoVisible}
         onRequestClose={() => setDebtInfoVisible(false)}

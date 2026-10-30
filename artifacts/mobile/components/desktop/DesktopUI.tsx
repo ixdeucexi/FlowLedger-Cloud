@@ -239,6 +239,7 @@ export function SummaryMetricCard({
               color: tone === "red" ? desktopPalette.red : desktopPalette.text,
             },
           ]}
+
         >
           {value}
         </Text>

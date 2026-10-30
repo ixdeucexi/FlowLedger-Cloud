@@ -1989,6 +1989,7 @@ export default function MonthlyScreen() {
                     </React.Fragment>
                   ))}
                 </View>
+
                 {settings.zeroBasedBudgetEnabled && (
                   <Pressable
                     accessibilityRole="button"

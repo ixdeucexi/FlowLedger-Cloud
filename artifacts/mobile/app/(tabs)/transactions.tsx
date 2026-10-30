@@ -2504,11 +2504,17 @@ export function ActivityScreen() {
               </View>
               <View style={styles.summaryTotalRight}>
                 <Text
+
+
+
                   style={[styles.summaryMiniValue, { color: c.success }]}
                 >
                   +${formatActivityMoney(activitySummary.income)} in
                 </Text>
                 <Text
+
+
+
                   style={[styles.summaryMiniValue, { color: c.destructive }]}
                 >
                   −${formatActivityMoney(activitySummary.out)} out
@@ -3077,6 +3083,9 @@ export function ActivityScreen() {
             styles.activityNetValue,
             { color: activitySummary.net >= 0 ? c.success : c.destructive },
           ]}
+
+
+
         >
           {activitySummary.net > 0 ? "+" : activitySummary.net < 0 ? "−" : ""}$
           {formatActivityMoney(activitySummary.net)}
@@ -3097,6 +3106,9 @@ export function ActivityScreen() {
           >
             <Text
               style={[styles.monthlySummaryValue, { color: c.success }]}
+
+
+
             >
               ${formatActivityMoney(activitySummary.income)}
             </Text>
@@ -3121,6 +3133,9 @@ export function ActivityScreen() {
           >
             <Text
               style={[styles.monthlySummaryValue, { color: c.destructive }]}
+
+
+
             >
               ${formatActivityMoney(activitySummary.out)}
             </Text>
@@ -3400,6 +3415,7 @@ export function ActivityScreen() {
             const statusColor =
               item.pending || needsIncomeReview ? c.warning : c.primary;
             const runningBalance = runningBalanceById.get(item.id);
+
             return (
               <Pressable
                 accessibilityRole="button"
@@ -3435,6 +3451,7 @@ export function ActivityScreen() {
                     color={sourceMeta.color}
                   />
                 </View>
+
                 {/* Middle */}
                 <View style={styles.txMid}>
                   <Text
@@ -3466,6 +3483,7 @@ export function ActivityScreen() {
                     </View>
                   ) : null}
                 </View>
+
                 {/* Amount + action hint */}
                 <View style={styles.txRight}>
                   <Text
@@ -3473,12 +3491,16 @@ export function ActivityScreen() {
                       styles.txAmount,
                       { color: isExpense ? c.destructive : c.success },
                     ]}
+
+
+
                   >
                     {isExpense ? "−" : "+"}${formatActivityMoney(item.amount)}
                   </Text>
                   {runningBalance != null ? (
                     <Text
                       style={[styles.txBalance, { color: c.mutedForeground }]}
+
                     >
                       Balance ${formatActivityMoney(runningBalance)}
                     </Text>
@@ -3497,7 +3519,8 @@ export function ActivityScreen() {
               </Pressable>
             );
           }}
-        />   )}
+        />
+      )}
 
       {/* ── Filter sheet ── */}
       <Modal

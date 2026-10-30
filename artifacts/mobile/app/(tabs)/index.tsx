@@ -1191,6 +1191,7 @@ overview: (<View
               </View>
             </View>
           </Animated.View>
+
           <Animated.View
             pointerEvents={flipped ? "auto" : "none"}
             style={[
@@ -1354,6 +1355,7 @@ monthly_plan: (<Pressable
           </View>
           <Feather name="arrow-up-right" size={18} color={c.primary} />
         </View>
+
         <View style={styles.dashboardPlanOutcome}>
           <AppText
             tone="number"
@@ -1374,6 +1376,7 @@ monthly_plan: (<Pressable
                   : "left after remaining bills and buckets"}
           </AppText>
         </View>
+
         {cashFlow.monthlyIncome > 0 ? (
           <>
             <View style={[styles.dashboardProgressTrack, { backgroundColor: c.muted }]}>
@@ -1384,6 +1387,7 @@ monthly_plan: (<Pressable
             </AppText>
           </>
         ) : null}
+
         <View style={[styles.dashboardPlanBreakdown, { borderTopColor: c.border }]}>
           <View style={styles.dashboardPlanBreakdownRow}>
             <View style={styles.dashboardPlanBreakdownLabelWrap}>
