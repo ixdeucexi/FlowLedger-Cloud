@@ -238,6 +238,49 @@
     }
   },
   {
+    "eyebrow": "PERSONAL TOUCHES",
+    "title": "Make FlowLedger yours",
+    "intro": "Choose the view that helps you plan, keep amounts private, and review your latest saved changes.",
+    "icon": "sliders",
+    "accent": "#9B5CFF",
+    "sections": [
+      {
+        "title": "Your view and shortcuts",
+        "items": [
+          {
+            "title": "Customize Dashboard",
+            "body": "Open Customize dashboard. Start with Simple, Debt Focus or Planning Ahead, move cards with the arrows, hide optional cards, and choose up to four favorite actions.",
+            "icon": "layout"
+          },
+          {
+            "title": "Privacy Mode",
+            "body": "Use the Dashboard eye or Settings > Appearance to hide amounts and Flo conversations. Show amounts restores the view. Your saved numbers and calculations stay the same.",
+            "icon": "eye-off"
+          }
+        ]
+      },
+      {
+        "title": "Personal buckets and a clear history",
+        "items": [
+          {
+            "title": "Personalize a bucket",
+            "body": "Choose Personalize on a bucket card or in its details. Pick an icon, cover or photo, and turn milestone moments on if you like. Photos and bucket looks stay on this device; photos hide in Privacy Mode.",
+            "icon": "image"
+          },
+          {
+            "title": "Recent Changes",
+            "body": "Open Settings > Data & security > Recent Changes for before-and-after values and who made each change. History starts with this update. Review eligible Undo actions before confirming.",
+            "icon": "rotate-ccw"
+          }
+        ]
+      }
+    ],
+    "callout": {
+      "title": "Undo checks the latest saved version",
+      "body": "Some actions have linked effects and stay history-only. Use Open item to reach their existing controls. A newer edit can make an earlier change unavailable to undo."
+    }
+  },
+  {
     "eyebrow": "STEP 9",
     "title": "When a number does not look right",
     "intro": "Most differences come from status, recurrence, unmatched activity, or an outdated balance.",

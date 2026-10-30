@@ -28,8 +28,8 @@ test("user guide can use the current web origin without a double slash", () => {
   );
 });
 
-test("the mobile layout opens the current ten-page swipe guide", () => {
-  assert.equal(FLOWLEDGER_USER_GUIDE_PAGE_TITLES.length, 10);
+test("the mobile layout opens the current eleven-page swipe guide", () => {
+  assert.equal(FLOWLEDGER_USER_GUIDE_PAGE_TITLES.length, 11);
   assert.deepEqual(flowLedgerUserGuideTarget("mobile"), {
     kind: "mobile",
     href: FLOWLEDGER_USER_GUIDE_ROUTE,
@@ -72,7 +72,7 @@ test("the in-app guide matches the current navigation and launch plan", () => {
   }>;
   const serializedCatalog = JSON.stringify(guideCatalog);
 
-  assert.equal(guideCatalog.length, 10);
+  assert.equal(guideCatalog.length, 11);
   assert.deepEqual(
     guideCatalog.map((slide) => slide.title),
     FLOWLEDGER_USER_GUIDE_PAGE_TITLES,
@@ -145,6 +145,6 @@ test("the swipe guide derives its footer page from the actual scroll position", 
   assert.equal(flowLedgerUserGuidePageFromOffset(0, 390), 0);
   assert.equal(flowLedgerUserGuidePageFromOffset(390, 390), 1);
   assert.equal(flowLedgerUserGuidePageFromOffset(390 * 5, 390), 5);
-  assert.equal(flowLedgerUserGuidePageFromOffset(390 * 20, 390), 9);
+  assert.equal(flowLedgerUserGuidePageFromOffset(390 * 20, 390), 10);
   assert.equal(flowLedgerUserGuidePageFromOffset(-390, 390), 0);
 });
