@@ -1,6 +1,7 @@
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, Alert, Platform, StyleSheet, useWindowDimensions } from "react-native";
 
 import { useAuth } from "@/context/AuthContext";
 import { useBudget } from "@/context/BudgetContext";

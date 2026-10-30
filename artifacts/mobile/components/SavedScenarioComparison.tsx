@@ -1,5 +1,6 @@
+import { PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import React from "react";
-import { StyleSheet, View, useWindowDimensions } from "react-native";
+import { StyleSheet, useWindowDimensions } from "react-native";
 import { AppText } from "./AppText";
 import { ScenarioOptionPicker } from "./ScenarioOptionPicker";
 import { SimulatorChoiceChips } from "./SimulatorChoiceChips";

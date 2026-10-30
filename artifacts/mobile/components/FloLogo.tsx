@@ -1,5 +1,6 @@
+import { PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import React from "react";
-import { Image, StyleSheet, View } from "react-native";
+import { Image, StyleSheet } from "react-native";
 
 type Props = {
   size?: number;

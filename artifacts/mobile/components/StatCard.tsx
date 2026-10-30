@@ -1,6 +1,7 @@
+import { PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet } from "react-native";
 
 import colors from "@/constants/colors";
 import { useColors } from "@/hooks/useColors";

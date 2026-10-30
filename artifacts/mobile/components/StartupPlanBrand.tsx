@@ -1,5 +1,6 @@
+import { PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import React from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet } from "react-native";
 
 const STARTUP_LOGO_SIZE = 200;
 

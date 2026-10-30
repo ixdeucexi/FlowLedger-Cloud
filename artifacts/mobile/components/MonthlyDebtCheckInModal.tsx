@@ -1,7 +1,8 @@
 import Feather from "@expo/vector-icons/Feather";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useEffect, useMemo, useState } from "react";
-import { Image, Modal, Pressable, StyleSheet, View } from "react-native";
+import { Image, Modal, StyleSheet } from "react-native";
+import { PrivacyPressable as Pressable, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 
 import { AppText } from "@/components/AppText";
 import type { Bill } from "@/context/BudgetContext";

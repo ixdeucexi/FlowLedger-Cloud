@@ -1,6 +1,7 @@
+import { PrivacyPressable as Pressable, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import React, { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { ScrollView, StyleSheet } from "react-native";
 import { AppText } from "./AppText";
 import { useColors } from "@/hooks/useColors";
 export type ScenarioPickerOption = { key: string; name: string; source: string };

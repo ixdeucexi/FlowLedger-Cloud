@@ -1,10 +1,12 @@
+import { usePrivacyAlerts } from "@/hooks/usePrivacyAlerts";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 "use client";
 
 import { AppearanceSettings } from "@/components/AppearanceSettings";
 
 import { parseMoneyInput } from "@/lib/moneyFormInput";
 import { parseBillCsv } from "@/lib/billCsv";
-import { showFormError } from "@/lib/formInputAlert";
+
 import { StatementImportPanel, type StatementImportFeedback } from "@/components/StatementImportPanel";
 
 import Feather from "@expo/vector-icons/Feather";
@@ -25,18 +27,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  Alert,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { Modal, Platform, ScrollView, StyleSheet, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ConnectedBalanceList } from "@/components/ConnectedBalanceList";
@@ -377,6 +368,8 @@ export default function MoreScreen({
 }: {
   initialSection?: SettingsSectionId;
 } = {}) {
+  const { alert: privacyAlert, formError: privacyFormError } = usePrivacyAlerts();
+
   const c = useColors();
   const insets = useSafeAreaInsets();
   const { width: viewportWidth } = useWindowDimensions();
@@ -953,7 +946,7 @@ export default function MoreScreen({
     const horizonText = forecastHorizonText.trim();
     const horizon = /^\d+$/.test(horizonText) ? Number(horizonText) : NaN;
     if (floor === null || !Number.isSafeInteger(horizon) || horizon < 1 || horizon > 24) {
-      showFormError("Check safety settings", "Enter a nonnegative floor with up to two decimal places and a whole-number forecast horizon from 1 to 24 months.");
+      privacyFormError("Check safety settings", "Enter a nonnegative floor with up to two decimal places and a whole-number forecast horizon from 1 to 24 months.");
       return;
     }
     setSafetyFloorText(floor.toString());
@@ -1103,7 +1096,7 @@ export default function MoreScreen({
           ? error.message
           : "Couldn’t create invite code. Try again.";
       setHouseholdMessage(message);
-      Alert.alert("Household invite", message);
+      privacyAlert("Household invite", message);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setHouseholdBusy(false);
@@ -1129,7 +1122,7 @@ export default function MoreScreen({
           ? error.message
           : "Couldn’t join that household. Try again.";
       setHouseholdMessage(message);
-      Alert.alert("Join household", message);
+      privacyAlert("Join household", message);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setHouseholdBusy(false);
@@ -1153,7 +1146,7 @@ export default function MoreScreen({
           ? error.message
           : "Could not update member access.";
       setHouseholdMessage(message);
-      Alert.alert("Household member", message);
+      privacyAlert("Household member", message);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return false;
     } finally {
@@ -1178,7 +1171,7 @@ export default function MoreScreen({
           ? error.message
           : "Could not remove that member.";
       setHouseholdMessage(message);
-      Alert.alert("Household member", message);
+      privacyAlert("Household member", message);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       throw error;
     } finally {
@@ -1189,7 +1182,7 @@ export default function MoreScreen({
   const handleLeaveHousehold = () => {
     if (!activeHousehold) return;
     if (!canLeaveHousehold(activeHousehold.role)) {
-      Alert.alert(
+      privacyAlert(
         "Transfer ownership first",
         "The household owner must make someone else the owner before leaving.",
       );
@@ -1216,7 +1209,7 @@ export default function MoreScreen({
               ? error.message
               : "Could not leave that household.";
           setHouseholdMessage(message);
-          Alert.alert("Leave household", message);
+          privacyAlert("Leave household", message);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
           setHouseholdBusy(false);
@@ -1682,7 +1675,7 @@ export default function MoreScreen({
     );
     const amount = Math.round((rawAmount + Number.EPSILON) * 100) / 100;
     if (!Number.isFinite(amount) || amount <= 0) {
-      Alert.alert("Check subscription", "A finite positive bill amount is required.");
+      privacyAlert("Check subscription", "A finite positive bill amount is required.");
       return;
     }
     const latestDate =
@@ -1738,7 +1731,7 @@ export default function MoreScreen({
           await retryBudgetLoad();
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (error) {
-          Alert.alert(
+          privacyAlert(
             "Couldn’t create bill",
             error instanceof Error ? error.message : "Try again.",
           );
@@ -1784,7 +1777,7 @@ export default function MoreScreen({
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
-      Alert.alert("Couldn’t match bill", error instanceof Error ? error.message : "Please try again.");
+      privacyAlert("Couldn’t match bill", error instanceof Error ? error.message : "Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setSubscriptionMatchBusy(null);
@@ -1796,7 +1789,7 @@ export default function MoreScreen({
     const householdId = activeHousehold?.householdId;
     if (!subscription || !user?.id || !householdId || subscriptionMatchBusy) return;
     if (!canEditHousehold) {
-      Alert.alert("View only", "You need household edit access to link a subscription to a bill.");
+      privacyAlert("View only", "You need household edit access to link a subscription to a bill.");
       return;
     }
     const key = subscriptionKey(subscription);
@@ -1819,10 +1812,10 @@ export default function MoreScreen({
         openSubscriptionInReview(pendingMatch.transactionId);
       } else {
         const billName = bills.find(bill => bill.id === billId)?.name ?? "that bill";
-        Alert.alert("Bill linked", `Future ${subscription.merchant} charges will suggest ${billName} first.`);
+        privacyAlert("Bill linked", `Future ${subscription.merchant} charges will suggest ${billName} first.`);
       }
     } catch (error) {
-      Alert.alert("Couldn’t link bill", error instanceof Error ? error.message : "Please try again.");
+      privacyAlert("Couldn’t link bill", error instanceof Error ? error.message : "Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setSubscriptionMatchBusy(null);
@@ -1835,7 +1828,7 @@ export default function MoreScreen({
   ) => {
     void markSubscriptionDecision(subscription, decision)
       .then(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light))
-      .catch(error => Alert.alert("Couldn’t save subscription", error instanceof Error ? error.message : "Please try again."));
+      .catch(error => privacyAlert("Couldn’t save subscription", error instanceof Error ? error.message : "Please try again."));
   };
 
   const handleRecordGoalContribution = (goalId: string) => {
@@ -1952,7 +1945,7 @@ export default function MoreScreen({
       setNewCategory(current => current === newCategory ? "" : current);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (error) {
-      showFormError("Couldn’t add category", error instanceof Error ? error.message : "Please try again.");
+      privacyFormError("Couldn’t add category", error instanceof Error ? error.message : "Please try again.");
     } finally {
       categoryMutationInFlightRef.current = false;
       setCategorySaveBusy(false);
@@ -1973,7 +1966,7 @@ export default function MoreScreen({
       if (categoryDraftRef.current.renamingCategory === oldName && categoryDraftRef.current.renameValue === renameValue) setRenamingCategory(null);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (error) {
-      showFormError("Couldn’t rename category", error instanceof Error ? error.message : "Please try again.");
+      privacyFormError("Couldn’t rename category", error instanceof Error ? error.message : "Please try again.");
     } finally {
       categoryMutationInFlightRef.current = false;
       setCategorySaveBusy(false);
@@ -2168,7 +2161,7 @@ export default function MoreScreen({
           globalThis.localStorage?.setItem(BACKUP_COMPLETE_KEY, "true");
       } catch {}
     } catch {
-      Alert.alert("Error", "Export failed.");
+      privacyAlert("Error", "Export failed.");
     }
   };
 
@@ -2194,7 +2187,7 @@ export default function MoreScreen({
       }
       const imported = parseBillCsv(content);
       if (!imported.length) {
-        showFormError("No Data", "No bill rows were found. Other backup sections are not imported as bills.");
+        privacyFormError("No Data", "No bill rows were found. Other backup sections are not imported as bills.");
         return;
       }
       if (billImportScopeRef.current.key !== importScope.key || !billImportScopeRef.current.canEdit) {
@@ -2202,9 +2195,9 @@ export default function MoreScreen({
       }
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       await importBills(imported);
-      showFormError("Imported", `${imported.length} bills added.`);
+      privacyFormError("Imported", `${imported.length} bills added.`);
     } catch (error) {
-      showFormError("Import failed", error instanceof Error ? error.message : "The bills could not be imported. Please try again.");
+      privacyFormError("Import failed", error instanceof Error ? error.message : "The bills could not be imported. Please try again.");
     } finally {
       billImportInFlightRef.current = false;
     }
@@ -2307,7 +2300,7 @@ export default function MoreScreen({
       onConfirm: async () => {
         await resetFloHouseholdMemory(activeHousehold.householdId, user.id);
         await saveFloPreferences(user.id, activeHousehold.householdId, DEFAULT_FLO_PREFERENCES);
-        Alert.alert("Flo Memory Reset", "Flo's saved memory was removed.");
+        privacyAlert("Flo Memory Reset", "Flo's saved memory was removed.");
       },
     });
   };
@@ -2321,7 +2314,7 @@ export default function MoreScreen({
       destructive: true,
       onConfirm: async () => {
         await AsyncStorage.removeItem(floAiConsentStorageKey(user.id));
-        Alert.alert("Flo AI Access Off", "Flo will ask for permission again before sending any new account question.");
+        privacyAlert("Flo AI Access Off", "Flo will ask for permission again before sending any new account question.");
       },
     });
   };
@@ -2331,7 +2324,7 @@ export default function MoreScreen({
       globalThis.dispatchEvent?.(new Event(PWA_INSTALL_EVENT));
       return;
     }
-    Alert.alert(
+    privacyAlert(
       "Install FlowLedger",
       "Open FlowLedger in your phone browser, then use Add to Home Screen.",
     );
@@ -3965,7 +3958,7 @@ export default function MoreScreen({
                     >
                       Safety floor ($)
                     </Text>
-                    <TextInput
+                    <TextInput sensitive
                       style={[
                         styles.balanceFullInput,
                         forecastSafetyLayout.input,
@@ -4648,7 +4641,7 @@ export default function MoreScreen({
               {contributionStep.stage === "entry" ? <>
               <Text style={[styles.dataLabel, { color: c.foreground }]}>Record contribution: {goals.find(goal => goal.id === contributionGoalId)?.name}</Text>
               <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>Only record money already set aside and not already recorded in Activity. This does not move money between bank accounts.</Text>
-              <TextInput accessibilityLabel="Contribution amount" placeholder="Amount (0.00)" placeholderTextColor={c.mutedForeground} value={contributionText} onChangeText={setContributionText} keyboardType="decimal-pad" editable={!goalContributionBusy} style={{ color: c.foreground, fontSize: 16, minHeight: 48, borderWidth: 1, borderColor: c.border, padding: 12, borderRadius: 12 }} />
+              <TextInput sensitive accessibilityLabel="Contribution amount" placeholder="Amount (0.00)" placeholderTextColor={c.mutedForeground} value={contributionText} onChangeText={setContributionText} keyboardType="decimal-pad" editable={!goalContributionBusy} style={{ color: c.foreground, fontSize: 16, minHeight: 48, borderWidth: 1, borderColor: c.border, padding: 12, borderRadius: 12 }} />
               <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>Source account (optional)</Text>
               {[{ id: null, name: "Unassigned — no account selected" }, ...activeAccounts].map(account => <Pressable key={account.id ?? "unassigned"} accessibilityRole="radio" accessibilityState={{ checked: contributionAccountId === account.id }} disabled={Boolean(goalContributionBusy)} onPress={() => setContributionAccountId(account.id)} style={{ minHeight: 44, justifyContent: "center", paddingVertical: 12 }}><Text style={{ fontSize: 15, color: contributionAccountId === account.id ? c.primary : c.foreground }}>{contributionAccountId === account.id ? "✓ " : ""}{account.name}</Text></Pressable>)}
               <Pressable accessibilityRole="button" style={{ minHeight: 44, justifyContent: "center" }} disabled={Boolean(goalContributionBusy)} onPress={() => handleRecordGoalContribution(contributionGoalId)}><Text style={{ fontSize: 16, color: c.primary, paddingVertical: 12 }}>Review and record</Text></Pressable>
@@ -5644,7 +5637,7 @@ export default function MoreScreen({
                       void handleSignOut();
                       return;
                     }
-                    Alert.alert("Sign Out", "Sign out of FlowLedger?", [
+                    privacyAlert("Sign Out", "Sign out of FlowLedger?", [
                       { text: "Cancel", style: "cancel" },
                       {
                         text: "Sign Out",

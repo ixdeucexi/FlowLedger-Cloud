@@ -1,6 +1,8 @@
+import { usePrivacyAlerts } from "@/hooks/usePrivacyAlerts";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import { createTransactionNameResolver } from "@/lib/transactionNames";
 import { BucketDetailModal } from "@/components/BucketDetailModal";
-import { showFormError } from "@/lib/formInputAlert";
+
 import { MatchTypeFilters } from "@/components/MatchTypeFilters";
 import { matchTargetKindLabels, reviewTargetsForKind, selectedMatchTargetKind, type MatchTargetSelection } from "@/lib/matchTargetFilters";
 import { useAuth } from "@/context/AuthContext";
@@ -8,7 +10,7 @@ import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocalDay } from "@/hooks/useLocalDay";
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, ScrollView, StyleSheet } from "react-native";
 
 import { AddBillModal, type AddBillInitialValues } from "@/components/AddBillModal";
 import { BillSurplusModal } from "@/components/BillSurplusModal";
@@ -106,6 +108,8 @@ type BucketClosePrompt = {
 };
 
 export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketScope, closeBucketRequest, onCloseBucketRequestHandled, focusTransactionId, initialFilter = "all", onManageBuckets, onBucketOverlayChange, subscriptionBillLinks = EMPTY_SUBSCRIPTION_BILL_LINKS }: ReviewCenterProps = {}) {
+  const { alert: privacyAlert, formError: privacyFormError } = usePrivacyAlerts();
+
   const c = useColors();
   const bucketsOnly = viewMode === "buckets";
   const { user } = useAuth();
@@ -445,7 +449,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       return true;
     } catch (error) {
-      showFormError("Couldn’t close bucket", error instanceof Error ? error.message : "Please try again.");
+      privacyFormError("Couldn’t close bucket", error instanceof Error ? error.message : "Please try again.");
       return false;
     } finally {
       bucketCloseInFlightRef.current = false;
@@ -517,7 +521,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
       setBucketClosePrompt(null);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
-      Alert.alert("Couldn’t route bucket remainder", error instanceof Error ? error.message : "Please try again.");
+      privacyAlert("Couldn’t route bucket remainder", error instanceof Error ? error.message : "Please try again.");
     } finally {
       bucketCloseInFlightRef.current = false;
       setSaving(false);
@@ -542,7 +546,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
       setBucketMessage(`${goal.name} reopened`);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (error) {
-      showFormError("Couldn’t reopen bucket", error instanceof Error ? error.message : "Please try again.");
+      privacyFormError("Couldn’t reopen bucket", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSaving(false);
     }
@@ -563,7 +567,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
           setBucketMessage(`${goal.name} archived`);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (error) {
-          showFormError("Couldn’t archive bucket", error instanceof Error ? error.message : "Please try again.");
+          privacyFormError("Couldn’t archive bucket", error instanceof Error ? error.message : "Please try again.");
         } finally {
           setSaving(false);
         }
@@ -580,7 +584,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
       setBucketMessage(`${goal.name} restored to completed buckets`);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (error) {
-      showFormError("Couldn’t restore bucket", error instanceof Error ? error.message : "Please try again.");
+      privacyFormError("Couldn’t restore bucket", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSaving(false);
     }
@@ -602,7 +606,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
           setBucketMessage(`${goal.name} deleted`);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (error) {
-          showFormError("Couldn’t delete bucket", error instanceof Error ? error.message : "Please try again.");
+          privacyFormError("Couldn’t delete bucket", error instanceof Error ? error.message : "Please try again.");
         } finally {
           setSaving(false);
         }
@@ -639,7 +643,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
       await completeReview(input, notice);
       return true;
     } catch (error) {
-      Alert.alert("Couldn’t finish this review", error instanceof Error ? error.message : "Please try again.");
+      privacyAlert("Couldn’t finish this review", error instanceof Error ? error.message : "Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return false;
     }
@@ -749,7 +753,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
     const choice = variance;
     const goal = goals.find(item => item.id === choice.target.id);
     if (!goal) {
-      showFormError("Couldn’t close bucket", "This spending bucket is no longer available.");
+      privacyFormError("Couldn’t close bucket", "This spending bucket is no longer available.");
       return;
     }
     const completed = await resolveTarget(choice.target, "partial");
@@ -804,7 +808,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
       setCompletedThisVisit(value => Math.max(0, value - 1));
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (error) {
-      Alert.alert("Couldn’t undo review", error instanceof Error ? error.message : "Please try again.");
+      privacyAlert("Couldn’t undo review", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSaving(false);
     }
@@ -827,7 +831,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
       setCompletedThisVisit(value => value + 1);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
-      Alert.alert("Couldn’t redo review", error instanceof Error ? error.message : "Please try again.");
+      privacyAlert("Couldn’t redo review", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSaving(false);
     }
@@ -865,7 +869,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
       setSurplusPrompt(null);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
-      Alert.alert("Couldn’t route leftover", error instanceof Error ? error.message : "The bill is still matched. You can keep the leftover available or try again.");
+      privacyAlert("Couldn’t route leftover", error instanceof Error ? error.message : "The bill is still matched. You can keep the leftover available or try again.");
     } finally {
       setSaving(false);
     }

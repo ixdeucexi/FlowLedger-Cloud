@@ -1,6 +1,7 @@
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import React from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, StyleSheet } from "react-native";
 
 import { FloLogo } from "@/components/FloLogo";
 import { useBackDismiss } from "@/hooks/useBackDismiss";

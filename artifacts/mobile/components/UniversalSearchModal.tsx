@@ -1,6 +1,8 @@
+import { moneyPrivacySearchSensitive } from "@/lib/moneyPrivacy";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useBackDismiss } from "@/hooks/useBackDismiss";
@@ -117,7 +119,7 @@ export function UniversalSearchModal(props: Props) {
             <TextInput
               autoFocus
               accessibilityLabel={prompt}
-              value={query}
+              value={query} sensitive={moneyPrivacySearchSensitive(query)}
               onChangeText={onQueryChange}
               placeholder={prompt}
               placeholderTextColor={c.mutedForeground}

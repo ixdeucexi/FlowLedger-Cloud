@@ -1,17 +1,7 @@
 import Feather from "@expo/vector-icons/Feather";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet } from "react-native";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { DatePickerField } from "@/components/DatePickerField";
@@ -542,7 +532,7 @@ export function FloCreationForm({
                       )}
                     </View>
                   ) : (
-                    <TextInput
+                    <TextInput sensitive={field.type === "money"}
                       ref={(input) => {
                         inputsRef.current[field.key] = input;
                       }}

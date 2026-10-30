@@ -1,6 +1,7 @@
+import { PrivacyPressable as Pressable, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import React, { useEffect, useState } from "react";
-import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Modal, Platform, StyleSheet } from "react-native";
 
 import { AppText } from "@/components/AppText";
 import { useBackDismiss } from "@/hooks/useBackDismiss";

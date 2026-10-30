@@ -1,18 +1,10 @@
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 "use client";
 
 import Feather from "@expo/vector-icons/Feather";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Modal, ScrollView, StyleSheet, Switch } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
@@ -1146,7 +1138,7 @@ function EditPlanView({
             Sample income used to calculate Ready to Assign.
           </Text>
         </View>
-        <TextInput
+        <TextInput sensitive
           value={incomeText}
           onChangeText={onIncomeText}
           onBlur={onSaveIncome}
@@ -1881,7 +1873,7 @@ function CategoryEditor({
                     : "Target amount"
                 }
               />
-              <TextInput
+              <TextInput sensitive
                 value={String(category?.targetAmount ?? 0)}
                 onChangeText={(value) =>
                   update({ targetAmount: Number(value) || 0 })

@@ -1,7 +1,9 @@
+import { usePrivacyAlerts } from "@/hooks/usePrivacyAlerts";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Keyboard, Modal, ScrollView, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
@@ -35,6 +37,8 @@ interface CategoryBudgetScreenProps {
 }
 
 export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenProps) {
+  const { alert: privacyAlert } = usePrivacyAlerts();
+
   const c = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -164,7 +168,7 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
     const next = new Date(year, month + delta, 1);
     const change = () => { setMonth(next.getMonth()); setYear(next.getFullYear()); };
     if (dirtyRef.current.size) {
-      Alert.alert("Unsaved assignments", "Save your changes before changing months, or discard them.", [
+      privacyAlert("Unsaved assignments", "Save your changes before changing months, or discard them.", [
         { text: "Keep editing", style: "cancel" }, { text: "Discard", style: "destructive", onPress: change },
       ]);
     } else change();
@@ -202,7 +206,7 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
     if (result.error) { setSaveMessage(`Could not load the previous month: ${result.error}`); return; }
     const previous = result.value;
     if (!Object.keys(previous).length) {
-      Alert.alert("Nothing to copy", "The previous month does not have any saved assignments yet.");
+      privacyAlert("Nothing to copy", "The previous month does not have any saved assignments yet.");
       return;
     }
     const applyCopy = () => { if (version === scopeVersion.current && !dirtyRef.current.size) void persistBudgets(previous); };
@@ -210,7 +214,7 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
       applyCopy();
       return;
     }
-    Alert.alert("Replace this month?", "Copying will replace this month's saved assignments. Planned bill amounts will still refresh for this month.", [
+    privacyAlert("Replace this month?", "Copying will replace this month's saved assignments. Planned bill amounts will still refresh for this month.", [
       { text: "Cancel", style: "cancel" },
       { text: "Replace", style: "destructive", onPress: applyCopy },
     ]);
@@ -355,7 +359,7 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
                   <Text style={[styles.inputLabel, { color: c.mutedForeground }]}>Monthly assignment</Text>
                 <View style={[styles.inputWrap, { backgroundColor: c.muted }]}>
                   <Text style={[styles.dollar, { color: c.mutedForeground }]}>$</Text>
-                  <TextInput
+                  <TextInput sensitive
                     value={drafts[row.category] ?? ""}
                     onChangeText={value => { dirtyRef.current.add(row.category); setSaveMessage("Unsaved assignments"); setDrafts(previous => ({ ...previous, [row.category]: value })); }}
                     editable={canEditHousehold && !saving && loadReady}
@@ -395,7 +399,7 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
             </ScrollView>
             <View style={[styles.inputWrap, { backgroundColor: c.muted, marginBottom: 8 }]}>
               <Text style={[styles.dollar, { color: c.mutedForeground }]}>$</Text>
-              <TextInput value={moveAmount} onChangeText={setMoveAmount} keyboardType="decimal-pad" placeholder="Amount" placeholderTextColor={c.mutedForeground} style={[styles.input, { color: c.foreground }]} />
+              <TextInput sensitive value={moveAmount} onChangeText={setMoveAmount} keyboardType="decimal-pad" placeholder="Amount" placeholderTextColor={c.mutedForeground} style={[styles.input, { color: c.foreground }]} />
             </View>
             {moveError ? <Text style={[styles.error, { color: c.destructive }]}>{moveError}</Text> : null}
             <Pressable disabled={saving} onPress={applyMove} style={[styles.sheetPrimary, { backgroundColor: c.primary }]}>

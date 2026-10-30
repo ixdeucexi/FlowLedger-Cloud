@@ -1,7 +1,8 @@
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ScrollView, StyleSheet } from "react-native";
 
 import { FloLogo } from "@/components/FloLogo";
 import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
@@ -97,7 +98,7 @@ export function BasicFlo({ facts, baseline }: { facts: FloFacts; baseline: Decis
         {selected?.requiresAmount ? (
           <View style={[styles.amountRow, { backgroundColor: c.card, borderColor: c.border }]}>
             <Text style={[styles.amountPrefix, { color: c.mutedForeground }]}>$</Text>
-            <TextInput
+            <TextInput sensitive
               accessibilityLabel="Purchase amount"
               value={amount}
               onChangeText={setAmount}

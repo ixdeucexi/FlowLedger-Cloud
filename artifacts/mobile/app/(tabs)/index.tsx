@@ -1,14 +1,13 @@
 import { dashboardMonthlyPlan } from "@/lib/dashboardMonthlyPlan";
+import { usePrivacyAlerts } from "@/hooks/usePrivacyAlerts";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import { SPENDING_BUCKETS_ROUTE } from "@/lib/settingsNavigation";
 import { parseMoneyInput } from "@/lib/moneyFormInput";
 import Feather from "@expo/vector-icons/Feather";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Alert, Animated, Image, Keyboard, Linking, Modal, PanResponder, Platform, Pressable,
-  ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,
-} from "react-native";
+import { Animated, Image, Keyboard, Linking, Modal, PanResponder, Platform, ScrollView, StyleSheet, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from "react-native-svg";
 
@@ -18,6 +17,7 @@ import { DashboardSections, MOBILE_DASHBOARD_WIDGET_IDS } from "@/components/Das
 import { DashboardFavoriteActions } from "@/components/DashboardFavoriteActions";
 import { DashboardLayoutStatus } from "@/components/DashboardLayoutStatus";
 import { DashboardCustomizer } from "@/components/DashboardCustomizer";
+import { MoneyPrivacyToggle } from "@/components/privacy/MoneyPrivacyControls";
 import { DashboardSnapshotStage } from "@/components/DashboardSnapshotStage";
 import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import { DashboardUtilityWidgets } from "@/components/DashboardUtilityWidgets";
@@ -264,6 +264,8 @@ function MobileDashboardContent({
   dashboardSnapshot: DashboardFinancialSnapshot;
   snapshotKey: string;
 }) {
+  const { alert: privacyAlert } = usePrivacyAlerts();
+
   const c = useColors();
   const { openNotifications, unreadNotificationCount } = useAppDiscovery();
   const dashboardTheme = DASHBOARD_THEMES[c.mode];
@@ -407,7 +409,7 @@ function MobileDashboardContent({
   const exploreFlowmentum = useCallback(() => {
     dismissFlowmentum();
     void Linking.openURL(FLOWMENTUM_URL).catch(() => {
-      Alert.alert("Could not open the page", "Visit flowmentum-algo.com in your browser.");
+      privacyAlert("Could not open the page", "Visit flowmentum-algo.com in your browser.");
     });
   }, [dismissFlowmentum]);
 
@@ -566,7 +568,7 @@ function MobileDashboardContent({
       setCategoryBudgets(next);
       return true;
     } catch (error) {
-      if (scope === categorySaveScopeRef.current) Alert.alert("Category budget not saved", error instanceof Error ? error.message : "Your changes are still here. Please try again.");
+      if (scope === categorySaveScopeRef.current) privacyAlert("Category budget not saved", error instanceof Error ? error.message : "Your changes are still here. Please try again.");
       return false;
     } finally {
       categorySavingRef.current = false;
@@ -627,7 +629,7 @@ function MobileDashboardContent({
   const saveCategoryBudgets = async () => {
     try {
       if (await persistCategoryBudgets(parseCategoryAssignments(categoryBudgetDrafts))) setCategoryBudgetModalVisible(false);
-    } catch (error) { Alert.alert("Check assignments", error instanceof Error ? error.message : "Enter valid assignments."); }
+    } catch (error) { privacyAlert("Check assignments", error instanceof Error ? error.message : "Enter valid assignments."); }
   };
 
   const clearCategoryBudgets = async () => {
@@ -1121,7 +1123,7 @@ overview: (<View
               </View>
               <View style={styles.referenceHeroPrimaryRow}>
                 <View style={styles.referenceBalanceAmount}>
-                  <AppText tone="label" style={[styles.referenceHeroLabel, { color: dashboardTheme.mutedText }]}>Checking balance</AppText>
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}><AppText tone="label" style={[styles.referenceHeroLabel, { color: dashboardTheme.mutedText }]}>Checking balance</AppText><MoneyPrivacyToggle /></View>
                   <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.62} style={[styles.referenceHeroAmount, { color: dashboardTheme.amount, textShadowColor: "transparent" }]}>{formatDashboardCurrency(dashboardCheckingBalance)}</AppText>
                   {pendingCheckingSummary && pendingCheckingSummary.pendingCount > 0 ? (
                     <Pressable
@@ -1738,7 +1740,7 @@ quick_actions: (<DashboardFavoriteActions layout={dashboardLayout} canEdit={canE
                   </View>
                   <View style={[styles.categoryBudgetInputWrap, { backgroundColor: c.muted }]}>
                     <Text style={[styles.categoryBudgetDollar, { color: c.mutedForeground }]}>$</Text>
-                    <TextInput
+                    <TextInput sensitive
                       value={categoryBudgetDrafts[category] ?? ""}
                       editable={!categorySaving}
                       onChangeText={(value) => setCategoryBudgetDrafts(previous => ({ ...previous, [category]: value }))}
@@ -1936,7 +1938,7 @@ quick_actions: (<DashboardFavoriteActions layout={dashboardLayout} canEdit={canE
             <Text style={[styles.categoryDetailSectionTitle, { color: c.mutedForeground, marginTop: 10 }]}>Amount</Text>
             <View style={[styles.moveAmountInputWrap, { backgroundColor: c.muted }]}>
               <Text style={[styles.categoryBudgetDollar, { color: c.mutedForeground }]}>$</Text>
-              <TextInput
+              <TextInput sensitive
                 value={moveAmount}
                 editable={!categorySaving}
                 onChangeText={(value) => {

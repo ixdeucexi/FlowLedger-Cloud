@@ -1,6 +1,7 @@
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
-import { AccessibilityInfo, findNodeHandle, Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { AccessibilityInfo, findNodeHandle, Modal, Platform, StyleSheet } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
 import { useOverlayActivity } from "@/hooks/useOverlayActivity";

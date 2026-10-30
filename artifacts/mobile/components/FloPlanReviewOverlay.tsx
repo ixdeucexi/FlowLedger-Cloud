@@ -1,6 +1,7 @@
+import { PrivacyPressable as Pressable, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import React, { useMemo } from "react";
-import { Image, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Image, Modal, ScrollView, StyleSheet } from "react-native";
 import { AppText } from "@/components/AppText";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";

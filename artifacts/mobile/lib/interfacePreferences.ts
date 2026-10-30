@@ -23,6 +23,7 @@ export type ActivityPresentationState = {
 };
 
 export type InterfacePreferences = {
+  amountsHidden?: boolean;
   floLauncherEnabled?: boolean;
   lastRoute?: string;
   sidebarCollapsed?: boolean;
@@ -63,6 +64,11 @@ export async function readInterfacePreferences(
 }
 
 const writeQueues = new Map<string, Promise<void>>();
+
+/** A hydration read must not race a queued write to this same scoped record. */
+export function waitForInterfacePreferenceWrites(userId: string, householdId: string): Promise<void> {
+  return writeQueues.get(interfacePreferenceKey(userId, householdId)) ?? Promise.resolve();
+}
 
 export async function updateInterfacePreferences(
   userId: string,

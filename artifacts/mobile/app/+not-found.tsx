@@ -1,5 +1,6 @@
+import { PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import { Link, Stack } from "expo-router";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
 

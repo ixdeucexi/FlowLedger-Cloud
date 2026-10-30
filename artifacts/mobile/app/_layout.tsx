@@ -45,6 +45,8 @@ import { FloVolatileSessionProvider } from "@/context/FloVolatileSessionContext"
 import { BudgetProvider, useBudget } from "@/context/BudgetContext";
 import { MembershipProvider } from "@/context/MembershipContext";
 import { ThemeProvider, useThemeMode } from "@/context/ThemeContext";
+import { MoneyPrivacyProvider } from "@/context/MoneyPrivacyContext";
+import { MoneyPrivacyBar } from "@/components/privacy/MoneyPrivacyControls";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { NetworkStatusProvider } from "@/hooks/useNetworkStatus";
@@ -809,6 +811,7 @@ function RootNavigator({
           <>
             <AuthObserver restorableRouteApplyReady={restorableRouteApplyReady} />
             <GestureHandlerRootView key={navigatorPrivacyKey} style={{ flex: 1 }}>
+              {session ? <MoneyPrivacyBar /> : null}
               <Stack screenOptions={{ headerShown: false }}>
                 <Stack.Screen name="index" />
                 <Stack.Screen name="login" />
@@ -1021,6 +1024,7 @@ export default function RootLayout() {
               <AuthProvider>
                 <BiometricLockProvider>
                   <BudgetProvider>
+                    <MoneyPrivacyProvider>
                     <MembershipProvider>
                       <FloVolatileSessionProvider>
                         <RootNavigator
@@ -1029,6 +1033,7 @@ export default function RootLayout() {
                         />
                       </FloVolatileSessionProvider>
                     </MembershipProvider>
+                    </MoneyPrivacyProvider>
                   </BudgetProvider>
                 </BiometricLockProvider>
               </AuthProvider>

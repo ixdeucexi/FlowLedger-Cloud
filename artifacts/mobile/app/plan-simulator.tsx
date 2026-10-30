@@ -1,3 +1,4 @@
+import { PrivacyPressable as Pressable, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import { SimulatorChoiceChips as ChoiceChips } from "@/components/SimulatorChoiceChips";
 import Feather from "@expo/vector-icons/Feather";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -8,18 +9,7 @@ import { useOverlayActivity } from "@/hooks/useOverlayActivity";
 import { createSimulatorEditorHistory } from "@/lib/simulatorEditorHistory";
 import { DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_WIDE } from "@/lib/desktopModal";
 import { useLocalDay } from "@/hooks/useLocalDay";
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { buildSimulationEditorChange, replaceSimulationChange, simulationEditorFields, type SimulationEditorFields } from "@/lib/planSimulationEditor";
@@ -193,6 +183,7 @@ function Input({
       placeholder={placeholder}
       placeholderTextColor={c.mutedForeground}
       keyboardType={keyboardType}
+      sensitive={keyboardType === "decimal-pad"}
       style={[styles.input, { color: c.foreground, backgroundColor: c.background, borderColor: c.border }]}
     />
   );

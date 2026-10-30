@@ -1,8 +1,9 @@
+import { PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 "use client";
 
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet } from "react-native";
 import { usePlaidLink } from "react-plaid-link";
 
 import { useAuth } from "@/context/AuthContext";

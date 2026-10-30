@@ -1,5 +1,6 @@
+import { PrivacyText as Text } from "@/components/privacy/PrivacyPrimitives";
 import React from "react";
-import { Platform, StyleSheet, Text, type TextProps, type TextStyle } from "react-native";
+import { Platform, StyleSheet, type TextProps, type TextStyle } from "react-native";
 
 import { type AppFontStyle, useThemeMode } from "@/context/ThemeContext";
 import { fontFamilyForStyle, fontFamilyForWeight, nativeFontFamilyForStyle } from "@/lib/appTypography";
@@ -7,6 +8,7 @@ import { fontFamilyForStyle, fontFamilyForWeight, nativeFontFamilyForStyle } fro
 export type AppTextTone = "body" | "title" | "label" | "number" | "button" | "flo";
 
 type AppTextProps = TextProps & {
+  sensitive?: boolean;
   tone?: AppTextTone;
   fontStyleOverride?: AppFontStyle;
 };

@@ -1,5 +1,6 @@
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import React from "react";
-import { Pressable, Switch, Text, View } from "react-native";
+import { Switch } from "react-native";
 import { useColors } from "@/hooks/useColors";
 import { useFloLauncherPreference } from "@/hooks/useFloLauncherPreference";
 

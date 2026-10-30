@@ -1,7 +1,8 @@
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Feather from "@expo/vector-icons/Feather";
 import React, { useEffect, useMemo, useState } from "react";
-import { Modal, Pressable, StyleProp, StyleSheet, Text, TextStyle, View } from "react-native";
+import { Modal, StyleProp, StyleSheet, TextStyle } from "react-native";
 
 import { FloLogo } from "@/components/FloLogo";
 import { useAuth } from "@/context/AuthContext";

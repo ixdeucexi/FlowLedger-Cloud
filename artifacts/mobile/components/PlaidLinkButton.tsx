@@ -1,7 +1,8 @@
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import { createPlaidLinkSession, type LinkExit, type LinkSuccess } from "react-native-plaid-link-sdk";
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Platform, StyleSheet } from "react-native";
 
 import { useBudget } from "@/context/BudgetContext";
 import { apiFetch } from "@/lib/api";

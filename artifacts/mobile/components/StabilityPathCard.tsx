@@ -1,6 +1,7 @@
+import { PrivacyPressable as Pressable, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import React, { memo, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet } from "react-native";
 
 import { AppText } from "@/components/AppText";
 import { surfaceTokens } from "@/constants/surfaces";

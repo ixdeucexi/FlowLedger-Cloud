@@ -1,3 +1,4 @@
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import { AppearanceSettings } from "@/components/AppearanceSettings";
 import Feather from "@expo/vector-icons/Feather";
 import { UpdateCenter } from "@/components/settings/UpdateCenter";
@@ -5,14 +6,7 @@ import { FloLauncherSetting } from "@/components/FloLauncherSetting";
 import { AccountDeletionSetting } from "@/components/AccountDeletionSetting";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ScrollView, StyleSheet } from "react-native";
 
 import { BiometricLockSettings } from "@/components/BiometricLockSettings";
 import { HouseholdSwitcher } from "@/components/HouseholdSwitcher";
@@ -659,6 +653,7 @@ function Field({
       <Text style={styles.fieldLabel}>{label}</Text>
       <TextInput
         accessibilityLabel={label}
+        sensitive={/balance|amount|safety floor/i.test(label)}
         value={value}
         onChangeText={onChangeText}
         editable={editable}

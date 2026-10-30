@@ -1,7 +1,8 @@
 import { parseMoneyInput } from "@/lib/moneyFormInput";
 import Feather from "@expo/vector-icons/Feather";
 import React, { useEffect, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Modal, ScrollView, StyleSheet } from "react-native";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 
 import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
 import { DatePickerField } from "@/components/DatePickerField";
@@ -80,7 +81,7 @@ export function SnowballPreviewModal({ visible, method, preview, amount, existin
               <Text style={[styles.label, { color: c.mutedForeground }]}>EXTRA PAYMENT</Text>
               <View style={[styles.inputWrap, { backgroundColor: c.card, borderColor: (requested === null && Boolean(amount.trim())) || exceedsSafeMaximum ? c.destructive : c.border }]}>
                 <Text style={[styles.dollar, { color: c.foreground }]}>$</Text>
-                <TextInput accessibilityLabel="Extra debt payment amount" value={amount} onChangeText={onAmountChange} keyboardType="decimal-pad" style={[styles.input, { color: c.foreground }]} />
+                <TextInput sensitive accessibilityLabel="Extra debt payment amount" value={amount} onChangeText={onAmountChange} keyboardType="decimal-pad" style={[styles.input, { color: c.foreground }]} />
               </View>
               {requested === null && amount.trim() ? (
                 <Text style={[styles.error, { color: c.destructive }]}>Enter a positive amount with up to two decimal places, such as 1,200.50.</Text>

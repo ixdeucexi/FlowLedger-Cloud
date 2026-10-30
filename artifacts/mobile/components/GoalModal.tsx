@@ -1,15 +1,13 @@
+import { usePrivacyAlerts } from "@/hooks/usePrivacyAlerts";
 import { SPENDING_BUCKETS_ROUTE } from "@/lib/settingsNavigation";
-import { showFormError } from "@/lib/formInputAlert";
 import { parseMoneyInput } from "@/lib/moneyFormInput";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/context/AuthContext";
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
 import React, { useEffect, useRef, useState } from "react";
-import {
-  KeyboardAvoidingView, Modal, Platform,
-  Pressable, ScrollView, StyleSheet, Text, TextInput, View,
-} from "react-native";
+import { KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet } from "react-native";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 
 import colors from "@/constants/colors";
 import { FloSafetyStopModal } from "@/components/FloSafetyStopModal";
@@ -53,6 +51,7 @@ export function GoalModal({
   visible, onClose, onSave, onDelete, editGoal, initialMode = "savings", initialName = "", initialTargetAmount,
   initialTargetDate, title, saveLabel, lockedMode, minimumTargetAmount, minimumTargetDate, hint, skipAffordabilityCheck = false, hideBucketLifecycle = false,
 }: Props) {
+  const privacyAlerts = usePrivacyAlerts();
   const c = useColors();
   const isDesktop = useDesktopExperience();
   const { getDailyBalances, settings, goals, canEditHousehold, activeHousehold, previewBucketBudgetSafetyStop } = useBudget();
@@ -143,11 +142,11 @@ export function GoalModal({
     if (savingRef.current || pendingGoal) return;
     const t = parseMoneyInput(target);
     const savedAmount = current.trim() ? parseMoneyInput(current) : 0;
-    if (t === null || t <= 0 || (goalMode === "savings" && savedAmount === null)) { showFormError("Check amounts", "Enter a positive target and a nonnegative saved amount with up to two decimal places."); return; }
+    if (t === null || t <= 0 || (goalMode === "savings" && savedAmount === null)) { privacyAlerts.formError("Check amounts", "Enter a positive target and a nonnegative saved amount with up to two decimal places."); return; }
     if (!name.trim() || !targetDate) return;
     const minimumBucketAmount = Math.max(minimumTargetAmount ?? 0, editGoal?.goal_type === "planned_expense" ? editGoal.current_amount : 0);
     if (t + 0.005 < minimumBucketAmount) {
-      showFormError("Bucket amount is too small", editGoal?.goal_type === "planned_expense"
+      privacyAlerts.formError("Bucket amount is too small", editGoal?.goal_type === "planned_expense"
         ? `The budget must be at least $${minimumBucketAmount.toFixed(2)} to cover purchases already recorded.`
         : `Enter at least $${minimumBucketAmount.toFixed(2)} to include this posted transaction. You can enter more for future purchases.`);
       return;
@@ -267,7 +266,7 @@ export function GoalModal({
 
             {/* ── Target amount ── */}
             <Text style={lbl}>Target Amount ($)</Text>
-            <TextInput
+            <TextInput sensitive
               style={input}
               value={target}
               onChangeText={setTarget}
@@ -280,7 +279,7 @@ export function GoalModal({
               <>
                 {/* ── Already saved ── */}
                 <Text style={lbl}>Already Saved ($)</Text>
-                <TextInput
+                <TextInput sensitive
                   style={input}
                   value={current}
                   onChangeText={setCurrent}

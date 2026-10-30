@@ -1,20 +1,11 @@
+import { usePrivacyAlerts } from "@/hooks/usePrivacyAlerts";
 import { transferExpected } from "@/lib/transferMutation";
-import { showFormError } from "@/lib/formInputAlert";
 import { parseMoneyInput } from "@/lib/moneyFormInput";
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
 import React, { useEffect, useRef, useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet } from "react-native";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 
 import colors from "@/constants/colors";
 import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
@@ -46,6 +37,7 @@ interface Props {
 }
 
 export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDeleteTransfer, editTx, defaultDate, initialValues, creationContext, bucketId }: Props) {
+  const privacyAlerts = usePrivacyAlerts();
   const c = useColors();
   const isDesktop = useDesktopExperience();
   const { categories, accounts, bills, transactions, goals, previewTransactionSafetyStop, previewBucketPurchaseSafetyStop, saveTransfer } = useBudget();
@@ -152,7 +144,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
   const handleSave = async () => {
     if (savingRef.current || saving) return;
     const parsed = parseMoneyInput(amount);
-    if (parsed === null || parsed <= 0) { showFormError("Check amount", "Enter a positive amount with up to two decimal places. Use commas only for thousands, such as 1,200.50."); return; }
+    if (parsed === null || parsed <= 0) { privacyAlerts.formError("Check amount", "Enter a positive amount with up to two decimal places. Use commas only for thousands, such as 1,200.50."); return; }
     if (bucketPurchase && (!bucket || bucket.closed_at || bucket.archived_at || parsed > bucketRemaining + 0.005)) {
       setSaveError(!bucket || bucket.closed_at || bucket.archived_at ? "Reopen this bucket before adding a purchase." : "This purchase is more than the money left. Adjust the bucket budget first.");
       return;
@@ -277,7 +269,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
             </View>}
 
             <Text style={labelStyle}>Amount ($)</Text>
-            <TextInput style={inputStyle} value={amount} onChangeText={setAmount} placeholder="0.00" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
+            <TextInput sensitive style={inputStyle} value={amount} onChangeText={setAmount} placeholder="0.00" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
 
             {bucketPurchase ? <Text style={[styles.helpText, { color: c.mutedForeground, marginTop: 7 }]}>${bucketRemaining.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} left in this bucket</Text> : null}
             <DatePickerField label="Date" value={date} onChange={setDate} placeholder="Choose transaction date" />

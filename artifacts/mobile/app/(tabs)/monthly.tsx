@@ -1,15 +1,13 @@
+import { usePrivacyAlerts } from "@/hooks/usePrivacyAlerts";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import { pendingManualReplacementIds } from "@/lib/pendingManualReplacement";
 import { parseMoneyInput } from "@/lib/moneyFormInput";
-import { showFormError } from "@/lib/formInputAlert";
+
 import Feather from "@expo/vector-icons/Feather";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "@/lib/haptics";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Alert, BackHandler, FlatList, Keyboard, Modal, PanResponder, Platform,
-  Pressable, ScrollView, StyleSheet, Text,
-  TextInput, useWindowDimensions, View,
-} from "react-native";
+import { BackHandler, FlatList, Keyboard, Modal, PanResponder, Platform, ScrollView, StyleSheet, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddTransactionModal } from "@/components/AddTransactionModal";
@@ -290,7 +288,7 @@ function CalendarDebtPaymentCard({
           <Text style={[styles.inlineDebtEditorLabel, { color: c.primary }]}>PAYMENT STILL PLANNED</Text>
           <View style={[styles.inlineDebtEditorInputWrap, { borderColor: editError ? c.destructive : c.border, backgroundColor: c.background }]}>
             <Text style={[styles.inlineDebtEditorDollar, { color: c.mutedForeground }]}>$</Text>
-            <TextInput
+            <TextInput sensitive
               accessibilityLabel={`Remaining planned payment for ${name}`}
               editable={inlineEdit.canEdit && !saving}
               inputMode="decimal"
@@ -400,6 +398,8 @@ function CalendarDebtPaymentCard({
 }
 
 export default function MonthlyScreen() {
+  const { alert: privacyAlert, formError: privacyFormError } = usePrivacyAlerts();
+
   const c = useColors();
   const isDesktop = useDesktopExperience();
   const { width: viewportWidth, fontScale } = useWindowDimensions();
@@ -1045,7 +1045,7 @@ export default function MonthlyScreen() {
     const { bill, budgeted, actual, paidDate } = prompt;
     if (bill.frequency === "weekly" || Math.abs(budgeted - actual) < 0.005) return;
     const currentMonthLabel = `${MONTH_FULL[month]} ${selectedYear}`;
-    const showPrompt = () => Alert.alert(
+    const showPrompt = () => privacyAlert(
       "Was this the full payment?",
       `${bill.name} was paid at $${actual.toFixed(2)}, which is different from the planned $${budgeted.toFixed(2)}. Should I update ${currentMonthLabel}'s amount to $${actual.toFixed(2)} and mark it paid?`,
       [
@@ -1058,7 +1058,7 @@ export default function MonthlyScreen() {
               await finalizeBillPayment(bill.id, month, selectedYear, actual, paidDate);
               await setCustomAmount(bill.id, month, selectedYear, Math.abs(actual - bill.amount) < 0.005 ? undefined : actual);
             } catch (error) {
-              Alert.alert("Could not update amount", error instanceof Error ? error.message : "Please try again.");
+              privacyAlert("Could not update amount", error instanceof Error ? error.message : "Please try again.");
             }
           },
         },
@@ -1090,7 +1090,7 @@ export default function MonthlyScreen() {
   }, [router]);
 
   const explainDebtPaymentRoute = useCallback(() => {
-    Alert.alert(
+    privacyAlert(
       "Record debt payments in Activity",
       "Matching the payment there updates both the paid amount and debt balance together.",
       [
@@ -1118,7 +1118,7 @@ export default function MonthlyScreen() {
       paidPromptPendingRef.current.delete(paidKey);
       setFullPaymentPrompt(null);
     } catch (error) {
-      Alert.alert("Could not save payment", error instanceof Error ? error.message : "Please try again.");
+      privacyAlert("Could not save payment", error instanceof Error ? error.message : "Please try again.");
     } finally {
       paidSaveInFlightRef.current.delete(paidKey);
       setSavingPaidKey(current => current === paidKey ? null : current);
@@ -1157,7 +1157,7 @@ export default function MonthlyScreen() {
       paidPromptPendingRef.current.delete(paidKey);
       setFullPaymentPrompt(null);
     } catch (error) {
-      Alert.alert("Could not close bill", error instanceof Error ? error.message : "Please try again.");
+      privacyAlert("Could not close bill", error instanceof Error ? error.message : "Please try again.");
     } finally {
       paidSaveInFlightRef.current.delete(paidKey);
       setSavingPaidKey(current => current === paidKey ? null : current);
@@ -1201,7 +1201,7 @@ export default function MonthlyScreen() {
         return;
       }
       const parsed = parsePaidInput(trimmed);
-      if (parsed === null) { showFormError("Check paid amount", "Enter a nonnegative amount with up to two decimal places."); return; }
+      if (parsed === null) { privacyFormError("Check paid amount", "Enter a nonnegative amount with up to two decimal places."); return; }
       const budgeted = bill ? getBillMonthlyTotal(bill, month, selectedYear) : 0;
       const day = bill ? Math.min(new Date(selectedYear, month + 1, 0).getDate(), getCustomDueDay(bill.id, month, selectedYear) ?? bill.due_day) : 1;
       const paidDate = `${selectedYear}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -1302,7 +1302,7 @@ export default function MonthlyScreen() {
     try {
       await applyDebtSnowballPayment(surplusSnowballOffer.preview, sources);
     } catch {
-      Alert.alert(
+      privacyAlert(
         "Bill Finalized",
         "The actual bill amount was saved, but the surplus could not be added to debt. The difference is still available in your account, so you can safely try again.",
       );
@@ -1315,13 +1315,13 @@ export default function MonthlyScreen() {
     const val = editingAmounts[key];
     if (val === undefined) return;
     const parsed = val.trim() ? parseMoneyInput(val) : undefined;
-    if (parsed === null) { showFormError("Check bill amount", "Enter a nonnegative amount with up to two decimals, or leave blank to clear the override."); return; }
+    if (parsed === null) { privacyFormError("Check bill amount", "Enter a nonnegative amount with up to two decimals, or leave blank to clear the override."); return; }
     try {
       if (occurrenceDate) await setBillOccurrenceAmount(bill.id, occurrenceDate, parsed === bill.amount ? undefined : parsed);
       else await setCustomAmount(bill.id, month, selectedYear, parsed === bill.amount ? undefined : parsed);
       setEditingAmounts(previous => { if (previous[key] !== val) return previous; const next = { ...previous }; delete next[key]; return next; });
     } catch (error) {
-      showFormError("Could not save bill amount", error instanceof Error ? error.message : "Please try again.");
+      privacyFormError("Could not save bill amount", error instanceof Error ? error.message : "Please try again.");
     }
   }, [editingAmounts, setBillOccurrenceAmount, setCustomAmount, month, selectedYear]);
 
@@ -1344,7 +1344,7 @@ export default function MonthlyScreen() {
       }
       setDueDayPicker(null);
     } catch (error) {
-      Alert.alert("Couldn’t save date", error instanceof Error ? error.message : "Please try again.");
+      privacyAlert("Couldn’t save date", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSavingDueDay(false);
     }
@@ -1362,7 +1362,7 @@ export default function MonthlyScreen() {
       });
       setIncomeDatePicker(null);
     } catch (error) {
-      Alert.alert("Couldn’t save payday", error instanceof Error ? error.message : "Please try again.");
+      privacyAlert("Couldn’t save payday", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSavingIncomeDate(false);
     }
@@ -1395,9 +1395,9 @@ export default function MonthlyScreen() {
 
   const handleApplyExtra = () => {
     const amt = parseMoneyInput(extraPayment);
-    if (amt === null || amt <= 0) { showFormError("Check payment amount", "Enter a positive amount with up to two decimal places."); return; }
+    if (amt === null || amt <= 0) { privacyFormError("Check payment amount", "Enter a positive amount with up to two decimal places."); return; }
     const debtCount = bills.filter(b => b.is_debt && b.balance > 0).length;
-    if (debtCount === 0) { Alert.alert("No Debts", "You have no active debts to apply extra payments to."); return; }
+    if (debtCount === 0) { privacyAlert("No Debts", "You have no active debts to apply extra payments to."); return; }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const existing = getExtraPayment(month, selectedYear);
     const preview = previewDebtSnowball(month, selectedYear, amt, 0, existing?.payment_date, existing?.id);
@@ -1415,7 +1415,7 @@ export default function MonthlyScreen() {
   };
 
   const confirmSnowballPayment = async () => {
-    if (parseMoneyInput(extraPayment) === null) { showFormError("Check payment amount", "Enter a valid amount before saving."); return; }
+    if (parseMoneyInput(extraPayment) === null) { privacyFormError("Check payment amount", "Enter a valid amount before saving."); return; }
     if (!snowballPreview) return;
     try {
       await applyDebtSnowballPayment(snowballPreview);
@@ -1424,21 +1424,21 @@ export default function MonthlyScreen() {
       setSnowballModalVisible(false);
       setExtraPayment("");
     } catch (error) {
-      Alert.alert("Couldn’t update payment", error instanceof Error ? error.message : "Please try again.");
+      privacyAlert("Couldn’t update payment", error instanceof Error ? error.message : "Please try again.");
     }
   };
 
   const removeSavedSnowballPayment = async () => {
     const saved = getExtraPayment(month, selectedYear);
     if (hasBucketRemainderFunding(saved?.sources)) {
-      Alert.alert("Reopen bucket first", "Reopen the routed spending bucket before removing this Snowball payment.");
+      privacyAlert("Reopen bucket first", "Reopen the routed spending bucket before removing this Snowball payment.");
       return;
     }
     try {
       await removeDebtSnowballPayment(month, selectedYear);
       setSnowballModalVisible(false);
     } catch (error) {
-      Alert.alert("Couldn’t remove payment", error instanceof Error ? error.message : "Please try again.");
+      privacyAlert("Couldn’t remove payment", error instanceof Error ? error.message : "Please try again.");
     }
   };
 
@@ -1519,7 +1519,7 @@ export default function MonthlyScreen() {
             ])).sort(),
           });
         } catch (error) {
-          Alert.alert("Couldn't remove payday", error instanceof Error ? error.message : "Try again in a moment.");
+          privacyAlert("Couldn't remove payday", error instanceof Error ? error.message : "Try again in a moment.");
         }
       },
     });
@@ -1536,7 +1536,7 @@ export default function MonthlyScreen() {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           await deleteGoal(goalId);
         } catch (error) {
-          Alert.alert("Couldn't delete goal", error instanceof Error ? error.message : "Try again in a moment.");
+          privacyAlert("Couldn't delete goal", error instanceof Error ? error.message : "Try again in a moment.");
         }
       },
     });
@@ -1545,7 +1545,7 @@ export default function MonthlyScreen() {
   const openEditBucket = useCallback((goalId: string) => {
     const bucket = goals.find(goal => goal.id === goalId && goal.goal_type === "planned_expense");
     if (!bucket) {
-      Alert.alert("Bucket not found", "Refresh Forecast and try again.");
+      privacyAlert("Bucket not found", "Refresh Forecast and try again.");
       return;
     }
     setSelectedDate(null);
@@ -1564,7 +1564,7 @@ export default function MonthlyScreen() {
     const amount = parseMoneyInput(editPlanAmount);
     const name = editPlanName.trim() || editPlan.name;
     if (amount === null || amount <= 0) {
-      showFormError("Amount needed", "Enter a valid amount greater than $0 with up to two decimal places.");
+      privacyFormError("Amount needed", "Enter a valid amount greater than $0 with up to two decimal places.");
       return;
     }
     setSavingPlan(true);
@@ -1582,7 +1582,7 @@ export default function MonthlyScreen() {
       setSelectedDate(editPlanDate);
       setEditPlan(null);
     } catch (error) {
-      Alert.alert("Couldn’t save plan", error instanceof Error ? error.message : "Please try again.");
+      privacyAlert("Couldn’t save plan", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSavingPlan(false);
     }
@@ -1610,7 +1610,7 @@ export default function MonthlyScreen() {
       const absAmt = Math.abs(newTx.amount);
       const displayName = newTx.note.trim();
       const dueDay = parseInt(newTx.date.split("-")[2], 10);
-      Alert.alert(
+      privacyAlert(
         "Recurring Expense?",
         `"${displayName}" ($${absAmt.toFixed(2)}) has appeared in multiple months. Would you like to add it as a recurring bill?`,
         [
@@ -1630,7 +1630,7 @@ export default function MonthlyScreen() {
                 balance: 0,
                 interest_rate: 0,
               });
-              Alert.alert("Bill Added", `"${displayName}" has been added as a monthly recurring bill on ${MONTH_FULL[month]} ${dueDay}, ${selectedYear}.`);
+              privacyAlert("Bill Added", `"${displayName}" has been added as a monthly recurring bill on ${MONTH_FULL[month]} ${dueDay}, ${selectedYear}.`);
             },
           },
         ]
@@ -2048,7 +2048,7 @@ export default function MonthlyScreen() {
                     </Text>
                   </View>
                   <View style={styles.extraRow}>
-                    <TextInput
+                    <TextInput sensitive
                       style={[styles.extraInput, { backgroundColor: c.muted, color: c.foreground }]}
                       value={extraPayment}
                       onChangeText={setExtraPayment}
@@ -2167,7 +2167,7 @@ export default function MonthlyScreen() {
                           </View>
                         );
                       })()}
-                      <TextInput
+                      <TextInput sensitive
                         style={[styles.fieldInput, {
                           backgroundColor: Math.abs(editableAmt - bill.amount) > 0.001 ? c.primary + "18" : c.muted,
                           color: Math.abs(editableAmt - bill.amount) > 0.001 ? c.primary : c.foreground,
@@ -2194,7 +2194,7 @@ export default function MonthlyScreen() {
                           <Text numberOfLines={1} style={[styles.quickPaidText, { color: c.primary }]}>Use Activity</Text>
                         </Pressable>
                       ) : (
-                        <TextInput
+                        <TextInput sensitive
                           style={[styles.fieldInput, { backgroundColor: isPaid ? c.success + "20" : c.muted, color: isPaid ? c.success : c.foreground }]}
                           value={showPaid}
                           onChangeText={v => {
@@ -2254,7 +2254,7 @@ export default function MonthlyScreen() {
                           onPress={() => {
                             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                             setCustomDueDay(bill.id, month, selectedYear, undefined)
-                              .catch(error => Alert.alert("Couldn’t save date", error instanceof Error ? error.message : "Please try again."));
+                              .catch(error => privacyAlert("Couldn’t save date", error instanceof Error ? error.message : "Please try again."));
                           }}
                           style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, marginLeft: 6 })}
                           hitSlop={8}
@@ -2510,7 +2510,7 @@ export default function MonthlyScreen() {
                                   <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>{bill.is_debt ? "Forecast" : "Amount"}</Text>
                                   <View style={styles.dayBillPaidInputRow}>
                                     <Text style={[styles.dayBillPaidDollar, { color: c.foreground }]}>$</Text>
-                                    <TextInput
+                                    <TextInput sensitive
                                       value={showAmt}
                                       onChangeText={text => setEditingAmounts(current => ({ ...current, [amtKey]: text }))}
                                       onFocus={() => setEditingAmounts(current => ({ ...current, [amtKey]: showAmt || amount.toFixed(2) }))}
@@ -2549,7 +2549,7 @@ export default function MonthlyScreen() {
                                   ) : (
                                     <View style={styles.dayBillPaidInputRow}>
                                       <Text style={[styles.dayBillPaidDollar, { color: showPaid ? c.success : c.mutedForeground }]}>$</Text>
-                                      <TextInput
+                                      <TextInput sensitive
                                         value={showPaid}
                                         onChangeText={text => {
                                           editingPaidRef.current = { ...editingPaidRef.current, [paidKey]: text };
@@ -3337,7 +3337,7 @@ export default function MonthlyScreen() {
             </View>
 
             <Text style={[styles.pickerLabel, { color: c.mutedForeground }]}>Amount</Text>
-            <TextInput
+            <TextInput sensitive
               value={editPlanAmount}
               onChangeText={setEditPlanAmount}
               keyboardType="decimal-pad"

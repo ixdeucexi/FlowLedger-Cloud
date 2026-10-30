@@ -1,19 +1,10 @@
+import { usePrivacyAlerts } from "@/hooks/usePrivacyAlerts";
+import { PrivacyPressable as Pressable, PrivacyTextInput as TextInput, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 ﻿import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Alert,
-  ActivityIndicator,
-  Modal,
-  Platform,
-  Pressable,
-  FlatList,
-  TextInput,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, Modal, Platform, FlatList, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddBillModal } from "@/components/AddBillModal";
@@ -111,6 +102,8 @@ function debtRequiredMinimum(debt: Pick<Bill, "amount">): number {
 }
 
 export default function BillsScreen() {
+  const { alert: privacyAlert } = usePrivacyAlerts();
+
   const c = useColors();
   const isDesktop = useDesktopExperience();
   const insets = useSafeAreaInsets();
@@ -478,7 +471,7 @@ export default function BillsScreen() {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             await updateBill({ ...bill, end_date: undefined }, ["end_date"]);
           } catch (error) {
-            Alert.alert(
+            privacyAlert(
               "Couldn’t restart bill",
               error instanceof Error ? error.message : "Please try again.",
             );
@@ -650,7 +643,7 @@ export default function BillsScreen() {
       cashFlowSafeSnowballAmount > 0 &&
       assignedDebtExtra <= 0
     ) {
-      Alert.alert(
+      privacyAlert(
         "Assign money to Debt",
         "Zero-Based Budget is protecting your category plan. Assign money above your debt minimums before scheduling an extra payment.",
         [
@@ -944,6 +937,7 @@ export default function BillsScreen() {
                 numberOfLines={1}
                 adjustsFontSizeToFit
                 minimumFontScale={0.68}
+                sensitive={!isPaidOff}
               >
                 {isPaidOff
                   ? "Paid"

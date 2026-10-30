@@ -1,8 +1,9 @@
+import { PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import { useColors } from "@/hooks/useColors";
 import { useThemeMode } from "@/context/ThemeContext";
 import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet } from "react-native";
 
 type FlowWaveVariant = "blue" | "green" | "purple";
 

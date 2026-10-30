@@ -1,8 +1,10 @@
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet } from "react-native";
 import { useThemeMode } from "@/context/ThemeContext";
 import { CalendarAppearanceSettings } from "@/components/CalendarAppearanceSettings";
+import { MoneyPrivacySetting } from "@/components/privacy/MoneyPrivacyControls";
 import { useColors } from "@/hooks/useColors";
 import colors from "@/constants/colors";
 import {
@@ -72,6 +74,7 @@ export function AppearanceSettings() {
   );
   return (
     <View style={styles.root}>
+      <MoneyPrivacySetting />
       <View style={styles.headingRow}>
         <View style={styles.headingCopy}>
           <Text

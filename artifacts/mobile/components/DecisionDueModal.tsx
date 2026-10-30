@@ -1,16 +1,9 @@
+import { usePrivacyAlerts } from "@/hooks/usePrivacyAlerts";
 import Feather from "@expo/vector-icons/Feather";
 import { useRouter } from "expo-router";
 import React, { useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, Modal, StyleSheet } from "react-native";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 
 import { useBudget } from "@/context/BudgetContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
@@ -29,6 +22,7 @@ function parsedMoney(value: string): number | null {
 }
 
 export function DecisionDueModal() {
+  const privacyAlerts = usePrivacyAlerts();
   const c = useColors();
   const router = useRouter();
   const {
@@ -84,7 +78,7 @@ export function DecisionDueModal() {
       await updateDecision({ ...due, ...patch });
       return true;
     } catch (error) {
-      Alert.alert(
+      privacyAlerts.alert(
         "Couldn’t update plan",
         error instanceof Error ? error.message : "Please try again.",
       );
@@ -207,7 +201,7 @@ export function DecisionDueModal() {
     if (mutationInFlightRef.current) return;
     const amount = parsedMoney(actual);
     if (amount === null) {
-      Alert.alert("Check amount", "Enter a valid amount of zero or more.");
+      privacyAlerts.alert("Check amount", "Enter a valid amount of zero or more.");
       return;
     }
     if (
@@ -219,7 +213,7 @@ export function DecisionDueModal() {
         "extra_debt_payment",
       ].includes(due.scenario.type)
     ) {
-      Alert.alert("Check amount", "Enter an amount greater than zero.");
+      privacyAlerts.alert("Check amount", "Enter an amount greater than zero.");
       return;
     }
     if (due.scenario.type === "savings_contribution") {
@@ -233,7 +227,7 @@ export function DecisionDueModal() {
           )
         : 0;
       if (!goal || amount <= 0 || amount > remaining) {
-        Alert.alert(
+        privacyAlerts.alert(
           "Check contribution",
           goal
             ? `Enter an amount up to $${remaining.toFixed(2)}.`
@@ -274,7 +268,7 @@ export function DecisionDueModal() {
       completed = true;
       setDismissedDueId(due.id);
     } catch (error) {
-      Alert.alert("Couldn’t complete plan", error instanceof Error ? error.message : "Please try again.");
+      privacyAlerts.alert("Couldn’t complete plan", error instanceof Error ? error.message : "Please try again.");
     } finally {
       mutationInFlightRef.current = false;
       setBusy(false);
@@ -285,7 +279,7 @@ export function DecisionDueModal() {
     if (difference > 0 && (due.scenario.type === "one_time_purchase" || due.scenario.type === "recurring_bill")) {
       const preview = previewDebtSnowball(now.getMonth(), now.getFullYear(), difference, difference);
       if (preview.allocations.length && preview.safeMaximum + 0.005 >= difference) {
-        Alert.alert(
+        privacyAlerts.alert(
           "Under Plan",
           `You spent $${difference.toFixed(2)} less than planned. Add it to ${preview.allocations[0].billName}?`,
           [
@@ -307,7 +301,7 @@ export function DecisionDueModal() {
           <Text style={[s.title, { color: c.foreground }]}>What happened with {due.name}?</Text>
           <Text style={[s.sub, { color: c.mutedForeground }]}>Planned ${Math.abs(due.scenario.amount).toFixed(2)} for {due.scenario.date}</Text>
           <Text style={[s.label, { color: c.mutedForeground }]}>Actual amount</Text>
-          <TextInput
+          <TextInput sensitive
             accessibilityLabel="Actual amount"
             value={actual}
             onChangeText={setActual}

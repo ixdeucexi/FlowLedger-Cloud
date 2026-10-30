@@ -1,16 +1,10 @@
+import { MoneyPrivacyToggle } from "@/components/privacy/MoneyPrivacyControls";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import { useThemeMode } from "@/context/ThemeContext";
 import Feather from "@expo/vector-icons/Feather";
 import { useGlobalSearchParams, usePathname, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { Image, ScrollView, StyleSheet, useWindowDimensions } from "react-native";
 
 import {
   desktopPalette as palette,
@@ -153,6 +147,7 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
               </Pressable>
             </View>
           </View>
+          <View style={{ paddingHorizontal: 12, paddingBottom: 10 }}><MoneyPrivacyToggle label={!isCollapsed} /></View>
           {!isCollapsed ? <Text style={styles.navEyebrow}>Workspace</Text> : null}
           {navigation.map((item) => {
             const active = isDesktopPlanningTabActive(item.tab, pathname, params.view ?? null);

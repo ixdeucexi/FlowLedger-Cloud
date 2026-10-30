@@ -1,3 +1,6 @@
+import { moneyPrivacySearchSensitive } from "@/lib/moneyPrivacy";
+import { usePrivacyAlerts } from "@/hooks/usePrivacyAlerts";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import { createTransactionNameResolver } from "@/lib/transactionNames";
 import { pendingManualReplacementIds } from "@/lib/pendingManualReplacement";
 import { MatchTypeFilters } from "@/components/MatchTypeFilters";
@@ -5,7 +8,7 @@ import { FloLogo } from "@/components/FloLogo";
 import { activityTargetsForKind, matchTargetKindLabels, selectedMatchTargetKind, type MatchTargetKind, type MatchTargetSelection } from "@/lib/matchTargetFilters";
 import { pendingMatchesForKind, strongestPendingMatch, pendingMatchKindLabels, type PendingMatchKind } from "@/lib/pendingMatchChooser";
 import { parseMoneyInput } from "@/lib/moneyFormInput";
-import { showFormError } from "@/lib/formInputAlert";
+
 import Feather from "@expo/vector-icons/Feather";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, {
@@ -15,18 +18,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  Alert,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  SectionList,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Modal, Platform, ScrollView, SectionList, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddTransactionModal } from "@/components/AddTransactionModal";
@@ -331,6 +323,8 @@ export default function TransactionsScreen() {
 }
 
 export function ActivityScreen() {
+  const { alert: privacyAlert, formError: privacyFormError } = usePrivacyAlerts();
+
   const c = useColors();
   const isDesktop = useDesktopExperience();
   const insets = useSafeAreaInsets();
@@ -1099,7 +1093,7 @@ export function ActivityScreen() {
       })),
     );
     if (!exported)
-      Alert.alert(
+      privacyAlert(
         "CSV export",
         "CSV export is available in the website and installed web app.",
       );
@@ -1308,7 +1302,7 @@ export function ActivityScreen() {
     const pending = unmatchedPendingActivity[0];
     if (!pending) return;
     if (isFeatureLocked("transaction_matching")) {
-      Alert.alert(
+      privacyAlert(
         "Pending matching is planned for Pro",
         "Pending charges stay visible during Founding Free. Connecting them to bills or manual Activity will arrive with Pro.",
       );
@@ -1429,7 +1423,7 @@ export function ActivityScreen() {
       );
       setPendingTransactionSource(null);
       setDetailItem(null);
-      Alert.alert(
+      privacyAlert(
         "Transaction created",
         "The charge is reserved in Activity now. When it posts, FlowLedger will replace this entry so it is not counted twice.",
       );
@@ -1772,7 +1766,7 @@ export function ActivityScreen() {
       setQueuedFullPaymentPrompt(nextFullPaymentPrompt);
       setMatchTx(null);
     } catch (error) {
-      Alert.alert(
+      privacyAlert(
         "Could not match bill",
         error instanceof Error ? error.message : "Please try again.",
       );
@@ -1797,12 +1791,12 @@ export function ActivityScreen() {
       );
       setPendingMatchTx(null);
       setDetailItem(null);
-      Alert.alert(
+      privacyAlert(
         "Payment pending",
         `${option.name} will not show overdue while this bank charge is pending. Confirm it after it posts.`,
       );
     } catch (error) {
-      showFormError(
+      privacyFormError(
         "Could not match pending payment",
         error instanceof Error ? error.message : "Please try again.",
       );
@@ -1825,12 +1819,12 @@ export function ActivityScreen() {
       );
       setPendingMatchTx(null);
       setDetailItem(null);
-      Alert.alert(
+      privacyAlert(
         "Payment pending",
         `${option.name} is linked to this pending charge. It will be replaced by the bank-backed Activity entry after the charge posts and you confirm it.`,
       );
     } catch (error) {
-      showFormError(
+      privacyFormError(
         "Could not match pending payment",
         error instanceof Error ? error.message : "Please try again.",
       );
@@ -1873,7 +1867,7 @@ export function ActivityScreen() {
       await removePendingPlanMatch(selectedPendingPlanMatch.id);
       setPendingMatchTx(null);
     } catch (error) {
-      Alert.alert(
+      privacyAlert(
         "Could not remove pending match",
         error instanceof Error ? error.message : "Please try again.",
       );
@@ -1904,7 +1898,7 @@ export function ActivityScreen() {
       });
       setMatchTx(null);
     } catch (error) {
-      Alert.alert(
+      privacyAlert(
         "Could not match transaction",
         error instanceof Error ? error.message : "Please try again.",
       );
@@ -1933,7 +1927,7 @@ export function ActivityScreen() {
       });
       setMatchTx(null);
     } catch (error) {
-      Alert.alert(
+      privacyAlert(
         "Could not update bucket",
         error instanceof Error ? error.message : "Please try again.",
       );
@@ -1954,7 +1948,7 @@ export function ActivityScreen() {
       });
       setUnplannedChargeTx(null);
     } catch (error) {
-      Alert.alert(
+      privacyAlert(
         "Could not save one-time charge",
         error instanceof Error ? error.message : "Please try again.",
       );
@@ -2032,7 +2026,7 @@ export function ActivityScreen() {
       setSurplusPrompt(null);
       setFullPaymentPrompt(null);
     } catch (error) {
-      Alert.alert(
+      privacyAlert(
         "Could not close bill",
         error instanceof Error ? error.message : "Please try again.",
       );
@@ -2073,7 +2067,7 @@ export function ActivityScreen() {
       }
       setSurplusPrompt(null);
     } catch (error) {
-      Alert.alert(
+      privacyAlert(
         "Could not finish bill",
         error instanceof Error ? error.message : "Please try again.",
       );
@@ -2114,7 +2108,7 @@ export function ActivityScreen() {
       await applyDebtSnowballPayment(surplusSnowballOffer.preview, sources);
       setSurplusPrompt(null);
     } catch (error) {
-      Alert.alert(
+      privacyAlert(
         "Could not route extra money",
         error instanceof Error
           ? error.message
@@ -2141,7 +2135,7 @@ export function ActivityScreen() {
       }
       setMatchTx(null);
     } catch (error) {
-      Alert.alert(
+      privacyAlert(
         "Could not undo match",
         error instanceof Error ? error.message : "Please try again.",
       );
@@ -2235,7 +2229,7 @@ export function ActivityScreen() {
       (editExtraDateLimits.min && editExtraDate < editExtraDateLimits.min) ||
       (editExtraDateLimits.max && editExtraDate > editExtraDateLimits.max)
     ) {
-      Alert.alert(
+      privacyAlert(
         "Choose a valid payment date",
         editExtraDateLimits.bucketAvailableDate
           ? `This payment includes bucket money that is not available until ${editExtraDateLimits.bucketAvailableDate}.`
@@ -2249,7 +2243,7 @@ export function ActivityScreen() {
       amount <= 0 ||
       Math.abs(editExtraPreview.selectedExtra - amount) > 0.005
     ) {
-      showFormError(
+      privacyFormError(
         "Check the payment amount",
         "Use an amount that stays within the safe maximum shown above.",
       );
@@ -2265,7 +2259,7 @@ export function ActivityScreen() {
       setEditExtraPayment(null);
       setEditExtraPreview(null);
     } catch (error) {
-      Alert.alert(
+      privacyAlert(
         "Could not update payment",
         error instanceof Error ? error.message : "Please try again.",
       );
@@ -2285,7 +2279,7 @@ export function ActivityScreen() {
   const removeEditedExtraPayment = useCallback(async () => {
     if (!editExtraPayment || savingExtraPayment) return;
     if (hasBucketRemainderFunding(editExtraPayment.sources)) {
-      Alert.alert(
+      privacyAlert(
         "Reopen bucket first",
         "Reopen the routed spending bucket before removing this Snowball payment.",
       );
@@ -2300,7 +2294,7 @@ export function ActivityScreen() {
       setEditExtraPayment(null);
       setEditExtraPreview(null);
     } catch (error) {
-      Alert.alert(
+      privacyAlert(
         "Could not remove payment",
         error instanceof Error ? error.message : "Please try again.",
       );
@@ -2348,7 +2342,7 @@ export function ActivityScreen() {
           },
         } as any);
       if (isFeatureLocked("transaction_matching")) {
-        Alert.alert(
+        privacyAlert(
           "Income matching is planned for Pro",
           "Posted deposits stay available in Activity during Founding Free. Matching them to planned paydays will arrive with Pro.",
           [
@@ -2372,7 +2366,7 @@ export function ActivityScreen() {
         item.rawTx.source === "plaid" &&
         isFeatureLocked("transaction_matching")
       ) {
-        Alert.alert(
+        privacyAlert(
           "Bill matching is locked in this preview",
           "Basic plan preview keeps imported transaction matching locked. This test does not change your real household plan.",
           [
@@ -2731,6 +2725,7 @@ export function ActivityScreen() {
                     </Text>
                     <Text
                       style={[styles.sheetRowValue, { color: c.foreground }]}
+                      sensitive={row.label === "Details" && detailItem.source === "bill_payment"}
                     >
                       {row.value}
                     </Text>
@@ -2768,7 +2763,7 @@ export function ActivityScreen() {
                   onPress={() => {
                     if (!detailItem.rawPending) return;
                     if (isFeatureLocked("transaction_matching")) {
-                      Alert.alert(
+                      privacyAlert(
                         "Pending matching is planned for Pro",
                         "Pending charges stay visible during Founding Free. Connecting them to bills or manual Activity will arrive with Pro.",
                       );
@@ -3238,7 +3233,7 @@ export function ActivityScreen() {
             style={[styles.searchInput, { color: c.foreground }]}
             placeholder="Search by name or category…"
             placeholderTextColor={c.mutedForeground}
-            value={search}
+            value={search} sensitive={moneyPrivacySearchSensitive(search)}
             onChangeText={setSearch}
             returnKeyType="search"
           />
@@ -4018,7 +4013,7 @@ export function ActivityScreen() {
                       <Pressable
                         key={`${option.targetType}-${option.billId}`}
                         accessibilityRole="button"
-                        accessibilityLabel={`Match transaction to ${option.name}, planned ${option.plannedAmount.toFixed(2)}`}
+                        accessibilityLabel={`Match transaction to ${option.name}, planned $${option.plannedAmount.toFixed(2)}`}
                         disabled={savingMatch}
                         onPress={() =>
                           void (option.targetType === "manual"
@@ -4838,7 +4833,7 @@ export function ActivityScreen() {
               targetAmount: goal.target_amount,
               targetDate: goal.target_date,
             });
-            Alert.alert(
+            privacyAlert(
               "Bucket created and transaction added",
               result.remainingAmount > 0.005
                 ? `$${result.remainingAmount.toFixed(2)} remains in ${goal.name} for future purchases.`
@@ -4846,7 +4841,7 @@ export function ActivityScreen() {
             );
           } else {
             await addGoal(goal);
-            Alert.alert(
+            privacyAlert(
               "Money set aside",
               `Your ${goal.name} bucket is ready. Match the charge to it after the bank posts it.`,
             );

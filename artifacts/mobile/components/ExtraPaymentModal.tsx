@@ -1,16 +1,8 @@
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
 import React, { useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { KeyboardAvoidingView, Modal, Platform, StyleSheet } from "react-native";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 
 import colors from "@/constants/colors";
 import { useColors } from "@/hooks/useColors";
@@ -56,7 +48,7 @@ export function ExtraPaymentModal({ visible, onClose, onApply }: ExtraPaymentMod
           </View>
 
           <Text style={[styles.label, { color: c.mutedForeground }]}>Amount ($)</Text>
-          <TextInput
+          <TextInput sensitive
             style={[styles.input, { backgroundColor: c.card, color: c.foreground, borderColor: c.border }]}
             value={amount}
             onChangeText={setAmount}

@@ -1,6 +1,7 @@
 import Feather from "@expo/vector-icons/Feather";
 import React, { useEffect, useState } from "react";
-import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Modal, Platform, StyleSheet } from "react-native";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 
 import { DatePickerField } from "@/components/DatePickerField";
 import type { Account } from "@/context/BudgetContext";
@@ -121,7 +122,7 @@ export function AccountModal({
           ) : null}
 
           <Text style={[styles.label, { color: c.mutedForeground }]}>Current balance</Text>
-          <TextInput
+          <TextInput sensitive
             value={balance}
             onChangeText={setBalance}
             keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "default"}

@@ -1,13 +1,10 @@
-import { showFormError } from "@/lib/formInputAlert";
+import { usePrivacyAlerts } from "@/hooks/usePrivacyAlerts";
 import { parseMoneyInput, parseDecimalInput } from "@/lib/moneyFormInput";
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  Alert, Keyboard, KeyboardAvoidingView, Modal, Platform,
-  Pressable, ScrollView, StyleSheet, Switch,
-  Text, TextInput, View,
-} from "react-native";
+import { Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Switch } from "react-native";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 
 import colors from "@/constants/colors";
 import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
@@ -63,6 +60,7 @@ interface AddBillModalProps {
 }
 
 export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture, onResume, onDeleteMistake, editBill, forceDebt, initialValues, title, saveLabel }: AddBillModalProps) {
+  const privacyAlerts = usePrivacyAlerts();
   const c = useColors();
   const isDesktop = useDesktopExperience();
   const { categories, settings } = useBudget();
@@ -170,10 +168,10 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
     const parsedAmount = parseMoneyInput(amount);
     const parsedBalance = balance.trim() ? parseMoneyInput(balance) : 0;
     const parsedRate = interestRate.trim() ? parseDecimalInput(interestRate, 4) : 0;
-    if (parsedAmount === null || parsedAmount <= 0 || (isDebt && (parsedBalance === null || parsedRate === null))) { showFormError("Check bill amounts", "Enter valid nonnegative amounts. Payment and balance allow up to two decimal places; interest rate allows up to four."); return; }
+    if (parsedAmount === null || parsedAmount <= 0 || (isDebt && (parsedBalance === null || parsedRate === null))) { privacyAlerts.formError("Check bill amounts", "Enter valid nonnegative amounts. Payment and balance allow up to two decimal places; interest rate allows up to four."); return; }
     if (!name.trim()) return;
     if (frequency === "quarterly" && !nextPaymentDate.trim()) {
-      Alert.alert("Choose the first payment date", "FlowLedger uses it to repeat this bill every 3 months.");
+      privacyAlerts.alert("Choose the first payment date", "FlowLedger uses it to repeat this bill every 3 months.");
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -205,7 +203,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       else await onSave(data);
       onClose();
     } catch (error) {
-      Alert.alert(`Couldn’t save ${noun.toLowerCase()}`, error instanceof Error ? error.message : "Please try again.");
+      privacyAlerts.alert(`Couldn’t save ${noun.toLowerCase()}`, error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSaving(false);
     }
@@ -221,7 +219,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
         await onDelete(editBill.id);
         onClose();
       } catch (error) {
-        Alert.alert("Couldn’t delete", error instanceof Error ? error.message : "Please try again.");
+        privacyAlerts.alert("Couldn’t delete", error instanceof Error ? error.message : "Please try again.");
       } finally {
         setSaving(false);
       }
@@ -247,7 +245,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
         await stopFuture(editBill.id);
         onClose();
       } catch (error) {
-        Alert.alert("Couldn’t stop future bill", error instanceof Error ? error.message : "Please try again.");
+        privacyAlerts.alert("Couldn’t stop future bill", error instanceof Error ? error.message : "Please try again.");
       } finally {
         setSaving(false);
       }
@@ -271,7 +269,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
         await onResume(editBill.id);
         onClose();
       } catch (error) {
-        Alert.alert("Couldn’t resume payments", error instanceof Error ? error.message : "Please try again.");
+        privacyAlerts.alert("Couldn’t resume payments", error instanceof Error ? error.message : "Please try again.");
       } finally {
         setSaving(false);
       }
@@ -393,7 +391,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
 
             {/* Amount */}
             <Text style={lbl}>{isDebt ? "Required Minimum Payment ($)" : "Payment Amount ($)"}</Text>
-            <TextInput style={inp} value={amount} onChangeText={setAmount}
+            <TextInput sensitive style={inp} value={amount} onChangeText={setAmount}
               accessibilityLabel={isDebt ? "Required minimum payment" : "Payment amount"}
               placeholder="0.00" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
 
@@ -579,7 +577,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
             {isDebt ? (
               <>
                 <Text style={lbl}>Current Balance ($)</Text>
-                <TextInput style={inp} value={balance} onChangeText={setBalance}
+                <TextInput sensitive style={inp} value={balance} onChangeText={setBalance}
                   placeholder="0.00" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
                 <Text style={lbl}>Interest Rate (% APR)</Text>
                 <TextInput style={inp} value={interestRate} onChangeText={setInterestRate}
@@ -591,7 +589,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
                       <Pressable
                         hitSlop={10}
                         accessibilityLabel="Explain the Snowball payoff plan"
-                        onPress={() => Alert.alert(
+                        onPress={() => privacyAlerts.alert(
                           "How payoff plans work",
                           "Snowball sends extra money to the smallest balance first for quicker wins. Minimum payments stay protected.",
                         )}

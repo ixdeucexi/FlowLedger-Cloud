@@ -1,21 +1,11 @@
 import { dashboardMonthlyPlan } from "@/lib/dashboardMonthlyPlan";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import { createTransactionNameResolver } from "@/lib/transactionNames";
 import { SPENDING_BUCKETS_ROUTE } from "@/lib/settingsNavigation";
 import Feather from "@expo/vector-icons/Feather";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Animated,
-  Easing,
-  Pressable,
-  ScrollView,
-  StyleProp,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-  ViewStyle,
-} from "react-native";
+import { Animated, Easing, ScrollView, StyleProp, StyleSheet, useWindowDimensions, ViewStyle } from "react-native";
 import Svg, {
   Circle,
   Defs,
@@ -30,6 +20,7 @@ import { DashboardSections } from "@/components/DashboardSections";
 import { DashboardFavoriteActions } from "@/components/DashboardFavoriteActions";
 import { DashboardLayoutStatus } from "@/components/DashboardLayoutStatus";
 import { DashboardCustomizer } from "@/components/DashboardCustomizer";
+import { MoneyPrivacyToggle } from "@/components/privacy/MoneyPrivacyControls";
 import { DashboardSnapshotStage } from "@/components/DashboardSnapshotStage";
 import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import { DashboardUtilityWidgets } from "@/components/DashboardUtilityWidgets";
@@ -781,7 +772,7 @@ overview: (<SurfaceCard
             <View style={styles.accountCard}>
               <View style={styles.accountHeader}>
                 <View>
-                  <Text style={styles.cardEyebrow}>CHECKING BALANCE</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}><Text style={styles.cardEyebrow}>CHECKING BALANCE</Text><MoneyPrivacyToggle /></View>
                   <Text
                     adjustsFontSizeToFit
                     minimumFontScale={0.55}

@@ -1,15 +1,7 @@
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import React, { useMemo, useState } from "react";
-import {
-  Pressable,
-  ScrollView,
-  type StyleProp,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-  type ViewStyle,
-} from "react-native";
+import { ScrollView, type StyleProp, StyleSheet, useWindowDimensions, type ViewStyle } from "react-native";
 
 import {
   CardHeader,

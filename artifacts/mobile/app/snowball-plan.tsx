@@ -1,11 +1,13 @@
+import { usePrivacyAlerts } from "@/hooks/usePrivacyAlerts";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import { parseMoneyInput } from "@/lib/moneyFormInput";
-import { showFormError } from "@/lib/formInputAlert";
+
 import { adjacentPlannerMonthDate } from "@/lib/snowballPlanner";
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
+import { ScrollView, StyleSheet, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { DatePickerField } from "@/components/DatePickerField";
@@ -75,6 +77,8 @@ function allocationLabel(kind: "required" | "rollover" | "extra") {
 }
 
 function SnowballPlanScreen() {
+  const { alert: privacyAlert, formError: privacyFormError } = usePrivacyAlerts();
+
   const c = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -263,7 +267,7 @@ function SnowballPlanScreen() {
   };
 
   const savePlan = async () => {
-    if (parsedExtra === null || parsedExtra <= 0) { showFormError("Check payment amount", "Enter a positive amount with up to two decimal places."); return; }
+    if (parsedExtra === null || parsedExtra <= 0) { privacyFormError("Check payment amount", "Enter a positive amount with up to two decimal places."); return; }
     if (!valid || saving) return;
     setSaving(true);
     try {
@@ -291,7 +295,7 @@ function SnowballPlanScreen() {
         params: { openDate: paymentDate, openDateAt: String(Date.now()) },
       } as never);
     } catch (error) {
-      Alert.alert("Couldn’t save the extra payment", error instanceof Error ? error.message : "Try again.");
+      privacyAlert("Couldn’t save the extra payment", error instanceof Error ? error.message : "Try again.");
     } finally {
       setSaving(false);
     }
@@ -300,7 +304,7 @@ function SnowballPlanScreen() {
   const removePlan = () => {
     if ((!existingPayment && !editTransaction) || saving || !canEditHousehold) return;
     if (hasBucketRemainderFunding(existingPayment?.sources)) {
-      Alert.alert("Reopen bucket first", `Reopen ${bucketFundingSource?.bucketName ?? "the routed spending bucket"} before removing this Snowball payment.`);
+      privacyAlert("Reopen bucket first", `Reopen ${bucketFundingSource?.bucketName ?? "the routed spending bucket"} before removing this Snowball payment.`);
       return;
     }
     confirmAction({
@@ -316,7 +320,7 @@ function SnowballPlanScreen() {
           setExtraAmount("");
           void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (error) {
-          Alert.alert("Couldn’t remove the extra payment", error instanceof Error ? error.message : "Try again.");
+          privacyAlert("Couldn’t remove the extra payment", error instanceof Error ? error.message : "Try again.");
         } finally {
           setSaving(false);
         }
@@ -606,7 +610,7 @@ function SnowballPlanScreen() {
                 <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>EXTRA PAYMENT</Text>
                 <View style={[styles.inputWrap, { backgroundColor: c.background, borderColor: requestedExtra > safeMaximum || requestedExtra > editTargetCapacity ? c.destructive : c.border }]}>
                   <Text style={[styles.dollar, { color: c.foreground }]}>$</Text>
-                  <TextInput
+                  <TextInput sensitive
                     accessibilityLabel="Extra debt payment"
                     value={extraAmount}
                     onChangeText={setExtraAmount}

@@ -1,7 +1,8 @@
+import { PrivacyPressable as Pressable, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from "react-native";
+import { ScrollView, StyleSheet, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText } from "@/components/AppText";
@@ -185,7 +186,7 @@ export default function PlannedDebtPaymentScreen() {
             <AppText tone="label" style={[styles.fieldLabel, { color: c.mutedForeground }]}>PLANNED AMOUNT</AppText>
             <View style={[styles.inputWrap, { backgroundColor: c.background, borderColor: error || validationError ? c.destructive : c.border }]}>
               <AppText tone="number" style={[styles.dollar, { color: c.mutedForeground }]}>$</AppText>
-              <TextInput
+              <TextInput sensitive
                 accessibilityLabel="Planned amount"
                 editable={canEditHousehold && !saving}
                 inputMode="decimal"

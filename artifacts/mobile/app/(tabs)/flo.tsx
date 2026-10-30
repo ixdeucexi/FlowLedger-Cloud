@@ -1,20 +1,11 @@
+import { useMoneyPrivacy } from "@/context/MoneyPrivacyContext";
+import { MoneyPrivacyToggle } from "@/components/privacy/MoneyPrivacyControls";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  Share,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Share, ScrollView, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useMembership } from "@/context/MembershipContext";
@@ -112,6 +103,7 @@ async function readHistoryCreationReceipts(messages: FloStoredMessage[], househo
 }
 
 export default function FloScreen() {
+  const moneyPrivacy = useMoneyPrivacy();
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ prompt?: string; promptId?: string; sourceRoute?: string; entityType?: string; entityId?: string; date?: string; label?: string }>();
@@ -1383,6 +1375,10 @@ export default function FloScreen() {
   }, [params.prompt, params.promptId, chatScopeKey, floDataScopeKey, user?.id, activeHousehold?.householdId, floAccessLocked, historyBusy]);
 
   const composerBottom = Platform.OS === "web" ? 88 : Math.max(insets.bottom, 8) + 54;
+
+  if (moneyPrivacy.hidden) {
+    return <View style={[styles.screen, { backgroundColor: colors.background }]}><PremiumBackdrop variant="purple" /><View style={[styles.welcome, { flex: 1, justifyContent: "center", paddingHorizontal: 24 }]}><FloLogo size={58} /><Text accessibilityRole="header" style={[styles.welcomeTitle, { color: colors.foreground }]}>Flo conversations are hidden</Text><Text style={[styles.welcomeSubtitle, { color: colors.mutedForeground }]}>Privacy Mode keeps messages and drafts out of view. Your conversation stays here.</Text><MoneyPrivacyToggle label /></View></View>;
+  }
 
   if (floAccessLocked) {
     return <BasicFlo facts={facts} baseline={baseline} />;

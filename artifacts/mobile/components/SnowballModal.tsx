@@ -1,17 +1,8 @@
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
 import React, { useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet } from "react-native";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 
 import colors from "@/constants/colors";
 import type { SnowballAllocation } from "@/context/BudgetContext";
@@ -74,7 +65,7 @@ export function SnowballModal({ visible, onClose, method, onRun }: Props) {
             {!ran ? (
               <>
                 <Text style={[styles.label, { color: c.mutedForeground }]}>Extra Payment Amount ($)</Text>
-                <TextInput
+                <TextInput sensitive
                   style={[styles.input, { backgroundColor: c.card, color: c.foreground, borderColor: c.border }]}
                   value={amount}
                   onChangeText={setAmount}

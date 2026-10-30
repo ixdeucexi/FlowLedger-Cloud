@@ -1,5 +1,6 @@
+import { PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import React from "react";
-import { StyleProp, StyleSheet, View, ViewStyle } from "react-native";
+import { StyleProp, StyleSheet, ViewStyle } from "react-native";
 
 import { StartupPlanBrand } from "@/components/StartupPlanBrand";
 

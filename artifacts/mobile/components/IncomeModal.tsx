@@ -1,9 +1,10 @@
-import { showFormError } from "@/lib/formInputAlert";
+import { usePrivacyAlerts } from "@/hooks/usePrivacyAlerts";
 import { parseMoneyInput } from "@/lib/moneyFormInput";
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
 import React, { useEffect, useState } from "react";
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet } from "react-native";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 
 import colors from "@/constants/colors";
 import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
@@ -37,6 +38,7 @@ interface Props {
 }
 
 export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Props) {
+  const privacyAlerts = usePrivacyAlerts();
   const c = useColors();
   const isDesktop = useDesktopExperience();
   useBackDismiss(visible, onClose);
@@ -115,11 +117,11 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
   const handleSave = async () => {
     if (saving) return;
     const a = parseMoneyInput(amount);
-    if (a === null || a <= 0) { showFormError("Check income amount", "Enter a positive amount with up to two decimal places, such as 1,200.50."); return; }
+    if (a === null || a <= 0) { privacyAlerts.formError("Check income amount", "Enter a positive amount with up to two decimal places, such as 1,200.50."); return; }
     if (!name.trim()) return;
     const payday = firstPayDate.trim();
     if (!payday) {
-      showFormError("Payday needed", "Choose the date this income should appear on your calendar.");
+      privacyAlerts.formError("Payday needed", "Choose the date this income should appear on your calendar.");
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -144,7 +146,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
       else await onSave(data);
       onClose();
     } catch (error) {
-      showFormError("Couldn’t save income", error instanceof Error ? error.message : "Please try again.");
+      privacyAlerts.formError("Couldn’t save income", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSaving(false);
     }
@@ -153,7 +155,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
   const handleAddUpdate = () => {
     const a = parseMoneyInput(raiseAmount);
     const originalAmount = parseMoneyInput(amount);
-    if (a === null || a <= 0 || originalAmount === null || originalAmount <= 0) { showFormError("Check income amounts", "Enter positive income amounts with up to two decimal places."); return; }
+    if (a === null || a <= 0 || originalAmount === null || originalAmount <= 0) { privacyAlerts.formError("Check income amounts", "Enter positive income amounts with up to two decimal places."); return; }
     if (!raiseDate) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const ef = raiseDate.slice(0, 7);
@@ -232,7 +234,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
             <TextInput style={input} value={name} onChangeText={setName} placeholder="e.g. Main Job" placeholderTextColor={c.mutedForeground} />
 
             <Text style={lbl}>Amount per Paycheck ($)</Text>
-            <TextInput style={input} value={amount} onChangeText={setAmount} placeholder="0.00" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
+            <TextInput sensitive style={input} value={amount} onChangeText={setAmount} placeholder="0.00" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
 
             {parsedPreviewAmount !== null && parsedPreviewAmount > 0 && (
               <View style={[styles.equivBadge, { backgroundColor: c.success + "18" }]}>
@@ -342,7 +344,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
               {showUpdateForm && (
                 <View style={[styles.raiseForm, { borderTopWidth: history.length > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: c.border }]}>
                   <Text style={[styles.raiseFormLabel, { color: c.mutedForeground }]}>New amount per paycheck ($)</Text>
-                  <TextInput
+                  <TextInput sensitive
                     style={[styles.raiseInput, { backgroundColor: c.muted, color: c.foreground }]}
                     value={raiseAmount}
                     onChangeText={setRaiseAmount}

@@ -1,6 +1,7 @@
+import { PrivacyPressable as Pressable } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import React from "react";
-import { Pressable, StyleSheet, type PressableProps } from "react-native";
+import { StyleSheet, type PressableProps } from "react-native";
 
 export function AccessiblePressable({ accessibilityRole = "button", hitSlop = 8, style, ...props }: PressableProps) {
   return (

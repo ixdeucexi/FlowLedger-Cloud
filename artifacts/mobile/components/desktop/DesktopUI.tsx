@@ -1,15 +1,10 @@
+import { moneyPrivacySearchSensitive } from "@/lib/moneyPrivacy";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import { appearancePalette, DEFAULT_APPEARANCE, mixColor, type AppearancePreferences } from "@/lib/appearance";
 import colors from "@/constants/colors";
 import Feather from "@expo/vector-icons/Feather";
 import React from "react";
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  type ViewStyle,
-} from "react-native";
+import { StyleSheet, type ViewStyle } from "react-native";
 
 export const desktopPalette = {
   canvas: "var(--fl-desktop-canvas, #ffffff)",
@@ -310,7 +305,7 @@ export function DesktopSearch({
       <Feather name="search" size={15} color={desktopPalette.faint} />
       <TextInput
         accessibilityLabel={placeholder}
-        value={value}
+        value={value} sensitive={moneyPrivacySearchSensitive(value)}
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={desktopPalette.faint}

@@ -1,6 +1,7 @@
+import { PrivacyPressable as Pressable, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import React, { useEffect, useRef } from "react";
-import { Animated, Easing, Modal, Pressable, StyleSheet, View } from "react-native";
+import { Animated, Easing, Modal, StyleSheet } from "react-native";
 
 import { AppText } from "@/components/AppText";
 import { FloLogo } from "@/components/FloLogo";

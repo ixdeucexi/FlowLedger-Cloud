@@ -1,20 +1,10 @@
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Speech from "expo-speech";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Animated,
-  Easing,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, Animated, Easing, Platform, ScrollView, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AccountModal } from "@/components/AccountModal";
@@ -567,7 +557,7 @@ function SetupWizard() {
         <View style={[styles.fieldRow, !isDesktop && styles.fieldRowMobile]}>
           <View style={styles.fieldWrap}>
             <Text style={styles.fieldLabel}>Safety cushion</Text>
-            <TextInput accessibilityLabel="Safety cushion" value={safetyFloorText} onChangeText={setSafetyFloorText} keyboardType="decimal-pad" style={styles.input} placeholder="200" placeholderTextColor="#64748b" />
+            <TextInput sensitive accessibilityLabel="Safety cushion" value={safetyFloorText} onChangeText={setSafetyFloorText} keyboardType="decimal-pad" style={styles.input} placeholder="200" placeholderTextColor="#64748b" />
           </View>
           <View style={styles.fieldWrap}>
             <Text style={styles.fieldLabel}>Forecast months</Text>

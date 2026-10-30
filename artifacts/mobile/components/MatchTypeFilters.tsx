@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
+import { StyleSheet } from "react-native";
 import { useColors } from "@/hooks/useColors";
 import { matchTargetKindLabels, type MatchTargetKind } from "@/lib/matchTargetFilters";
 

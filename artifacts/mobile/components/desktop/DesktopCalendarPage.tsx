@@ -1,17 +1,11 @@
+import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import { useCalendarAppearance } from "@/hooks/useCalendarAppearance";
 import type { CalendarAppearance } from "@/lib/calendarAppearance";
 import { calendarAccentVariables, calendarHighlightText } from "@/lib/calendarAppearance";
 import { useColors } from "@/hooks/useColors";
 import Feather from "@expo/vector-icons/Feather";
 import React, { useMemo } from "react";
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { ScrollView, StyleSheet, useWindowDimensions } from "react-native";
 
 import {
   DesktopCard,
