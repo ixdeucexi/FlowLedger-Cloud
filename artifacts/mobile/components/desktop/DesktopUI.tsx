@@ -239,11 +239,11 @@ export function SummaryMetricCard({
               color: tone === "red" ? desktopPalette.red : desktopPalette.text,
             },
           ]}
-          numberOfLines={1}
+
         >
           {value}
         </Text>
-        <Text style={styles.metricDetail} numberOfLines={1}>
+        <Text style={styles.metricDetail} >
           {detail}
         </Text>
       </View>
@@ -537,7 +537,7 @@ const styles = StyleSheet.create({
   },
   metricCard: {
     flex: 1,
-    minWidth: 0,
+    minWidth: 210,
     minHeight: 106,
     borderWidth: 1,
     borderColor: desktopPalette.border,
@@ -545,10 +545,11 @@ const styles = StyleSheet.create({
     backgroundColor: desktopPalette.surface,
     padding: 15,
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     gap: 10,
   },
-  metricCopy: { flex: 1, minWidth: 0 },
+  metricCopy: { flex: 1, minWidth: 175 },
   metricLabel: {
     color: desktopPalette.textSecondary,
     fontSize: 12,

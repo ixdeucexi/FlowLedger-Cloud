@@ -13,7 +13,7 @@ import { isConfirmedBillMatch } from "@/lib/billMatching";
 import { isSnowballPaymentTransaction, snowballPaymentName } from "@/lib/debtPaymentPlan";
 import { allocationLabel, groupPlannedExpenseAllocations, occurrenceKey } from "@/lib/reviewCenter";
 import { scenarioDates } from "@/lib/decisions";
-import { calendarVisibleForecastEvents, formatCalendarBalance } from "@/lib/forecastDisplay";
+import { calendarVisibleForecastEvents, formatCalendarBalance, formatCompactCalendarAmount } from "@/lib/forecastDisplay";
 
 const DAY_NAMES = ["S", "M", "T", "W", "T", "F", "S"];
 const EMPTY_OVERDUE_BILL_KEYS: ReadonlySet<string> = new Set();
@@ -274,7 +274,7 @@ export function CalendarView({
                       adjustsFontSizeToFit
                       minimumFontScale={0.55}
                     >
-                      {formatCalendarBalance(visibleBalance.balance)}
+                      {formatCompactCalendarAmount(visibleBalance.balance)}
                     </Text>
                   ) : null}
                 </View>

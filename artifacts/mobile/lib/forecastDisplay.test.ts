@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, combineSameDayDebtPaymentEvents, dedupeSameDayBillEvents, debtPaymentStatusLabel, deriveCarriedForwardReserves, formatForecastDateLabel, forecastItemBadgeLabel, forecastItemTypeLabel, formatCalendarBalance, groupForecastEvents, lowestForecastDate, plannedDebtEditorParams } from "./forecastDisplay";
+import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, combineSameDayDebtPaymentEvents, dedupeSameDayBillEvents, debtPaymentStatusLabel, deriveCarriedForwardReserves, formatForecastDateLabel, forecastItemBadgeLabel, forecastItemTypeLabel, formatCalendarBalance, formatCompactCalendarAmount, groupForecastEvents, lowestForecastDate, plannedDebtEditorParams } from "./forecastDisplay";
 import type { FinancialEvent } from "./forecast";
 
 const event = (overrides: Partial<FinancialEvent> & Pick<FinancialEvent, "id" | "sourceType" | "sourceId" | "kind" | "date" | "amount" | "status">): FinancialEvent => ({
@@ -19,6 +19,19 @@ test("calendar balances round cents to the nearest whole dollar", () => {
   assert.equal(formatCalendarBalance(0.49), "$0");
 });
 
+test("dense calendar labels compact large amounts while preserving normal labels and signs", () => {
+  assert.equal(formatCompactCalendarAmount(1689.49), "$1,689");
+  assert.equal(formatCompactCalendarAmount(9999.99, "$9,999.99"), "$9,999.99");
+  assert.equal(formatCompactCalendarAmount(10000), "$10K");
+  assert.equal(formatCompactCalendarAmount(263682.34, "−$263,682.34"), "−$264K");
+  assert.equal(formatCompactCalendarAmount(-263682.34), "-$264K");
+  assert.equal(formatCompactCalendarAmount(999499), "$999K");
+  assert.equal(formatCompactCalendarAmount(999500), "$1M");
+  assert.equal(formatCompactCalendarAmount(9999999.99, "+$9,999,999.99"), "+$10M");
+  assert.equal(formatCompactCalendarAmount(999500000), "$1B");
+  assert.equal(formatCompactCalendarAmount(1000000000000), "$1,000B");
+});
+
 test("Flo can name the date protected by the safety floor", () => {
   const balances = (month: number, _year: number) => month === 8
     ? [{ day: 17, balance: 420, balanceDate: "2026-09-17" }, { day: 26, balance: 175, balanceDate: "2026-09-26" }]
@@ -27,13 +40,13 @@ test("Flo can name the date protected by the safety floor", () => {
   assert.equal(formatForecastDateLabel("2026-09-26"), "September 26, 2026");
 });
 
-test("mobile calendar displays and announces the full balance", () => {
+test("mobile calendar keeps full accessible balances with readable compact grid labels", () => {
   const calendar = readFileSync(path.resolve(process.cwd(), "components/CalendarView.tsx"), "utf8");
 
   assert.match(calendar, /accessibilityLabel=\{`Balance \$\{formatCalendarBalance\(visibleBalance\.balance\)\}`\}/);
   assert.doesNotMatch(calendar, /Actual close|Actual bank close/i);
   assert.doesNotMatch(calendar, />Projected</);
-  assert.match(calendar, /\{formatCalendarBalance\(visibleBalance\.balance\)\}/);
+  assert.match(calendar, /\{formatCompactCalendarAmount\(visibleBalance\.balance\)\}/);
   assert.doesNotMatch(calendar, /formatCompactCalendarBalance/);
 });
 

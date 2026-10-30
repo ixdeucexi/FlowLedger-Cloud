@@ -382,9 +382,9 @@ export function DesktopActivityPage({
                   <Text style={styles.flowSupportLabel}>INFLOWS</Text>
                   <Text
                     style={[styles.flowSupportValue, { color: palette.green }]}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.72}
+
+
+
                   >
                     {money(visibleSummary.income)}
                   </Text>
@@ -407,9 +407,9 @@ export function DesktopActivityPage({
                   <Text style={styles.flowSupportLabel}>OUTFLOWS</Text>
                   <Text
                     style={[styles.flowSupportValue, { color: palette.red }]}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.72}
+
+
+
                   >
                     {money(visibleSummary.out)}
                   </Text>
@@ -426,7 +426,7 @@ export function DesktopActivityPage({
                 </View>
                 <View style={styles.flowSupportCopy}>
                   <Text style={styles.flowSupportLabel}>ENTRIES</Text>
-                  <Text style={styles.flowSupportValue} numberOfLines={1}>
+                  <Text style={styles.flowSupportValue} >
                     {visibleSummary.transactions ??
                       filtered.filter((row) => !row.pending).length}
                   </Text>
@@ -920,6 +920,7 @@ const styles = StyleSheet.create({
   flowSupportGridBase: {
     minWidth: 0,
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "stretch",
     gap: 10,
   },
@@ -932,9 +933,10 @@ const styles = StyleSheet.create({
   },
   flowSupportCard: {
     flex: 1,
-    minWidth: 0,
+    minWidth: 185,
     minHeight: 96,
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     gap: 10,
     padding: 13,
@@ -950,7 +952,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  flowSupportCopy: { flex: 1, minWidth: 0 },
+  flowSupportCopy: { flex: 1, minWidth: 145 },
   flowSupportLabel: {
     color: palette.muted,
     fontSize: 9,
@@ -1056,7 +1058,7 @@ const styles = StyleSheet.create({
   colDescription: { flex: 1.7, minWidth: 90 },
   colCategory: { flex: 1.05, minWidth: 70 },
   colAccount: { flex: 1, minWidth: 62 },
-  colAmount: { flex: 0.92, minWidth: 70 },
+  colAmount: { flex: 0.92, minWidth: 160 },
   colType: { flex: 0.88, minWidth: 65 },
   colAction: { width: 24, alignItems: "flex-end" },
   descriptionCell: { flexDirection: "row", alignItems: "center", gap: 7 },
@@ -1127,12 +1129,14 @@ const styles = StyleSheet.create({
   spendingRow: {
     minHeight: 25,
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     gap: 7,
   },
   dot: { width: 7, height: 7, borderRadius: 4 },
   spendingLabel: {
     flex: 1,
+    minWidth: 90,
     color: palette.textSecondary,
     fontSize: 11,
     fontFamily: "Inter_500Medium",
@@ -1143,7 +1147,8 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
   },
   spendingPercent: {
-    width: 28,
+    width: 34,
+    flexShrink: 0,
     textAlign: "right",
     color: palette.muted,
     fontSize: 11,

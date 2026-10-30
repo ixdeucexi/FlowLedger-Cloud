@@ -201,6 +201,18 @@ export function formatCalendarBalance(amount: number): string {
   return `${sign}$${wholeDollars.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
 
+/** Compact grid-only money; retain fullLabel in accessibility and day details. */
+export function formatCompactCalendarAmount(amount: number, fullLabel = formatCalendarBalance(amount)): string {
+  const magnitude = Math.abs(Number(amount) || 0);
+  if (!Number.isFinite(magnitude) || magnitude < 10_000) return fullLabel;
+  const sign = fullLabel.match(/^[+\-−]/)?.[0] ?? "";
+  const units = [{ divisor: 1_000, suffix: "K" }, { divisor: 1_000_000, suffix: "M" }, { divisor: 1_000_000_000, suffix: "B" }];
+  let index = magnitude >= 1_000_000_000 ? 2 : magnitude >= 1_000_000 ? 1 : 0;
+  if (index < units.length - 1 && Math.round(magnitude / units[index].divisor) >= 1_000) index += 1;
+  const unit = units[index];
+  return `${sign}$${Math.round(magnitude / unit.divisor).toLocaleString("en-US")}${unit.suffix}`;
+}
+
 export function formatForecastDateLabel(value?: string): string {
   if (!value) return "the tightest forecast date";
   const parsed = new Date(`${value.slice(0, 10)}T12:00:00`);

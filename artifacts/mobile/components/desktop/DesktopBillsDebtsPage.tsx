@@ -1106,7 +1106,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
   },
   tabTextActive: { color: palette.purpleDark, fontFamily: "Inter_700Bold" },
-  metrics: { flexDirection: "row", gap: 12, marginBottom: 14 },
+  metrics: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginBottom: 14 },
   billOverviewRow: { marginBottom: 14 },
   overviewCard: { width: "100%", minWidth: 0, overflow: "hidden" },
   textLink: {

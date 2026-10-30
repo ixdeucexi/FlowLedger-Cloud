@@ -785,9 +785,9 @@ export default function BillsScreen() {
             <View style={styles.cardRight}>
               <Text
                 style={[styles.amount, { color: c.foreground }]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.72}
+
+
+
               >
                 ${item.amount.toFixed(2)}
               </Text>
@@ -1319,9 +1319,9 @@ export default function BillsScreen() {
                                 : c.success,
                           },
                         ]}
-                        numberOfLines={1}
-                        adjustsFontSizeToFit
-                        minimumFontScale={0.72}
+
+
+
                       >
                         ${currentBillRemaining.toFixed(0)}
                       </Text>
@@ -1674,9 +1674,9 @@ export default function BillsScreen() {
                         styles.debtOverviewAmount,
                         { color: c.foreground },
                       ]}
-                      numberOfLines={1}
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.72}
+
+
+
                     >
                       $
                       {totalDebt.toLocaleString(undefined, {
@@ -1699,9 +1699,9 @@ export default function BillsScreen() {
                             styles.debtOverviewStatValue,
                             { color: c.foreground },
                           ]}
-                          numberOfLines={1}
-                          adjustsFontSizeToFit
-                          minimumFontScale={0.7}
+
+
+
                         >
                           ${totalMinPayments.toFixed(0)}
                         </Text>
@@ -1728,9 +1728,9 @@ export default function BillsScreen() {
                             styles.debtOverviewStatValue,
                             { color: c.success },
                           ]}
-                          numberOfLines={1}
-                          adjustsFontSizeToFit
-                          minimumFontScale={0.7}
+
+
+
                         >
                           +${debtPaymentPlan.extraPayment.toFixed(0)}
                         </Text>
@@ -2335,11 +2335,12 @@ const styles = StyleSheet.create({
   },
   billSnapshotHero: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "flex-end",
     justifyContent: "space-between",
     gap: 12,
   },
-  billSnapshotAmountWrap: { flex: 1 },
+  billSnapshotAmountWrap: { flex: 1, minWidth: 210 },
   billSnapshotAmountLabel: {
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
@@ -2383,9 +2384,10 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   billProgressFill: { height: "100%", borderRadius: 999 },
-  billSnapshotStats: { flexDirection: "row", gap: 10 },
+  billSnapshotStats: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   billSnapshotStat: {
     flex: 1,
+    minWidth: 90,
     borderWidth: 1,
     borderRadius: 16,
     paddingHorizontal: 12,
@@ -2490,12 +2492,12 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   cardBody: { flex: 1, paddingHorizontal: 12, paddingVertical: 11 },
-  cardTop: { flexDirection: "row", alignItems: "flex-start" },
-  cardLeft: { flex: 1, minWidth: 0 },
+  cardTop: { flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "flex-start" },
+  cardLeft: { flex: 1, minWidth: 140 },
   cardRight: {
-    maxWidth: "39%",
-    minWidth: 0,
-    flexShrink: 1,
+    maxWidth: "100%",
+    minWidth: 150,
+    flexShrink: 0,
     alignItems: "flex-end",
     marginLeft: 8,
   },
@@ -2503,7 +2505,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     alignItems: "center",
-    flexWrap: "nowrap",
+    flexWrap: "wrap",
   },
   metaText: {
     flex: 1,
@@ -2591,16 +2593,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   debtOverviewAmount: {
-    fontSize: 36,
-    lineHeight: 42,
+    fontSize: 26,
+    lineHeight: 34,
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: -1.3,
     marginTop: 2,
   },
-  debtOverviewStats: { flexDirection: "row", gap: 8, marginTop: 15 },
+  debtOverviewStats: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 15 },
   debtOverviewStat: {
     flex: 1,
-    minWidth: 0,
+    minWidth: 170,
     borderWidth: 1,
     borderRadius: 16,
     paddingHorizontal: 11,

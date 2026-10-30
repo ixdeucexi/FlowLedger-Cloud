@@ -1,3 +1,4 @@
+import { formatCompactCalendarAmount } from "@/lib/forecastDisplay";
 import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import { useCalendarAppearance } from "@/hooks/useCalendarAppearance";
 import type { CalendarAppearance } from "@/lib/calendarAppearance";
@@ -235,7 +236,7 @@ function CalendarEventPill({
       <View style={[styles.eventDot, { backgroundColor: tone.dot }]} />
       <Text numberOfLines={1} style={styles.eventName}>{resolveEventLabel(event)}</Text>
       <Text style={[styles.eventAmount, { color: tone.color }]}>
-        {money(event.amount, true)}
+        {formatCompactCalendarAmount(event.amount, money(event.amount, true))}
       </Text>
     </View>
   );
@@ -344,14 +345,14 @@ function DesktopMonthGrid({
                 <Text style={styles.moreText}>+{hiddenCount} more</Text>
               ) : null}
               {visibleBalance ? (
-                <Text style={styles.dayBalanceSource}>{money(visibleBalance.balance)}</Text>
+                <Text accessibilityLabel={`Balance ${money(visibleBalance.balance)}`} style={styles.dayBalanceSource}>{formatCompactCalendarAmount(visibleBalance.balance, money(visibleBalance.balance))}</Text>
               ) : null}
               {isLowest ? (
                 <View style={[styles.lowestCellBadge, tightestForecastIsRisk && styles.riskCellBadge]}>
                   <Text style={[styles.lowestCellLabel, tightestForecastIsRisk && styles.riskCellLabel]}>
                     {tightestForecastIsRisk ? "Build room · Tightest forecast" : "Tightest forecast point"}
                   </Text>
-                  <Text style={[styles.lowestCellValue, tightestForecastIsRisk && styles.riskCellValue]}>{money(lowestBalance)}</Text>
+                  <Text accessibilityLabel={`Tightest forecast ${money(lowestBalance)}`} style={[styles.lowestCellValue, tightestForecastIsRisk && styles.riskCellValue]}>{formatCompactCalendarAmount(lowestBalance, money(lowestBalance))}</Text>
                 </View>
               ) : null}
             </Pressable>
@@ -662,9 +663,9 @@ const styles = StyleSheet.create({
   simulatorButton: { minHeight: 44, borderRadius: 7, borderWidth: 1, borderColor: palette.purple, backgroundColor: palette.purpleSoft, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
   simulatorButtonText: { color: palette.purple, fontSize: 12, fontFamily: "Inter_700Bold" },
   pressed: { opacity: 0.72 },
-  metrics: { flexDirection: "row", gap: 12, marginBottom: 14 },
+  metrics: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginBottom: 14 },
   metricsCompact: { flexWrap: "wrap" },
-  metricItem: { flex: 1, minWidth: 0 },
+  metricItem: { flex: 1, minWidth: 210 },
   metricItemCompact: { flexGrow: 0, flexBasis: "48%" as never },
   mainRow: { flexDirection: "row", alignItems: "flex-start", gap: 14 },
   calendarColumn: { flex: 1, minWidth: 0 },
@@ -709,7 +710,7 @@ const styles = StyleSheet.create({
   detailContent: { padding: 16, gap: 15 },
   sectionTitle: { color: palette.text, fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   summaryRows: { gap: 9 },
-  summaryRow: { minHeight: 28, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  summaryRow: { minHeight: 28, flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10 },
   summaryLabel: { color: palette.textSecondary, fontSize: 12, fontFamily: "Inter_600SemiBold" },
   summaryValue: { fontSize: 12, fontFamily: "Inter_700Bold" },
   summaryNet: { borderTopWidth: 1, borderTopColor: palette.borderSoft, paddingTop: 9, marginTop: 2 },

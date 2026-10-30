@@ -3083,9 +3083,9 @@ export function ActivityScreen() {
             styles.activityNetValue,
             { color: activitySummary.net >= 0 ? c.success : c.destructive },
           ]}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.64}
+
+
+
         >
           {activitySummary.net > 0 ? "+" : activitySummary.net < 0 ? "−" : ""}$
           {formatActivityMoney(activitySummary.net)}
@@ -3106,9 +3106,9 @@ export function ActivityScreen() {
           >
             <Text
               style={[styles.monthlySummaryValue, { color: c.success }]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.7}
+
+
+
             >
               ${formatActivityMoney(activitySummary.income)}
             </Text>
@@ -3133,9 +3133,9 @@ export function ActivityScreen() {
           >
             <Text
               style={[styles.monthlySummaryValue, { color: c.destructive }]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.7}
+
+
+
             >
               ${formatActivityMoney(activitySummary.out)}
             </Text>
@@ -3491,16 +3491,16 @@ export function ActivityScreen() {
                       styles.txAmount,
                       { color: isExpense ? c.destructive : c.success },
                     ]}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.72}
+
+
+
                   >
                     {isExpense ? "−" : "+"}${formatActivityMoney(item.amount)}
                   </Text>
                   {runningBalance != null ? (
                     <Text
                       style={[styles.txBalance, { color: c.mutedForeground }]}
-                      numberOfLines={1}
+
                     >
                       Balance ${formatActivityMoney(runningBalance)}
                     </Text>
@@ -5059,15 +5059,15 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   activityNetValue: {
-    fontSize: 39,
+    fontSize: 26,
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: -1.5,
     marginBottom: 15,
   },
-  monthlySummaryStats: { flexDirection: "row", gap: 10, marginBottom: 12 },
+  monthlySummaryStats: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 12 },
   monthlySummaryStat: {
     flex: 1,
-    minWidth: 0,
+    minWidth: 180,
     borderRadius: 16,
     backgroundColor: "rgba(15,23,42,0.42)",
     borderWidth: 1,
@@ -5514,6 +5514,7 @@ const styles = StyleSheet.create({
   txRow: {
     minHeight: 78,
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     marginHorizontal: 16,
     paddingHorizontal: 13,
@@ -5536,7 +5537,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  txMid: { flex: 1, minWidth: 0 },
+  txMid: { flex: 1, minWidth: 150 },
   txNote: { fontSize: 14, fontFamily: "Inter_800ExtraBold", marginBottom: 4 },
   txMetaLine: { fontSize: 10, fontFamily: "Inter_500Medium", lineHeight: 15 },
   txStatus: {
@@ -5570,9 +5571,9 @@ const styles = StyleSheet.create({
   debtBadgeText: { flexShrink: 1, fontSize: 9, fontFamily: "Inter_700Bold" },
   txDate: { fontSize: 9, fontFamily: "Inter_400Regular" },
   txRight: {
-    maxWidth: "39%",
-    minWidth: 0,
-    flexShrink: 1,
+    maxWidth: "100%",
+    minWidth: 170,
+    flexShrink: 0,
     alignItems: "flex-end",
   },
   txAmount: { fontSize: 15, fontFamily: "Inter_800ExtraBold" },

@@ -249,15 +249,15 @@ function CalendarDebtPaymentCard({
       <View style={styles.dayBillNumbers}>
         <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
           <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Amount</Text>
-          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: c.foreground }]}>${amount.toFixed(2)}</Text>
+          <Text    style={[styles.dayBillNumberValue, { color: c.foreground }]}>${amount.toFixed(2)}</Text>
         </View>
         <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
           <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Paid</Text>
-          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: applied ? c.success : c.mutedForeground }]}>${(applied ? amount : 0).toFixed(2)}</Text>
+          <Text    style={[styles.dayBillNumberValue, { color: applied ? c.success : c.mutedForeground }]}>${(applied ? amount : 0).toFixed(2)}</Text>
         </View>
         <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
           <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Left</Text>
-          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: applied ? c.success : c.warning }]}>${(applied ? 0 : amount).toFixed(2)}</Text>
+          <Text    style={[styles.dayBillNumberValue, { color: applied ? c.success : c.warning }]}>${(applied ? 0 : amount).toFixed(2)}</Text>
         </View>
       </View>
 
@@ -2583,7 +2583,7 @@ export default function MonthlyScreen() {
                                 </View>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
                                   <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>{bill.is_debt ? "Required left" : "Left"}</Text>
-                                  <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: remaining > 0 ? c.destructive : c.success }]}>${remaining.toFixed(2)}</Text>
+                                  <Text    style={[styles.dayBillNumberValue, { color: remaining > 0 ? c.destructive : c.success }]}>${remaining.toFixed(2)}</Text>
                                 </View>
                               </View>
                               {optionalExtraRemaining > 0.005 ? (
@@ -2864,15 +2864,15 @@ export default function MonthlyScreen() {
                               <View style={styles.dayBillNumbers}>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
                                   <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Planned</Text>
-                                  <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: c.foreground }]}>${group.plannedAmount.toFixed(2)}</Text>
+                                  <Text    style={[styles.dayBillNumberValue, { color: c.foreground }]}>${group.plannedAmount.toFixed(2)}</Text>
                                 </View>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
                                   <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Spent</Text>
-                                  <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: c.success }]}>${group.spentAmount.toFixed(2)}</Text>
+                                  <Text    style={[styles.dayBillNumberValue, { color: c.success }]}>${group.spentAmount.toFixed(2)}</Text>
                                 </View>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
                                   <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>{finalLabel}</Text>
-                                  <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: statusColor }]}>${finalAmount.toFixed(2)}</Text>
+                                  <Text    style={[styles.dayBillNumberValue, { color: statusColor }]}>${finalAmount.toFixed(2)}</Text>
                                 </View>
                               </View>
                               {group.source === "goal" ? (
@@ -2946,7 +2946,7 @@ export default function MonthlyScreen() {
                               <View style={styles.dayBillNumbers}>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
                                   <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>{isMoneyIn && tx.review_resolution === "income" ? "Planned" : "Amount"}</Text>
-                                  <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: c.foreground }]}>${settlement.amount.toFixed(2)}</Text>
+                                  <Text    style={[styles.dayBillNumberValue, { color: c.foreground }]}>${settlement.amount.toFixed(2)}</Text>
                                 </View>
                                 {awaitingReview ? (
                                   <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
@@ -2956,11 +2956,11 @@ export default function MonthlyScreen() {
                                 ) : <>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
                                   <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>{isTransfer ? "Moved" : isMoneyIn ? "Received" : "Paid"}</Text>
-                                  <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: c.success }]}>${settlement.paid.toFixed(2)}</Text>
+                                  <Text    style={[styles.dayBillNumberValue, { color: c.success }]}>${settlement.paid.toFixed(2)}</Text>
                                 </View>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
                                   <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Left</Text>
-                                  <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.58} style={[styles.dayBillNumberValue, { color: remaining > 0.005 ? c.warning : c.success }]}>${remaining.toFixed(2)}</Text>
+                                  <Text    style={[styles.dayBillNumberValue, { color: remaining > 0.005 ? c.warning : c.success }]}>${remaining.toFixed(2)}</Text>
                                 </View>
                                 </>}
                               </View>
@@ -3550,8 +3550,8 @@ const styles = StyleSheet.create({
   dayBillTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   dayBillName: { fontSize: 14, fontFamily: "Inter_700Bold" },
   dayBillMeta: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
-  dayBillNumbers: { flexDirection: "row", gap: 8 },
-  dayBillNumberTile: { flex: 1, minWidth: 0, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 8 },
+  dayBillNumbers: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  dayBillNumberTile: { flex: 1, minWidth: 160, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 8 },
   dayBillNumberLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.5 },
   dayBillNumberValue: { maxWidth: "100%", fontSize: 13, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
   dayDebtPlanSummary: { borderWidth: 1, borderRadius: 12, padding: 10, gap: 3 },

@@ -437,7 +437,7 @@ function MetricCard({
   return (
     <SurfaceCard
       accent={accent}
-      style={{ flexBasis: width as never, flexGrow: 1, minWidth: 0 }}
+      style={{ flexBasis: width as never, flexGrow: 1, minWidth: 260 }}
       onPress={onPress}
       accessibilityLabel={`${label}: ${value}`}
     >

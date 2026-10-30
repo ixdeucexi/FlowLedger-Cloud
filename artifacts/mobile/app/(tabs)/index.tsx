@@ -658,13 +658,13 @@ function MobileDashboardContent({
   // The hero is a bank snapshot. Forecasted balances belong on Monthly only.
   const dashboardCheckingBalance = bankCurrentCheckingBalance;
   const savingsAccountRowsHeight = savingsAccounts.length > 0
-    ? savingsAccounts.length * 36 + 8
+    ? savingsAccounts.length * (viewportWidth < 600 ? 76 : 36) + 8
     : 44;
   const goalsScrollViewportHeight = isCommandWide ? 220 : 156;
   const goalRowsHeight = currentGoals.length === 0
     ? 80
     : Math.min(goalsScrollViewportHeight, currentGoals.length * 56 + 14);
-  const compactSavingsFaceHeight = 92
+  const compactSavingsFaceHeight = (viewportWidth < 600 ? 152 : 92)
     + savingsAccountRowsHeight
     + goalRowsHeight;
   const heroFrontFaceHeight = isCommandWide ? 260 : 250;
@@ -1124,10 +1124,10 @@ overview: (<View
                   <AppText style={[styles.referenceFlipButtonText, { color: dashboardTheme.purpleText }]}>Savings</AppText>
                 </Pressable>
               </View>
-              <View style={styles.referenceHeroPrimaryRow}>
+              <View style={[styles.referenceHeroPrimaryRow, !isCommandWide && styles.referenceHeroPrimaryRowCompact]}>
                 <View style={styles.referenceBalanceAmount}>
                   <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}><AppText tone="label" style={[styles.referenceHeroLabel, { color: dashboardTheme.mutedText }]}>Checking balance</AppText><MoneyPrivacyToggle /></View>
-                  <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.62} style={[styles.referenceHeroAmount, { color: dashboardTheme.amount, textShadowColor: "transparent" }]}>{formatDashboardCurrency(dashboardCheckingBalance)}</AppText>
+                  <AppText tone="number"    style={[styles.referenceHeroAmount, viewportWidth < 600 && formatDashboardCurrency(dashboardCheckingBalance).length > 10 && styles.referenceHeroAmountCompact, { color: dashboardTheme.amount, textShadowColor: "transparent" }]}>{formatDashboardCurrency(dashboardCheckingBalance)}</AppText>
                   {pendingCheckingSummary && pendingCheckingSummary.pendingCount > 0 ? (
                     <Pressable
                       accessibilityRole="button"
@@ -1136,13 +1136,13 @@ overview: (<View
                       style={({ pressed }) => [styles.pendingBalanceStrip, { backgroundColor: c.warning + "12", borderColor: c.warning + "38", opacity: pressed ? 0.76 : 1 }]}
                     >
                       <Feather name="clock" size={12} color={c.warning} />
-                      <AppText style={[styles.pendingBalancePrimary, { color: c.warning }]} numberOfLines={1}>
+                      <AppText style={[styles.pendingBalancePrimary, { color: c.warning }]} >
                         {pendingCheckingSummary.pendingOutflow > 0
                           ? `−${formatDashboardCurrency(pendingCheckingSummary.pendingOutflow)} pending`
                           : `+${formatDashboardCurrency(pendingCheckingSummary.pendingInflow)} pending`}
                       </AppText>
                       <View style={[styles.pendingBalanceDot, { backgroundColor: dashboardTheme.subtleText }]} />
-                      <AppText style={[styles.pendingBalanceAvailable, { color: dashboardTheme.mutedText }]} numberOfLines={1}>
+                      <AppText style={[styles.pendingBalanceAvailable, { color: dashboardTheme.mutedText }]} >
                         {formatDashboardCurrency(pendingCheckingSummary.availableBalance)} available
                       </AppText>
                     </Pressable>
@@ -1212,7 +1212,7 @@ overview: (<View
             <View style={styles.referenceMoneyHeader}>
               <View style={styles.referenceSavingsHeaderCopy}>
                 <AppText tone="label" style={[styles.referenceHeroLabel, { color: dashboardTheme.mutedText }]}>Savings accounts</AppText>
-                <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.62} style={[styles.referenceHeroAmount, styles.referenceSavingsAmount, { color: dashboardTheme.savings, textShadowColor: "transparent" }]}>{formatDashboardCurrency(savingsAccountBalance)}</AppText>
+                <AppText tone="number"    style={[styles.referenceHeroAmount, styles.referenceSavingsAmount, viewportWidth < 600 && formatDashboardCurrency(savingsAccountBalance).length > 10 && styles.referenceHeroAmountCompact, { color: dashboardTheme.savings, textShadowColor: "transparent" }]}>{formatDashboardCurrency(savingsAccountBalance)}</AppText>
               </View>
               <Pressable onPress={doFlip} accessibilityLabel="Show checking balance" style={[styles.referenceFlipButton, { backgroundColor: dashboardTheme.purpleSurface, borderColor: dashboardTheme.purpleBorder }]}>
                 <Feather name="repeat" size={13} color={dashboardTheme.purpleText} />
@@ -1234,7 +1234,7 @@ overview: (<View
                     ) : null}
                   </View>
                   <View style={styles.referenceSavingsValue}>
-                    <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={[styles.referenceSavingsBalance, { color: dashboardTheme.savings }]}>
+                    <AppText tone="number"    style={[styles.referenceSavingsBalance, { color: dashboardTheme.savings }]}>
                       {formatDashboardCurrency(account.balance)}
                     </AppText>
                     {canEditHousehold ? (
@@ -1283,7 +1283,7 @@ overview: (<View
                       <View style={styles.referenceGoalTopRow}>
                         <Pressable accessibilityRole="button" accessibilityLabel={`Personalize ${goal.name}`} accessibilityHint={bucketPersonalization.unavailableReason ?? undefined} disabled={!bucketPersonalization.available} style={{ opacity: bucketPersonalization.available ? 1 : 0.5 }} onPress={event => { event.stopPropagation(); bucketPersonalization.open(goal.id); }}><BucketThumbnail goalId={goal.id} name={goal.name} size={28} /></Pressable>
                         <AppText style={[styles.referenceGoalName, { color: dashboardTheme.mutedText }]} numberOfLines={1}>{goal.name}</AppText>
-                        <AppText numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.referenceGoalAmounts, { color: dashboardTheme.subtleText }]}>{bucket ? `${formatDashboardCurrency(bucket.remaining)} left` : `${formatDashboardCurrency(goal.current_amount)} / ${formatDashboardCurrency(goal.target_amount)}`}</AppText>
+                        <AppText    style={[styles.referenceGoalAmounts, { color: dashboardTheme.subtleText }]}>{bucket ? `${formatDashboardCurrency(bucket.remaining)} left` : `${formatDashboardCurrency(goal.current_amount)} / ${formatDashboardCurrency(goal.target_amount)}`}</AppText>
                       </View>
                       <AppText style={{ color: dashboardTheme.subtleText, fontSize: 11 }}>{bucket ? `${formatDashboardCurrency(bucket.planned)} planned · ${formatDashboardCurrency(bucket.spent)} spent` : goal.target_amount > 0 ? `${Math.round(percent)}% funded` : "No savings target set"}</AppText>
                       <View style={styles.referenceGoalTrack}>
@@ -1312,7 +1312,7 @@ snapshot: (<View style={[styles.dashboardSnapshotCard, { backgroundColor: c.card
             <Feather name="file-text" size={18} color={c.primary} />
           </View>
           <AppText style={[styles.dashboardSnapshotLabel, { color: c.mutedForeground }]}>Bills left</AppText>
-          <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.dashboardSnapshotValue, { color: c.foreground }]}>{formatDashboardCurrency(dashboardBillsLeft)}</AppText>
+          <AppText tone="number"    style={[styles.dashboardSnapshotValue, { color: c.foreground }]}>{formatDashboardCurrency(dashboardBillsLeft)}</AppText>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -1324,7 +1324,7 @@ snapshot: (<View style={[styles.dashboardSnapshotCard, { backgroundColor: c.card
             <Feather name="shield" size={18} color={c.success} />
           </View>
           <AppText style={[styles.dashboardSnapshotLabel, { color: c.mutedForeground }]}>Safe to spend</AppText>
-          <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.dashboardSnapshotValue, { color: c.success }]}>{formatDashboardCurrency(dashboardSafeToSpend)}</AppText>
+          <AppText tone="number"    style={[styles.dashboardSnapshotValue, { color: c.success }]}>{formatDashboardCurrency(dashboardSafeToSpend)}</AppText>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -1336,7 +1336,7 @@ snapshot: (<View style={[styles.dashboardSnapshotCard, { backgroundColor: c.card
             <Feather name="calendar" size={18} color={c.warning} />
           </View>
           <AppText style={[styles.dashboardSnapshotLabel, { color: c.mutedForeground }]}>Next payday</AppText>
-          <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.dashboardSnapshotValue, { color: c.foreground }]}>{dashboardNextPayday}</AppText>
+          <AppText tone="number"    style={[styles.dashboardSnapshotValue, { color: c.foreground }]}>{dashboardNextPayday}</AppText>
         </Pressable>
       </View>),
 today_decisions: (<DashboardUtilityWidgets layout={dashboardLayout} widgetId="today_decisions" decisions={todayDecisions} reviewCount={reviewCenterCount} compact onNavigate={(pathname, params) => router.push({ pathname: pathname as any, params } as any)} />),
@@ -1394,7 +1394,7 @@ monthly_plan: (<Pressable
               <View style={[styles.dashboardProgressDot, { backgroundColor: "#4f86ff" }]} />
               <AppText style={[styles.dashboardProgressLabel, { color: c.mutedForeground }]}>Planned income</AppText>
             </View>
-            <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={[styles.dashboardPlanBreakdownValue, { color: c.foreground }]}>
+            <AppText tone="number" style={[styles.dashboardPlanBreakdownValue, { color: c.foreground }]}>
               {formatDashboardCurrency(dashboardModel.monthlyIncome)}
             </AppText>
           </View>
@@ -1403,7 +1403,7 @@ monthly_plan: (<Pressable
               <View style={[styles.dashboardProgressDot, { backgroundColor: "#38bdf8" }]} />
               <AppText style={[styles.dashboardProgressLabel, { color: c.mutedForeground }]}>Income still expected</AppText>
             </View>
-            <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={[styles.dashboardPlanBreakdownValue, { color: c.foreground }]}>
+            <AppText tone="number" style={[styles.dashboardPlanBreakdownValue, { color: c.foreground }]}>
               {formatDashboardCurrency(cashFlow.monthlyIncome)}
             </AppText>
           </View>
@@ -1412,7 +1412,7 @@ monthly_plan: (<Pressable
               <View style={[styles.dashboardProgressDot, { backgroundColor: c.primary }]} />
               <AppText style={[styles.dashboardProgressLabel, { color: c.mutedForeground }]}>Remaining bills and buckets</AppText>
             </View>
-            <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={[styles.dashboardPlanBreakdownValue, { color: c.foreground }]}>
+            <AppText tone="number" style={[styles.dashboardPlanBreakdownValue, { color: c.foreground }]}>
               {formatDashboardCurrency(dashboardPlanned)}
             </AppText>
           </View>
@@ -2156,7 +2156,7 @@ const styles = StyleSheet.create({
   pendingFloTitle: { fontSize: 21, lineHeight: 25, letterSpacing: -0.5 },
   pendingFloMessage: { fontSize: 17, lineHeight: 24, fontFamily: "Inter_700Bold", marginTop: 17 },
   pendingFloSecondary: { fontSize: 12, lineHeight: 17, fontFamily: "Inter_500Medium", marginTop: 6 },
-  pendingFloBalanceBox: { borderWidth: 1, borderRadius: 17, paddingHorizontal: 13, paddingVertical: 11, marginTop: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  pendingFloBalanceBox: { flexWrap: "wrap", borderWidth: 1, borderRadius: 17, paddingHorizontal: 13, paddingVertical: 11, marginTop: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   pendingFloAvailableColumn: { alignItems: "flex-end" },
   pendingFloBalanceLabel: { fontSize: 9, letterSpacing: 0.8, textTransform: "uppercase" },
   pendingFloBalanceValue: { fontSize: 18, lineHeight: 22, letterSpacing: -0.4 },
@@ -2188,10 +2188,12 @@ const styles = StyleSheet.create({
   referenceHeroFrontWide: { minHeight: 260, alignItems: "stretch" },
   referenceHeroMoneyPanel: { width: "100%" },
   referenceHeroMoneyPanelWide: { flex: 1, width: "auto" },
-  referenceMoneyHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  referenceMoneyHeader: { flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", gap: 10 },
   referenceHeroPrimaryRow: { flexDirection: "row", alignItems: "center", gap: 14, marginTop: 12 },
-  referenceBalanceAmount: { flex: 1, minWidth: 0 },
-  pendingBalanceStrip: { alignSelf: "flex-start", maxWidth: "100%", minHeight: 27, borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, marginTop: 3, flexDirection: "row", alignItems: "center", gap: 5 },
+  referenceHeroPrimaryRowCompact: { flexDirection: "column", alignItems: "stretch" },
+  referenceHeroAmountCompact: { fontSize: 26, lineHeight: 34, letterSpacing: -0.8 },
+  referenceBalanceAmount: { flex: 1, minWidth: 0, width: "100%" },
+  pendingBalanceStrip: { flexWrap: "wrap", alignSelf: "flex-start", maxWidth: "100%", minHeight: 27, borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, marginTop: 3, flexDirection: "row", alignItems: "center", gap: 5 },
   pendingBalancePrimary: { fontSize: 10, fontFamily: "Inter_800ExtraBold" },
   pendingBalanceDot: { width: 3, height: 3, borderRadius: 2 },
   pendingBalanceAvailable: { flexShrink: 1, fontSize: 10, fontFamily: "Inter_700Bold" },
@@ -2203,14 +2205,14 @@ const styles = StyleSheet.create({
   referenceHeroForecastText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   referenceFlipButton: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, borderWidth: 1, borderColor: "rgba(196,181,253,0.28)", backgroundColor: "rgba(124,58,237,0.18)", paddingHorizontal: 9, paddingVertical: 6 },
   referenceFlipButtonText: { color: "#c4b5fd", fontSize: 9, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.5 },
-  referenceSavingsHeaderCopy: { flex: 1, minWidth: 0 },
+  referenceSavingsHeaderCopy: { flex: 1, minWidth: 200 },
   referenceSavingsAmount: { color: "#6ee7b7", fontSize: 34, lineHeight: 38, letterSpacing: -1.4 },
   referenceSavingsList: { marginTop: 8, gap: 5 },
-  referenceSavingsItem: { minHeight: 31, borderRadius: 10, borderWidth: 1, paddingHorizontal: 9, paddingVertical: 6, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  referenceSavingsIdentity: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 },
+  referenceSavingsItem: { flexWrap: "wrap", minHeight: 31, borderRadius: 10, borderWidth: 1, paddingHorizontal: 9, paddingVertical: 6, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  referenceSavingsIdentity: { flex: 1, minWidth: 120, flexDirection: "row", alignItems: "center", gap: 6 },
   referenceSavingsName: { flexShrink: 1, fontSize: 11, fontFamily: "Inter_700Bold" },
   referenceSavingsMask: { fontSize: 9, fontFamily: "Inter_600SemiBold" },
-  referenceSavingsValue: { maxWidth: "48%", minWidth: 0, flexShrink: 1, flexDirection: "row", alignItems: "center", gap: 6 },
+  referenceSavingsValue: { maxWidth: "100%", minWidth: 150, flexShrink: 0, flexDirection: "row", alignItems: "center", gap: 6 },
   referenceSavingsBalance: { flexShrink: 1, fontSize: 12, lineHeight: 16, fontFamily: "Inter_800ExtraBold" },
   referenceSavingsEdit: { width: 28, height: 28, borderRadius: 9, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   referenceSavingsEmpty: { minHeight: 36, borderRadius: 10, borderWidth: 1, borderStyle: "dashed", alignItems: "center", justifyContent: "center", paddingHorizontal: 9 },
@@ -2221,9 +2223,9 @@ const styles = StyleSheet.create({
   referenceGoalsScroll: { flexGrow: 0, marginBottom: 2 },
   referenceGoalsScrollContent: { paddingBottom: 2 },
   referenceGoalItem: { minHeight: 44, borderRadius: 10, backgroundColor: "rgba(15,23,42,0.56)", borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", paddingHorizontal: 9, paddingVertical: 6, marginTop: 4 },
-  referenceGoalTopRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  referenceGoalName: { flex: 1, color: "#e2e8f0", fontSize: 11, fontFamily: "Inter_700Bold" },
-  referenceGoalAmounts: { maxWidth: "52%", flexShrink: 1, color: "#94a3b8", fontSize: 9, fontFamily: "Inter_700Bold", textAlign: "right" },
+  referenceGoalTopRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
+  referenceGoalName: { flex: 1, minWidth: 120, color: "#e2e8f0", fontSize: 11, fontFamily: "Inter_700Bold" },
+  referenceGoalAmounts: { width: "100%", flexShrink: 0, color: "#94a3b8", fontSize: 11, fontFamily: "Inter_700Bold" },
   referenceGoalTrack: { height: 4, borderRadius: 999, overflow: "hidden", backgroundColor: "rgba(148,163,184,0.22)", marginTop: 5 },
   referenceGoalFill: { height: "100%", borderRadius: 999, backgroundColor: "#34d399" },
   referenceGoalsEmpty: { minHeight: 74, borderRadius: 14, borderWidth: 1, borderStyle: "dashed", borderColor: "rgba(167,139,250,0.38)", backgroundColor: "rgba(124,58,237,0.10)", alignItems: "center", justifyContent: "center", gap: 7, padding: 12 },
@@ -2233,7 +2235,7 @@ const styles = StyleSheet.create({
   referenceHeroLabel: { color: "#cbd5e1", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.4, textTransform: "uppercase" },
   referenceHeroAmount: { color: "#ffffff", fontSize: 42, lineHeight: 46, fontFamily: "Inter_800ExtraBold", letterSpacing: -2.4, textShadowColor: "transparent", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 0 },
   referenceSafeThrough: { fontSize: 11, fontFamily: "Inter_700Bold", marginTop: 7 },
-  referenceScorePanel: { width: 112, alignItems: "center", justifyContent: "center", paddingVertical: 1 },
+  referenceScorePanel: { width: 112, alignSelf: "center", alignItems: "center", justifyContent: "center", paddingVertical: 1 },
   referenceGaugeWrap: { width: 98, height: 98, alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
   referenceGaugeSvg: { backgroundColor: "transparent" },
   referenceGaugeCenter: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
@@ -2241,8 +2243,8 @@ const styles = StyleSheet.create({
   referenceGaugeLabel: { color: "#cbd5e1", fontSize: 9, fontFamily: "Inter_700Bold" },
   referenceScoreStatus: { color: "#4ade80", fontSize: 12, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
   referenceScoreUnderline: { width: 64, height: 3, borderRadius: 3, backgroundColor: "#22c55e", marginTop: 4, marginBottom: 4 },
-  dashboardSnapshotCard: { minHeight: 134, flexDirection: "row", borderRadius: 24, borderWidth: 1, overflow: "hidden", marginBottom: 12 },
-  dashboardSnapshotItem: { flex: 1, minWidth: 0, paddingVertical: 15, paddingHorizontal: 9, alignItems: "center", justifyContent: "center" },
+  dashboardSnapshotCard: { minHeight: 134, flexDirection: "row", flexWrap: "wrap", borderRadius: 24, borderWidth: 1, overflow: "hidden", marginBottom: 12 },
+  dashboardSnapshotItem: { flex: 1, minWidth: 180, paddingVertical: 15, paddingHorizontal: 9, alignItems: "center", justifyContent: "center" },
   dashboardSnapshotItemBorder: { borderLeftWidth: 1 },
   dashboardSnapshotIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center", marginBottom: 7 },
   dashboardSnapshotLabel: { fontSize: 10, lineHeight: 13, fontFamily: "Inter_700Bold", textAlign: "center" },
@@ -2260,11 +2262,11 @@ const styles = StyleSheet.create({
   dashboardProgressFill: { height: "100%", borderRadius: 999, backgroundColor: "#38bdf8" },
   dashboardCommitmentLabel: { fontSize: 11, lineHeight: 15, fontFamily: "Inter_600SemiBold", marginTop: 6 },
   dashboardPlanBreakdown: { borderTopWidth: 1, marginTop: 15, paddingTop: 11, gap: 9 },
-  dashboardPlanBreakdownRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
-  dashboardPlanBreakdownLabelWrap: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 8 },
+  dashboardPlanBreakdownRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  dashboardPlanBreakdownLabelWrap: { flex: 1, minWidth: 150, flexDirection: "row", alignItems: "center", gap: 8 },
   dashboardProgressDot: { width: 8, height: 8, borderRadius: 4 },
   dashboardProgressLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
-  dashboardPlanBreakdownValue: { maxWidth: "48%", fontSize: 15, lineHeight: 20, letterSpacing: -0.3 },
+  dashboardPlanBreakdownValue: { maxWidth: "100%", minWidth: 155, fontSize: 15, lineHeight: 20, letterSpacing: -0.3 },
   algoScoreRing: { width: 68, height: 68, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.24)", borderWidth: 1, borderColor: "rgba(34,211,238,0.42)" },
   algoScoreValue: { color: "#f8fafc", fontSize: 24, fontFamily: "Inter_800ExtraBold", lineHeight: 27 },
   algoScoreLabel: { color: "#93c5fd", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 1 },

@@ -6173,6 +6173,7 @@ const styles = StyleSheet.create({
 
   incomeRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     paddingVertical: 12,
     gap: 10,
@@ -6184,7 +6185,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  incomeInfo: { flex: 1 },
+  incomeInfo: { flex: 1, minWidth: 140 },
   incomeName: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   incomeFreq: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   incomeHistoryHint: {
@@ -6194,12 +6195,14 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   incomeHistoryHintText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
-  incomeRight: { alignItems: "flex-end", gap: 4 },
+  incomeRight: { minWidth: 155, alignItems: "flex-end", gap: 4 },
   incomeMonthly: { fontSize: 15, fontFamily: "Inter_700Bold" },
   incomeMonthlyUnit: { fontSize: 11, fontFamily: "Inter_400Regular" },
   deleteIcon: { padding: 4 },
   incomeTotal: {
     flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
     justifyContent: "space-between",
     alignItems: "center",
     paddingTop: 10,
@@ -6390,6 +6393,8 @@ const styles = StyleSheet.create({
   accountRightCompact: {
     width: "100%",
     flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
     alignItems: "center",
     justifyContent: "space-between",
   },
