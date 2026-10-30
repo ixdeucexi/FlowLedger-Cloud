@@ -1,0 +1,82 @@
+{
+  "status": "PASS",
+  "checks": 6,
+  "results": [
+    {
+      "width": 390,
+      "status": "PASS",
+      "checks": [
+        "late-mocked-creation-response-stays-private",
+        "edited-creation-fields-stay-private",
+        "creation-form-draft-survives-hide-and-reveal"
+      ],
+      "expectedDraft": "4777.77",
+      "restoredDraft": "4777.77",
+      "mockedFloCalls": 1,
+      "providerCalls": 0,
+      "financialWrites": 0,
+      "surfaces": [
+        {
+          "name": "flo-late-creation-hidden",
+          "inputs": 0,
+          "attributes": 52,
+          "maskedTokens": 17,
+          "startupLeaks": 0
+        },
+        {
+          "name": "flo-edited-creation-hidden",
+          "inputs": 0,
+          "attributes": 52,
+          "maskedTokens": 17,
+          "startupLeaks": 0
+        }
+      ],
+      "errors": [],
+      "unknown": [],
+      "bundles": [
+        {
+          "path": "/_expo/static/js/web/entry-0240763657e575ad48cb96315a93e634.js",
+          "sha256": "e3b5d4350a8f646e5ddb4334e75bc80fcc8c36153fcc0c59262b0c5b11251748"
+        }
+      ]
+    },
+    {
+      "width": 1200,
+      "status": "PASS",
+      "checks": [
+        "late-mocked-creation-response-stays-private",
+        "edited-creation-fields-stay-private",
+        "creation-form-draft-survives-hide-and-reveal"
+      ],
+      "expectedDraft": "4777.77",
+      "restoredDraft": "4777.77",
+      "mockedFloCalls": 1,
+      "providerCalls": 0,
+      "financialWrites": 0,
+      "surfaces": [
+        {
+          "name": "flo-late-creation-hidden",
+          "inputs": 0,
+          "attributes": 22,
+          "maskedTokens": 0,
+          "startupLeaks": 0
+        },
+        {
+          "name": "flo-edited-creation-hidden",
+          "inputs": 0,
+          "attributes": 22,
+          "maskedTokens": 0,
+          "startupLeaks": 0
+        }
+      ],
+      "errors": [],
+      "unknown": [],
+      "bundles": [
+        {
+          "path": "/_expo/static/js/web/entry-0240763657e575ad48cb96315a93e634.js",
+          "sha256": "e3b5d4350a8f646e5ddb4334e75bc80fcc8c36153fcc0c59262b0c5b11251748"
+        }
+      ]
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+import { revealedPrivacyBindings, revealedPrivacyModule } from "./privacyTestHarness";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { settingsSectionOwnsPathname } from "./settingsNavigation";
@@ -37,6 +38,8 @@ function harness(component = "BucketDetailModal", overrides: Record<string, any>
   const props: any = component === "BucketDetailModal" ? { bucketId: "bucket", onClose() {}, onCloseBucket() {}, onReopenBucket() {} } : { visible: true, onClose() {}, onSave: async () => {} };
   const js = transpileModule(readFileSync(`components/${component}.tsx`, "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, jsx: JsxEmit.React, esModuleInterop: true } }).outputText;
   new Function("exports", "require", js)(exported, (name: string) => {
+    const privacyModule = revealedPrivacyModule(name);
+    if (privacyModule) return privacyModule;
     if (name === "react") return hooks;
     if (name === "react-native") return { ...Object.fromEntries(["View", "Text", "Modal", "Pressable", "ScrollView", "TextInput", "KeyboardAvoidingView"].map(value => [value, value])), Platform: { OS: "web" }, Alert: { alert() {} }, StyleSheet: { create: (value: any) => value, hairlineWidth: 1 } };
     if (name === "expo-router") return { useRouter: () => ({ push() {} }) };
@@ -128,11 +131,11 @@ function settingsBucketBack(section = "buckets", initialSection?: string) {
   const end = source.indexOf("  useEffect(() => {", start);
   assert.ok(start >= 0 && end > start);
   const body = transpileModule(source.slice(start, end), { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
-  const bindings = { window, Platform: { OS: "web" }, activeSettingsSection: section, initialSection, settingsRouteActive: true, settingsSectionOwnsPathname,
+  const bindings = revealedPrivacyBindings({ window, Platform: { OS: "web" }, activeSettingsSection: section, initialSection, settingsRouteActive: true, settingsSectionOwnsPathname,
     useRef: (value: any) => ({ current: value }), useCallback: (fn: any) => fn,
     useBackDismiss: (_active: boolean, fn: (event?: { state?: unknown }) => void) => { callback = fn; },
     openSettingsSection: (value: string) => navigated.push(value),
-  };
+  });
   const changed = new Function(...Object.keys(bindings), `${body}; return onBucketOverlayChange;`)(...Object.values(bindings));
   return { changed, navigated, path: (value: string) => { window.location.pathname = value; }, back: (event?: { state?: unknown }) => callback(event), layer: (value: string) => { window.history.state.flowledgerLayer = value; } };
 }
@@ -172,6 +175,8 @@ test("existing Back listeners receive an optional event without changing no-argu
   const window = { history: { state: {}, pushState() {} }, location: { href: "https://example.test" }, addEventListener(_type: string, callback: any) { onPop = callback; }, removeEventListener() {} };
   const source = transpileModule(readFileSync("hooks/useBackDismiss.ts", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
   new Function("exports", "require", "window", source)(exported, (name: string) => {
+    const privacyModule = revealedPrivacyModule(name);
+    if (privacyModule) return privacyModule;
     if (name === "react") return { useRef: (value: any) => ({ current: value }), useEffect: (fn: () => void) => effects.push(fn) };
     if (name === "react-native") return { Platform: { OS: "web" } };
     if (name.endsWith("useOverlayActivity")) return { useOverlayActivity() {} };

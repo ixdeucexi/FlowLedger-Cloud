@@ -1,3 +1,4 @@
+import { revealedPrivacyBindings } from "./privacyTestHarness";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
@@ -66,6 +67,7 @@ test("recurring imports require the schedule facts needed by the canonical occur
 });
 
 function importHandler(bindings: Record<string, unknown>) {
+  bindings = revealedPrivacyBindings(bindings);
   const source = readFileSync("app/(tabs)/more.tsx", "utf8"), start = source.indexOf("  const handleImport =");
   const body = source.slice(start, source.indexOf("  const readPickedFile =", start));
   return new Function(...Object.keys(bindings), `${transpileModule(body, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText}; return handleImport;`)(...Object.values(bindings));

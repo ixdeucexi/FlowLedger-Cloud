@@ -12,7 +12,7 @@ import { useMembership } from "@/context/MembershipContext";
 import { useBudget } from "@/context/BudgetContext";
 import { BasicFlo } from "@/components/BasicFlo";
 import { FloCreationForm } from "@/components/FloCreationForm";
-import { FLO_FORM_TITLES } from "@/lib/floCreationForm";
+import { FLO_FORM_TITLES, type FloFormDraft } from "@/lib/floCreationForm";
 import { FloCreationCard } from "@/components/FloCreationCard";
 import { FloSafetyStopModal } from "@/components/FloSafetyStopModal";
 import { buildBucketSafetyStop, type SafetyStopWarning } from "@/lib/safetyStop";
@@ -132,7 +132,7 @@ export default function FloScreen() {
   const [sourcesByMessageId, setSourcesByMessageId] = useState<Record<string, FloSource[]>>({});
   const [followUpsByMessageId, setFollowUpsByMessageId] = useState<Record<string, string[]>>({});
   const [proposalByMessageId, setProposalByMessageId] = useState<Record<string, FloReviewProposal | null>>({});
-  const [creationFormSession, setCreationFormSession] = useState<{ id: string; revision: number; owner: string; conversationId: string | null; creation: FloCreationResult; open: boolean } | null>(null);
+  const [creationFormSession, setCreationFormSession] = useState<{ id: string; revision: number; owner: string; conversationId: string | null; creation: FloCreationResult; open: boolean; draft?: FloFormDraft } | null>(null);
   const formFeedbackRevisionRef = useRef(0);
   const [creationFormBusy, setCreationFormBusy] = useState(false);
   const creationFormRef = useRef(creationFormSession);
@@ -808,6 +808,14 @@ export default function FloScreen() {
     ])).slice(0, 4);
   }, [params.entityType]);
 
+  const retainCreationFormDraft = (id: string, revision: number, draft: FloFormDraft) => {
+    const session = creationFormRef.current;
+    if (!session || session.id !== id || session.revision !== revision || session.owner !== creationOwnerKeyRef.current || session.conversationId !== activeConversationIdRef.current) return;
+    const next = { ...session, draft };
+    creationFormRef.current = next;
+    setCreationFormSession(previous => previous?.id === id && previous.revision === revision && previous.owner === session.owner && previous.conversationId === session.conversationId ? { ...previous, draft } : previous);
+  };
+
   const closeCreationForm = (id: string) => {
     const session = creationFormRef.current;
     if (!session || session.id !== id || session.owner !== creationOwnerKeyRef.current || session.conversationId !== activeConversationIdRef.current || formSubmitRef.current || activeRequestRef.current !== null || (creationOperationRef.current?.submitted && !creationOperationRef.current.settled)) return;
@@ -1452,7 +1460,7 @@ export default function FloScreen() {
         ))}
       </ScrollView>
 
-      {creationFormSession && creationFormSession.owner === creationOwnerKey ? <FloCreationForm key={`${creationFormSession.owner}:${creationFormSession.id}:${creationFormSession.revision}`} creation={creationFormSession.creation} visible={creationFormSession.open} suspended={Boolean(creationSafety)} busy={creationFormBusy || creationSaving || historyBusy} error={chatError} accounts={accounts} onClose={() => closeCreationForm(creationFormSession.id)} onBackFromSafety={() => creationSafety?.cancel()} onSave={value => submitCreationForm(creationFormSession.id, value)} /> : null}
+      {creationFormSession && creationFormSession.owner === creationOwnerKey ? <FloCreationForm key={`${creationFormSession.owner}:${creationFormSession.id}:${creationFormSession.revision}`} creation={creationFormSession.creation} initialDraft={creationFormSession.draft} onDraftChange={draft => retainCreationFormDraft(creationFormSession.id, creationFormSession.revision, draft)} visible={creationFormSession.open} suspended={Boolean(creationSafety)} busy={creationFormBusy || creationSaving || historyBusy} error={chatError} accounts={accounts} onClose={() => closeCreationForm(creationFormSession.id)} onBackFromSafety={() => creationSafety?.cancel()} onSave={value => submitCreationForm(creationFormSession.id, value)} /> : null}
 
       <FloSafetyStopModal manageBackHistory={!creationFormSession?.open} visible={Boolean(creationSafety)} warning={creationSafety?.warning ?? null} onKeepEditing={() => creationSafety?.cancel()} onScheduleAnyway={() => creationSafety?.proceed()} />
 

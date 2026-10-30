@@ -1,3 +1,4 @@
+import { revealedPrivacyBindings, revealedPrivacyModule } from "./privacyTestHarness";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
@@ -6,6 +7,7 @@ import { parseMoneyInput } from "./moneyFormInput";
 import { monthlyIncomeAnchorDate } from "./schedule";
 
 function evaluateDeclarations(file: string, startToken: string, endToken: string, bindings: Record<string, unknown>, result: string) {
+  bindings = revealedPrivacyBindings(bindings);
   const source = readFileSync(file, "utf8"), start = source.indexOf(startToken);
   assert.ok(start >= 0);
   const body = source.slice(start, source.indexOf(endToken, start));
@@ -27,14 +29,14 @@ test("income's actual save handler visibly reports missing payday and persistenc
     let saves = 0, closed = 0, saving = false; const errors: string[] = [];
     const source = readFileSync("components/IncomeModal.tsx", "utf8"), start = source.indexOf("  const handleSave =");
     const body = source.slice(start, source.indexOf("  const handleAddUpdate =", start));
-    const bindings = {
+    const bindings = revealedPrivacyBindings({
       saving: false, amount: "1,200.50", parseMoneyInput, name: "Income", firstPayDate: payday,
       showFormError: (title: string) => errors.push(title),
       Haptics: { impactAsync() {}, ImpactFeedbackStyle: { Medium: "medium" } },
       history: [], frequency: "monthly", monthlyLastDay: false, monthlyIncomeAnchorDate, editItem: null,
       setSaving: (value: boolean) => { saving = value; }, onClose: () => closed++,
       onSave: async () => { saves++; throw new Error("Offline"); },
-    };
+    });
     const js = transpileModule(body, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
     const save = new Function(...Object.keys(bindings), `${js}; return handleSave;`)(...Object.values(bindings));
     await save(); assert.equal(saves, payday ? 1 : 0); assert.equal(closed, 0); assert.equal(saving, false);
@@ -61,6 +63,8 @@ test("the actual snowball editor stays available through clear, invalid draft an
   const components = Object.fromEntries(["Modal", "Pressable", "ScrollView", "Text", "TextInput", "View"].map(name => [name, name]));
   const js = transpileModule(readFileSync("components/SnowballPreviewModal.tsx", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, jsx: JsxEmit.React, esModuleInterop: true } }).outputText;
   new Function("exports", "require", js)(exported, (name: string) => {
+    const privacyModule = revealedPrivacyModule(name);
+    if (privacyModule) return privacyModule;
     if (name === "react") return { __esModule: true, default: react, useState: (value: unknown) => [value, () => {}], useEffect() {} };
     if (name === "react-native") return { ...components, StyleSheet: { create: (styles: unknown) => styles } };
     if (name.endsWith("moneyFormInput")) return { parseMoneyInput };

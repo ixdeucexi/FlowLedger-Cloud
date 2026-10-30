@@ -1,3 +1,4 @@
+import { revealedPrivacyBindings } from "./privacyTestHarness";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
@@ -33,6 +34,7 @@ test("manual choices retain canonical same-month and eligibility exclusions", ()
 });
 const source = () => readFileSync("app/(tabs)/transactions.tsx", "utf8");
 function extract(start: string, end: string, bindings: Record<string, unknown>) {
+  bindings = revealedPrivacyBindings(bindings);
   const s = source(); const a = s.indexOf(`  const ${start} =`); const b = s.indexOf(`  const ${end} =`, a);
   return new Function(...Object.keys(bindings), `${transpileModule(s.slice(a,b), { compilerOptions: { module: ModuleKind.CommonJS } }).outputText}; return ${start};`)(...Object.values(bindings));
 }
@@ -99,14 +101,14 @@ function renderSuggestion(suggestion: ReturnType<typeof strongestPendingMatch>, 
   const end = s.indexOf("What does this payment cover?", start);
   const expression = s.slice(start + 1, s.lastIndexOf(") : null}", end) + ") : null".length);
   const calls: unknown[][] = [];
-  const bindings = {
+  const bindings = revealedPrivacyBindings({
     React: { createElement: (type: unknown, props: unknown, ...children: unknown[]) => ({ type, props, children }) },
     Pressable: "button", View: "view", Text: "text", Feather: "icon",
     pendingMatchSuggestion: suggestion, pendingMatchKindLabels: { bill: "Bill", debt: "Debt", manual: "Manual transaction" },
     savingMatch, styles: {}, c: {},
     handleMatchPendingManual: (id: string) => calls.push(["manual", id]),
     handleMatchPendingBill: (id: string) => calls.push(["bill", id]),
-  };
+  });
   const js = transpileModule(`const result = (${expression});`, {
     fileName: "suggestion.tsx", compilerOptions: { module: ModuleKind.CommonJS, jsx: JsxEmit.React },
   }).outputText;

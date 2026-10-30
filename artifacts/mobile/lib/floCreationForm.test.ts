@@ -6,10 +6,13 @@ import {
   FLO_FORM_FIELDS,
   FLO_FORM_TITLES,
   floFormInitialValues,
+  floFormInitialDraft,
   floFormAccounts,
   validateFloForm,
   type FloFormValues,
+  type FloFormDraft,
 } from "./floCreationForm";
+import { revealedPrivacyModule } from "./privacyTestHarness";
 import {
   FLO_CREATION_FORM_FIELDS,
   type FloCreationKind,
@@ -191,6 +194,7 @@ function componentHarness(
   kind: FloCreationKind,
   initial = values[kind],
   platform = "web",
+  retained?: { initialDraft?: FloFormDraft; onDraftChange?: (draft: FloFormDraft) => void },
 ) {
   const state: any[] = [],
     refs: any[] = [],
@@ -226,6 +230,7 @@ function componentHarness(
       if (events.held) await events.held;
       if (events.fail) throw new Error("Fictional network error");
     },
+    ...retained,
   };
   const React = {
     createElement: (type: any, p: any, ...children: any[]) => {
@@ -248,7 +253,7 @@ function componentHarness(
     },
   }).outputText;
   const requireMock = (name: string) =>
-    name === "react"
+    revealedPrivacyModule(name) ?? (name === "react"
       ? {
           __esModule: true,
           default: React,
@@ -291,6 +296,7 @@ function componentHarness(
                 ? {
                     floFormAccounts,
                     floFormInitialValues,
+                    floFormInitialDraft,
                     FLO_FORM_FIELDS,
                     FLO_FORM_TITLES,
                     validateFloForm,
@@ -305,7 +311,7 @@ function componentHarness(
                         return { dispose() {} };
                       },
                     }
-                  : {};
+                  : {});
   new Function(
     "exports",
     "require",
@@ -345,6 +351,106 @@ const text = (node: any): string =>
       : typeof node === "string"
         ? node
         : "";
+
+function draftOwnerHarness() {
+  const source = readFileSync("app/(tabs)/flo.tsx", "utf8");
+  const start = source.indexOf("  const retainCreationFormDraft =");
+  const end = source.indexOf("  const closeCreationForm =", start);
+  assert.ok(start > 0 && end > start);
+  const session: any = {
+    id: "command-a", revision: 1, owner: "actor:home:budget:epoch0",
+    conversationId: "conversation-a", open: true,
+  };
+  const bindings: Record<string, any> = {
+    creationFormRef: { current: session },
+    creationOwnerKeyRef: { current: session.owner },
+    activeConversationIdRef: { current: session.conversationId },
+    setCreationFormSession: (update: any) => {
+      bindings.creationFormRef.current = update(bindings.creationFormRef.current);
+    },
+  };
+  const code = transpileModule(source.slice(start, end), {
+    compilerOptions: { module: ModuleKind.CommonJS },
+  }).outputText;
+  const retain = new Function(...Object.keys(bindings), `${code};return retainCreationFormDraft;`)(...Object.values(bindings));
+  return { bindings, session, retain };
+}
+
+test("private Flo removes every form field while all six actual creation drafts survive unmount and reveal", async () => {
+  const source = readFileSync("app/(tabs)/flo.tsx", "utf8");
+  const start = source.indexOf("  if (moneyPrivacy.hidden) {");
+  const end = source.indexOf("  if (floAccessLocked)", start);
+  const hiddenCode = transpileModule(source.slice(start, end), {
+    compilerOptions: { module: ModuleKind.CommonJS, jsx: JsxEmit.React },
+  }).outputText;
+  const privateScreen = new Function("moneyPrivacy", "React", "View", "Text", "PremiumBackdrop", "FloLogo", "MoneyPrivacyToggle", "styles", "colors", hiddenCode);
+  const React = { createElement: (type: any, props: any, ...children: any[]) => ({ type, props: { ...props, children } }) };
+  for (const kind of Object.keys(values) as FloCreationKind[]) {
+    const owner = draftOwnerHarness();
+    const onDraftChange = (draft: FloFormDraft) => owner.retain("command-a", 1, draft);
+    const h = componentHarness(kind, values[kind], "web", { onDraftChange });
+    let tree = h.render();
+    const field = (label: string) => flatten(tree).find(node => node.props?.accessibilityLabel === label);
+    for (const definition of FLO_FORM_FIELDS[kind]) {
+      if (["text", "money", "apr"].includes(definition.type)) {
+        field(definition.label).props.onChangeText(definition.type === "money" ? "4777.77" : definition.type === "apr" ? "12.3456" : "Edited draft");
+      } else if (definition.type === "date") {
+        field(`Type ${definition.label.toLowerCase()}`).props.onPress();
+        tree = h.render();
+        field(definition.label).props.onChangeText("2027-02-28");
+      } else if (definition.type === "frequency") {
+        field("Monthly").props.onPress();
+      } else if (definition.type === "direction") {
+        field("Money in").props.onPress();
+      } else if (definition.type === "account") {
+        field(`${account.name}, checking`).props.onPress();
+        field("Search accounts").props.onChangeText("Fictional");
+      }
+      tree = h.render();
+    }
+    if (kind === "create_income") field("Paid on the last day of each month").props.onPress();
+    if (kind === "create_bill") field("One time").props.onPress();
+    // The latest event is retained synchronously, before another local render.
+    const retained: FloFormDraft = owner.bindings.creationFormRef.current.draft;
+    assert.ok(retained);
+    assert.equal(h.events.saves.length, 0);
+    const privateTree = privateScreen({ hidden: true }, React, "View", "Text", "PremiumBackdrop", "FloLogo", "MoneyPrivacyToggle", {}, {});
+    assert.match(text(privateTree), /Flo conversations are hidden/);
+    assert.equal(flatten(privateTree).some(node => node.type === "TextInput" || "value" in (node.props ?? {})), false);
+    assert.doesNotMatch(text(privateTree), /4777|Edited draft|Fictional/);
+    const revealed = componentHarness(kind, values[kind], "web", { initialDraft: retained, onDraftChange });
+    const revealedTree = revealed.render();
+    for (const definition of FLO_FORM_FIELDS[kind]) {
+      if (["text", "money", "apr", "date"].includes(definition.type)) {
+        assert.equal(flatten(revealedTree).find(node => node.props?.accessibilityLabel === definition.label)?.props.value, retained.values[definition.key], `${kind}:${definition.key}`);
+      }
+    }
+    if (kind === "create_manual_transaction") {
+      assert.equal(flatten(revealedTree).find(node => node.props?.accessibilityLabel === "Search accounts")?.props.value, "Fictional");
+      assert.equal(flatten(revealedTree).find(node => node.props?.accessibilityLabel === `${account.name}, checking`)?.props["aria-checked"], true);
+    }
+    if (kind === "create_income") assert.equal(flatten(revealedTree).find(node => node.props?.accessibilityRole === "checkbox")?.props["aria-checked"], true);
+    if (kind === "create_bill") assert.equal(flatten(revealedTree).find(node => node.props?.accessibilityLabel === "One time")?.props["aria-checked"], true);
+    assert.equal(revealed.events.saves.length, 0, "reveal never saves or asks Flo");
+    await flatten(revealedTree).find(node => node.props?.accessibilityLabel === `Save ${FLO_FORM_TITLES[kind]}`)?.props.onPress();
+    assert.deepEqual(revealed.events.saves, [validateFloForm(kind, retained.values, [account]).input]);
+  }
+});
+
+test("retained form drafts reject a different command, feedback revision, conversation, owner epoch and explicit reset", () => {
+  const draft = floFormInitialDraft({ status: "needs_details", kind: "create_income", prompt: "Details", missingFields: [], form: { values: { amount: "4777.77" }, errors: {} } });
+  for (const drift of ["command", "revision", "conversation", "scope", "aba", "reset"]) {
+    const h = draftOwnerHarness();
+    if (drift === "command") h.bindings.creationFormRef.current = { ...h.session, id: "command-b" };
+    if (drift === "revision") h.bindings.creationFormRef.current = { ...h.session, revision: 2 };
+    if (drift === "conversation") h.bindings.activeConversationIdRef.current = "conversation-b";
+    if (drift === "scope") h.bindings.creationOwnerKeyRef.current = "actor:other-home:budget:epoch1";
+    if (drift === "aba") h.bindings.creationOwnerKeyRef.current = "actor:home:budget:epoch2";
+    if (drift === "reset") h.bindings.creationFormRef.current = null;
+    h.retain("command-a", 1, draft);
+    assert.equal(h.bindings.creationFormRef.current?.draft, undefined, drift);
+  }
+});
 
 test("opening/closing a populated form never saves; double Save uses one guarded explicit callback", async () => {
   const h = componentHarness("create_income");

@@ -1,3 +1,4 @@
+import { revealedPrivacyBindings, revealedPrivacyModule } from "./privacyTestHarness";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
@@ -12,7 +13,7 @@ function settingsHandlers() {
   const state = { calls: 0, haptics: 0, busy: false, newCategory: "New category", renaming: "Old" as string | null, errors: [] as string[], confirmation: null as any };
   const categoryDraftRef = { current: { renamingCategory: "Old", renameValue: "Renamed" } };
   const mutate = () => { state.calls++; return pending; };
-  const bindings = {
+  const bindings = revealedPrivacyBindings({
     Haptics: { impactAsync: () => { state.haptics++; }, ImpactFeedbackStyle: {} },
     deleteIncome: mutate, deleteCategory: mutate, addCategory: mutate, updateCategory: mutate,
     confirmAction: (options: any) => { state.confirmation = options; },
@@ -22,7 +23,7 @@ function settingsHandlers() {
     setNewCategory: (next: (current: string) => string) => { state.newCategory = next(state.newCategory); },
     setRenamingCategory: (next: string | null) => { state.renaming = next; },
     showFormError: (title: string) => { state.errors.push(title); },
-  };
+  });
   const source = readFileSync("app/(tabs)/more.tsx", "utf8");
   const body = source.slice(source.indexOf("  const handleDeleteIncome ="), source.indexOf("  const openAccount ="));
   const handlers = new Function(...Object.keys(bindings), `${transpileModule(body, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText}; return { handleDeleteIncome, handleAddCategory, handleRenameCategory, handleDeleteCategory };`)(...Object.values(bindings));
@@ -85,6 +86,8 @@ function incomeModal(clock: string, editItem?: any) {
   const FixedDate = new Proxy(Date, { construct(target, args) { return Reflect.construct(target, args.length ? args : [clock]); } });
   const source = transpileModule(readFileSync("components/IncomeModal.tsx", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, jsx: JsxEmit.React, esModuleInterop: true } }).outputText;
   new Function("exports", "require", "Date", source)(exports, (name: string) => {
+    const privacyModule = revealedPrivacyModule(name);
+    if (privacyModule) return privacyModule;
     if (name === "react") return hooks;
     if (name === "react-native") return { ...Object.fromEntries(["Modal", "Pressable", "ScrollView", "Text", "TextInput", "View", "KeyboardAvoidingView"].map(key => [key, key])), Platform: { OS: "web" }, StyleSheet: { create: (style: any) => style } };
     if (name.endsWith("/schedule")) return schedule;

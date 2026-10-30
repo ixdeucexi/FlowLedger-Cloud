@@ -1,3 +1,4 @@
+import { revealedPrivacyBindings, revealedPrivacyModule } from "./privacyTestHarness";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
@@ -14,7 +15,7 @@ function harness(options: { platform?: string; content?: string; pick?: () => Pr
   const source = readFileSync("app/(tabs)/more.tsx", "utf8"), start = source.indexOf("  const readPickedFile =");
   const body = source.slice(start, source.indexOf("  const handleResetFlo =", start));
   const read = async () => { state.reads++; options.afterRead?.(); return options.content ?? csv; };
-  const bindings = {
+  const bindings = revealedPrivacyBindings({
     statementImportScopeRef: scope, statementImportDraftScopeRef: draft, statementImportAccountsRef: accountRef,
     statementImportMountedRef: mounted, statementImportInFlightRef: inFlight,
     setStatementImportOpen: (value: boolean) => { state.open = value; }, setStatementImportBusy: (value: boolean) => { state.busy = value; }, setStatementImportFeedback: (value: any) => { state.feedback = value; },
@@ -22,7 +23,7 @@ function harness(options: { platform?: string; content?: string; pick?: () => Pr
     Platform: { OS: options.platform ?? "web" }, fetch: async () => ({ ok: options.httpOk !== false, text: read }), FileSystem: { readAsStringAsync: read },
     parseStatementCsv: (content: string, id: string) => { const rows = parseStatementCsv(content, id); options.afterParse?.(); return rows; },
     importStatementTransactions: async (accountId: string, rows: unknown[]) => { state.saves.push({ accountId, rows }); return options.persist ? options.persist() : { imported: rows.length, duplicates: 0 }; },
-  };
+  });
   const js = transpileModule(body, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
   const handlers = new Function(...Object.keys(bindings), `${js}; return { handleStatementImport, importStatementFor, cancelStatementImport };`)(...Object.values(bindings));
   return { ...handlers, state, scope, accountRef, mounted, draft, inFlight };
@@ -109,7 +110,7 @@ function panelHarness() {
   const hooks = { __esModule: true, default: react, useState: (initial: any) => { const i = cursor++; if (!(i in state)) state[i] = initial; return [state[i], (value: any) => { state[i] = value; }]; }, useMemo: (fn: () => any) => { cursor++; return fn(); }, useEffect() {} };
   const props: any = { open: true, canEdit: true, busy: false, accounts: [...accounts, { ...accounts[0], id: "inactive", name: "Hidden inactive", is_active: false }], feedback: null, onSelect() {}, onCancel() {} };
   const js = transpileModule(readFileSync("components/StatementImportPanel.tsx", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, jsx: JsxEmit.React, esModuleInterop: true } }).outputText;
-  new Function("exports", "require", js)(exported, (name: string) => name === "react" ? hooks : name === "react-native" ? { ...Object.fromEntries(["View", "Text", "Pressable", "ScrollView", "TextInput"].map(value => [value, value])), StyleSheet: { create: (value: any) => value } } : name.endsWith("useColors") ? { useColors: () => new Proxy({}, { get: () => "#000000" }) } : {});
+  new Function("exports", "require", js)(exported, (name: string) => revealedPrivacyModule(name) ?? (name === "react" ? hooks : name === "react-native" ? { ...Object.fromEntries(["View", "Text", "Pressable", "ScrollView", "TextInput"].map(value => [value, value])), StyleSheet: { create: (value: any) => value } } : name.endsWith("useColors") ? { useColors: () => new Proxy({}, { get: () => "#000000" }) } : {}));
   return { props, render: () => { cursor = 0; return exported.StatementImportPanel(props); } };
 }
 

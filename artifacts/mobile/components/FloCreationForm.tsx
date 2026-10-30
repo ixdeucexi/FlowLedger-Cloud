@@ -15,12 +15,12 @@ import {
 import { createSimulatorEditorHistory as createFormHistory } from "@/lib/simulatorEditorHistory";
 import {
   floFormAccounts,
-  floFormInitialValues,
+  floFormInitialDraft,
   FLO_FORM_FIELDS,
   FLO_FORM_TITLES,
   validateFloForm,
   type FloFormAccount,
-  type FloFormValues,
+  type FloFormDraft,
 } from "@/lib/floCreationForm";
 import type {
   FloCreationFormInput,
@@ -34,6 +34,8 @@ type Props = {
   busy?: boolean;
   error?: string | null;
   accounts: readonly FloFormAccount[];
+  initialDraft?: FloFormDraft;
+  onDraftChange?: (draft: FloFormDraft) => void;
   onClose: () => void;
   onBackFromSafety: () => void;
   onSave: (input: FloCreationFormInput) => Promise<void>;
@@ -46,6 +48,8 @@ export function FloCreationForm({
   busy = false,
   error,
   accounts,
+  initialDraft,
+  onDraftChange,
   onClose,
   onBackFromSafety,
   onSave,
@@ -53,25 +57,21 @@ export function FloCreationForm({
   const c = useColors(),
     desktop = useDesktopExperience(),
     insets = useSafeAreaInsets();
-  const [values, setValues] = useState<FloFormValues>(() =>
-    floFormInitialValues(creation),
+  const [draft, setDraft] = useState<FloFormDraft>(() =>
+    initialDraft ?? floFormInitialDraft(creation),
   );
-  const [errors, setErrors] = useState<Record<string, string>>(
-    creation.form?.errors ?? {},
-  );
+  const { values, errors, errorSummary, saveError, typedDates, accountSearch } = draft;
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  // Publish in the interaction itself: hiding before an effect runs must retain
+  // the latest edit even though Privacy Mode removes this form from the tree.
+  const updateDraft = (changes: Partial<FloFormDraft>) => {
+    const next = { ...draftRef.current, ...changes };
+    draftRef.current = next;
+    setDraft(next);
+    onDraftChange?.(next);
+  };
   const [saving, setSaving] = useState(false);
-  const [errorSummary, setErrorSummary] = useState<string | null>(() => {
-    const first = Object.keys(creation.form?.errors ?? {})[0];
-    const field = creation.kind
-      ? FLO_FORM_FIELDS[creation.kind].find((item) => item.key === first)
-      : undefined;
-    return first
-      ? `${field?.label ?? "Details"}: ${creation.form?.errors[first]}`
-      : null;
-  });
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [typedDates, setTypedDates] = useState<Record<string, boolean>>({});
-  const [accountSearch, setAccountSearch] = useState("");
   const [historyRevision, setHistoryRevision] = useState(0);
   const savingRef = useRef(false),
     mountedRef = useRef(true);
@@ -152,14 +152,14 @@ export function FloCreationForm({
   const title = FLO_FORM_TITLES[kind];
   const update = (key: string, value: string | boolean) => {
     if (disabled || savingRef.current) return;
-    setValues((previous) => ({ ...previous, [key]: value }));
-    setErrors((previous) => {
-      const next = { ...previous };
-      delete next[key];
-      return next;
+    const nextErrors = { ...draftRef.current.errors };
+    delete nextErrors[key];
+    updateDraft({
+      values: { ...draftRef.current.values, [key]: value },
+      errors: nextErrors,
+      saveError: null,
+      errorSummary: null,
     });
-    setSaveError(null);
-    setErrorSummary(null);
   };
   const requestClose = () => {
     if (!disabled && !savingRef.current) onClose();
@@ -167,17 +167,13 @@ export function FloCreationForm({
   const save = async () => {
     if (disabled || savingRef.current) return;
     const checked = validateFloForm(kind, values, accounts);
-    setErrors(checked.errors);
-    setSaveError(null);
-    setErrorSummary(null);
+    updateDraft({ errors: checked.errors, saveError: null, errorSummary: null });
     const firstError = Object.keys(checked.errors)[0];
     if (firstError) {
       const field = FLO_FORM_FIELDS[kind].find(
         (item) => item.key === firstError,
       );
-      setErrorSummary(
-        `${field?.label ?? "Details"}: ${checked.errors[firstError]}`,
-      );
+      updateDraft({ errorSummary: `${field?.label ?? "Details"}: ${checked.errors[firstError]}` });
       scrollRef.current?.scrollTo({
         y: Math.max(0, (fieldYRef.current[firstError] ?? 0) - 12),
         animated: true,
@@ -187,7 +183,7 @@ export function FloCreationForm({
           (field) => field.key === firstError && field.type === "date",
         )
       )
-        setTypedDates((previous) => ({ ...previous, [firstError]: true }));
+        updateDraft({ typedDates: { ...draftRef.current.typedDates, [firstError]: true } });
       requestAnimationFrame(() => inputsRef.current[firstError]?.focus());
       return;
     }
@@ -197,11 +193,9 @@ export function FloCreationForm({
       await onSave(checked.input);
     } catch (cause) {
       if (mountedRef.current)
-        setSaveError(
-          cause instanceof Error
+        updateDraft({ saveError: cause instanceof Error
             ? cause.message
-            : "Could not save. Please try again.",
-        );
+            : "Could not save. Please try again." });
     } finally {
       savingRef.current = false;
       if (mountedRef.current) setSaving(false);
@@ -405,10 +399,10 @@ export function FloCreationForm({
                         accessibilityLabel={`${typedDates[field.key] ? "Pick" : "Type"} ${field.label.toLowerCase()}`}
                         disabled={disabled}
                         onPress={() => {
-                          setTypedDates((previous) => ({
-                            ...previous,
-                            [field.key]: !previous[field.key],
-                          }));
+                          updateDraft({ typedDates: {
+                            ...draftRef.current.typedDates,
+                            [field.key]: !draftRef.current.typedDates[field.key],
+                          } });
                         }}
                         style={styles.dateMode}
                       >
@@ -439,7 +433,7 @@ export function FloCreationForm({
                             accessibilityLabel="Search accounts"
                             editable={!disabled}
                             value={accountSearch}
-                            onChangeText={setAccountSearch}
+                            onChangeText={(accountSearch) => updateDraft({ accountSearch })}
                             placeholder="Search accounts"
                             placeholderTextColor={c.mutedForeground}
                             style={[

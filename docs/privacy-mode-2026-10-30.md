@@ -1,0 +1,17 @@
+# App-wide money Privacy Mode
+
+Status: verified candidate; production release pending.
+
+Privacy Mode adds an eye control on Dashboard, an Appearance setting, a desktop sidebar control, and an always-available Show amounts bar while hidden. It conceals monetary text and accessibility labels across mobile/desktop screens, charts, search, notifications, dialogs and forms without changing stored numbers, calculations or action payloads. Dates, counts, Flow Score and APR remain readable. Money fields become explicit Show to edit controls while hidden. Flo conversations and drafts stay out of view; showing them does not send a question or perform a creation.
+
+A dedicated device-local preference is scoped to user/household with a settled personal-plan fallback. Initial loading, read failure and scope changes remain masked. Hydration waits for pending scoped preference writes and retains failed hide intent, including A-to-B-to-A returns. Save/load failures expose retry. Existing household membership shielding and biometric/auth barriers are separate and unchanged. Explicit presentation primitives replace financial UI imports; no React Native, Intl or DOM runtime monkeypatch is used. Currency grammar covers actual localized Intl outputs, nested/adjacent currency fragments, currency-word labels and numeric financial searches.
+
+Final browser tests found and fixed an unfinished Flo creation form resetting on private hide/reveal. The complete form snapshot now stays in the existing owner/conversation/command/revision-bound session and restores after remount. Old scope/command callbacks cannot overwrite it; explicit reset/new command clears it. Validation, review and canonical financial creation paths are unchanged.
+
+Verification: independent source reviews passed, including a 148-case locale/date/count matrix. Twelve focused masking/storage tests and a 105-test focused Flo/privacy/affected-handler run passed; strict test compilation and integrated mobile typecheck passed. Broad API/Edge/release tests passed (217/563/37). After adapting VM-only tests to the new revealed-mode presentation primitives, all 1,430 compiled mobile tests and five performance tests passed. No assertions or actual persistence-handler checks were removed. Fresh web export and artifact checks passed; no dependency/schema/environment changes are included.
+
+All 80 final browser checks passed across 390/1,200-pixel layouts and 86 recorded money/accessibility surfaces: 19 routes per layout, monetary forms, search, notifications, calendar details, Flo/history and retained creation drafts, startup masking, household choices, persistence and errors. Actual loaded entry: `entry-0240763657e575ad48cb96315a93e634.js`, SHA-256 `e3b5d4350a8f646e5ddb4334e75bc80fcc8c36153fcc0c59262b0c5b11251748`. Screenshots were reviewed. All auth/API/financial requests were intercepted with fictional records; no app errors, unknown requests, financial writes or real AI-provider calls occurred. Two explicit mocked Flo sends exercised creation responses. Browser contexts were closed. Native hardware execution is not claimed by browser viewport tests.
+
+Rollback: `rollback/prod-before-privacy-mode-20261030-0532`, remotely verified annotated tag at `f0790d3b3452b55e73186bc5a8fcd79b7c00c267`, exact prior READY deployment `dpl_AuCv4TBT8P5VX1mQUBV62DKBXXtM`. Marketing assets and later isolated features remain outside release source.
+
+Evidence: `release-snapshots/privacy-mode-20261030/`.

@@ -1,3 +1,4 @@
+import { revealedPrivacyBindings } from "./privacyTestHarness";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
@@ -5,6 +6,7 @@ import { transpileModule, ModuleKind } from "typescript";
 import { parseMoneyInput, parseDecimalInput } from "./moneyFormInput";
 
 function handler(file: string, start: string, end: string, bindings: Record<string, unknown>) {
+  bindings = revealedPrivacyBindings(bindings);
   const source = readFileSync(file, "utf8");
   const body = source.slice(source.indexOf(`  const ${start} =`), source.indexOf(`  const ${end} =`, source.indexOf(`  const ${start} =`)));
   return new Function(...Object.keys(bindings), `${transpileModule(body, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText}; return ${start};`)(...Object.values(bindings));

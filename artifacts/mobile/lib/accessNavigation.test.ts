@@ -1,3 +1,4 @@
+import { revealedPrivacyBindings, revealedPrivacyModule } from "./privacyTestHarness";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
@@ -52,6 +53,8 @@ function reviewHarness(goals: any[] = [open, closed, archived], canEdit = true) 
   const modules: Record<string, any> = { transactionNames, reviewCenter: reviewTools, matchTargetFilters: targetFilters, spendingBuckets: bucketTools, pendingPlanMatches: pendingTools, billMatching, billMatchCandidates: candidateTools, competitiveGrowth: competitiveTools, billSurplusRouting: surplusRouting, snowballFunding, forecastDisplay };
   const js = transpileModule(readFileSync("components/ReviewCenter.tsx", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, jsx: JsxEmit.React, esModuleInterop: true } }).outputText;
   new Function("exports", "require", js)(exported, (name: string) => {
+    const privacyModule = revealedPrivacyModule(name);
+    if (privacyModule) return privacyModule;
     if (name === "react") return hooks;
     if (name === "react-native") return { ...Object.fromEntries(["View", "Text", "Pressable", "Modal", "ScrollView"].map(value => [value, value])), Alert: { alert() {} }, StyleSheet: { create: (value: any) => value, hairlineWidth: 1 } };
     const leaf = name.split("/").at(-1)!;
@@ -160,7 +163,7 @@ test("Goal editor close requests return to the bucket list with the existing sco
   const source = readFileSync("components/GoalModal.tsx", "utf8"), start = source.indexOf("  const openCloseBucket =");
   const body = source.slice(start, source.indexOf("  const [name", start));
   const routes: unknown[] = []; let closes = 0;
-  const bindings = { SPENDING_BUCKETS_ROUTE, canCloseBucket: true, savingRef: { current: false }, closeNavigationRef: { current: false }, onClose: () => closes++, router: { push: (route: unknown) => routes.push(route) }, currentBucket: { id: "bucket" }, user: { id: "user" }, activeHousehold: { householdId: "home" } };
+  const bindings = revealedPrivacyBindings({ SPENDING_BUCKETS_ROUTE, canCloseBucket: true, savingRef: { current: false }, closeNavigationRef: { current: false }, onClose: () => closes++, router: { push: (route: unknown) => routes.push(route) }, currentBucket: { id: "bucket" }, user: { id: "user" }, activeHousehold: { householdId: "home" } });
   const fn = new Function(...Object.keys(bindings), `${transpileModule(body, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText}; return openCloseBucket;`)(...Object.values(bindings));
   fn(); fn(); assert.equal(closes, 1); assert.equal(routes.length, 1);
   const route = routes[0] as any; assert.equal(route.params.section, "buckets"); assert.equal(route.params.closeBucketId, "bucket"); assert.equal(route.params.closeBucketScope, "user:home"); assert.ok(route.params.closeBucketAt);
@@ -181,8 +184,8 @@ test("Tools summaries count savings and active/closed buckets in their own visib
   const source = readFileSync("app/(tabs)/more.tsx", "utf8"), start = source.indexOf("  const hubStatuses =");
   const body = source.slice(start, source.indexOf("  const saveSubscriptionDecisions", start));
   const goals = [{ ...open, id: "savings", goal_type: "savings" }, open, closed, archived];
-  const bindings = { goals, growthGoals: goals.filter(goal => goal.goal_type !== "planned_expense"), useMemo: (fn: () => unknown) => fn(), formatCountStatus, attentionCountStatus,
-    activeAccounts: [], reviewTransactionCount: 0, subscriptions: [], smartReminders: [], setupIsComplete: true, setupComplete: 0, setupSteps: [], themeMode: "dark", presetName: "FlowLedger", backupExported: false, deletedTransactions: [], membershipStatusLabel: "Free", newFeedbackCount: 0 };
+  const bindings = revealedPrivacyBindings({ goals, growthGoals: goals.filter(goal => goal.goal_type !== "planned_expense"), useMemo: (fn: () => unknown) => fn(), formatCountStatus, attentionCountStatus,
+    activeAccounts: [], reviewTransactionCount: 0, subscriptions: [], smartReminders: [], setupIsComplete: true, setupComplete: 0, setupSteps: [], themeMode: "dark", presetName: "FlowLedger", backupExported: false, deletedTransactions: [], membershipStatusLabel: "Free", newFeedbackCount: 0 });
   const js = transpileModule(body, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
   const statuses = new Function(...Object.keys(bindings), `${js}; return hubStatuses;`)(...Object.values(bindings));
   assert.equal(statuses.goals.label, "1 goal"); assert.equal(statuses.buckets.label, "2 buckets");

@@ -6,6 +6,14 @@ import type {
 import { parseDecimalInput, parseMoneyInput } from "./moneyFormInput";
 
 export type FloFormValues = Record<string, string | boolean>;
+export type FloFormDraft = {
+  values: FloFormValues;
+  errors: Record<string, string>;
+  errorSummary: string | null;
+  saveError: string | null;
+  typedDates: Record<string, boolean>;
+  accountSearch: string;
+};
 export type FloFormAccount = {
   id: string;
   name: string;
@@ -136,6 +144,21 @@ export function floFormInitialValues(
       values[key] = String(value);
   }
   return values;
+}
+export function floFormInitialDraft(creation: FloCreationResult): FloFormDraft {
+  const errors = { ...creation.form?.errors };
+  const first = Object.keys(errors)[0];
+  const field = creation.kind
+    ? FLO_FORM_FIELDS[creation.kind].find((item) => item.key === first)
+    : undefined;
+  return {
+    values: floFormInitialValues(creation),
+    errors,
+    errorSummary: first ? `${field?.label ?? "Details"}: ${errors[first]}` : null,
+    saveError: null,
+    typedDates: {},
+    accountSearch: "",
+  };
 }
 export function floFormAccounts(
   accounts: readonly FloFormAccount[],

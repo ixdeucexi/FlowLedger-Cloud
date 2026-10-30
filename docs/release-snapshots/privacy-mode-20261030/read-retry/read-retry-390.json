@@ -1,0 +1,24 @@
+{
+  "width": 390,
+  "status": "PASS",
+  "checks": [
+    "unreadable-privacy-preference-fails-closed-with-no-startup-money-flash",
+    "retry-load-restores-the-stored-shown-preference"
+  ],
+  "surface": {
+    "name": "failed-preference-read-stays-private",
+    "inputs": 0,
+    "attributes": 53,
+    "maskedTokens": 17,
+    "startupLeaks": 0
+  },
+  "bundles": [
+    {
+      "path": "/_expo/static/js/web/entry-0240763657e575ad48cb96315a93e634.js",
+      "sha256": "e3b5d4350a8f646e5ddb4334e75bc80fcc8c36153fcc0c59262b0c5b11251748"
+    }
+  ],
+  "errors": [],
+  "unknown": [],
+  "console": []
+}
