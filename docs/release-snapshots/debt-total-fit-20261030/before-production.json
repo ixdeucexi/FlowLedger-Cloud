@@ -1,0 +1,10 @@
+{
+  "source": "36d240051fc88a4d45677adccce407d1220ac42f",
+  "deployment": "dpl_3EEJjFUEtNjufQ6HZmkRHxnKAyFs",
+  "url": "flow-ledger-cloud-ck8ukjxwo-flow-ledger-s-projects.vercel.app",
+  "state": "READY",
+  "rollback": "rollback/prod-before-debt-total-fit-20261030-1325",
+  "rollbackTagObject": "141fd71e43a0f95d403255d6ef4c66f9e51e0503",
+  "rollbackRemoteVerified": true,
+  "scope": "Frontend debt-summary text/layout only; no financial formula, database, API or Flo changes."
+}
