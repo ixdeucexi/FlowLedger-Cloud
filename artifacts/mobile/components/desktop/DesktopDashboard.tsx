@@ -1,5 +1,7 @@
 import { dashboardMonthlyPlan } from "@/lib/dashboardMonthlyPlan";
 import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
+import { BucketThumbnail } from "@/components/BucketVisual";
+import { useBucketPersonalization } from "@/context/BucketPersonalizationContext";
 import { createTransactionNameResolver } from "@/lib/transactionNames";
 import { SPENDING_BUCKETS_ROUTE } from "@/lib/settingsNavigation";
 import Feather from "@expo/vector-icons/Feather";
@@ -518,6 +520,7 @@ function DesktopDashboardContent({
   const router = useRouter();
   const routeParams = useLocalSearchParams<{ action?: string }>();
   const { width } = useWindowDimensions();
+  const bucketPersonalization = useBucketPersonalization();
   const { user } = useAuth();
   const {
     addBill,
@@ -1258,13 +1261,7 @@ savings_goals: (<SurfaceCard
                       onPress={() => setGoalEditor(goal)}
                       style={({ pressed }) => [styles.goalRow, index > 0 && styles.rowDivider, { opacity: pressed ? 0.72 : 1 }]}
                     >
-                      <View style={styles.goalIcon}>
-                        <Feather
-                          name={goal.goal_type === "savings" ? "shield" : "star"}
-                          size={14}
-                          color="#6ee7b7"
-                        />
-                      </View>
+                      <Pressable accessibilityRole="button" accessibilityLabel={`Personalize ${goal.name}`} onPress={event => { event.stopPropagation(); bucketPersonalization.open(goal.id); }}><BucketThumbnail goalId={goal.id} name={goal.name} size={29} /></Pressable>
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text style={styles.goalName} numberOfLines={1}>{goal.name}</Text>
                         <Text style={styles.goalMeta}>{bucket ? `${currency(bucket.planned)} planned · ${currency(bucket.spent)} spent` : goal.target_amount > 0 ? `${Math.round(percent)}% funded` : "No savings target set"}</Text>

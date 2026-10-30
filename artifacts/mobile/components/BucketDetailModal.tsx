@@ -5,6 +5,8 @@ import Feather from "@expo/vector-icons/Feather";
 import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Modal, ScrollView, StyleSheet } from "react-native";
 
+import { BucketCover, BucketThumbnail } from "@/components/BucketVisual";
+import { useBucketPersonalization } from "@/context/BucketPersonalizationContext";
 import { AddTransactionModal } from "@/components/AddTransactionModal";
 import { GoalModal } from "@/components/GoalModal";
 import { useAuth } from "@/context/AuthContext";
@@ -40,6 +42,7 @@ function purchaseDate(value: string) {
 export function BucketDetailModal({ bucketId, suspended = false, busy = false, routed = false, onClose, onCloseBucket, onConfirmCloseBucket, onReopenBucket }: Props) {
   const c = useColors();
   const desktop = useDesktopExperience();
+  const personalization = useBucketPersonalization();
   const { user } = useAuth();
   const { bills, incomes, goals, transactions, transactionAccountIdentities, activeHousehold, canEditHousehold, addBucketPurchase, removeBucketPurchase, updateGoal } = useBudget();
   const purchaseName = useMemo(() => createTransactionNameResolver(bills, incomes), [bills, incomes]);
@@ -80,7 +83,7 @@ export function BucketDetailModal({ bucketId, suspended = false, busy = false, r
   const pending = saving || busy;
   const managementBlocked = pending || confirmClose;
   const activeScreen = canEditHousehold ? screen : "detail";
-  const mainVisible = Boolean(goal && !suspended && activeScreen !== "record" && activeScreen !== "budget");
+  const mainVisible = Boolean(goal && !suspended && !personalization.active && activeScreen !== "record" && activeScreen !== "budget");
   const deferredSearch = useDeferredValue(search);
   const classifyAccount = useMemo(() => createPlaidTransactionAccountKindClassifier(transactionAccountIdentities), [transactionAccountIdentities]);
   const candidates = useMemo(() => kind ? bucketPurchaseCandidates(transactions, kind, deferredSearch).filter(tx => tx.source !== "plaid" || classifyAccount(tx) === "checking") : [], [transactions, kind, deferredSearch, classifyAccount]);
@@ -162,7 +165,7 @@ export function BucketDetailModal({ bucketId, suspended = false, busy = false, r
         <Pressable accessibilityRole="button" accessibilityLabel={confirmClose ? "Cancel closing bucket" : "Close bucket details"} disabled={pending} onPress={() => { if (!pending) { if (confirmClose) setConfirmClose(false); else onClose(); } }} style={StyleSheet.absoluteFillObject} />
         <View style={[styles.sheet, { backgroundColor: c.background, borderColor: c.border }, desktop && DESKTOP_MODAL_REGULAR]}>
           <View style={styles.header}>
-            {activeScreen === "add" ? <Pressable accessibilityRole="button" accessibilityLabel="Back to bucket details" disabled={pending} onPress={back} style={styles.iconButton}><Feather name="arrow-left" size={21} color={c.foreground} /></Pressable> : <View style={[styles.headingIcon, { backgroundColor: c.primary + "18" }]}><Feather name="shopping-bag" size={21} color={c.primary} /></View>}
+            {activeScreen === "add" ? <Pressable accessibilityRole="button" accessibilityLabel="Back to bucket details" disabled={pending} onPress={back} style={styles.iconButton}><Feather name="arrow-left" size={21} color={c.foreground} /></Pressable> : <BucketThumbnail goalId={bucketId} name={goal.name} size={42} />}
             <View style={styles.headerCopy}>
               <Text style={[styles.eyebrow, { color: c.mutedForeground }]}>{activeScreen === "add" ? "ADD PURCHASE" : goal.archived_at ? "ARCHIVED BUCKET" : goal.closed_at ? "CLOSED BUCKET" : "SPENDING BUCKET"}</Text>
               <Text accessibilityRole="header" style={[styles.title, { color: c.foreground }]}>{goal.name}</Text>
@@ -171,6 +174,8 @@ export function BucketDetailModal({ bucketId, suspended = false, busy = false, r
           </View>
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content} showsVerticalScrollIndicator={desktop}>
             {activeScreen === "detail" ? <>
+              <BucketCover goalId={bucketId} name={goal.name} />
+              <Pressable accessibilityRole="button" accessibilityLabel={`Personalize ${goal.name} bucket`} onPress={() => personalization.open(bucketId)} style={[styles.secondary, { borderColor: c.primary + "55", backgroundColor: c.primary + "10" }]}><Feather name="image" size={16} color={c.primary} /><Text style={[styles.secondaryText, { color: c.primary }]}>Personalize bucket</Text></Pressable>
               <View style={[styles.metrics, !desktop && styles.metricsCompact, { backgroundColor: c.card, borderColor: c.border }]}>
                 {[{ label: "Planned", value: summary.planned, color: c.foreground }, { label: "Spent", value: summary.spent, color: c.foreground }, { label: summary.closed ? "Released" : "Remaining", value: summary.closed ? summary.released : summary.remaining, color: summary.closed ? c.mutedForeground : c.success }].map(item => <View key={item.label} style={[styles.metric, !desktop && styles.metricCompact]}><Text style={[styles.metricLabel, !desktop && styles.metricLabelCompact, { color: c.mutedForeground }]}>{item.label}</Text><Text style={[styles.metricValue, !desktop && styles.metricValueCompact, { color: item.color }]}>{money(item.value)}</Text></View>)}
               </View>

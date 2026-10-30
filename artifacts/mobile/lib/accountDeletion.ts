@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system/legacy";
 import { Platform } from "react-native";
 
+import { clearBucketAppearanceForUser } from "@/lib/bucketAppearanceRuntime";
 import { apiFetch } from "@/lib/api";
 import { accountDeletionStorageKeyShouldBeRemoved } from "@/lib/accountDeletionPolicy";
 import { authStorage } from "@/lib/secureAuthStorage";
@@ -29,6 +30,7 @@ export async function purgeFlowLedgerCacheExports(): Promise<void> {
 }
 
 export async function clearDeletedAccountStorage(userId: string): Promise<void> {
+  await clearBucketAppearanceForUser(userId).catch(() => undefined);
   await purgeFlowLedgerCacheExports();
   await authStorage.removeItem(supabaseAuthStorageKey).catch(() => undefined);
   const keys = await AsyncStorage.getAllKeys().catch(() => [] as string[]);

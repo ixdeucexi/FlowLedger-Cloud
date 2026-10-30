@@ -1,5 +1,7 @@
 import { usePrivacyAlerts } from "@/hooks/usePrivacyAlerts";
 import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
+import { BucketThumbnail } from "@/components/BucketVisual";
+import { useBucketPersonalization } from "@/context/BucketPersonalizationContext";
 import { createTransactionNameResolver } from "@/lib/transactionNames";
 import { BucketDetailModal } from "@/components/BucketDetailModal";
 
@@ -111,6 +113,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
   const { alert: privacyAlert, formError: privacyFormError } = usePrivacyAlerts();
 
   const c = useColors();
+  const bucketPersonalization = useBucketPersonalization();
   const bucketsOnly = viewMode === "buckets";
   const { user } = useAuth();
   const handledCloseRequestRef = useRef<string | null>(null);
@@ -1011,12 +1014,14 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
               <View key={goal.id} style={[styles.bucketRow, index > 0 && { borderTopWidth: 1, borderTopColor: c.border }]}>
                 <Pressable accessibilityRole="button" accessibilityLabel={`Open ${goal.name} bucket`} disabled={saving} onPress={() => setSelectedBucketId(goal.id)} style={[styles.optionCopy, { minHeight: 44, justifyContent: "center" }]}>
                   <View style={styles.bucketNameRow}>
+                    <BucketThumbnail goalId={goal.id} name={goal.name} size={32} />
                     <Text numberOfLines={1} style={[styles.optionTitle, { color: c.foreground, flex: 1 }]}>{goal.name}</Text>
                     {goal.closed_at ? <Text style={[styles.closedBadge, { color: c.success, backgroundColor: c.success + "18" }]}>CLOSED</Text> : null}
                     <Feather name="chevron-right" size={18} color={c.mutedForeground} />
                   </View>
                   <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Planned {money(summary.planned)} · Spent {money(summary.spent)} · {summary.closed ? `Released ${money(summary.released)}` : `${money(summary.remaining)} left`}</Text>
                 </Pressable>
+                <View style={styles.bucketActions}><Pressable accessibilityRole="button" accessibilityLabel={`Personalize ${goal.name} bucket`} disabled={saving} onPress={() => bucketPersonalization.open(goal.id)} style={[styles.bucketActionButton, { borderColor: c.border }]}><Feather name="image" size={13} color={c.primary} /><Text style={[styles.bucketActionText, { color: c.primary }]}>Personalize</Text></Pressable></View>
                 {canEditHousehold ? <View style={styles.bucketActions}>
                   {!routed ? (
                     <Pressable
@@ -1083,9 +1088,10 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
               {showArchivedBuckets ? archivedBuckets.map(goal => (
                 <View key={goal.id} style={[styles.archivedRow, { borderTopColor: c.border }]}>
                   <Pressable accessibilityRole="button" accessibilityLabel={`Open ${goal.name} bucket`} disabled={saving} onPress={() => setSelectedBucketId(goal.id)} style={[styles.optionCopy, { minHeight: 44, justifyContent: "center" }]}>
-                    <View style={styles.bucketNameRow}><Text numberOfLines={1} style={[styles.optionTitle, { color: c.foreground, flex: 1 }]}>{goal.name}</Text><Feather name="chevron-right" size={18} color={c.mutedForeground} /></View>
+                    <View style={styles.bucketNameRow}><BucketThumbnail goalId={goal.id} name={goal.name} size={30} /><Text numberOfLines={1} style={[styles.optionTitle, { color: c.foreground, flex: 1 }]}>{goal.name}</Text><Feather name="chevron-right" size={18} color={c.mutedForeground} /></View>
                     <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Completed bucket · history preserved</Text>
                   </Pressable>
+                  <View style={styles.bucketActions}><Pressable accessibilityRole="button" accessibilityLabel={`Personalize ${goal.name} bucket`} disabled={saving} onPress={() => bucketPersonalization.open(goal.id)} style={[styles.bucketActionButton, { borderColor: c.border }]}><Feather name="image" size={13} color={c.primary} /><Text style={[styles.bucketActionText, { color: c.primary }]}>Personalize</Text></Pressable></View>
                   {canEditHousehold ? <View style={styles.bucketActions}>
                     <Pressable
                       accessibilityRole="button"

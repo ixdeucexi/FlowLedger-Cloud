@@ -22,6 +22,7 @@ const manual = { id: "manual", amount: -25, date: "2026-10-25", category: "Shopp
 function harness(component = "BucketDetailModal", overrides: Record<string, any> = {}) {
   const states: any[] = [], effects: Array<() => void> = [], cleanups: Array<() => void> = [], exported: any = {};
   let cursor = 0, dirty = false;
+  const personalization = { active: false, opened: [] as string[], open(id: string) { this.opened.push(id); this.active = true; dirty = true; } };
   const budget: any = { activeHousehold: { householdId: "home", budgetId: "budget", role: "owner" }, canEditHousehold: true,
     goals: [{ ...bucket }], transactions: [{ ...purchase }, { ...bank }, { ...manual }, { ...bank, id: "unknown", note: "Unknown account", plaid_account_id: "unknown" }],
     transactionAccountIdentities: [], categories: ["Other", "Shopping", "Debt"], bills: [{ id: "debt", is_debt: true, balance: 100, name: "Card" }], accounts: [], settings: { safety_floor: 100, forecast_horizon_months: 6 },
@@ -46,6 +47,7 @@ function harness(component = "BucketDetailModal", overrides: Record<string, any>
     const leaf = name.split("/").at(-1)!;
     if (name.includes("/components/")) return { [leaf]: leaf, ConfirmActionOverlay: "ConfirmActionOverlay" };
     if (leaf === "BudgetContext") return { useBudget: () => budget };
+    if (leaf === "BucketPersonalizationContext") return { useBucketPersonalization: () => personalization };
     if (leaf === "AuthContext") return { useAuth: () => ({ user: { id: "user" } }) };
     if (leaf === "useColors") return { useColors: () => new Proxy({}, { get: () => "#000000" }) };
     if (leaf === "useDesktopExperience") return { useDesktopExperience: () => false };
@@ -64,8 +66,18 @@ function harness(component = "BucketDetailModal", overrides: Record<string, any>
   });
   const render = () => { let tree: any; for (let n = 0; n < 8; n++) { cursor = 0; dirty = false; tree = exported[component](props); effects.splice(0).forEach(fn => fn()); if (!dirty) break; } return tree; };
   const button = (label: string) => flatten(render()).find(node => node.type === "Pressable" && node.props.accessibilityLabel === label);
-  return { budget, props, render, button, unmount: () => cleanups.forEach(fn => fn()) };
+  return { budget, props, render, button, personalization, unmount: () => cleanups.forEach(fn => fn()) };
 }
+
+test("viewers can personalize a bucket without opening a financial editor or leaving stacked detail overlays", () => {
+  let writes = 0;
+  const h = harness("BucketDetailModal", { canEditHousehold: false, updateGoal: async () => { writes++; } });
+  const personalize = h.button("Personalize Holiday bucket"); assert.ok(personalize);
+  personalize.props.onPress();
+  assert.deepEqual(h.personalization.opened, ["bucket"]);
+  assert.equal(flatten(h.render()).find(node => node.type === "Modal").props.visible, false);
+  assert.equal(writes, 0);
+});
 
 test("bucket detail keeps purchase history readable and mutation controls scoped to editors", () => {
   const h = harness(); let tree = h.render();

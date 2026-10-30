@@ -13,6 +13,7 @@
   "include": [
     "lib/moneyPrivacy.test.ts",
     "lib/appearance.test.ts",
+    "lib/bucketAppearance.test.ts",
     "lib/pendingMatchChooser.test.ts",
     "lib/accessNavigation.test.ts",
     "lib/billCsv.test.ts",

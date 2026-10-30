@@ -1,6 +1,8 @@
 import { dashboardMonthlyPlan } from "@/lib/dashboardMonthlyPlan";
 import { usePrivacyAlerts } from "@/hooks/usePrivacyAlerts";
 import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
+import { BucketThumbnail } from "@/components/BucketVisual";
+import { useBucketPersonalization } from "@/context/BucketPersonalizationContext";
 import { SPENDING_BUCKETS_ROUTE } from "@/lib/settingsNavigation";
 import { parseMoneyInput } from "@/lib/moneyFormInput";
 import Feather from "@expo/vector-icons/Feather";
@@ -267,6 +269,7 @@ function MobileDashboardContent({
   const { alert: privacyAlert } = usePrivacyAlerts();
 
   const c = useColors();
+  const bucketPersonalization = useBucketPersonalization();
   const { openNotifications, unreadNotificationCount } = useAppDiscovery();
   const dashboardTheme = DASHBOARD_THEMES[c.mode];
   const heroSurface = Platform.OS === "web"
@@ -1277,6 +1280,7 @@ overview: (<View
                       style={({ pressed }) => [styles.referenceGoalItem, { backgroundColor: dashboardTheme.goalSurface, borderColor: dashboardTheme.goalBorder, opacity: pressed ? 0.72 : 1 }]}
                     >
                       <View style={styles.referenceGoalTopRow}>
+                        <Pressable accessibilityRole="button" accessibilityLabel={`Personalize ${goal.name}`} onPress={event => { event.stopPropagation(); bucketPersonalization.open(goal.id); }}><BucketThumbnail goalId={goal.id} name={goal.name} size={28} /></Pressable>
                         <AppText style={[styles.referenceGoalName, { color: dashboardTheme.mutedText }]} numberOfLines={1}>{goal.name}</AppText>
                         <AppText numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.referenceGoalAmounts, { color: dashboardTheme.subtleText }]}>{bucket ? `${formatDashboardCurrency(bucket.remaining)} left` : `${formatDashboardCurrency(goal.current_amount)} / ${formatDashboardCurrency(goal.target_amount)}`}</AppText>
                       </View>

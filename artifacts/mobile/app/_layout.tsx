@@ -42,6 +42,7 @@ import {
   useBiometricLock,
 } from "@/context/BiometricLockContext";
 import { FloVolatileSessionProvider } from "@/context/FloVolatileSessionContext";
+import { BucketPersonalizationProvider } from "@/context/BucketPersonalizationContext";
 import { BudgetProvider, useBudget } from "@/context/BudgetContext";
 import { MembershipProvider } from "@/context/MembershipContext";
 import { ThemeProvider, useThemeMode } from "@/context/ThemeContext";
@@ -1025,6 +1026,7 @@ export default function RootLayout() {
                 <BiometricLockProvider>
                   <BudgetProvider>
                     <MoneyPrivacyProvider>
+                    <BucketPersonalizationProvider>
                     <MembershipProvider>
                       <FloVolatileSessionProvider>
                         <RootNavigator
@@ -1033,6 +1035,7 @@ export default function RootLayout() {
                         />
                       </FloVolatileSessionProvider>
                     </MembershipProvider>
+                    </BucketPersonalizationProvider>
                     </MoneyPrivacyProvider>
                   </BudgetProvider>
                 </BiometricLockProvider>
