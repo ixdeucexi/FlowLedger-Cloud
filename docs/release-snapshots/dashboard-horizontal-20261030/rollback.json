@@ -1,0 +1,7 @@
+{
+  "tag": "rollback/prod-before-dashboard-horizontal-20261030-2026",
+  "annotatedTagObject": "c5e055bd40a6e32a9bd8ba781afce7b09ad5d8bd",
+  "source": "b71199ba2020a63b069a3d67f96ef22b2fed9f6b",
+  "deployment": "dpl_GmD96Cq7d1x1Gw6cLj6bUmPW3goK",
+  "remotelyVerifiedBeforeProductionChange": true
+}

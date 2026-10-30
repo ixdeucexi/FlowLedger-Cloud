@@ -1,0 +1,9 @@
+{
+  "status": "PASS",
+  "file": "artifacts/mobile/app/(tabs)/index.tsx",
+  "baseline": "44be8fac10d19051406df1a69389879d84ce8026",
+  "sourceSha256": "ecba80f5a4e3c9ce793cc38c0dc2107d432e9de6721b20b6cb5b307ed586094c",
+  "unchangedExistingHandlers": 90,
+  "newLayoutState": "Local width measurement only; same-width updates bail out.",
+  "scope": "Styles, gauge size and privacy-preserving full-value font fitting only; no calculations or persistence changes."
+}

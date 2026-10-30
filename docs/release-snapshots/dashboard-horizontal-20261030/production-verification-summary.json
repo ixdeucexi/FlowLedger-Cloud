@@ -1,0 +1,109 @@
+{
+  "status": "PASS",
+  "applicationSource": "48de915d72d9fdefca3f8a447482eebf02b4d98e",
+  "origin": "https://flowledger-algo.com",
+  "deployment": "dpl_CUfiE8vDX8goGDp2W9wqDNr2HXm5",
+  "expectedEntrySHA256": "1b9c2bc45a0ea544891b5e81ce7342959d0f6d9a0ed7cca91e5f4835a98c125b",
+  "entryBytes": 5100594,
+  "cases": 72,
+  "isolatedContexts": 38,
+  "coverage": {
+    "main": {
+      "stages": 52,
+      "contexts": 24,
+      "widths": [
+        320,
+        390,
+        430,
+        768
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "profiles": [
+        "normal",
+        "large",
+        "negative"
+      ],
+      "surfaces": [
+        "Checking and Flow Score side by side",
+        "three snapshot metrics across",
+        "full Dashboard money tokens",
+        "Savings flip and reserved frame",
+        "Privacy hide and reveal"
+      ]
+    },
+    "pending": {
+      "stages": 8,
+      "widths": [
+        320,
+        390
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "profiles": [
+        "normal",
+        "negative"
+      ],
+      "checks": [
+        "pending strip remains inside balance column",
+        "Flow Score gap",
+        "complete pending and available balance tokens"
+      ]
+    },
+    "desktop": {
+      "stages": 12,
+      "contexts": 6,
+      "widths": [
+        1200
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "profiles": [
+        "normal",
+        "large",
+        "negative"
+      ],
+      "numericInstances": 196
+    }
+  },
+  "normalExactValues": {
+    "checking": "$5,106.57",
+    "billsLeft": "$761.60",
+    "safeToSpend": "$3,844.97"
+  },
+  "largeCheckingValues": [
+    "$9,999,999.99",
+    "-$9,999,999.99"
+  ],
+  "normalHeroFontsAt320And390": [
+    29,
+    37
+  ],
+  "normal390SnapshotFont": 18,
+  "visuallyReviewed": [
+    "390-dark normal",
+    "320-dark negative pending"
+  ],
+  "unresolvedNumericOrPaintBugs": 0,
+  "uncaughtAppErrors": 0,
+  "unknownRequests": 0,
+  "actualCustomerFinancialOrProviderWrites": 0,
+  "allOwnedBrowsersAndServersClosed": true,
+  "ownedQaProcesses": [],
+  "intentionalPresentation": [
+    "Desktop1200 has its existing Savings Progress card rather than mobile flip",
+    "Nonmonetary names may retain existing intentional ellipsis"
+  ],
+  "screenshots": 72,
+  "proofFiles": [
+    "/tmp/dashboard-horizontal-20261030/production-browser/main/results.json",
+    "/tmp/dashboard-horizontal-20261030/production-browser/pending/results.json",
+    "/tmp/dashboard-horizontal-20261030/production-browser/desktop/results.json"
+  ]
+}
