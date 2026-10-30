@@ -6,6 +6,7 @@ import { StyleSheet, useWindowDimensions } from "react-native";
 
 import colors from "@/constants/colors";
 import { useColors } from "@/hooks/useColors";
+import { PlanFeatureGate } from "@/components/PlanFeatureGate";
 import type { MonthlyMoneyInsight, ReminderItem, ReportsSummary, SubscriptionCandidate } from "@/lib/competitiveGrowth";
 import type { CategoryPlanRow } from "@/lib/categoryPlanning";
 import { shouldExpandReportDetails, shouldStackSettingsMetrics } from "@/lib/settingsLayout";
@@ -161,6 +162,7 @@ export function ReportsInsightsView({
         }) : <EmptyState icon="target" text="Add bills or category plans to see your pace." />}
       </View>
 
+      <PlanFeatureGate feature="long_term_reports" compact>
       <View style={styles.insightHeading}>
         <SectionTitle label="Money over time" />
         <View style={[styles.rangeToggle, { backgroundColor: c.muted }]}>
@@ -207,6 +209,7 @@ export function ReportsInsightsView({
           <View style={[styles.legendDot, { backgroundColor: c.primary }]} /><Text style={[styles.legendText, { color: c.mutedForeground }]}>Out</Text>
         </View>
       </View>
+      </PlanFeatureGate>
 
       <SectionTitle label="Where money went" />
       <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>

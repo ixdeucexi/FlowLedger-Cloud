@@ -8,6 +8,17 @@ import {
   type PlanSimulationHorizon,
 } from "./planSimulator";
 
+export type ScenarioRequestScope = { userId: string; isCurrent: () => boolean };
+
+async function requestToken(scope: ScenarioRequestScope) {
+  if (!scope.isCurrent()) throw new Error("Your scenario account changed. Open the simulator again.");
+  const { data, error } = await supabase.auth.getSession();
+  if (!scope.isCurrent()) throw new Error("Your scenario account changed. Open the simulator again.");
+  const session = data?.session;
+  if (error || !session?.access_token || session.user.id !== scope.userId) throw new Error("Your sign-in changed. Open the simulator again.");
+  return session.access_token;
+}
+
 const SELECT_COLUMNS = "id,household_id,name,horizon_months,changes,schema_version,version,created_by,updated_by,created_at,updated_at";
 
 function validDefinitionInput(name: string, changes: readonly PlanSimulationChange[]) {
@@ -26,23 +37,26 @@ function normalizeSavedRow(row: unknown): PlanSimulationDefinition {
   return normalized;
 }
 
-export async function loadPlanSimulations(householdId: string): Promise<PlanSimulationDefinition[]> {
+export async function loadPlanSimulations(householdId: string, scope: ScenarioRequestScope): Promise<PlanSimulationDefinition[]> {
+  const token = await requestToken(scope);
   const result = await supabase
     .from("plan_simulations")
     .select(SELECT_COLUMNS)
     .eq("household_id", householdId)
-    .order("updated_at", { ascending: false });
+    .order("updated_at", { ascending: false }).setHeader("Authorization", `Bearer ${token}`);
   if (result.error) throw new Error(`Load Plan Simulator: ${result.error.message}`);
   return (result.data ?? []).map(row => normalizeSavedRow(row));
 }
 
 export async function createPlanSimulation(input: {
   householdId: string;
+  requestScope: ScenarioRequestScope;
   name: string;
   horizonMonths: PlanSimulationHorizon;
   changes: readonly PlanSimulationChange[];
 }): Promise<PlanSimulationDefinition> {
   const { normalizedName, decodedChanges } = validDefinitionInput(input.name, input.changes);
+  const token = await requestToken(input.requestScope);
   const result = await supabase
     .from("plan_simulations")
     .insert({
@@ -53,18 +67,20 @@ export async function createPlanSimulation(input: {
       schema_version: 1,
     })
     .select(SELECT_COLUMNS)
-    .single();
+    .single().setHeader("Authorization", `Bearer ${token}`);
   if (result.error) throw new Error(`Save Plan Simulator: ${result.error.message}`);
   return normalizeSavedRow(result.data);
 }
 
 export async function updatePlanSimulation(input: {
   scenario: PlanSimulationDefinition;
+  requestScope: ScenarioRequestScope;
   name: string;
   horizonMonths: PlanSimulationHorizon;
   changes: readonly PlanSimulationChange[];
 }): Promise<PlanSimulationDefinition> {
   const { normalizedName, decodedChanges } = validDefinitionInput(input.name, input.changes);
+  const token = await requestToken(input.requestScope);
   const result = await supabase
     .from("plan_simulations")
     .update({
@@ -77,13 +93,14 @@ export async function updatePlanSimulation(input: {
     .eq("household_id", input.scenario.householdId)
     .eq("version", input.scenario.version)
     .select(SELECT_COLUMNS)
-    .maybeSingle();
+    .maybeSingle().setHeader("Authorization", `Bearer ${token}`);
   if (result.error) throw new Error(`Update Plan Simulator: ${result.error.message}`);
   if (!result.data) throw new Error("This scenario changed somewhere else. Refresh it before saving again.");
   return normalizeSavedRow(result.data);
 }
 
-export async function deletePlanSimulation(scenario: PlanSimulationDefinition): Promise<void> {
+export async function deletePlanSimulation(scenario: PlanSimulationDefinition, scope: ScenarioRequestScope): Promise<void> {
+  const token = await requestToken(scope);
   const result = await supabase
     .from("plan_simulations")
     .delete()
@@ -91,7 +108,7 @@ export async function deletePlanSimulation(scenario: PlanSimulationDefinition): 
     .eq("household_id", scenario.householdId)
     .eq("version", scenario.version)
     .select("id")
-    .maybeSingle();
+    .maybeSingle().setHeader("Authorization", `Bearer ${token}`);
   if (result.error) throw new Error(`Delete Plan Simulator: ${result.error.message}`);
   if (!result.data) throw new Error("This scenario changed somewhere else. Refresh it before deleting.");
 }

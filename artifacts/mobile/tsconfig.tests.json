@@ -223,6 +223,8 @@
     ,"lib/planSimulator.test.ts"
     ,"lib/planSimulationEditor.test.ts"
     ,"lib/planSimulationLibrary.test.ts"
+    ,"lib/planSimulationAccess.test.ts"
+    ,"lib/debtReportAccess.test.ts"
     ,"lib/planSimulationComparison.test.ts"
     ,"lib/simulatorEditorHistory.test.ts"
     ,"lib/floExperience.ts"

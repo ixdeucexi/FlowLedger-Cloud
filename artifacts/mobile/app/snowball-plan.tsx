@@ -15,7 +15,10 @@ import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import { FloLogo } from "@/components/FloLogo";
 import { PlanFeatureGate } from "@/components/PlanFeatureGate";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
+import { useAuth } from "@/context/AuthContext";
 import { useBudget } from "@/context/BudgetContext";
+import { useMembership } from "@/context/MembershipContext";
+import { orderDebts } from "@/lib/snowball";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { confirmAction } from "@/lib/confirmAction";
@@ -80,6 +83,9 @@ function SnowballPlanScreen() {
   const { alert: privacyAlert, formError: privacyFormError } = usePrivacyAlerts();
 
   const c = useColors();
+  const { user } = useAuth();
+  const { isFeatureLocked } = useMembership();
+  const hasAdvancedStrategies = !isFeatureLocked("debt_strategies");
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { width } = useWindowDimensions();
@@ -87,6 +93,7 @@ function SnowballPlanScreen() {
   const twoColumn = isDesktop && width >= 1080;
   const params = useLocalSearchParams<{ paymentId?: string; suggested?: string; transactionId?: string }>();
   const {
+    activeHousehold,
     applyDebtSnowballPayment,
     bills,
     canEditHousehold,
@@ -157,6 +164,17 @@ function SnowballPlanScreen() {
   const planDate = dateParts(paymentDate);
   const targetMonthPayment = hasResolvedTransactionEdit ? undefined : getExtraPayment(planDate.month, planDate.year);
   const existingPayment = hasResolvedTransactionEdit ? undefined : editingPayment ?? targetMonthPayment;
+  // Saved financial records remain manageable after a subscription ends.
+  const canManageExtra = hasAdvancedStrategies || Boolean(existingPayment || editTransaction);
+  const editorAccessKey = `${user?.id ?? "anonymous"}:${activeHousehold?.householdId ?? "local"}:${activeHousehold?.budgetId ?? "local"}:${canEditHousehold}:${hasAdvancedStrategies}`;
+  const editorAccessRef = useRef({ key: editorAccessKey, epoch: 0, canEdit: canEditHousehold, canManageExtra });
+  if (editorAccessRef.current.key !== editorAccessKey) editorAccessRef.current.epoch += 1;
+  editorAccessRef.current = { ...editorAccessRef.current, key: editorAccessKey, canEdit: canEditHousehold, canManageExtra };
+  const editorAccessEpoch = editorAccessRef.current.epoch;
+  const editorMountedRef = useRef(true);
+  useEffect(() => { editorMountedRef.current = true; return () => { editorMountedRef.current = false; }; }, []);
+  const isCurrentEditor = () => editorMountedRef.current && editorAccessRef.current.key === editorAccessKey && editorAccessRef.current.epoch === editorAccessEpoch;
+  const canManageExtraNow = () => isCurrentEditor() && editorAccessRef.current.canEdit && editorAccessRef.current.canManageExtra;
   const bucketAvailableDate = latestBucketRemainderAvailableDate(existingPayment?.sources);
   const bucketFundingSource = existingPayment?.sources?.find(source => source.type === "bucket_remainder");
   const paymentDateMinimum = bucketAvailableDate && bucketAvailableDate > today ? bucketAvailableDate : today;
@@ -173,11 +191,11 @@ function SnowballPlanScreen() {
   const preview = useMemo(() => previewDebtSnowball(
     planDate.month,
     planDate.year,
-    requestedExtra,
+    canManageExtra ? requestedExtra : 0,
     0,
     paymentDate,
     existingPayment?.id,
-  ), [existingPayment?.id, paymentDate, planDate.month, planDate.year, previewDebtSnowball, requestedExtra]);
+  ), [canManageExtra, existingPayment?.id, paymentDate, planDate.month, planDate.year, previewDebtSnowball, requestedExtra]);
   const monthDebts = getMonthlyBills(planDate.month, planDate.year).filter(debt => debt.is_debt);
   const fullDatedPlan = getDebtPlanForMonth(planDate.month, planDate.year);
   const remainingDatedPlan = getRemainingDebtPlanForMonth(planDate.month, planDate.year);
@@ -212,7 +230,7 @@ function SnowballPlanScreen() {
     : Number.POSITIVE_INFINITY;
   const draftExtra = editTransaction ? Math.min(requestedExtra, editTargetCapacity) : preview.selectedExtra;
   const totalPlanned = scheduledForecast + draftExtra;
-  const valid = canEditHousehold
+  const valid = canManageExtra && canEditHousehold
     && requestedExtra > 0.005
     && requestedExtra <= safeMaximum + 0.005
     && requestedExtra <= editTargetCapacity + 0.005
@@ -221,6 +239,14 @@ function SnowballPlanScreen() {
     && (editTransaction ? Boolean(target) : preview.allocations.length > 0);
   const monthLabel = `${MONTH_NAMES[planDate.month]} ${planDate.year}`;
   const strategyName = "Snowball";
+  const comparisonDebts = plannerRows.filter(row => row.balance > 0.005).map(row => ({
+    id: row.id, name: row.name, balance: row.balance,
+    minimum: row.minimum, apr: row.apr, dueDay: row.dueDay, included: true,
+  }));
+  const strategyTargets = hasAdvancedStrategies ? {
+    snowball: orderDebts(comparisonDebts, "snowball")[0],
+    avalanche: orderDebts(comparisonDebts, "avalanche")[0],
+  } : null;
   const totalDebt = plannerRows.reduce((sum, row) => sum + row.balance, 0);
   const snowballMatches = useMemo(
     () => matchedOccurrenceAllocations(transactions, "extra_principal", "snowball"),
@@ -267,6 +293,7 @@ function SnowballPlanScreen() {
   };
 
   const savePlan = async () => {
+    if (!canManageExtraNow()) return;
     if (parsedExtra === null || parsedExtra <= 0) { privacyFormError("Check payment amount", "Enter a positive amount with up to two decimal places."); return; }
     if (!valid || saving) return;
     setSaving(true);
@@ -302,7 +329,7 @@ function SnowballPlanScreen() {
   };
 
   const removePlan = () => {
-    if ((!existingPayment && !editTransaction) || saving || !canEditHousehold) return;
+    if (!isCurrentEditor() || !editorAccessRef.current.canEdit || (!existingPayment && !editTransaction) || saving) return;
     if (hasBucketRemainderFunding(existingPayment?.sources)) {
       privacyAlert("Reopen bucket first", `Reopen ${bucketFundingSource?.bucketName ?? "the routed spending bucket"} before removing this Snowball payment.`);
       return;
@@ -313,6 +340,7 @@ function SnowballPlanScreen() {
       confirmText: "Remove plan",
       destructive: true,
       onConfirm: async () => {
+        if (!isCurrentEditor() || !editorAccessRef.current.canEdit) return;
         setSaving(true);
         try {
           if (editTransaction) await deleteTransaction(editTransaction.id);
@@ -401,7 +429,7 @@ function SnowballPlanScreen() {
             </View>
           </View>
 
-          {suggestedAmount > 0 ? (
+          {hasAdvancedStrategies && suggestedAmount > 0 ? (
             <View style={[styles.suggestion, { backgroundColor: c.success + "12", borderColor: c.success + "45" }]}>
               <Feather name="gift" size={18} color={c.success} />
               <View style={styles.flexOne}>
@@ -411,7 +439,7 @@ function SnowballPlanScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Preview the ${money(suggestedAmount)} suggestion`}
-                onPress={() => setExtraAmount(suggestedAmount.toFixed(2))}
+                onPress={() => { if (isCurrentEditor() && !isFeatureLocked("debt_strategies")) setExtraAmount(suggestedAmount.toFixed(2)); }}
                 style={({ pressed }) => [styles.useSuggestion, { backgroundColor: c.success + "20", opacity: pressed ? 0.72 : 1 }]}
               >
                 <Text style={[styles.useSuggestionText, { color: c.success }]}>Use suggestion</Text>
@@ -575,7 +603,17 @@ function SnowballPlanScreen() {
             </View>
 
             <View style={[styles.sideColumn, twoColumn && styles.sideColumnDesktop]}>
-              <View style={[styles.plannerCard, { backgroundColor: c.card, borderColor: c.primary + "55" }]}>
+              {strategyTargets ? <View accessibilityLabel="Payoff strategy comparison" style={[styles.sectionCard, { backgroundColor: c.card, borderColor: c.border }]}>
+                <Text style={[styles.sectionEyebrow, { color: c.primary }]}>COMPARE STRATEGIES</Text>
+                <Text style={[styles.sectionTitle, { color: c.foreground }]}>Choose your focus</Text>
+                <Text style={[styles.smallCopy, { color: c.mutedForeground }]}>Compare this month’s opening debt balances: Snowball starts with the smallest balance; Avalanche starts with the highest APR. Your saved Forecast keeps its current Snowball schedule.</Text>
+                {(["snowball", "avalanche"] as const).map(method => <View key={method} style={{ marginTop: 14 }}>
+                  <Text style={[styles.cardLabel, { color: c.primary }]}>{method === "snowball" ? "SNOWBALL" : "AVALANCHE"}</Text>
+                  <Text style={[styles.debtName, { color: c.foreground }]}>{strategyTargets[method]?.name ?? "No eligible debt"}</Text>
+                  {strategyTargets[method] ? <Text style={[styles.smallCopy, { color: c.mutedForeground }]}>{money(strategyTargets[method].balance)} · {strategyTargets[method].apr.toFixed(2)}% APR</Text> : null}
+                </View>)}
+              </View> : null}
+              {canManageExtra ? <View style={[styles.plannerCard, { backgroundColor: c.card, borderColor: c.primary + "55" }]}>
                 <View style={styles.sectionHeader}>
                   <View style={styles.flexOne}>
                     <Text style={[styles.sectionEyebrow, { color: c.primary }]}>SAFE EXTRA SIMULATOR</Text>
@@ -684,7 +722,7 @@ function SnowballPlanScreen() {
                     </Text>
                   </Pressable>
                 </View>
-              </View>
+              </View> : <PlanFeatureGate feature="debt_strategies" compact><View /></PlanFeatureGate>}
 
             </View>
           </View>
