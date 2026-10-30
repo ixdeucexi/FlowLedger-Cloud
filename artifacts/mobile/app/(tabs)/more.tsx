@@ -53,6 +53,7 @@ import { ReviewCenter } from "@/components/ReviewCenter";
 import { PWA_INSTALL_EVENT } from "@/components/PwaInstallPrompt";
 import { PlaidLinkButton } from "@/components/PlaidLinkButton";
 import { RecentlyDeletedTransactions } from "@/components/RecentlyDeletedTransactions";
+import { RecentChanges } from "@/components/RecentChanges";
 import colors from "@/constants/colors";
 import type { Account, IncomeItem, Goal } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
@@ -278,6 +279,7 @@ const FINANCIAL_DATA_SECTIONS = new Set<SettingsSectionId>([
   "goals",
   "backup",
   "deleted",
+  "recent_changes",
   "admin",
 ]);
 
@@ -1590,6 +1592,7 @@ export default function MoreScreen({
           ? formatCountStatus(deletedTransactions.length, "item")
           : "Empty",
       },
+      recent_changes: { label: "Review edits" },
       membership: { label: membershipStatusLabel },
       admin: newFeedbackCount
         ? {
@@ -3289,6 +3292,16 @@ export default function MoreScreen({
                     );
                   })
                 )}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="View recent changes and undo options"
+                  onPress={() => openSettingsSection("recent_changes")}
+                  style={{ marginTop: 14, flexDirection: "row", alignItems: "center", gap: 8 }}
+                >
+                  <Feather name="rotate-ccw" size={15} color={c.primary} />
+                  <Text style={{ color: c.primary, fontFamily: "Inter_600SemiBold", fontSize: 12 }}>View recent changes</Text>
+                  <Feather name="chevron-right" size={14} color={c.primary} />
+                </Pressable>
               </View>
 
               {!!householdMessage && (
@@ -4766,6 +4779,7 @@ export default function MoreScreen({
         )}
 
         {activeSettingsSection === "deleted" && <RecentlyDeletedTransactions />}
+        {activeSettingsSection === "recent_changes" && <RecentChanges />}
 
         {activeSettingsSection === "admin" && feedbackAdmin ? (
           <>

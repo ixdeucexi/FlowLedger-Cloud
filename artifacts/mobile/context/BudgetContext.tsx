@@ -377,6 +377,7 @@ interface BudgetContextType {
   updateTransaction: (tx: Transaction) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
   restoreDeletedTransaction: (id: string) => Promise<void>;
+  undoRecentChange: (changeId: string) => Promise<void>;
   saveTransfer: (input: TransferMutation) => Promise<void>;
   deleteTransfer: (transferGroupId: string) => Promise<void>;
   matchTransactionToBill: (transactionId: string, billId: string, occurrenceDate?: string, plannedAmount?: number) => Promise<void>;
@@ -3930,6 +3931,57 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setBills(nextBills); setTransactions(collections.active); setDeletedTransactions(collections.deleted);
   }, [user, applyHouseholdSelect, loadAllTransactions]);
 
+  const undoRecentChange = useCallback(async (changeId: string) => {
+    if (!user || demoMode) throw new Error("Sign in to undo a saved change");
+    assertCanEditHousehold("undo a recent change");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(changeId)) {
+      throw new Error("Choose a saved change from Recent Changes");
+    }
+    const uid = user.id, scope = householdScopeRef.current;
+    const generation = financialScopeGenerationRef.current;
+    if (!scope?.householdId || !scope.budgetId) throw new Error("Choose a household and budget first");
+    const current = () => userScopeIdRef.current === uid
+      && financialScopeGenerationRef.current === generation
+      && householdScopeRef.current?.householdId === scope.householdId
+      && householdScopeRef.current?.budgetId === scope.budgetId;
+    const persist: () => Promise<void> = () => runTrackedFinancialMutation(async () => {
+      if (!current()) throw new Error("Your household changed. Open Recent Changes again");
+      const { data, error } = await supabase.rpc("undo_recent_change", {
+        p_change_id: changeId,
+        p_expected_household_id: scope.householdId,
+        p_expected_budget_id: scope.budgetId,
+      });
+      if (error) throw new Error(error.message);
+      if (!data || data.changeId !== changeId || data.householdId !== scope.householdId
+        || data.budgetId !== scope.budgetId || typeof data.undoneAt !== "string" || !Number.isFinite(Date.parse(data.undoneAt))
+        || typeof data.inverseChangeId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.inverseChangeId)) {
+        throw new Error("Undo could not be verified. Refresh Recent Changes before trying again");
+      }
+      if (!current()) return;
+      // Every supported inverse affects these core collections only. Read the
+      // authoritative rows before publishing success; never synthesize an old
+      // client snapshot or repaint a household selected during the request.
+      const [billRows, incomeRows, goalRows, transactionRows] = await Promise.all([
+        applyHouseholdSelect(supabase.from("bills").select("*"), uid, scope),
+        applyHouseholdSelect(supabase.from("incomes").select("*"), uid, scope),
+        applyHouseholdSelect(supabase.from("goals").select("*"), uid, scope),
+        loadAllTransactions(uid, scope),
+      ]);
+      if (!current()) return;
+      for (const result of [billRows, incomeRows, goalRows, transactionRows]) {
+        if (result.error) throw new Error(`Undo saved, but refreshing your plan failed: ${result.error.message}. Retry to refresh safely`);
+      }
+      const collections = accountAwareTransactionCollections(transactionRows.data ?? [], transactionAccountIdentitiesRef.current);
+      setBills(reorderDebtPriorities((billRows.data ?? []).map(normalizeBillRow)));
+      setIncomes((incomeRows.data ?? []).map((row: any) => ({ ...row, amount: Number(row.amount), amount_history: row.amount_history ?? [] })));
+      setGoals((goalRows.data ?? []).map(normalizeGoalRow));
+      setTransactions(collections.active);
+      setDeletedTransactions(collections.deleted);
+      void queryClient.invalidateQueries({ queryKey: ["budget-core", uid] });
+    }, persist);
+    await persist();
+  }, [user, demoMode, assertCanEditHousehold, runTrackedFinancialMutation, applyHouseholdSelect, loadAllTransactions, queryClient]);
+
   const syncDebtTransactionsAndRefresh = useCallback(async () => {
     if (!user || demoMode || !canEditHousehold || user.id !== userScopeIdRef.current) return;
     const uid = user.id, scope = householdScopeRef.current, generation = financialScopeGenerationRef.current;
@@ -6238,7 +6290,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       getMonthlyBills, getBillOccurrencesInMonth, getBillOccurrenceAmount, getBillMonthlyTotal, getBillEffectiveMonthlyTotal, getDebtMonthSettlements, getDebtSourceCommitment, getDebtPlanForMonth, getRemainingDebtPlanForMonth,
       runSnowball, previewDebtSnowball, applyDebtSnowballPayment, saveExtraPayment, getExtraPayment, deleteExtraPayment, removeDebtSnowballPayment, finalizeBillPayment,
       addBucketPurchase, removeBucketPurchase, previewBucketPurchaseSafetyStop, previewBucketBudgetSafetyStop,
-      addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, saveTransfer, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, matchPendingTransactionToBill, matchPendingTransactionToManual, createTransactionForPendingCharge, removePendingPlanMatch, reconcileTransaction, createSpendingBucketForTransaction, undoTransactionReconciliation, removeReviewSurplusFunding, getTransactionsForMonth,
+      addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, undoRecentChange, saveTransfer, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, matchPendingTransactionToBill, matchPendingTransactionToManual, createTransactionForPendingCharge, removePendingPlanMatch, reconcileTransaction, createSpendingBucketForTransaction, undoTransactionReconciliation, removeReviewSurplusFunding, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome, getIncomeOccurrencesInMonth,
       addGoal, updateGoal, closeSpendingBucket, closeSpendingBucketAndRouteRemainder, reopenSpendingBucket, archiveSpendingBucket, restoreArchivedSpendingBucket, deleteGoal, checkGoalAffordability,
       getCashFlow, getDailyBalances, previewTransactionSafetyStop, getCalendarDailyBalances, getPlanSimulationBaseline,

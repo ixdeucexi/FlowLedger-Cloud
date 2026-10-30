@@ -15,6 +15,7 @@ export type SettingsSectionId =
   | "help"
   | "backup"
   | "deleted"
+  | "recent_changes"
   | "security"
   | "updates"
   | "admin";
@@ -54,6 +55,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
   { id: "appearance", label: "Appearance & feedback", description: "Presets, colors, backgrounds, and haptic feedback", icon: "sliders" },
   { id: "backup", label: "Data & backup", description: "Import, export, install, and reset Flo memory", icon: "download" },
   { id: "deleted", label: "Recently deleted", description: "Restore transactions", icon: "trash-2" },
+  { id: "recent_changes", label: "Recent changes", description: "Review edits and undo eligible changes", icon: "rotate-ccw" },
   { id: "membership", label: "Membership", description: "Plan and pricing", icon: "award" },
   { id: "security", label: "Security & sign-in", description: "App lock, identity, and sign-out controls", icon: "shield" },
   { id: "help", label: "Help & user guide", description: "Illustrated guidance, support, and feedback", icon: "book-open" },
@@ -78,7 +80,7 @@ export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
     id: "data",
     label: "Data & security",
     description: "Control your data, backups, and sign-in security",
-    sectionIds: ["backup", "deleted", "security"],
+    sectionIds: ["backup", "deleted", "recent_changes", "security"],
   },
   {
     id: "account",

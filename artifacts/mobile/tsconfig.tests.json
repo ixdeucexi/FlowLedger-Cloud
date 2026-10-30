@@ -297,5 +297,6 @@
     ,"lib/floCreationUi.test.ts"
     ,"lib/floCreationProtocol.test.ts"
     ,"lib/floCreationForm.test.ts"
+    ,"lib/recentChanges.test.ts"
   ]
 }

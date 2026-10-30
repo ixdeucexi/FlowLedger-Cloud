@@ -25,7 +25,7 @@ test("settings hub preserves the intended group order", () => {
   assert.deepEqual(SETTINGS_GROUPS.map(group => group.sectionIds), [
     ["money", "accounts", "plaid"],
     ["appearance", "notifications", "setup"],
-    ["backup", "deleted", "security"],
+    ["backup", "deleted", "recent_changes", "security"],
     ["membership", "help"],
     ["updates", "admin"],
   ]);

@@ -1,0 +1,21 @@
+{
+  "status": "PASS",
+  "assertions": 81,
+  "isolatedPostgres": true,
+  "liveFinancialWrites": 0,
+  "actualFinancialGuards": 16,
+  "covered": [
+    "scope and permission",
+    "private RLS/ACL",
+    "semantic diffs",
+    "supported inverses",
+    "linked and compound rejection",
+    "ABA and stale metadata",
+    "atomic failure",
+    "concurrent retries and edits",
+    "verified Flo provenance",
+    "immutable creation receipt after Undo",
+    "keyset pagination",
+    "service actors and account/household cascade cleanup"
+  ]
+}

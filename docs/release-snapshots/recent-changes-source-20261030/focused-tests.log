@@ -1,0 +1,22 @@
+✔ recent changes validates the selected household and budget before exposing rows (2.495746ms)
+✔ every supported entity uses only its canonical in-app destination (0.553913ms)
+✔ invalid snapshots cannot enter the money diff or claim eligibility (0.698361ms)
+✔ paging requires ordered unique IDs and a last-row cursor (0.699322ms)
+✔ cursor validation retains bigint precision and rejects malformed pages (0.142435ms)
+✔ formatted before and after preserve money signs, zero and absent fields (16.805314ms)
+✔ page append deduplicates without replacing newer rows or mutating inputs (0.433763ms)
+✔ request gate rejects old page and old household completions, including scope ABA (0.192119ms)
+✔ settings hub places every true setting in exactly one group (1.030801ms)
+✔ settings hub preserves the intended group order (1.00284ms)
+✔ count statuses handle zero, singular, and larger values (0.248714ms)
+✔ attention statuses only highlight positive counts (0.322486ms)
+✔ settings group lookups preserve the destination hierarchy (0.231899ms)
+✔ admin settings are visible only to approved admins (0.290277ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 108.218811
