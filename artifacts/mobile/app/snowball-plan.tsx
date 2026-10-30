@@ -798,7 +798,7 @@ const styles = StyleSheet.create({
   metrics: { flexDirection: "row", gap: 12, marginTop: 20 },
   metricsMobile: { flexWrap: "wrap" },
   metric: { flex: 1, minWidth: 180, borderWidth: 1, borderRadius: 17, padding: 14 },
-  metricMobile: { minWidth: 140 },
+  metricMobile: { minWidth: "100%" },
   metricLabel: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.8 },
   metricValue: { fontSize: 21, fontFamily: "Inter_800ExtraBold", marginTop: 4 },
   metricDetail: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 3 },
