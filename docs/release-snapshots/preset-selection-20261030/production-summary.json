@@ -1,0 +1,20 @@
+{
+  "status": "PASS",
+  "source": "9f4959467f8b3605bed03ded933eab16f62f98e0",
+  "deployment": "dpl_7ijyTmiBBu8DNPEQh63uC3N2PSud",
+  "target": "production",
+  "readyState": "READY",
+  "allFourAliasesAligned": true,
+  "bundleSha256": "b67e9fb3a642435ddfc4d3d953f8ff013f2c3134f97fb928b5f122c956424668",
+  "exactTestedBundle": true,
+  "focusedTests": 17,
+  "typecheck": "PASS",
+  "webExport": "PASS",
+  "httpPostflight": "PASS",
+  "productionBrowserChecks": 34,
+  "unexpectedErrors": 0,
+  "financialWrites": 0,
+  "knownBaselineCspPerViewport": 3,
+  "rollbackRef": "rollback/prod-before-preset-selection-20261030-0441",
+  "rollbackDeployment": "dpl_DsHzL1RJFmQU1khmyEUSE53yzN4k"
+}

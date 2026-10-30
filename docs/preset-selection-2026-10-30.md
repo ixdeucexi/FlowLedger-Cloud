@@ -1,6 +1,6 @@
 # Visible appearance preset selection
 
-Status: verified candidate; production release pending.
+Status: live at https://flowledger-algo.com on October 30, 2026. Production HTTP and browser postflight passed.
 
 Appearance previously treated independent calendar color choices as a fully custom appearance and removed the selected marker from every preset. Preset cards now identify the matching app preset using the four app-wide appearance fields while leaving calendar colors independent. The matching card has a visible Selected badge, checkmark and border. The current-status label includes the preset name and Custom colors when appropriate. A truly unmatched custom configuration explicitly says Custom and does not incorrectly select a preset. The current-status label sits below the heading so it remains readable on narrow screens.
 
@@ -15,3 +15,11 @@ Evidence: `release-snapshots/preset-selection-20261030/`.
 Browser verification passed 34 checks across 390/1,200-pixel layouts: all five presets, visible and accessible selection, independent calendar overrides and reload, fully custom honesty/persistence, reset and Flo/haptics independence. Screenshots were reviewed. All application/API requests used fictional fixtures and interception, with no app errors, unexpected console events, unknown requests, AI calls or financial writes. Intercepted diagnostics telemetry was counted separately.
 
 Tested entry: `entry-25e37fd2efcb9dc5e37e228a12e2eab7.js`, SHA-256 `b67e9fb3a642435ddfc4d3d953f8ff013f2c3134f97fb928b5f122c956424668`.
+
+## Production release
+
+Clean reviewed source `9f4959467f8b3605bed03ded933eab16f62f98e0` was pushed on dev and checked in a clean isolated release checkout. Source/config/guide guards passed. Production deployment `dpl_7ijyTmiBBu8DNPEQh63uC3N2PSud` is READY at immutable https://flow-ledger-cloud-7u0f2qj5t-flow-ledger-s-projects.vercel.app. All four app aliases were freshly verified and aligned; only the legacy alias required reassignment. Only the duplicate in-progress non-production build of this exact source was canceled.
+
+Repository HTTP postflight passed with fresh connected-tool alias/source observations and transparent GitHub-to-CLI metadata normalization. Startup, registered routes, executable assets, cache policies, health/missing-resource responses and guide/service-worker parity passed. The published entry SHA-256 exactly matches the browser-tested candidate above.
+
+All 34 checks passed again on the published assets across phone and desktop layouts. The actual loaded entry digest matched the tested candidate in both contexts. Final phone dark and desktop Mint screenshots were reviewed. No app errors, unknown requests, AI calls, financial writes or reconciliations occurred; existing Cloudflare analytics CSP messages (three per viewport) and intercepted diagnostics telemetry were classified separately. Browser contexts were closed. No backend, environment, schema, dependency or marketing changes were included. The rollback tag and prior READY deployment above remain available.

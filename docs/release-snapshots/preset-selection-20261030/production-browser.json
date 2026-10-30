@@ -1,0 +1,213 @@
+{
+  "status": "PASS",
+  "origin": "published-production-assets",
+  "namedChecks": 34,
+  "results": [
+    {
+      "width": 390,
+      "checks": [
+        "default-base-preset-is-clearly-selected",
+        "sole-selected-marker-FlowLedger",
+        "sole-selected-marker-Ocean",
+        "sole-selected-marker-Mint",
+        "sole-selected-marker-Sunset",
+        "sole-selected-marker-Paper",
+        "independent-calendar-color-retains-base-preset-selection-and-custom-qualifier",
+        "calendar-custom-base-selection-survives-reload",
+        "preset-FlowLedger-selection-preserves-calendar-colors",
+        "preset-Ocean-selection-preserves-calendar-colors",
+        "preset-Mint-selection-preserves-calendar-colors",
+        "preset-Sunset-selection-preserves-calendar-colors",
+        "preset-Paper-selection-preserves-calendar-colors",
+        "nonmatching-global-custom-look-is-explicit-and-does-not-select-arbitrary-preset",
+        "fully-custom-selection-and-calendar-colors-survive-reload",
+        "reset-clearly-selects-original-preset-and-clears-custom-colors",
+        "selection-and-reset-preserve-independent-flo-and-haptics"
+      ],
+      "customGeometry": {
+        "overflow": 0,
+        "viewport": 390,
+        "pill": {
+          "left": 16,
+          "right": 257.5,
+          "width": 241.5
+        },
+        "cards": [
+          {
+            "label": "Apply FlowLedger preset",
+            "bounds": {
+              "left": 16,
+              "right": 190,
+              "width": 174
+            },
+            "badges": [
+              {
+                "left": 133.875,
+                "right": 172,
+                "width": 38.125
+              }
+            ]
+          },
+          {
+            "label": "Apply Ocean preset",
+            "bounds": {
+              "left": 200,
+              "right": 374,
+              "width": 174
+            },
+            "badges": []
+          },
+          {
+            "label": "Apply Mint preset",
+            "bounds": {
+              "left": 16,
+              "right": 190,
+              "width": 174
+            },
+            "badges": []
+          },
+          {
+            "label": "Apply Sunset preset",
+            "bounds": {
+              "left": 200,
+              "right": 374,
+              "width": 174
+            },
+            "badges": []
+          },
+          {
+            "label": "Apply Paper preset",
+            "bounds": {
+              "left": 16,
+              "right": 374,
+              "width": 358
+            },
+            "badges": []
+          }
+        ]
+      },
+      "status": "PASS",
+      "errors": [],
+      "unknown": [],
+      "consoleErrors": [
+        "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked.",
+        "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked.",
+        "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+      ],
+      "knownBaselineCsp": 3,
+      "financialWrites": 0,
+      "interceptedDiagnosticsWrites": 3,
+      "aiCalls": 0,
+      "interceptedExternalRequests": 93,
+      "bundles": [
+        {
+          "path": "/_expo/static/js/web/entry-25e37fd2efcb9dc5e37e228a12e2eab7.js",
+          "sha256": "b67e9fb3a642435ddfc4d3d953f8ff013f2c3134f97fb928b5f122c956424668"
+        }
+      ]
+    },
+    {
+      "width": 1200,
+      "checks": [
+        "default-base-preset-is-clearly-selected",
+        "sole-selected-marker-FlowLedger",
+        "sole-selected-marker-Ocean",
+        "sole-selected-marker-Mint",
+        "sole-selected-marker-Sunset",
+        "sole-selected-marker-Paper",
+        "independent-calendar-color-retains-base-preset-selection-and-custom-qualifier",
+        "calendar-custom-base-selection-survives-reload",
+        "preset-FlowLedger-selection-preserves-calendar-colors",
+        "preset-Ocean-selection-preserves-calendar-colors",
+        "preset-Mint-selection-preserves-calendar-colors",
+        "preset-Sunset-selection-preserves-calendar-colors",
+        "preset-Paper-selection-preserves-calendar-colors",
+        "nonmatching-global-custom-look-is-explicit-and-does-not-select-arbitrary-preset",
+        "fully-custom-selection-and-calendar-colors-survive-reload",
+        "reset-clearly-selects-original-preset-and-clears-custom-colors",
+        "selection-and-reset-preserve-independent-flo-and-haptics"
+      ],
+      "customGeometry": {
+        "overflow": 0,
+        "viewport": 1200,
+        "pill": {
+          "left": 358,
+          "right": 599.5,
+          "width": 241.5
+        },
+        "cards": [
+          {
+            "label": "Apply FlowLedger preset",
+            "bounds": {
+              "left": 358,
+              "right": 717,
+              "width": 359
+            },
+            "badges": [
+              {
+                "left": 660.875,
+                "right": 699,
+                "width": 38.125
+              }
+            ]
+          },
+          {
+            "label": "Apply Ocean preset",
+            "bounds": {
+              "left": 727,
+              "right": 1086,
+              "width": 359
+            },
+            "badges": []
+          },
+          {
+            "label": "Apply Mint preset",
+            "bounds": {
+              "left": 358,
+              "right": 717,
+              "width": 359
+            },
+            "badges": []
+          },
+          {
+            "label": "Apply Sunset preset",
+            "bounds": {
+              "left": 727,
+              "right": 1086,
+              "width": 359
+            },
+            "badges": []
+          },
+          {
+            "label": "Apply Paper preset",
+            "bounds": {
+              "left": 358,
+              "right": 1086,
+              "width": 728
+            },
+            "badges": []
+          }
+        ]
+      },
+      "status": "PASS",
+      "errors": [],
+      "unknown": [],
+      "consoleErrors": [
+        "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked.",
+        "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked.",
+        "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+      ],
+      "knownBaselineCsp": 3,
+      "financialWrites": 0,
+      "interceptedDiagnosticsWrites": 3,
+      "aiCalls": 0,
+      "interceptedExternalRequests": 93,
+      "bundles": [
+        {
+          "path": "/_expo/static/js/web/entry-25e37fd2efcb9dc5e37e228a12e2eab7.js",
+          "sha256": "b67e9fb3a642435ddfc4d3d953f8ff013f2c3134f97fb928b5f122c956424668"
+        }
+      ]
+    }
+  ]
+}
