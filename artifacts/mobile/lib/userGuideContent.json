@@ -137,8 +137,8 @@
       {
         "title": "Try a what-if",
         "items": [
-          { "title": "Open Simulator", "body": "Test income or expense changes without editing live data.", "icon": "sliders" },
-          { "title": "Compare results", "body": "Review the real plan beside the simulated outcome.", "icon": "columns" },
+          { "title": "Open Simulator", "body": "Free includes one current what-if draft. Test income or expense changes without editing your real plan.", "icon": "sliders" },
+          { "title": "Compare results", "body": "Review your draft against the real plan. Pro and eligible Founders can save and compare multiple scenarios.", "icon": "columns" },
           { "title": "Leave safely", "body": "Exit the simulator to return to the unchanged Forecast.", "icon": "log-out" }
         ]
       }
@@ -159,16 +159,16 @@
         "title": "Savings",
         "items": [
           { "title": "Flip the full card", "body": "Tap Savings on Dashboard to switch from checking to savings.", "icon": "repeat" },
-          { "title": "Review accounts separately", "body": "Each manual savings balance appears on its own during Founding Free.", "icon": "layers" },
+          { "title": "Review accounts separately", "body": "Review each manual savings account and its current recorded balance.", "icon": "layers" },
           { "title": "Name the purpose", "body": "Use names like Emergency Fund, Vacation, Taxes, or Car Repair.", "icon": "tag" }
         ]
       },
       {
         "title": "Ask Flo",
         "items": [
-          { "title": "Ask about a date", "body": "Ask for your balance on a future date, upcoming bills, spending, debt payments, or a cash-buffer plan.", "icon": "help-circle" },
+          { "title": "Ask about a date", "body": "Flo Essentials gives local plan guidance. Free also includes ten conversational preview requests per calendar month, shared by the household.", "icon": "help-circle" },
           { "title": "Separate facts from forecasts", "body": "Flo calculates from recorded data. Expected paychecks and spending estimates are not guaranteed funds. Missing information is called out.", "icon": "link" },
-          { "title": "Try a what-if", "body": "Test a purchase, savings transfer, or extra debt payment without changing records. Review any separate proposed change before confirming it.", "icon": "eye" },
+          { "title": "Full Flo", "body": "Pro includes 300 chat requests per calendar month per household and confirmed item creation. Eligible Founders keep their existing Flo access.", "icon": "eye" },
           { "title": "Show or hide Flo", "body": "Hold the Flo icon to hide it; tap Undo to restore it. Toggle the floating icon in Settings or Dashboard Configure.", "icon": "eye-off" }
         ]
       }
@@ -210,7 +210,7 @@
   },
   {
     "eyebrow": "STEP 8",
-    "title": "Settings, setup, and Founding Free",
+    "title": "Settings, setup, and membership",
     "intro": "Open Settings to manage the active household, manual accounts, reminders, appearance, security, setup, and support.",
     "icon": "settings",
     "accent": "#A78BFA",
@@ -225,10 +225,12 @@
         ]
       },
       {
-        "title": "Current public plan",
+        "title": "Choose your household plan",
         "items": [
-          { "title": "Founding Free", "body": "No subscription or trial is required during the public launch. Forecast, bills, debt payoff, Activity, spending buckets, reports, and Flo are available.", "icon": "gift" },
-          { "title": "Pro is planned for a later release", "body": "Bank sync and advanced automation stay unavailable until their production approval and testing are complete.", "icon": "clock" }
+          { "title": "Free", "body": "Manual budgeting, Forecast, basic debt planning, monthly reports, sharing, customization, privacy and supported Undo stay Free.", "icon": "gift" },
+          { "title": "Pro", "body": "US list prices: $9.99 monthly or $79.99 yearly per household. Pro adds saved scenarios, advanced planning, historical reports and a larger Flo allowance.", "icon": "award" },
+          { "title": "Founding Free access", "body": "Eligible existing households keep their current planning and Flo tools. Bank connections and household scenario sync retain their separate eligibility.", "icon": "gift" },
+          { "title": "Verified store checkout", "body": "Purchasing opens when store products are ready. The store confirms the actual local price, eligible offer and renewal terms.", "icon": "shield" }
         ]
       }
     ],

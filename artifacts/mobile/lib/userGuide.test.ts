@@ -99,10 +99,10 @@ test("the in-app guide matches the current navigation and launch plan", () => {
     ),
   );
   assert.match(serializedCatalog, /Review Activity and match what happened/);
-  assert.match(serializedCatalog, /Settings, setup, and Founding Free/);
+  assert.match(serializedCatalog, /Settings, setup, and membership/);
   assert.match(serializedCatalog, /Dashboard → Next up → Activity → Forecast/);
   assert.match(serializedCatalog, /saved real closing balance/);
-  assert.match(serializedCatalog, /Pro is planned for a later release/);
+  assert.match(serializedCatalog, /Verified store checkout/);
   assert.doesNotMatch(
     serializedCatalog,
     /2027|Today.?s Decisions|actual close|projected close/i,
