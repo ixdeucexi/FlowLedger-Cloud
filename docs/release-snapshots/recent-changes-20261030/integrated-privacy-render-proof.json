@@ -1,0 +1,1 @@
+{"status":"PASS","actualIntegratedScreen":true,"actualPrivacyPrimitives":true,"checks":["revealed exact amounts","hidden visible values","hidden accessibility labels","dates preserved","viewer cannot review Undo","unsupported changes history-only"]}

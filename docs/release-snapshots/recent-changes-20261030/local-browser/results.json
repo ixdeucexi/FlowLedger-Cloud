@@ -1,0 +1,423 @@
+{
+  "status": "PASS",
+  "origin": "local-export-with-fixture-api",
+  "checks": 30,
+  "results": [
+    {
+      "width": 390,
+      "case": "owner-history-undo",
+      "checks": [
+        "Settings Data & security exposes Recent changes",
+        "Semantic before/after, actor, timestamp, and new-history boundary are shown",
+        "Flo and household actor labels come from parsed server journal fields",
+        "Skipped income history, linked bank activity, and already-undone edits never offer unsupported Undo",
+        "Review expands all fields; Cancel makes no Undo RPC",
+        "Pagination failure preserves loaded rows, retries the same cursor, and appends distinct rows",
+        "Failed Undo reports an actionable error without optimistic success",
+        "One confirmed Undo verifies pinned auth and receipt, refreshes authoritative core rows and journal, and suppresses double taps",
+        "A saved Undo with failed core refresh can be retried idempotently using the same receipt and one inverse",
+        "Household and budget switch clear stale confirmation, rows and feedback before loading the newly scoped journal"
+      ],
+      "screens": [
+        "history-summary-390.png",
+        "undo-review-390.png",
+        "undo-retry-390.png",
+        "history-second-household-390.png"
+      ],
+      "intentionalMockUndo": [
+        {
+          "input": {
+            "p_change_id": "90000000-0000-4000-8000-000000000100",
+            "p_expected_household_id": "22222222-2222-4222-8222-222222222222",
+            "p_expected_budget_id": "33333333-3333-4333-8333-333333333333"
+          },
+          "failed": true
+        },
+        {
+          "input": {
+            "p_change_id": "90000000-0000-4000-8000-000000000100",
+            "p_expected_household_id": "22222222-2222-4222-8222-222222222222",
+            "p_expected_budget_id": "33333333-3333-4333-8333-333333333333"
+          },
+          "failed": false
+        },
+        {
+          "input": {
+            "p_change_id": "90000000-0000-4000-8000-000000000097",
+            "p_expected_household_id": "22222222-2222-4222-8222-222222222222",
+            "p_expected_budget_id": "33333333-3333-4333-8333-333333333333"
+          },
+          "failed": false
+        },
+        {
+          "input": {
+            "p_change_id": "90000000-0000-4000-8000-000000000100",
+            "p_expected_household_id": "22222222-2222-4222-8222-222222222222",
+            "p_expected_budget_id": "33333333-3333-4333-8333-333333333333"
+          },
+          "failed": false
+        }
+      ],
+      "receipts": [
+        {
+          "changeId": "90000000-0000-4000-8000-000000000100",
+          "householdId": "22222222-2222-4222-8222-222222222222",
+          "budgetId": "33333333-3333-4333-8333-333333333333",
+          "undoneAt": "2026-10-29T12:00:00.000Z",
+          "inverseChangeId": "90000000-0000-4000-8000-000000002100"
+        },
+        {
+          "changeId": "90000000-0000-4000-8000-000000000097",
+          "householdId": "22222222-2222-4222-8222-222222222222",
+          "budgetId": "33333333-3333-4333-8333-333333333333",
+          "undoneAt": "2026-10-29T12:00:00.000Z",
+          "inverseChangeId": "90000000-0000-4000-8000-000000002097"
+        },
+        {
+          "changeId": "90000000-0000-4000-8000-000000000100",
+          "householdId": "22222222-2222-4222-8222-222222222222",
+          "budgetId": "33333333-3333-4333-8333-333333333333",
+          "undoneAt": "2026-10-29T12:00:00.000Z",
+          "inverseChangeId": "90000000-0000-4000-8000-000000002100"
+        }
+      ],
+      "safety": {
+        "financialTableWrites": 0,
+        "providerCalls": 0,
+        "reconciliationCalls": 0,
+        "onlyMockUndoIntents": 4,
+        "controlledFailures": [
+          "list",
+          "undo",
+          "core-refresh"
+        ],
+        "knownBaselineCsp": 0
+      },
+      "geometry": {
+        "viewport": 390,
+        "scroll": 390
+      },
+      "bundles": [
+        {
+          "path": "/_expo/static/js/web/entry-721eaf33822da0afb8ff61705688682c.js",
+          "sha256": "3417c3cbc3f124d8cbd283620cd09c8e06ec63dde6a9d848b122b56c90afeb3a",
+          "bytes": 5073649
+        }
+      ],
+      "status": "PASS"
+    },
+    {
+      "width": 390,
+      "case": "initial-error-empty",
+      "checks": [
+        "Initial load failure shows retry without claiming an empty history",
+        "Empty state honestly describes future history and makes no writes"
+      ],
+      "screens": [
+        "history-empty-390.png"
+      ],
+      "safety": {
+        "financialTableWrites": 0,
+        "providerCalls": 0,
+        "reconciliationCalls": 0,
+        "onlyMockUndoIntents": 0,
+        "controlledFailures": [
+          "list"
+        ],
+        "knownBaselineCsp": 0
+      },
+      "geometry": {
+        "viewport": 390,
+        "scroll": 390
+      },
+      "bundles": [
+        {
+          "path": "/_expo/static/js/web/entry-721eaf33822da0afb8ff61705688682c.js",
+          "sha256": "3417c3cbc3f124d8cbd283620cd09c8e06ec63dde6a9d848b122b56c90afeb3a",
+          "bytes": 5073649
+        }
+      ],
+      "status": "PASS"
+    },
+    {
+      "width": 390,
+      "case": "viewer",
+      "checks": [
+        "Viewer can read valid history and destinations while Undo is unavailable"
+      ],
+      "screens": [
+        "history-viewer-390.png"
+      ],
+      "safety": {
+        "financialTableWrites": 0,
+        "providerCalls": 0,
+        "reconciliationCalls": 0,
+        "onlyMockUndoIntents": 0,
+        "controlledFailures": [],
+        "knownBaselineCsp": 0
+      },
+      "geometry": {
+        "viewport": 390,
+        "scroll": 390
+      },
+      "bundles": [
+        {
+          "path": "/_expo/static/js/web/entry-721eaf33822da0afb8ff61705688682c.js",
+          "sha256": "3417c3cbc3f124d8cbd283620cd09c8e06ec63dde6a9d848b122b56c90afeb3a",
+          "bytes": 5073649
+        }
+      ],
+      "status": "PASS"
+    },
+    {
+      "width": 390,
+      "case": "privacy",
+      "checks": [
+        "Privacy Mode masks every money Before/After field, review expansion, DOM and accessibility values without a loading flash",
+        "Global Show amounts restores actual values and preserves an unsaved review without dispatching Undo"
+      ],
+      "screens": [
+        "history-private-review-390.png",
+        "history-revealed-review-390.png"
+      ],
+      "masked": {
+        "masks": 10,
+        "accessibleAttributes": 378,
+        "startupLeaks": 0
+      },
+      "reviewMasked": {
+        "masks": 10,
+        "accessibleAttributes": 384,
+        "startupLeaks": 0
+      },
+      "safety": {
+        "financialTableWrites": 0,
+        "providerCalls": 0,
+        "reconciliationCalls": 0,
+        "onlyMockUndoIntents": 0,
+        "controlledFailures": [],
+        "knownBaselineCsp": 0
+      },
+      "geometry": {
+        "viewport": 390,
+        "scroll": 390
+      },
+      "bundles": [
+        {
+          "path": "/_expo/static/js/web/entry-721eaf33822da0afb8ff61705688682c.js",
+          "sha256": "3417c3cbc3f124d8cbd283620cd09c8e06ec63dde6a9d848b122b56c90afeb3a",
+          "bytes": 5073649
+        }
+      ],
+      "status": "PASS"
+    },
+    {
+      "width": 1200,
+      "case": "owner-history-undo",
+      "checks": [
+        "Settings Data & security exposes Recent changes",
+        "Semantic before/after, actor, timestamp, and new-history boundary are shown",
+        "Flo and household actor labels come from parsed server journal fields",
+        "Skipped income history, linked bank activity, and already-undone edits never offer unsupported Undo",
+        "Review expands all fields; Cancel makes no Undo RPC",
+        "Pagination failure preserves loaded rows, retries the same cursor, and appends distinct rows",
+        "Failed Undo reports an actionable error without optimistic success",
+        "One confirmed Undo verifies pinned auth and receipt, refreshes authoritative core rows and journal, and suppresses double taps",
+        "A saved Undo with failed core refresh can be retried idempotently using the same receipt and one inverse",
+        "Household and budget switch clear stale confirmation, rows and feedback before loading the newly scoped journal"
+      ],
+      "screens": [
+        "history-summary-1200.png",
+        "undo-review-1200.png",
+        "undo-retry-1200.png",
+        "history-second-household-1200.png"
+      ],
+      "intentionalMockUndo": [
+        {
+          "input": {
+            "p_change_id": "90000000-0000-4000-8000-000000000100",
+            "p_expected_household_id": "22222222-2222-4222-8222-222222222222",
+            "p_expected_budget_id": "33333333-3333-4333-8333-333333333333"
+          },
+          "failed": true
+        },
+        {
+          "input": {
+            "p_change_id": "90000000-0000-4000-8000-000000000100",
+            "p_expected_household_id": "22222222-2222-4222-8222-222222222222",
+            "p_expected_budget_id": "33333333-3333-4333-8333-333333333333"
+          },
+          "failed": false
+        },
+        {
+          "input": {
+            "p_change_id": "90000000-0000-4000-8000-000000000097",
+            "p_expected_household_id": "22222222-2222-4222-8222-222222222222",
+            "p_expected_budget_id": "33333333-3333-4333-8333-333333333333"
+          },
+          "failed": false
+        },
+        {
+          "input": {
+            "p_change_id": "90000000-0000-4000-8000-000000000100",
+            "p_expected_household_id": "22222222-2222-4222-8222-222222222222",
+            "p_expected_budget_id": "33333333-3333-4333-8333-333333333333"
+          },
+          "failed": false
+        }
+      ],
+      "receipts": [
+        {
+          "changeId": "90000000-0000-4000-8000-000000000100",
+          "householdId": "22222222-2222-4222-8222-222222222222",
+          "budgetId": "33333333-3333-4333-8333-333333333333",
+          "undoneAt": "2026-10-29T12:00:00.000Z",
+          "inverseChangeId": "90000000-0000-4000-8000-000000002100"
+        },
+        {
+          "changeId": "90000000-0000-4000-8000-000000000097",
+          "householdId": "22222222-2222-4222-8222-222222222222",
+          "budgetId": "33333333-3333-4333-8333-333333333333",
+          "undoneAt": "2026-10-29T12:00:00.000Z",
+          "inverseChangeId": "90000000-0000-4000-8000-000000002097"
+        },
+        {
+          "changeId": "90000000-0000-4000-8000-000000000100",
+          "householdId": "22222222-2222-4222-8222-222222222222",
+          "budgetId": "33333333-3333-4333-8333-333333333333",
+          "undoneAt": "2026-10-29T12:00:00.000Z",
+          "inverseChangeId": "90000000-0000-4000-8000-000000002100"
+        }
+      ],
+      "safety": {
+        "financialTableWrites": 0,
+        "providerCalls": 0,
+        "reconciliationCalls": 0,
+        "onlyMockUndoIntents": 4,
+        "controlledFailures": [
+          "list",
+          "undo",
+          "core-refresh"
+        ],
+        "knownBaselineCsp": 0
+      },
+      "geometry": {
+        "viewport": 1200,
+        "scroll": 1200
+      },
+      "bundles": [
+        {
+          "path": "/_expo/static/js/web/entry-721eaf33822da0afb8ff61705688682c.js",
+          "sha256": "3417c3cbc3f124d8cbd283620cd09c8e06ec63dde6a9d848b122b56c90afeb3a",
+          "bytes": 5073649
+        }
+      ],
+      "status": "PASS"
+    },
+    {
+      "width": 1200,
+      "case": "initial-error-empty",
+      "checks": [
+        "Initial load failure shows retry without claiming an empty history",
+        "Empty state honestly describes future history and makes no writes"
+      ],
+      "screens": [
+        "history-empty-1200.png"
+      ],
+      "safety": {
+        "financialTableWrites": 0,
+        "providerCalls": 0,
+        "reconciliationCalls": 0,
+        "onlyMockUndoIntents": 0,
+        "controlledFailures": [
+          "list"
+        ],
+        "knownBaselineCsp": 0
+      },
+      "geometry": {
+        "viewport": 1200,
+        "scroll": 1200
+      },
+      "bundles": [
+        {
+          "path": "/_expo/static/js/web/entry-721eaf33822da0afb8ff61705688682c.js",
+          "sha256": "3417c3cbc3f124d8cbd283620cd09c8e06ec63dde6a9d848b122b56c90afeb3a",
+          "bytes": 5073649
+        }
+      ],
+      "status": "PASS"
+    },
+    {
+      "width": 1200,
+      "case": "viewer",
+      "checks": [
+        "Viewer can read valid history and destinations while Undo is unavailable"
+      ],
+      "screens": [
+        "history-viewer-1200.png"
+      ],
+      "safety": {
+        "financialTableWrites": 0,
+        "providerCalls": 0,
+        "reconciliationCalls": 0,
+        "onlyMockUndoIntents": 0,
+        "controlledFailures": [],
+        "knownBaselineCsp": 0
+      },
+      "geometry": {
+        "viewport": 1200,
+        "scroll": 1200
+      },
+      "bundles": [
+        {
+          "path": "/_expo/static/js/web/entry-721eaf33822da0afb8ff61705688682c.js",
+          "sha256": "3417c3cbc3f124d8cbd283620cd09c8e06ec63dde6a9d848b122b56c90afeb3a",
+          "bytes": 5073649
+        }
+      ],
+      "status": "PASS"
+    },
+    {
+      "width": 1200,
+      "case": "privacy",
+      "checks": [
+        "Privacy Mode masks every money Before/After field, review expansion, DOM and accessibility values without a loading flash",
+        "Global Show amounts restores actual values and preserves an unsaved review without dispatching Undo"
+      ],
+      "screens": [
+        "history-private-review-1200.png",
+        "history-revealed-review-1200.png"
+      ],
+      "masked": {
+        "masks": 10,
+        "accessibleAttributes": 462,
+        "startupLeaks": 0
+      },
+      "reviewMasked": {
+        "masks": 10,
+        "accessibleAttributes": 468,
+        "startupLeaks": 0
+      },
+      "safety": {
+        "financialTableWrites": 0,
+        "providerCalls": 0,
+        "reconciliationCalls": 0,
+        "onlyMockUndoIntents": 0,
+        "controlledFailures": [],
+        "knownBaselineCsp": 0
+      },
+      "geometry": {
+        "viewport": 1200,
+        "scroll": 1200
+      },
+      "bundles": [
+        {
+          "path": "/_expo/static/js/web/entry-721eaf33822da0afb8ff61705688682c.js",
+          "sha256": "3417c3cbc3f124d8cbd283620cd09c8e06ec63dde6a9d848b122b56c90afeb3a",
+          "bytes": 5073649
+        }
+      ],
+      "status": "PASS"
+    }
+  ]
+}

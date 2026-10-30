@@ -1,0 +1,48 @@
+{
+  "width": 1200,
+  "mode": "reduced-motion",
+  "checks": [
+    "initial-or-newly-enabled-fully-spent-bucket-does-not-celebrate",
+    "confirmed-completion-is-visible-and-hit-testable-above-other-modals",
+    "dismiss-reduced-motion-closes-only-the-celebration",
+    "bucket-details-return-after-milestone-dismissal",
+    "confirmed-moment-is-persisted-once-and-not-repeated-after-reload"
+  ],
+  "visibleOpacity": 1,
+  "hit": {
+    "receivesPointer": true,
+    "bounds": {
+      "x": 775,
+      "y": 719,
+      "width": 40,
+      "height": 44
+    },
+    "topRole": null,
+    "topLabel": null
+  },
+  "loadedBundles": [
+    {
+      "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+      "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+    },
+    {
+      "path": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+      "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660"
+    }
+  ],
+  "closeCalls": [
+    {
+      "input": {
+        "p_bucket_id": "fixture-full",
+        "p_expected_spent": 100,
+        "p_expected_remainder": 0
+      },
+      "failed": false
+    }
+  ],
+  "consoleErrors": [
+    "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked.",
+    "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+  ],
+  "success": true
+}

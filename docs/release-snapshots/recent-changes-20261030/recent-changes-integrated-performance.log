@@ -1,0 +1,18 @@
+✔ isolated shared engine preserves 20k preparation and cached month responsiveness (138.481607ms)
+ℹ shared 20k engine cold=20.9ms, repeated-max=16.8ms, cached-months=3.2ms
+✔ isolated 20k provider preparation components stay below one input task (185.353446ms)
+ℹ isolated 20k staged prep: context-index=3.1/4.9ms, ledger=14.9/26.1ms, matches=8.4/8.7ms, review=1.3/1.4ms, combined-cold=27.7ms (diagnostic), projection-index-max=5.8ms
+✔ isolated 20k cache-to-live equality stays below one input task (38.527502ms)
+ℹ isolated 20k cache-to-live equality cold=6.3ms, repeated-max=5.1ms
+✔ isolated dense Dashboard stages each stay below one input task (33.719673ms)
+ℹ isolated dense 20k cold/repeated-max: review=1.3/0.6ms, posted=1.4/0.8ms, recent=1.8/4.7ms, publish=6.0/1.0ms
+✔ isolated maximum plan-cache serialization stays below one input task (40.969243ms)
+ℹ isolated maximum plan-cache serialization cold=8.9ms, repeated-max=7.0ms
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 518.738963

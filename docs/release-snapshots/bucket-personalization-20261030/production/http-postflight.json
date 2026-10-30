@@ -1,0 +1,9 @@
+{
+  "status": "PASS",
+  "name": "Personalized buckets",
+  "deploymentId": "dpl_2zJvsd1AGAT4GL1en3DEja4GMJBK",
+  "source": "6a8fb70e768dce2f1d6b260b5228c3c1f84e5485",
+  "bundlePath": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+  "bundleSha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660",
+  "exactBrowserTestedBundle": true
+}

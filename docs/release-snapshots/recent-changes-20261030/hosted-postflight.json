@@ -1,0 +1,823 @@
+{
+  "projectId": "imqmhfdquqlqxgtcdbvc",
+  "appliedMigration": {
+    "name": "recent_changes_journal",
+    "version": "20261030065552",
+    "originalCliVersion": "20261030050751",
+    "sha256": "6164d30afc55406c61b32f1f05bb0ba555e002612f4b084c98eed73630756fdd",
+    "exactReviewedBytes": true
+  },
+  "catalog": {
+    "checks": [
+      {
+        "name": "function.private.capture_recent_change.exact_reviewed_body",
+        "passed": true
+      },
+      {
+        "name": "function.private.capture_recent_change.execute_acl",
+        "passed": true
+      },
+      {
+        "name": "function.private.capture_recent_change.shape",
+        "passed": true
+      },
+      {
+        "name": "function.private.list_recent_changes.exact_reviewed_body",
+        "passed": true
+      },
+      {
+        "name": "function.private.list_recent_changes.execute_acl",
+        "passed": true
+      },
+      {
+        "name": "function.private.list_recent_changes.shape",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_diff.exact_reviewed_body",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_diff.execute_acl",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_diff.shape",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_fields.exact_reviewed_body",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_fields.execute_acl",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_fields.shape",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_has_links.exact_reviewed_body",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_has_links.execute_acl",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_has_links.shape",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_reason.exact_reviewed_body",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_reason.execute_acl",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_reason.shape",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_scope.exact_reviewed_body",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_scope.execute_acl",
+        "passed": true
+      },
+      {
+        "name": "function.private.recent_change_scope.shape",
+        "passed": true
+      },
+      {
+        "name": "function.private.undo_recent_change.exact_reviewed_body",
+        "passed": true
+      },
+      {
+        "name": "function.private.undo_recent_change.execute_acl",
+        "passed": true
+      },
+      {
+        "name": "function.private.undo_recent_change.shape",
+        "passed": true
+      },
+      {
+        "name": "function.public.list_recent_changes.exact_reviewed_body",
+        "passed": true
+      },
+      {
+        "name": "function.public.list_recent_changes.execute_acl",
+        "passed": true
+      },
+      {
+        "name": "function.public.list_recent_changes.shape",
+        "passed": true
+      },
+      {
+        "name": "function.public.undo_recent_change.exact_reviewed_body",
+        "passed": true
+      },
+      {
+        "name": "function.public.undo_recent_change.execute_acl",
+        "passed": true
+      },
+      {
+        "name": "function.public.undo_recent_change.shape",
+        "passed": true
+      },
+      {
+        "name": "functions.exact_ten_expected_overloads",
+        "passed": true
+      },
+      {
+        "name": "index.private.flo_creation_receipts_recent_actor_idx",
+        "passed": true
+      },
+      {
+        "name": "index.private.recent_change_versions_pkey",
+        "passed": true
+      },
+      {
+        "name": "index.private.recent_changes_actor_idx",
+        "passed": true
+      },
+      {
+        "name": "index.private.recent_changes_entity_idx",
+        "passed": true
+      },
+      {
+        "name": "index.private.recent_changes_group_idx",
+        "passed": true
+      },
+      {
+        "name": "index.private.recent_changes_pkey",
+        "passed": true
+      },
+      {
+        "name": "index.private.recent_changes_scope_page_idx",
+        "passed": true
+      },
+      {
+        "name": "index.private.recent_changes_sequence_key",
+        "passed": true
+      },
+      {
+        "name": "index.private.recent_changes_undo_actor_idx",
+        "passed": true
+      },
+      {
+        "name": "schema.anon_private_usage_denied",
+        "passed": true
+      },
+      {
+        "name": "schema.authenticated_private_usage",
+        "passed": true
+      },
+      {
+        "name": "sequence.private.recent_changes_sequence_seq.identity",
+        "passed": true
+      },
+      {
+        "name": "sequence.private.recent_changes_sequence_seq.no_direct_client_or_public_grants",
+        "passed": true
+      },
+      {
+        "name": "table.private.recent_change_versions.deny_all_rls",
+        "passed": true
+      },
+      {
+        "name": "table.private.recent_change_versions.no_direct_client_or_public_grants",
+        "passed": true
+      },
+      {
+        "name": "table.private.recent_changes.deny_all_rls",
+        "passed": true
+      },
+      {
+        "name": "table.private.recent_changes.no_direct_client_or_public_grants",
+        "passed": true
+      },
+      {
+        "name": "trigger.public.bills.capture",
+        "passed": true
+      },
+      {
+        "name": "trigger.public.goals.capture",
+        "passed": true
+      },
+      {
+        "name": "trigger.public.incomes.capture",
+        "passed": true
+      },
+      {
+        "name": "trigger.public.transactions.capture",
+        "passed": true
+      },
+      {
+        "name": "triggers.exactly_four_capture_triggers",
+        "passed": true
+      }
+    ],
+    "failures": [],
+    "allPassed": true,
+    "projectId": "imqmhfdquqlqxgtcdbvc",
+    "checkCount": 53,
+    "schemaUsage": {
+      "anon": false,
+      "serviceRole": true,
+      "authenticated": true
+    },
+    "sourceCommit": "501174de671fc02bfd4d364cd1433b51398ab16d",
+    "migrationSha256": "6164d30afc55406c61b32f1f05bb0ba555e002612f4b084c98eed73630756fdd"
+  },
+  "noAuthReadOnlySmoke": {
+    "passed": true,
+    "expectedRejections": 6,
+    "customerRecordsAccessed": false
+  },
+  "security": {
+    "lints": [
+      {
+        "name": "rls_enabled_no_policy",
+        "title": "RLS Enabled No Policy",
+        "level": "INFO",
+        "facing": "EXTERNAL",
+        "categories": [
+          "SECURITY"
+        ],
+        "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+        "count": 15,
+        "findings": [
+          {
+            "detail": "Table \\`private.flo_creation_receipts\\` has RLS enabled, but no policies exist",
+            "metadata": {
+              "name": "flo_creation_receipts",
+              "type": "table",
+              "schema": "private"
+            },
+            "observed_at": "2026-10-30T06:56:36.855Z"
+          },
+          {
+            "detail": "Table \\`private.recent_change_versions\\` has RLS enabled, but no policies exist",
+            "metadata": {
+              "name": "recent_change_versions",
+              "type": "table",
+              "schema": "private"
+            },
+            "observed_at": "2026-10-30T06:56:36.855Z"
+          },
+          {
+            "detail": "Table \\`private.recent_changes\\` has RLS enabled, but no policies exist",
+            "metadata": {
+              "name": "recent_changes",
+              "type": "table",
+              "schema": "private"
+            },
+            "observed_at": "2026-10-30T06:56:36.855Z"
+          },
+          {
+            "detail": "Table \\`private.release_feature_entitlements\\` has RLS enabled, but no policies exist",
+            "metadata": {
+              "name": "release_feature_entitlements",
+              "type": "table",
+              "schema": "private"
+            },
+            "observed_at": "2026-10-30T06:56:36.855Z"
+          },
+          {
+            "detail": "Table \\`public.billing_entitlements\\` has RLS enabled, but no policies exist",
+            "metadata": {
+              "name": "billing_entitlements",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.855Z"
+          },
+          {
+            "detail": "Table \\`public.billing_events\\` has RLS enabled, but no policies exist",
+            "metadata": {
+              "name": "billing_events",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.855Z"
+          },
+          {
+            "detail": "Table \\`public.billing_purchase_bindings\\` has RLS enabled, but no policies exist",
+            "metadata": {
+              "name": "billing_purchase_bindings",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.855Z"
+          },
+          {
+            "detail": "Table \\`public.billing_purchase_intents\\` has RLS enabled, but no policies exist",
+            "metadata": {
+              "name": "billing_purchase_intents",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.855Z"
+          },
+          {
+            "detail": "Table \\`public.billing_sandbox_testers\\` has RLS enabled, but no policies exist",
+            "metadata": {
+              "name": "billing_sandbox_testers",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.855Z"
+          },
+          {
+            "detail": "Table \\`public.flo_audit_events\\` has RLS enabled, but no policies exist",
+            "metadata": {
+              "name": "flo_audit_events",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.855Z"
+          },
+          {
+            "detail": "Table \\`public.flo_daily_limits\\` has RLS enabled, but no policies exist",
+            "metadata": {
+              "name": "flo_daily_limits",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.855Z"
+          },
+          {
+            "detail": "Table \\`public.flo_rate_limits\\` has RLS enabled, but no policies exist",
+            "metadata": {
+              "name": "flo_rate_limits",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.855Z"
+          },
+          {
+            "detail": "Table \\`public.flo_usage\\` has RLS enabled, but no policies exist",
+            "metadata": {
+              "name": "flo_usage",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.855Z"
+          },
+          {
+            "detail": "Table \\`public.native_push_devices\\` has RLS enabled, but no policies exist",
+            "metadata": {
+              "name": "native_push_devices",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.855Z"
+          },
+          {
+            "detail": "Table \\`public.native_push_receipts\\` has RLS enabled, but no policies exist",
+            "metadata": {
+              "name": "native_push_receipts",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.855Z"
+          }
+        ]
+      }
+    ]
+  },
+  "performance": {
+    "lints": [
+      {
+        "name": "unindexed_foreign_keys",
+        "title": "Unindexed foreign keys",
+        "level": "INFO",
+        "facing": "EXTERNAL",
+        "categories": [
+          "PERFORMANCE"
+        ],
+        "description": "Identifies foreign key constraints without a covering index, which can impact database performance.",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0001_unindexed_foreign_keys",
+        "count": 1,
+        "findings": [
+          {
+            "detail": "Table \\`private.flo_creation_receipts\\` has a foreign key \\`flo_creation_receipts_household_id_fkey\\` without a covering index. This can lead to suboptimal query performance.",
+            "metadata": {
+              "name": "flo_creation_receipts",
+              "type": "table",
+              "schema": "private",
+              "fkey_name": "flo_creation_receipts_household_id_fkey",
+              "fkey_columns": [
+                2
+              ]
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          }
+        ]
+      },
+      {
+        "name": "unused_index",
+        "title": "Unused Index",
+        "level": "INFO",
+        "facing": "EXTERNAL",
+        "categories": [
+          "PERFORMANCE"
+        ],
+        "description": "Detects if an index has never been used and may be a candidate for removal.",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0005_unused_index",
+        "count": 42,
+        "findings": [
+          {
+            "detail": "Index \\`transactions_user_transfer_group_idx\\` on table \\`public.transactions\\` has not been used",
+            "metadata": {
+              "name": "transactions",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`goals_archived_by_idx\\` on table \\`public.goals\\` has not been used",
+            "metadata": {
+              "name": "goals",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`bill_date_moves_user_to_idx\\` on table \\`public.bill_date_moves\\` has not been used",
+            "metadata": {
+              "name": "bill_date_moves",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`app_feedback_type_created_idx\\` on table \\`public.app_feedback\\` has not been used",
+            "metadata": {
+              "name": "app_feedback",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`plaid_accounts_item_idx\\` on table \\`public.plaid_accounts\\` has not been used",
+            "metadata": {
+              "name": "plaid_accounts",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`flo_conversations_ephemeral_created_idx\\` on table \\`public.flo_conversations\\` has not been used",
+            "metadata": {
+              "name": "flo_conversations",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`goals_user_id_idx\\` on table \\`public.goals\\` has not been used",
+            "metadata": {
+              "name": "goals",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`household_invites_accepted_by_idx\\` on table \\`public.household_invites\\` has not been used",
+            "metadata": {
+              "name": "household_invites",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`household_invites_created_by_idx\\` on table \\`public.household_invites\\` has not been used",
+            "metadata": {
+              "name": "household_invites",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`household_settings_budget_id_idx\\` on table \\`public.household_settings\\` has not been used",
+            "metadata": {
+              "name": "household_settings",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`incomes_budget_id_idx\\` on table \\`public.incomes\\` has not been used",
+            "metadata": {
+              "name": "incomes",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`incomes_user_id_idx\\` on table \\`public.incomes\\` has not been used",
+            "metadata": {
+              "name": "incomes",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`plaid_accounts_account_id_idx\\` on table \\`public.plaid_accounts\\` has not been used",
+            "metadata": {
+              "name": "plaid_accounts",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`plaid_accounts_flowledger_account_id_idx\\` on table \\`public.plaid_accounts\\` has not been used",
+            "metadata": {
+              "name": "plaid_accounts",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`goals_household_archived_idx\\` on table \\`public.goals\\` has not been used",
+            "metadata": {
+              "name": "goals",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`goals_closed_by_idx\\` on table \\`public.goals\\` has not been used",
+            "metadata": {
+              "name": "goals",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`categories_budget_id_idx\\` on table \\`public.categories\\` has not been used",
+            "metadata": {
+              "name": "categories",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`push_notification_events_type_pending_idx\\` on table \\`public.push_notification_events\\` has not been used",
+            "metadata": {
+              "name": "push_notification_events",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`incomes_household_idx\\` on table \\`public.incomes\\` has not been used",
+            "metadata": {
+              "name": "incomes",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`accounts_budget_id_idx\\` on table \\`public.accounts\\` has not been used",
+            "metadata": {
+              "name": "accounts",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`goals_household_open_spending_idx\\` on table \\`public.goals\\` has not been used",
+            "metadata": {
+              "name": "goals",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`decisions_budget_id_idx\\` on table \\`public.decisions\\` has not been used",
+            "metadata": {
+              "name": "decisions",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`decisions_household_id_idx\\` on table \\`public.decisions\\` has not been used",
+            "metadata": {
+              "name": "decisions",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`goals_budget_id_idx\\` on table \\`public.goals\\` has not been used",
+            "metadata": {
+              "name": "goals",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`billing_purchase_bindings_intent_fk_idx\\` on table \\`public.billing_purchase_bindings\\` has not been used",
+            "metadata": {
+              "name": "billing_purchase_bindings",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`subscription_bill_links_household_member_fk_idx\\` on table \\`public.subscription_bill_links\\` has not been used",
+            "metadata": {
+              "name": "subscription_bill_links",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`native_push_receipts_device_fk_idx\\` on table \\`public.native_push_receipts\\` has not been used",
+            "metadata": {
+              "name": "native_push_receipts",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`bill_transaction_matches_household_member_fk_idx\\` on table \\`public.bill_transaction_matches\\` has not been used",
+            "metadata": {
+              "name": "bill_transaction_matches",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`categories_household_member_fk_idx\\` on table \\`public.categories\\` has not been used",
+            "metadata": {
+              "name": "categories",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`decisions_household_member_fk_idx\\` on table \\`public.decisions\\` has not been used",
+            "metadata": {
+              "name": "decisions",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`extra_payments_household_member_fk_idx\\` on table \\`public.extra_payments\\` has not been used",
+            "metadata": {
+              "name": "extra_payments",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`goals_household_member_fk_idx\\` on table \\`public.goals\\` has not been used",
+            "metadata": {
+              "name": "goals",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`subscription_bill_links_user_id_idx\\` on table \\`public.subscription_bill_links\\` has not been used",
+            "metadata": {
+              "name": "subscription_bill_links",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`categories_household_id_idx\\` on table \\`public.categories\\` has not been used",
+            "metadata": {
+              "name": "categories",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`plaid_transactions_household_active_pending_date_idx\\` on table \\`public.plaid_transactions\\` has not been used",
+            "metadata": {
+              "name": "plaid_transactions",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`subscription_candidates_household_status_idx\\` on table \\`public.subscription_candidates\\` has not been used",
+            "metadata": {
+              "name": "subscription_candidates",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`recent_changes_scope_page_idx\\` on table \\`private.recent_changes\\` has not been used",
+            "metadata": {
+              "name": "recent_changes",
+              "type": "table",
+              "schema": "private"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`recent_changes_group_idx\\` on table \\`private.recent_changes\\` has not been used",
+            "metadata": {
+              "name": "recent_changes",
+              "type": "table",
+              "schema": "private"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`recent_changes_entity_idx\\` on table \\`private.recent_changes\\` has not been used",
+            "metadata": {
+              "name": "recent_changes",
+              "type": "table",
+              "schema": "private"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`recent_changes_actor_idx\\` on table \\`private.recent_changes\\` has not been used",
+            "metadata": {
+              "name": "recent_changes",
+              "type": "table",
+              "schema": "private"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`recent_changes_undo_actor_idx\\` on table \\`private.recent_changes\\` has not been used",
+            "metadata": {
+              "name": "recent_changes",
+              "type": "table",
+              "schema": "private"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          },
+          {
+            "detail": "Index \\`flo_creation_receipts_recent_actor_idx\\` on table \\`private.flo_creation_receipts\\` has not been used",
+            "metadata": {
+              "name": "flo_creation_receipts",
+              "type": "table",
+              "schema": "private"
+            },
+            "observed_at": "2026-10-30T06:56:36.916Z"
+          }
+        ]
+      }
+    ]
+  },
+  "newSecurityFindings": [
+    "rls_enabled_no_policy:private.recent_change_versions",
+    "rls_enabled_no_policy:private.recent_changes"
+  ],
+  "financialTestWrites": "Local fictional PostgreSQL only; no hosted customer financial DML"
+}

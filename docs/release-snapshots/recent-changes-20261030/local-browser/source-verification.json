@@ -1,0 +1,19 @@
+{
+  "status": "PASS",
+  "exportSource": "e6722550e14a1f6f38cca3260b46a708b3e509f8",
+  "entry": "/_expo/static/js/web/entry-721eaf33822da0afb8ff61705688682c.js",
+  "sha256": "3417c3cbc3f124d8cbd283620cd09c8e06ec63dde6a9d848b122b56c90afeb3a",
+  "bytes": 5073649,
+  "contexts": 8,
+  "appSourceEdits": 0,
+  "providerRequests": 0,
+  "realAuthRequests": 0,
+  "realFinancialWrites": 0,
+  "scope": "Local exported app with fully intercepted fictional auth, journal, financial reads and deliberate mock Undo only",
+  "fixtureCorrection": "The isolated fake-auth fixture now retains the selected household across document reloads. Scope tests use in-app Settings navigation. Earlier debug files were moved outside release evidence.",
+  "scripts": [
+    "/tmp/recent-changes-browser.cjs",
+    "/tmp/recent-changes-fixture.cjs",
+    "/tmp/recent-changes-base-fixture.cjs"
+  ]
+}

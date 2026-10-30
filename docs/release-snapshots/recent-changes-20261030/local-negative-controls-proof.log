@@ -1,0 +1,8 @@
+BEGIN
+SET
+SET
+DO
+ROLLBACK
+
+{"allPassed":true,"checkCount":53,"failures":[]}
+PASS: all four isolated negative ACL/security/trigger controls rejected and restored

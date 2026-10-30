@@ -1,0 +1,43 @@
+✔ private display masks signed, compact, scientific and ISO currency without changing dates, counts or APR (10.608603ms)
+✔ every ordinary app currency value is removed from presentation and exactly restored (66.94849ms)
+✔ actual Intl currency and Activity strings in device locales conceal complete numbers (2.430619ms)
+✔ adjacent JSX currency fragments and nested styled text do not leak numeric children (1.948174ms)
+✔ screen reader and tooltip values are masked without mutating underlying control props (0.411519ms)
+✔ only a saved boolean enables privacy; preference scopes cannot collide (0.269676ms)
+✔ late hydration and save callbacks cannot overwrite a new choice, new household or ABA return (0.206221ms)
+✔ retained asynchronous alert callbacks use privacy at invocation and conceal unlabelled service amounts (0.396457ms)
+✔ returning to a household waits for its hide intent queued behind another interface write (0.413062ms)
+✔ a failed hide remains fail-closed even after the interface queue has been cleared (1.77309ms)
+✔ amount-capable search conceals numeric drafts without changing the query or clear date inputs (0.394524ms)
+✔ a settled legacy personal plan can toggle privacy; loading, errors and signout cannot reuse it (0.204688ms)
+✔ recent changes validates the selected household and budget before exposing rows (2.921469ms)
+✔ every supported entity uses only its canonical in-app destination (0.556177ms)
+✔ invalid snapshots cannot enter the money diff or claim eligibility (0.707215ms)
+✔ paging requires ordered unique IDs and a last-row cursor (1.748553ms)
+✔ cursor validation retains bigint precision and rejects malformed pages (0.189976ms)
+✔ formatted before and after preserve money signs, zero and absent fields (18.188356ms)
+✔ page append deduplicates without replacing newer rows or mutating inputs (0.436137ms)
+✔ request gate rejects old page and old household completions, including scope ABA (0.277198ms)
+✔ Undo rejects a different SDK user while React still shows the same household editor (96.658589ms)
+✔ Undo requires a successful nonempty SDK session before dispatch (53.995917ms)
+✔ Undo rechecks user, household, budget, generation and disposal after session lookup (76.696336ms)
+✔ Undo binds the request to the verified token even if SDK identity changes at dispatch (10.000748ms)
+✔ late Undo receipts cannot refresh or publish after scope changes or disposal (24.441932ms)
+✔ late authoritative refresh cannot publish after provider disposal (14.233942ms)
+✔ provider cleanup invalidates the Undo lifecycle even if it mounts again (4.043359ms)
+✔ unverified inverse receipts fail without publishing an old snapshot (7.698562ms)
+✔ history-only income schedules render their reason and destination without Undo confirmation (133.121636ms)
+✔ settings hub places every true setting in exactly one group (1.032775ms)
+✔ settings hub preserves the intended group order (1.18165ms)
+✔ count statuses handle zero, singular, and larger values (0.211178ms)
+✔ attention statuses only highlight positive counts (0.184327ms)
+✔ settings group lookups preserve the destination hierarchy (0.160471ms)
+✔ admin settings are visible only to approved admins (0.165089ms)
+ℹ tests 35
+ℹ suites 0
+ℹ pass 35
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 723.515469

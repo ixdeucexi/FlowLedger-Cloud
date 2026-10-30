@@ -1,0 +1,518 @@
+{
+  "success": true,
+  "origin": "https://flowledger-algo.com",
+  "deployedSourceCommit": "6a8fb70e768dce2f1d6b260b5228c3c1f84e5485",
+  "deploymentId": "dpl_2zJvsd1AGAT4GL1en3DEja4GMJBK",
+  "entry": "/_expo/static/js/web/entry-e40114fd78f4af7693e5f7bf9389c5ca.js",
+  "sha256": "b42bbdce3f789fdd8d318fccebf7462f91eecb127df51d310dc88d864abcc660",
+  "widths": [
+    390,
+    1200
+  ],
+  "checks": 98,
+  "cases": 16,
+  "screenshots": 42,
+  "loadedBundleResponses": 48,
+  "allLoadedBytesMatch": true,
+  "assets": "Remote published static assets only; local phase-4 dist was never served",
+  "milestonePointerAndOpacityChecks": [
+    {
+      "width": 390,
+      "mode": "click",
+      "opacity": 1,
+      "receivesPointer": true
+    },
+    {
+      "width": 390,
+      "mode": "global-retry",
+      "opacity": 1,
+      "receivesPointer": true
+    },
+    {
+      "width": 390,
+      "mode": "escape",
+      "opacity": 1,
+      "receivesPointer": true
+    },
+    {
+      "width": 390,
+      "mode": "back",
+      "opacity": 1,
+      "receivesPointer": true
+    },
+    {
+      "width": 390,
+      "mode": "reduced-motion",
+      "opacity": 1,
+      "receivesPointer": true
+    },
+    {
+      "width": 390,
+      "mode": "queued",
+      "opacity": 1,
+      "receivesPointer": true
+    },
+    {
+      "width": 1200,
+      "mode": "click",
+      "opacity": 1,
+      "receivesPointer": true
+    },
+    {
+      "width": 1200,
+      "mode": "global-retry",
+      "opacity": 1,
+      "receivesPointer": true
+    },
+    {
+      "width": 1200,
+      "mode": "escape",
+      "opacity": 1,
+      "receivesPointer": true
+    },
+    {
+      "width": 1200,
+      "mode": "back",
+      "opacity": 1,
+      "receivesPointer": true
+    },
+    {
+      "width": 1200,
+      "mode": "reduced-motion",
+      "opacity": 1,
+      "receivesPointer": true
+    },
+    {
+      "width": 1200,
+      "mode": "queued",
+      "opacity": 1,
+      "receivesPointer": true
+    }
+  ],
+  "allAPIsIntercepted": true,
+  "realCustomerProviderOrHostedWrites": 0,
+  "photoPath": "/workspace/FlowLedger-Cloud/marketing/play-store-2026-10-30/assets/ambient-background.png",
+  "photoBytes": 1231127,
+  "photoFlow": "Real DocumentPicker filechooser, File/Blob and IndexedDB; only explicit quota failures injected",
+  "clock": "Fictional fixed calendar date; elapsed Date.now advances for actual animations",
+  "uncaughtAppRuntimeErrors": 0,
+  "unclassifiedConsoleEvents": 0,
+  "knownConsoleEvents": [
+    {
+      "width": 390,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 390,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 390,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 390,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 390,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 390,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 390,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 390,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 390,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 390,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 390,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 390,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 390,
+      "mode": "click",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 390,
+      "mode": "click",
+      "classification": "React Native web animation uses JS fallback",
+      "message": "Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md"
+    },
+    {
+      "width": 390,
+      "mode": "click",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 390,
+      "mode": "global-retry",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 390,
+      "mode": "global-retry",
+      "classification": "Expected deliberately failed fake close RPC",
+      "message": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+    },
+    {
+      "width": 390,
+      "mode": "global-retry",
+      "classification": "React Native web animation uses JS fallback",
+      "message": "Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md"
+    },
+    {
+      "width": 390,
+      "mode": "global-retry",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 390,
+      "mode": "escape",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 390,
+      "mode": "escape",
+      "classification": "React Native web animation uses JS fallback",
+      "message": "Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md"
+    },
+    {
+      "width": 390,
+      "mode": "escape",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 390,
+      "mode": "back",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 390,
+      "mode": "back",
+      "classification": "React Native web animation uses JS fallback",
+      "message": "Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md"
+    },
+    {
+      "width": 390,
+      "mode": "back",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 390,
+      "mode": "reduced-motion",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 390,
+      "mode": "reduced-motion",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 390,
+      "mode": "queued",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 390,
+      "mode": "queued",
+      "classification": "React Native web animation uses JS fallback",
+      "message": "Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md"
+    },
+    {
+      "width": 390,
+      "mode": "queued",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "main",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "click",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "click",
+      "classification": "React Native web animation uses JS fallback",
+      "message": "Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md"
+    },
+    {
+      "width": 1200,
+      "mode": "click",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "global-retry",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "global-retry",
+      "classification": "Expected deliberately failed fake close RPC",
+      "message": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+    },
+    {
+      "width": 1200,
+      "mode": "global-retry",
+      "classification": "React Native web animation uses JS fallback",
+      "message": "Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md"
+    },
+    {
+      "width": 1200,
+      "mode": "global-retry",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "escape",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "escape",
+      "classification": "React Native web animation uses JS fallback",
+      "message": "Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md"
+    },
+    {
+      "width": 1200,
+      "mode": "escape",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "back",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "back",
+      "classification": "React Native web animation uses JS fallback",
+      "message": "Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md"
+    },
+    {
+      "width": 1200,
+      "mode": "back",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "reduced-motion",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "reduced-motion",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "queued",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    },
+    {
+      "width": 1200,
+      "mode": "queued",
+      "classification": "React Native web animation uses JS fallback",
+      "message": "Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md"
+    },
+    {
+      "width": 1200,
+      "mode": "queued",
+      "classification": "Previously known Cloudflare analytics beacon blocked by production CSP",
+      "message": "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092' violates the following Content Security Policy directive: \"script-src 'self' 'unsafe-inline' https://cdn.plaid.com\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked."
+    }
+  ],
+  "evidenceGroups": [
+    {
+      "group": "phone",
+      "path": "phone/results.json",
+      "checks": 49
+    },
+    {
+      "group": "desktop",
+      "path": "desktop/results.json",
+      "checks": 49
+    }
+  ],
+  "screenshotsList": [
+    "phone/archive-personalized-390.png",
+    "phone/dashboard-photo-390.png",
+    "phone/dashboard-private-390.png",
+    "phone/detail-restored-back-390.png",
+    "phone/detail-restored-click-390.png",
+    "phone/detail-restored-escape-390.png",
+    "phone/detail-restored-queued-390.png",
+    "phone/detail-restored-reduced-motion-390.png",
+    "phone/editor-private-390.png",
+    "phone/milestone-back-390.png",
+    "phone/milestone-click-390.png",
+    "phone/milestone-escape-390.png",
+    "phone/milestone-global-retry-390.png",
+    "phone/milestone-queued-390.png",
+    "phone/milestone-reduced-motion-390.png",
+    "phone/presets-selected-390.png",
+    "phone/queued-personalization-390.png",
+    "phone/real-photo-detail-390.png",
+    "phone/real-photo-editor-390.png",
+    "phone/real-photo-list-390.png",
+    "phone/viewer-personalization-390.png",
+    "desktop/archive-personalized-1200.png",
+    "desktop/dashboard-photo-1200.png",
+    "desktop/dashboard-private-1200.png",
+    "desktop/detail-restored-back-1200.png",
+    "desktop/detail-restored-click-1200.png",
+    "desktop/detail-restored-escape-1200.png",
+    "desktop/detail-restored-queued-1200.png",
+    "desktop/detail-restored-reduced-motion-1200.png",
+    "desktop/editor-private-1200.png",
+    "desktop/milestone-back-1200.png",
+    "desktop/milestone-click-1200.png",
+    "desktop/milestone-escape-1200.png",
+    "desktop/milestone-global-retry-1200.png",
+    "desktop/milestone-queued-1200.png",
+    "desktop/milestone-reduced-motion-1200.png",
+    "desktop/presets-selected-1200.png",
+    "desktop/queued-personalization-1200.png",
+    "desktop/real-photo-detail-1200.png",
+    "desktop/real-photo-editor-1200.png",
+    "desktop/real-photo-list-1200.png",
+    "desktop/viewer-personalization-1200.png"
+  ]
+}

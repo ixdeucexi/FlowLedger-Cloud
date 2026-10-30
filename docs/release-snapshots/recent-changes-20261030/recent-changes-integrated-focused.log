@@ -1,0 +1,41 @@
+✔ debt refresh discards A to B and A to B to A before any setter (115.344694ms)
+✔ latest debt request wins when first finishes last (20.818562ms)
+✔ prior actor and stale query failures cannot clear current data (10.561229ms)
+✔ transfer editor uses one atomic intent and stable ids across failed retry (48.199751ms)
+✔ new transfer uses stable proposed group and both leg ids across a lost response (16.064885ms)
+✔ allocated amount or date changes require undo; note-only and categorized edits work (0.673284ms)
+✔ actual household switch advances generation across A to B to A (7.26091ms)
+✔ in-flight scheduled debt sync cannot schedule another timer after cleanup (20.399209ms)
+✔ ordinary manual pending and applied debt edits keep sync and serialize No debt as null (152.601198ms)
+✔ note-only bank match edit preserves its confirmed bill link when editor omits debt choice (28.198721ms)
+✔ recent changes validates the selected household and budget before exposing rows (2.976872ms)
+✔ every supported entity uses only its canonical in-app destination (0.561536ms)
+✔ invalid snapshots cannot enter the money diff or claim eligibility (0.479182ms)
+✔ paging requires ordered unique IDs and a last-row cursor (5.67215ms)
+✔ cursor validation retains bigint precision and rejects malformed pages (0.215795ms)
+✔ formatted before and after preserve money signs, zero and absent fields (17.850843ms)
+✔ page append deduplicates without replacing newer rows or mutating inputs (0.432571ms)
+✔ request gate rejects old page and old household completions, including scope ABA (0.235154ms)
+✔ Undo rejects a different SDK user while React still shows the same household editor (208.056567ms)
+✔ Undo requires a successful nonempty SDK session before dispatch (136.047271ms)
+✔ Undo rechecks user, household, budget, generation and disposal after session lookup (193.728588ms)
+✔ Undo binds the request to the verified token even if SDK identity changes at dispatch (17.249999ms)
+✔ late Undo receipts cannot refresh or publish after scope changes or disposal (44.800334ms)
+✔ late authoritative refresh cannot publish after provider disposal (23.017231ms)
+✔ provider cleanup invalidates the Undo lifecycle even if it mounts again (13.524672ms)
+✔ unverified inverse receipts fail without publishing an old snapshot (12.438995ms)
+✔ history-only income schedules render their reason and destination without Undo confirmation (163.343539ms)
+✔ settings hub places every true setting in exactly one group (0.768337ms)
+✔ settings hub preserves the intended group order (0.713844ms)
+✔ count statuses handle zero, singular, and larger values (0.187632ms)
+✔ attention statuses only highlight positive counts (0.288093ms)
+✔ settings group lookups preserve the destination hierarchy (0.182184ms)
+✔ admin settings are visible only to approved admins (0.136786ms)
+ℹ tests 33
+ℹ suites 0
+ℹ pass 33
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1175.364504
