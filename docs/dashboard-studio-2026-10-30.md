@@ -1,6 +1,6 @@
 # Dashboard layouts and favorite actions
 
-Status: verified candidate; production release pending.
+Status: live at https://flowledger-algo.com on October 30, 2026. Production HTTP and browser postflight passed.
 
 Customize Dashboard now controls the actual major card sections on phone and desktop, with Simple, Debt Focus and Planning Ahead starting layouts, visible selected state, accessible move-up/down buttons, optional card visibility, and up to four favorite actions. Favorite actions use existing routes and edit permissions. Required money overview and Next up cards remain available. Current financial values and handlers are reused, including one shared monthly-plan presentation helper preserving the prior mobile formulas. Desktop cards use an overview-first configurable stack rather than the prior fixed columns.
 
@@ -15,3 +15,7 @@ Tested entry: `entry-fac551cbbbe08e3cd36b4a9a9869956c.js`, SHA-256 `4779accdfd3d
 Rollback: `rollback/prod-before-dashboard-studio-20261030-0506`, remotely verified annotated tag at `9f4959467f8b3605bed03ded933eab16f62f98e0`, exact prior READY deployment `dpl_7ijyTmiBBu8DNPEQh63uC3N2PSud`. Marketing assets and isolated later-phase work are outside the release source.
 
 Evidence: `release-snapshots/dashboard-studio-20261030/`.
+
+Production source `f0790d3b3452b55e73186bc5a8fcd79b7c00c267`, READY deployment `dpl_AuCv4TBT8P5VX1mQUBV62DKBXXtM`, immutable https://flow-ledger-cloud-xtixolsti-flow-ledger-s-projects.vercel.app. Clean source/config/guide guards passed in isolated release checkout. All four app aliases were freshly verified and aligned; only the legacy alias required reassignment. Only the duplicate in-progress non-production build of this exact source was canceled.
+
+The complete repository HTTP postflight passed using real connected-tool alias/deployment observations and transparent GitHub-to-CLI source metadata normalization. Published executable entry exactly matched the tested SHA above. All 26 browser checks passed again using actual published assets and intercepted fictional data. Phone/desktop screenshots were reviewed. Only the existing Cloudflare analytics CSP messages and the intentional mock503 save-failure test were classified separately; no unexpected errors, financial writes or AI calls. No backend/schema/environment/dependency changes were included.
