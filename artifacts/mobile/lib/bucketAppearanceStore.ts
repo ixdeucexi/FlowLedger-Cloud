@@ -45,8 +45,8 @@ export class BucketAppearanceStore {
   async load(retry = false): Promise<void> {
     if (this.disposed || (this.state.ready && !retry)) return;
     if (this.loading) return this.loading;
-    this.publish({ loadError: null });
-    this.loading = (async () => {
+    this.publish({ loadError: null, ready: false });
+    this.loading = Promise.resolve().then(async () => {
       try {
         const raw = await this.storage.read();
         if (!this.disposed)
@@ -60,7 +60,7 @@ export class BucketAppearanceStore {
       } finally {
         this.loading = null;
       }
-    })();
+    });
     return this.loading;
   }
   async change<T>(

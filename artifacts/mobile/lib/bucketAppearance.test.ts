@@ -160,14 +160,17 @@ test("appearance storage preserves the previous look on failure and queues indep
 test("failed hydration does not overwrite saved metadata and retry restores it", async () => {
   let unavailable = true,
     writes = 0;
+  const retryGate = deferred<void>();
   const store = new BucketAppearanceStore({
-    read: async () => {
+    read: () => {
       if (unavailable) throw Error("denied");
-      return JSON.stringify({
-        version: 1,
-        looks: { holiday: { icon: "gift", cover: "sunset" } },
-        seen: [],
-      });
+      return retryGate.promise.then(() =>
+        JSON.stringify({
+          version: 1,
+          looks: { holiday: { icon: "gift", cover: "sunset" } },
+          seen: [],
+        }),
+      );
     },
     write: async () => {
       writes++;
@@ -178,7 +181,12 @@ test("failed hydration does not overwrite saved metadata and retry restores it",
   await assert.rejects(store.update("holiday", { icon: "sun" }), /Load/);
   assert.equal(writes, 0);
   unavailable = false;
-  await store.load(true);
+  const retry = store.load(true);
+  await tick();
+  assert.equal(store.getSnapshot().ready, false);
+  await assert.rejects(store.update("holiday", { icon: "sun" }), /Load/);
+  retryGate.resolve();
+  await retry;
   assert.equal(store.getSnapshot().loadError, null);
   assert.equal(store.getSnapshot().data.looks.holiday.cover, "sunset");
   assert.equal(writes, 0);
