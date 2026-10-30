@@ -362,6 +362,7 @@ function draftOwnerHarness() {
     conversationId: "conversation-a", open: true,
   };
   const bindings: Record<string, any> = {
+    floCreationAllowedRef: { current: true }, floCreationAccessMessage: () => "Pro required",
     creationFormRef: { current: session },
     creationOwnerKeyRef: { current: session.owner },
     activeConversationIdRef: { current: session.conversationId },
@@ -571,6 +572,7 @@ test("parent Close/resume is local; Save is current owner/conversation only and 
   };
   const state: any = { saves: [], busy: false, held: null };
   const bindings: Record<string, any> = {
+    floCreationAllowedRef: { current: true }, floCreationAccessMessage: () => "Pro required",
     creationFormRef: { current: session },
     creationOwnerKeyRef: { current: session.owner },
     activeConversationIdRef: { current: session.conversationId },
@@ -648,6 +650,7 @@ test("pre-ready explicit Retry retains exact structured fields and never reconst
     },
   };
   const bindings: Record<string, any> = {
+    floCreationAllowedRef: { current: true },
     retry: true,
     clean: "Add income",
     submittedForm: undefined,

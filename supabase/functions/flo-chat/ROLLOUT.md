@@ -7,7 +7,7 @@ Flo v3 is intentionally fail-closed. Configure these Edge Function secrets befor
 - `FLO_SAFETY_IDENTIFIER_SECRET` (a dedicated high-entropy secret; never reuse a Supabase or OpenAI key)
 - `FLO_ALLOWED_ORIGINS` (comma-separated exact origins). Production must include `https://flowledger-algo.com`; add the exact preproduction origin separately for testing. Redirect-only aliases do not need entries. Native requests have no `Origin` and remain supported.
 
-Optional bounded controls are `OPENAI_MODEL` (defaults to `gpt-5-mini`), `FLO_DAILY_REQUEST_LIMIT` (defaults to `100`, bounded to `1..1000`), and `FLO_PRO_ENFORCEMENT_ENABLED`.
+Optional bounded controls are `OPENAI_MODEL` (defaults to `gpt-5-mini`), `FLO_DAILY_REQUEST_LIMIT` (defaults to `100`, bounded to `1..1000`), and the server-owned Free/Pro feature-access RPCs. The legacy `FLO_PRO_ENFORCEMENT_ENABLED` switch no longer bypasses V3 capability/quota checks.
 
 Deployment order: set the required secrets and allowed origins, apply `20260812152444_flo_v3_account_intelligence.sql`, deploy the v3 function, then publish the v3 client. Because the current repository replaces `flo-chat` and v3 rejects older requests, there is a coordinated-release compatibility window: old clients receive an upgrade-required response after the function changes. A future rollout should use a separately versioned `flo-chat-v3` function, move clients after health checks, and only then retire legacy `flo-chat`. Do not publish the v3 client before the migration and function are healthy. Roll back by restoring the prior client/function together.
 
@@ -31,3 +31,10 @@ Forecasts are bounded by the household's configured horizon. A recorded schedule
 ### Release / rollback
 
 Before this release, `rollback/prod-before-flo-intelligence-20260910` preserves commit `316845dec9c227a5e959b75193eb9b5f8de76b1c` and frontend deployment `dpl_HezsBfNARtjwDYYyuBjH16FVHZZe`. The corresponding production Edge version is `flo-chat` v32, saved separately before any replacement. Package relative dependencies with `scripts/package-flo-edge.mjs`; type-check with Deno and deploy the identical reviewed package with JWT verification enabled. Run authenticated synthetic-account questions, household refusal checks, full release preflight, candidate browser checks, and production postflight. If the release regresses, restore both the prior frontend deployment and the saved v32 Edge package. Never publish a failed independent audit.
+
+
+### Free/Pro request allowance
+
+V3 reads scoped `get_household_feature_access`, then reserves a server-generated request ID through `reserve_flo_plan_request`. New Free households share ten chat requests per UTC calendar month; new paid Pro households share 300. Existing founder/admin/permanent grandfathered access continues through the existing configurable daily limiter and 12/min safety limiter. The membership RPC’s day 100 is informational; the client does not block a legacy/day request from that value. Service-only monthly refunds are scope-bound and idempotent; failed processing and creation-upgrade guidance refund the preview. Completed message replay precedes reservation and remains readable at quota zero. Normal V4 remains its existing owner/admin preview; an explicit admin Free/Pro preview uses V3.
+
+Free preview can read and converse, but confirmed creations and recurring changes require current Pro/founding edit access. The canonical SQL functions recheck before new writes; existing committed receipt reads/replay remain available after downgrade. The client’s access-change path reads the exact old receipt rather than attempting a new write. Flo Essentials stays available without provider calls, and opening Flo/revealing amounts/refreshing allowance never submits a question.

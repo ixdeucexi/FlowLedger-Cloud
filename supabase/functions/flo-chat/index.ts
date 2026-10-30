@@ -1,10 +1,10 @@
-import { runFloCreation } from "./floCreation.ts";
+import { creationIntent, runFloCreation } from "./floCreation.ts";
+import { readFloPlanAccess, reserveFloPlanRequest, floReservationRefund } from "./planAccess.ts";
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2.108.0";
 import { createOpenAI, type OpenAILanguageModelResponsesOptions } from "npm:@ai-sdk/openai@4.0.37";
 import { isStepCount, Output, ToolLoopAgent } from "npm:ai@7.0.59";
 import { z } from "npm:zod@4.4.3";
-import { canUseFloAccountChat, isFloProEnforcementEnabled } from "./entitlement.ts";
 import {
   aggregateCoverage,
   allowsSavedPlanRead,
@@ -320,11 +320,10 @@ async function authorizeFloV3(client: UserClient, userId: string, body: Record<s
   const message = body.userMessage?.text;
   if (typeof message !== "string" || !message.trim() || message.length > 4000) return { error: jsonError("invalid_request", 400) };
 
-  const [{ data: preference }, { data: membership }, { data: conversation }, { data: plan }] = await Promise.all([
+  const [{ data: preference }, { data: membership }, { data: conversation }] = await Promise.all([
     client.from("user_preferences").select("active_household_id").eq("user_id", userId).maybeSingle(),
     client.from("household_members").select("role").eq("household_id", householdId).eq("user_id", userId).maybeSingle(),
     historyEnabled ? client.from("flo_conversations").select("id,created_by,household_id,title,summary,message_count,is_ephemeral").eq("id", requestedConversationId).maybeSingle() : Promise.resolve({ data: null }),
-    client.from("household_plans").select("tier").eq("household_id", householdId).maybeSingle(),
   ]);
   if (!membership || preference?.active_household_id !== householdId) return { error: jsonError("active_household_access_denied", 403) };
   if (historyEnabled && (!conversation || conversation.is_ephemeral || conversation.created_by !== userId || conversation.household_id !== householdId)) return { error: jsonError("conversation_access_denied", 403) };
@@ -334,9 +333,10 @@ async function authorizeFloV3(client: UserClient, userId: string, body: Record<s
     const { data: admin } = await client.from("feedback_admins").select("user_id").eq("user_id", userId).maybeSingle();
     if (admin) verifiedPreviewTier = body.previewTier;
   }
-  const enforcementEnabled = isFloProEnforcementEnabled(Deno.env.get("FLO_PRO_ENFORCEMENT_ENABLED"));
-  if (!canUseFloAccountChat(enforcementEnabled, plan?.tier, verifiedPreviewTier)) return { error: jsonError("pro_required", 402) };
-  return { householdId, requestedConversationId, historyEnabled, message: message.trim(), membership, conversation, enforcementEnabled };
+  let access;
+  try { access = await readFloPlanAccess(client, householdId, verifiedPreviewTier); }
+  catch { return { error: jsonError("plan_access_unavailable", 503) }; }
+  return { householdId, requestedConversationId, historyEnabled, message: message.trim(), membership, conversation, enforcementEnabled: true, verifiedPreviewTier, access };
 }
 
 function validatedEvidence(answer: FloGroundedAnswer, allSources: FloSourceRef[]): FloSourceRef[] {
@@ -410,15 +410,25 @@ async function handleV3(
     await audit(server, { request_id: requestId, user_id: userId, household_id: householdId, conversation_id: conversationId ?? null, message_id: null, event_type: "failure", parameters: { period: "day" }, model: modelId, status: "rejected", error_code: "usage_limited" }).catch(() => undefined);
     return jsonError("usage_limited", 429, { period: "day" });
   }
+  let reservation;
+  try { reservation = await reserveFloPlanRequest(server, userId, householdId, requestId, authorized.verifiedPreviewTier ?? null); }
+  catch { return jsonError("usage_limit_unavailable", 503); }
+  if (!reservation.allowed) return jsonError("plan_usage_limited", 429, { period: reservation.allowance.period, allowance: reservation.allowance });
+  const refundReservation = floReservationRefund(server, userId, householdId, reservation.reservationId);
+  const refundFailedAttempt = () => refundReservation().catch(() => { console.warn("[flo-chat] quota refund unavailable", { requestId }); });
+  const canCreate = reservation.allowance.canCreate;
+  let terminalAnswerCommitted = false;
+  try {
 
   if (ephemeral) {
     conversationId = crypto.randomUUID();
     const { data, error } = await server.from("flo_conversations").insert({ id: conversationId, household_id: householdId, created_by: userId, title: "Ephemeral Flo chat", is_ephemeral: true }).select("id,created_by,household_id,title,summary,message_count,is_ephemeral").single();
-    if (error || !data) return jsonError("ephemeral_conversation_failed", 503);
+    if (error || !data) { await refundFailedAttempt(); return jsonError("ephemeral_conversation_failed", 503); }
     conversation = data;
   }
-  if (!conversationId || !conversation) return jsonError("authorization_failed", 403);
+  if (!conversationId || !conversation) { await refundFailedAttempt(); return jsonError("authorization_failed", 403); }
   const failAfterConversation = async (response: Response) => {
+    await refundFailedAttempt();
     try { await cleanupEphemeral(server, conversationId!, householdId, userId, ephemeral); }
     catch { return jsonError("ephemeral_cleanup_failed", 503); }
     return response;
@@ -450,6 +460,7 @@ async function handleV3(
     }).catch(async () => {
       if (ephemeral) await cleanupEphemeral(server, conversationId!, householdId, userId, true).catch(() => undefined);
     });
+    await refundFailedAttempt();
     return jsonError("audit_unavailable", 503);
   }
 
@@ -486,7 +497,14 @@ async function handleV3(
         emitEvent("meta", { version: 3, conversationId, assistantMessageId, model: modelId, asOf: now, enforcementEnabled });
         emitProgress("Checking your FlowLedger records");
 
-        const creationResponse = forbiddenRequest.test(message) ? null : await runFloCreation({
+        const requestedCreation = creationIntent(message, body.creationDraft);
+        const creationPlanMessage = ["owner", "manager", "editor"].includes(membership.role)
+          ? "Flo can add items with Pro. You can add bills, debt, income, transactions and goals yourself for free using the app’s Add controls."
+          : "You have view-only access. A household editor can add or change items.";
+        const deniedCreation = !canCreate && (requestedCreation || body.creationForm)
+          ? { answer: { answer: creationPlanMessage, claims: [], caveat: null, evidenceIds: ["policy:flo-creation"], followups: [] }, sources: [{ id: "policy:flo-creation", type: "household", label: "Flo plan capabilities", route: "/(tabs)/more?section=membership", asOf: now, freshness: "current" as const }], aggregate: { partial: false, dataAsOf: now, coverage: { complete: true, tools: 0, partialTools: 0, exclusions: [], reasons: [], dateRanges: [] } }, creation: { status: "unavailable" as const, prompt: creationPlanMessage, missingFields: [] } }
+          : null;
+        const creationResponse = forbiddenRequest.test(message) ? null : deniedCreation ?? await runFloCreation({
           client, userId, householdId, commandId: userMessageId, message, draft: body.creationDraft, form: body.creationForm,
           apiKey: Deno.env.get("OPENAI_API_KEY"), modelId, now, timezone: body.timezone, allowRecurringBillChange: true,
         });
@@ -536,6 +554,7 @@ async function handleV3(
           if (!apiKey) throw new Error("flo_not_connected");
           const openai = createOpenAI({ apiKey });
           const tools = createFloTools(toolRuntime);
+          if (!canCreate) delete (tools as Record<string, unknown>).draftRecurringBillChange;
           const safetyIdentifier = await stableSafetyIdentifier(userId, Deno.env.get("FLO_SAFETY_IDENTIFIER_SECRET")!);
           const agent = new ToolLoopAgent({
             model: openai.responses(modelId),
@@ -590,7 +609,7 @@ async function handleV3(
           const check = validateGroundedAnswer(answer, allSources, toolRuntime.toolResults);
           if (!check.valid) throw new Error(check.code ?? "grounding_failed");
           sources = validatedEvidence(answer, allSources);
-          if (toolRuntime.proposalDraft && historyEnabled) {
+          if (toolRuntime.proposalDraft && historyEnabled && canCreate) {
             const proposalId = crypto.randomUUID();
             const expiresAt = new Date(Date.now() + 15 * 60_000).toISOString();
             const draft = toolRuntime.proposalDraft;
@@ -621,6 +640,8 @@ async function handleV3(
           terminalParameters: { sourceCount: sources.length, claimCount: answer.claims.length, deterministic: Boolean(deterministicIntent), deterministicIntent, droppedFollowupCount },
           rowCount: sources.length, terminalStatus: aggregate.partial ? "partial" : "completed", ephemeral,
         });
+        terminalAnswerCommitted = !deniedCreation;
+        if (deniedCreation) await refundFailedAttempt();
         emitEvent("text-delta", { delta: answer.answer });
         emitEvent("sources", { sources });
         emitEvent("followups", { items: answer.followups });
@@ -629,6 +650,7 @@ async function handleV3(
         emitEvent("done", { messageId: assistantMessageId, text: answer.answer, answer: answerEnvelope });
         if (ephemeral) emitEvent("ephemeral-cleanup", { status: "completed" });
       } catch (error) {
+        await refundFailedAttempt();
         let code = publicFailureCode(error);
         if (error instanceof Error && error.message === "conversation_deleted") {
           // Deletion is final. Never recreate a user's cleared history or try
@@ -707,6 +729,9 @@ async function handleV3(
     },
   });
   return new Response(output, { headers: streamHeaders });
+  } finally {
+    if (!terminalAnswerCommitted) await refundFailedAttempt();
+  }
 }
 
 Deno.serve(async (request): Promise<Response> => {

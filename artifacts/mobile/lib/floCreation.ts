@@ -1,19 +1,29 @@
 import { supabase } from "./supabase";
 import { FLO_CREATION_ROUTES, isFloCreationReceipt, floCreationDisplayLabel, type FloCreationResult, type FloCreationReceipt } from "./floCreationProtocol";
 export * from "./floCreationProtocol";
+export type FloMutationScope = { userId: string; isCurrent: () => boolean };
+/** Capture the SDK actor and pin this token on the individual mutation builder. */
+export async function floMutationAccessToken(scope: FloMutationScope): Promise<string> {
+ if (!scope?.userId || !scope.isCurrent()) throw new Error("flo_mutation_scope_changed");
+ const {data,error}=await supabase.auth.getSession();
+ if (!scope.isCurrent() || error || !data.session?.access_token || data.session.user.id!==scope.userId) throw new Error("flo_mutation_scope_changed");
+ return data.session.access_token;
+}
 /** Called only by a current explicit Send event, after canonical app previews.
  * Reusing commandId and payload is required after timeout/Stop/lost response. */
-export async function commitFloCreation(creation:FloCreationResult,expectedBudgetId:string):Promise<FloCreationResult>{
+export async function commitFloCreation(creation:FloCreationResult,expectedBudgetId:string,scope:FloMutationScope):Promise<FloCreationResult>{
  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(expectedBudgetId))throw new Error("Choose your active budget again before adding this item.");
  if(creation.status!=="ready"||!creation.commandId||!creation.householdId||!creation.kind||!creation.payload||!FLO_CREATION_ROUTES[creation.kind])throw new Error("This creation request is incomplete. Send the details again.");
+ const accessToken=await floMutationAccessToken(scope);
+ if(!scope.isCurrent())throw new Error("flo_mutation_scope_changed");
  const controller=new AbortController();
  const timeoutMessage="I couldn’t verify the save receipt yet. It may still finish; retry to check this same request.";
  let timer:ReturnType<typeof setTimeout>|undefined;
  let data:unknown;
  try {
-  const request=supabase.rpc("create_flo_entity",{p_command_id:creation.commandId,p_kind:creation.kind,p_payload:creation.payload,p_expected_household_id:creation.householdId,p_expected_budget_id:expectedBudgetId}).abortSignal(controller.signal);
+  const request=supabase.rpc("create_flo_entity",{p_command_id:creation.commandId,p_kind:creation.kind,p_payload:creation.payload,p_expected_household_id:creation.householdId,p_expected_budget_id:expectedBudgetId}).setHeader("Authorization",`Bearer ${accessToken}`).abortSignal(controller.signal);
   const result=await Promise.race([request,new Promise<never>((_resolve,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new Error(timeoutMessage));},20_000);})]);
-  if(result.error)throw new Error(controller.signal.aborted?timeoutMessage:result.error.message);
+  if(result.error)throw new Error(controller.signal.aborted?timeoutMessage:result.error.code==="55P03"?"lock_not_available":result.error.message);
   data=result.data;
  } finally {if(timer)clearTimeout(timer);}
  const receipt=data as FloCreationReceipt;

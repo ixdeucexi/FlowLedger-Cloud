@@ -23,6 +23,8 @@ import { FloLogo } from "@/components/FloLogo";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
+import { useBackDismiss } from "@/hooks/useBackDismiss";
+import { floAllowanceLabel, floMonthlyAllowanceExhausted, floCreationAccessMessage } from "@/lib/floPlanAccess";
 import { isCashFlowTransaction } from "@/lib/billMatching";
 import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
 import { type FloFacts } from "@/lib/flo";
@@ -110,7 +112,7 @@ export default function FloScreen() {
   const router = useRouter();
   const isDesktop = useDesktopExperience();
   const { user } = useAuth();
-  const { isFeatureLocked, previewTier, isAdmin } = useMembership();
+  const { isFeatureLocked, previewTier, isAdmin, accessReady, accessError, floAllowance, hasFoundingAccess, actualPlan, refreshAccess } = useMembership();
   const { activeHousehold, bills, billDateMoves, transactions, decisions, settings, forecastConfidence, retryBudgetLoad, getDailyBalances, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getDebtMonthSettlements, getIncomeOccurrencesInMonth, getPaidAmount, getTransactionsForMonth, categories, incomes, goals, demoMode, canEditHousehold, accounts, previewTransactionSafetyStop } = useBudget();
   const categoryBudgetScope = useMemo(() => ({
     userId: user?.id,
@@ -118,14 +120,20 @@ export default function FloScreen() {
     budgetId: activeHousehold?.budgetId,
   }), [activeHousehold?.budgetId, activeHousehold?.householdId, user?.id]);
   const floProLocked = isFeatureLocked("flo_account_chat");
-  const floV4Preview = floV4PreviewEnabled(isAdmin);
+  const floV4Preview = floV4PreviewEnabled(isAdmin) && !previewTier;
   const floAccessLocked = floProLocked && !floV4Preview;
+  const floCreationAllowed = (floV4Preview || accessReady && !isFeatureLocked("flo_creation") && floAllowance?.canCreate === true) && canEditHousehold;
+  const floCreationAllowedRef = useRef(floCreationAllowed);
+  floCreationAllowedRef.current = floCreationAllowed;
+  const monthlyAllowanceExhausted = !floV4Preview && floMonthlyAllowanceExhausted(floAllowance);
+  const canAskNewQuestion = floV4Preview || accessReady && Boolean(floAllowance) && !monthlyAllowanceExhausted;
   const volatileSession = useFloVolatileSession();
   const volatileStore = volatileSession.store;
   const [chat, dispatch] = useReducer(reduceFloChat, demoMode ? storeCaptureChat : initialChat);
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
   const decisionHubSettings = DEFAULT_DECISION_HUB_SETTINGS;
   const [input, setInput] = useState("");
+  const [essentialsOwner, setEssentialsOwner] = useState<string | null>(null);
   const [conversations, setConversations] = useState<FloConversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [olderMessageCursor, setOlderMessageCursor] = useState<string | null>(null);
@@ -154,6 +162,7 @@ export default function FloScreen() {
   const [preferencesScopeKey, setPreferencesScopeKey] = useState<string | null>(null);
   const [memoryScopeKey, setMemoryScopeKey] = useState<string | null>(null);
   const [reviewProposal, setReviewProposal] = useState<FloReviewProposal | null>(null);
+  const proposalReviewOwnerRef = useRef<{ owner: string; conversationId: string | null; proposalId: string; confirming: boolean } | null>(null);
   const [proposalConfirmState, setProposalConfirmState] = useState<"idle" | "reviewing" | "confirming" | "failed">("idle");
   const [proposalConfirmError, setProposalConfirmError] = useState("");
   const [proposalReceipt, setProposalReceipt] = useState<{ previousAmount: number; newAmount: number; confirmedAt: string } | null>(null);
@@ -202,12 +211,20 @@ export default function FloScreen() {
   const now = useMemo(() => new Date(), []);
   const today = localDateString(now);
 
+  const essentialsOpen = essentialsOwner === creationOwnerKey;
+  const closeEssentials = useCallback(() => setEssentialsOwner(current => current === creationOwnerKey ? null : current), [creationOwnerKey]);
+  useBackDismiss(essentialsOpen, closeEssentials, true, false);
+  useFocusEffect(useCallback(() => {
+    if (!demoMode && user?.id && activeHousehold?.householdId && !floV4Preview) void refreshAccess();
+  }, [activeHousehold?.householdId, demoMode, floV4Preview, refreshAccess, user?.id]));
+
   useEffect(() => {
     if (creationResetOwnerRef.current === creationOwnerKey) return;
     creationResetOwnerRef.current = creationOwnerKey;
     streamAbortRef.current?.abort(); streamAbortRef.current = null;
     dispatch({ type: "stop" });
     activeCreationDraftRef.current = null; retryCreationRef.current = null; retryRequestRef.current = null; creationOperationRef.current = null;
+    proposalReviewOwnerRef.current = null; setReviewProposal(null); setProposalReceipt(null); setProposalConfirmError(""); setProposalConfirmState("idle");
     setCreationSafety(null); setCreationSaving(false); setCreationByMessageId({}); setCreationFormSession(null); setCreationFormBusy(false); formSubmitRef.current = null;
   }, [creationOwnerKey]);
 
@@ -830,6 +847,7 @@ export default function FloScreen() {
   };
 
   const submitCreationForm = async (id: string, creationForm: FloCreationFormInput) => {
+    if (!floCreationAllowedRef.current) { setChatError(floCreationAccessMessage(canEditHousehold)); return; }
     const session = creationFormRef.current;
     if (!session || !session.open || session.id !== id || session.owner !== creationOwnerKeyRef.current || session.conversationId !== activeConversationIdRef.current || session.creation.kind !== creationForm.kind || formSubmitRef.current || activeRequestRef.current !== null || historyMutationRef.current || demoMode || !canEditHousehold) return;
     const ticket = { owner: session.owner, id };
@@ -975,17 +993,20 @@ export default function FloScreen() {
 
   const openProposalReview = (proposal: FloReviewProposal) => {
     if (proposal.kind !== "recurring_bill_change") return;
+    const ticket = { owner: creationOwnerKey, conversationId: activeConversationIdRef.current, proposalId: proposal.id, confirming: false };
+    proposalReviewOwnerRef.current = ticket;
+    const isCurrent = () => proposalReviewOwnerRef.current === ticket && ticket.owner === creationOwnerKeyRef.current && ticket.conversationId === activeConversationIdRef.current;
     setProposalConfirmState("reviewing");
     setProposalConfirmError("");
     setProposalReceipt(null);
     setReviewProposal(null);
     void readAuthoritativeFloProposal(proposal.id).then(authoritative => {
-      if (!floProposalMatchesAuthoritative(proposal, authoritative) || authoritative.kind !== "recurring_bill_change") {
-        throw new Error("proposal_review_mismatch");
-      }
+      if (!isCurrent()) return;
+      if (!floProposalMatchesAuthoritative(proposal, authoritative) || authoritative.kind !== "recurring_bill_change") throw new Error("proposal_review_mismatch");
       setReviewProposal(authoritative);
       setProposalConfirmState("idle");
     }).catch(() => {
+      if (!isCurrent()) return;
       setReviewProposal(null);
       setChatError("Flo could not verify this proposed change. Your plan was not changed.");
       setProposalConfirmState("failed");
@@ -993,18 +1014,28 @@ export default function FloScreen() {
   };
 
   const confirmProposal = async () => {
-    if (!reviewProposal || reviewProposal.kind !== "recurring_bill_change" || proposalConfirmState === "confirming") return;
+    const ticket = proposalReviewOwnerRef.current;
+    const isCurrent = () => Boolean(ticket && proposalReviewOwnerRef.current === ticket && ticket.owner === creationOwnerKeyRef.current && ticket.conversationId === activeConversationIdRef.current);
+    if (!isCurrent() || !user?.id || !reviewProposal || reviewProposal.id !== ticket?.proposalId || reviewProposal.kind !== "recurring_bill_change" || ticket.confirming || proposalReceipt) return;
+    if (!floCreationAllowedRef.current) { setProposalConfirmError(floCreationAccessMessage(canEditHousehold)); return; }
+    const proposal = reviewProposal;
+    const actorId = user.id;
+    ticket.confirming = true;
     setProposalConfirmState("confirming");
     setProposalConfirmError("");
     try {
-      const authoritative = await readAuthoritativeFloProposal(reviewProposal.id);
-      if (!floProposalMatchesAuthoritative(reviewProposal, authoritative) || authoritative.status !== "review") throw new Error("proposal_review_mismatch");
-      const receipt = await confirmFloRecurringBillProposal(reviewProposal.id);
+      const authoritative = await readAuthoritativeFloProposal(proposal.id);
+      if (!isCurrent()) return;
+      if (!floCreationAllowedRef.current) throw new Error("flo_creation_pro_required");
+      if (!floProposalMatchesAuthoritative(proposal, authoritative) || authoritative.status !== "review") throw new Error("proposal_review_mismatch");
+      const receipt = await confirmFloRecurringBillProposal(proposal.id, { userId: actorId, isCurrent: () => isCurrent() && floCreationAllowedRef.current });
+      if (!isCurrent()) return;
       setProposalReceipt(receipt);
-      setConfirmedProposalIds(previous => new Set(previous).add(reviewProposal.id));
+      setConfirmedProposalIds(previous => new Set(previous).add(proposal.id));
       setProposalConfirmState("idle");
       retryBudgetLoad();
     } catch (error) {
+      if (!isCurrent()) return;
       const code = error instanceof Error ? error.message.toLocaleLowerCase() : "";
       const message = code.includes("proposal_stale")
         ? "This bill changed since Flo prepared the review. Ask Flo to create a fresh change."
@@ -1012,11 +1043,15 @@ export default function FloScreen() {
           ? "This review expired. Ask Flo to prepare it again."
           : code.includes("proposal_role_denied") || code.includes("proposal_access_denied")
             ? "Your household role cannot confirm this change."
-            : code.includes("proposal_pro_required")
-              ? "Confirming Flo changes is planned for Pro. Your plan was not changed."
-              : "This change could not be confirmed. Your plan was not changed.";
+            : code.includes("proposal_pro_required") || code.includes("flo_creation_pro_required")
+              ? floCreationAccessMessage(canEditHousehold)
+              : code.includes("55p03") || code.includes("lock_not_available")
+                ? "Your household is updating. Try confirming again in a moment."
+                : "This change could not be confirmed. Check your plan before trying again.";
       setProposalConfirmError(message);
       setProposalConfirmState("failed");
+    } finally {
+      if (ticket) ticket.confirming = false;
     }
   };
 
@@ -1096,6 +1131,11 @@ export default function FloScreen() {
     const pendingSave = creationOperationRef.current;
     if (pendingSave?.scope === creationOwnerKey && pendingSave.submitted && !pendingSave.settled && !recovery) return;
     if (!clean || chat.sending || activeRequestRef.current !== null || historyMutationRef.current || floAccessLocked || !user?.id || !activeHousehold?.householdId) return;
+    if (submittedForm && !floCreationAllowedRef.current) { setChatError(floCreationAccessMessage(canEditHousehold)); return; }
+    if (!retry && !recovery && !canAskNewQuestion) {
+      setChatError(monthlyAllowanceExhausted ? "Your household has used this month’s Flo chat allowance. Flo Essentials and your saved chats remain available." : "Flo access is still loading. You can use Flo Essentials or retry the access check.");
+      setRetryAllowed(false); return;
+    }
     if (!aiConsentReady || !preferencesReady || chatScopeKey !== floDataScopeKey) return;
     if (floV4Preview && !volatileStore.isCurrent(volatileLeaseRef.current)) return;
     if (!aiConsentAccepted && !consentOverride) {
@@ -1105,7 +1145,7 @@ export default function FloScreen() {
     const requestDraft = retry && retryRequestRef.current?.text === clean && retryRequestRef.current.creationOwner === creationOwnerKey ? retryRequestRef.current.creationDraft : undefined;
     const retryForm = retry && retryRequestRef.current?.text === clean && retryRequestRef.current.creationOwner === creationOwnerKey ? retryRequestRef.current.creationForm : undefined;
     const creationForm = submittedForm ?? retryForm;
-    const creationDraft = creationForm ? undefined : requestDraft ?? (activeCreationDraftRef.current?.scope === creationOwnerKey ? activeCreationDraftRef.current.draft : undefined);
+    const creationDraft = !floCreationAllowedRef.current || creationForm ? undefined : requestDraft ?? (activeCreationDraftRef.current?.scope === creationOwnerKey ? activeCreationDraftRef.current.draft : undefined);
     if (!recovery) retryCreationRef.current = null;
     setCreationSafety(null);
     creationOperationRef.current = null;
@@ -1140,6 +1180,14 @@ export default function FloScreen() {
       const creation = parseFloCreationResult(value);
       if (!creationIsCurrent() || !requestBudgetId || activeRequestRef.current !== requestGeneration) return;
       if (!creation) { activeCreationDraftRef.current = null; setCreationFormSession(null); return; }
+      if (creation.status === "needs_details" && !floCreationAllowedRef.current) {
+        activeCreationDraftRef.current = null;
+        setCreationFormSession(null);
+        creationReply.current = floCreationAccessMessage(canEditHousehold);
+        setCreationByMessageId(previous => ({ ...previous, [assistantMessageId]: { status: "unavailable", prompt: creationReply.current!, missingFields: [] } }));
+        dispatch({ type: "replace", id: assistantMessageId, text: creationReply.current });
+        return;
+      }
       if (creation.status === "needs_details") {
         activeCreationDraftRef.current = creation.draft?.householdId === requestHouseholdId ? { scope: requestCreationOwnerKey, draft: creation.draft } : null;
         setCreationByMessageId(previous => ({ ...previous, [assistantMessageId]: creation }));
@@ -1165,7 +1213,10 @@ export default function FloScreen() {
         setCreationSaving(true);
         setCreationSafety(null);
         try {
-          const saved = await commitFloCreation(creation, requestBudgetId);
+          const saved = floCreationAllowedRef.current
+            ? await commitFloCreation(creation, requestBudgetId, { userId: requestUserId, isCurrent: () => creationIsCurrent() && floCreationAllowedRef.current && creationOperationRef.current === operation })
+            : await readFloCreationReceipt(creation.commandId!, requestHouseholdId, requestBudgetId);
+          if (!saved) throw new Error("flo_creation_pro_required");
           if (!creationIsCurrent() || creationOperationRef.current !== operation) return;
           if (saved.status !== "saved" || saved.receipt?.commandId !== userMessageId || saved.receipt.householdId !== requestHouseholdId) throw new Error("creation_receipt_mismatch");
           operation.saved = saved;
@@ -1175,20 +1226,22 @@ export default function FloScreen() {
           dispatch({ type: "replace", id: assistantMessageId, text: saved.prompt });
           dispatch({ type: "complete", id: assistantMessageId, userId: userMessageId });
           retryBudgetLoad();
-        } catch {
+        } catch (error) {
           if (!creationIsCurrent() || creationOperationRef.current !== operation) return;
-          creationReply.current = "I couldn’t verify the save. Retry the same question to check it safely.";
+          const planDenied = error instanceof Error && error.message.includes("flo_creation_pro_required");
+          const scopeBusy = error instanceof Error && error.message.includes("lock_not_available");
+          creationReply.current = planDenied ? floCreationAccessMessage(canEditHousehold) : scopeBusy ? "Your household is updating. Retry this request in a moment." : "I couldn’t verify the save. Retry the same question to check it safely.";
           dispatch({ type: "replace", id: assistantMessageId, text: creationReply.current });
           setCreationByMessageId(previous => ({ ...previous, [assistantMessageId]: { status: "unavailable", prompt: creationReply.current!, missingFields: [] } }));
-          setChatError("The save could not be verified. Retry checks the same request.");
-          setRetryAllowed(true);
+          setChatError(planDenied ? creationReply.current : "The save could not be verified. Retry checks the same request.");
+          setRetryAllowed(!planDenied);
         } finally {
           operation.settled = true;
           if (requestCreationOwnerKey === creationOwnerKeyRef.current && creationOperationRef.current === operation) setCreationSaving(false);
         }
       };
       const payload = creation.payload;
-      const warning = creation.kind === "create_bucket" ? buildBucketSafetyStop({ name: String(payload.name), amount: Number(payload.target_amount), targetDate: String(payload.target_date), safetyFloor: settings.safety_floor, horizonMonths: settings.forecast_horizon_months, getDailyBalances })
+      const warning = !floCreationAllowedRef.current ? null : creation.kind === "create_bucket" ? buildBucketSafetyStop({ name: String(payload.name), amount: Number(payload.target_amount), targetDate: String(payload.target_date), safetyFloor: settings.safety_floor, horizonMonths: settings.forecast_horizon_months, getDailyBalances })
         : creation.kind === "create_manual_transaction" && payload.direction === "expense" ? previewTransactionSafetyStop({ amount: -Number(payload.amount), date: String(payload.date), category: String(payload.category), note: String(payload.note), source: "manual", account_id: String(payload.account_id) }) : null;
       if (warning) {
         setCreationSafety({ warning, proceed: () => { if (creationIsCurrent() && creationOperationRef.current === operation) { creationCommit = persist(); void creationCommit; } }, cancel: () => {
@@ -1340,6 +1393,7 @@ export default function FloScreen() {
       }
     } finally {
       if (activeRequestRef.current === requestGeneration) { activeRequestRef.current = null; setCreationFormBusy(false); }
+      if (requestIsCurrent() && !floV4Preview) void refreshAccess();
     }
     if (!requestIsCurrent()) return;
     if (!historyEnabled) retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: null, creationDraft, creationForm, creationOwner: requestCreationOwnerKey };
@@ -1389,7 +1443,7 @@ export default function FloScreen() {
   }
 
   if (floAccessLocked) {
-    return <BasicFlo facts={facts} baseline={baseline} />;
+    return <View style={{ flex: 1, backgroundColor: colors.background }}><View style={[styles.allowanceBar, { backgroundColor: colors.card, borderColor: colors.border }]}><Text style={[styles.allowanceCopy, { flex: 1, color: colors.mutedForeground }]}>{accessError ? "Flo chat access could not be checked. Essentials is available below." : "Checking Flo chat access. Essentials is available below."}</Text><Pressable accessibilityRole="button" accessibilityLabel="Retry Flo access check" onPress={() => void refreshAccess()} style={styles.allowanceButton}><Text style={{ color: colors.primary }}>Retry</Text></Pressable></View><BasicFlo facts={facts} baseline={baseline} /></View>;
   }
 
   return (
@@ -1411,6 +1465,12 @@ export default function FloScreen() {
         {!floV4Preview ? <FloConversationBar key={floDataScopeKey} compact desktop={isDesktop} conversations={conversations} activeId={activeConversationId} disabled={chat.sending || creationSaving || historyBusy} preferencesDisabled={!preferencesControlsReady} householdName={activeHousehold?.name ?? "Personal household"} preferences={floPreferences} onNew={startNewConversation} onSelect={selectConversation} onRename={renameConversation} onDelete={removeConversation} onDeleteAll={removeAllConversations} onExport={exportConversations} onSearchHistory={searchHistory} onPreferencesChange={updatePreferences} /> : null}
       </View>
 
+      {!floV4Preview ? <View style={[styles.allowanceBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={{ flex: 1, minWidth: 0 }}><Text style={[styles.allowanceTitle, { color: colors.foreground }]}>{previewTier ? `Admin ${previewTier === "free" ? "Free" : "Pro"} preview` : hasFoundingAccess ? "Your existing Flo access" : actualPlan.tier === "pro" ? "Flo Pro" : "Flo chat preview"}</Text><Text style={[styles.allowanceCopy, { color: colors.mutedForeground }]}>{accessError ? "Your allowance could not be checked. Essentials stays available." : floAllowanceLabel(floAllowance)}</Text></View>
+        <Pressable accessibilityRole="button" accessibilityLabel="Open Flo Essentials" onPress={() => setEssentialsOwner(creationOwnerKey)} style={[styles.allowanceButton, { backgroundColor: colors.primary + "15" }]}><Text style={{ color: colors.primary, fontFamily: "Inter_600SemiBold", fontSize: 12 }}>Essentials</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={accessError ? "Retry Flo access check" : "Refresh Flo allowance"} onPress={() => void refreshAccess()} style={styles.allowanceButton}><Feather name="refresh-cw" size={16} color={colors.primary} /></Pressable>
+        {(previewTier ? previewTier !== "pro" : !hasFoundingAccess && actualPlan.tier !== "pro") ? <Pressable accessibilityRole="button" accessibilityLabel="View Flo Pro membership" onPress={() => router.push("/(tabs)/more?section=membership" as never)} style={styles.allowanceButton}><Text style={{ color: colors.primary, fontFamily: "Inter_600SemiBold", fontSize: 12 }}>Pro</Text></Pressable> : null}
+      </View> : null}
       <ScrollView
         ref={scrollRef}
         style={styles.conversation}
@@ -1429,7 +1489,7 @@ export default function FloScreen() {
             <Text accessibilityRole="header" style={[styles.welcomeTitle, { color: colors.foreground }]}>Let’s make sense of your money.</Text>
             <Text style={[styles.welcomeSubtitle, { color: colors.mutedForeground }]}>Ask about your bills, balances, or next move.</Text>
             <View style={[styles.questionGrid, isDesktop && styles.questionGridDesktop]}>
-              {quickPrompts.map((prompt, index) => <Pressable key={prompt} accessibilityRole="button" accessibilityLabel={`Ask Flo: ${prompt}`} disabled={historyBusy || !preferencesReady} onPress={() => void send(prompt)} style={({ pressed }) => [styles.questionCard, isDesktop && styles.questionCardDesktop, { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed || !preferencesReady ? 0.6 : 1 }]}>
+              {quickPrompts.map((prompt, index) => <Pressable key={prompt} accessibilityRole="button" accessibilityLabel={`Ask Flo: ${prompt}`} disabled={historyBusy || !preferencesReady || !canAskNewQuestion} onPress={() => void send(prompt)} style={({ pressed }) => [styles.questionCard, isDesktop && styles.questionCardDesktop, { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed || !preferencesReady ? 0.6 : 1 }]}>
                 <Feather name={(["calendar", "credit-card", "trending-down", "help-circle"] as const)[index]} size={18} color={colors.primary} />
                 <Text style={[styles.questionText, { color: colors.foreground }]}>{prompt}</Text>
                 <Feather name="arrow-up-right" size={15} color={colors.mutedForeground} />
@@ -1455,17 +1515,17 @@ export default function FloScreen() {
               {message.role === "flo" && !message.thinking ? <FloGroundedAnswer text={humanizeFloText(message.text)} sources={sourcesByMessageId[message.id] ?? []} dataAsOf={groundingByMessageId[message.id]?.dataAsOf} coverage={groundingByMessageId[message.id]?.coverage} partial={groundingByMessageId[message.id]?.partial} caveat={groundingByMessageId[message.id]?.caveat} followUps={followUpsByMessageId[message.id]} proposal={floV4Preview ? null : proposalByMessageId[message.id]} proposalConfirmed={Boolean(!floV4Preview && (proposalByMessageId[message.id]?.status === "confirmed" || (proposalByMessageId[message.id] && confirmedProposalIds.has(proposalByMessageId[message.id]!.id))))} onOpenSource={openFloSource} onFollowUp={question => void send(question)} onReviewProposal={proposal => { if (!floV4Preview) openProposalReview(proposal); }} /> : <Text style={[styles.bubbleText, { color: message.role === "user" ? colors.primaryForeground : colors.mutedForeground }]}>{message.text}</Text>}
             </View>
             {message.role === "flo" && creationByMessageId[message.id] ? <FloCreationCard creation={creationByMessageId[message.id]} onOpen={route => openFloSource(creationByMessageId[message.id].receipt?.kind === "create_debt" ? "/(tabs)/bills?view=debt" : route)} onCancel={creationByMessageId[message.id].status === "needs_details" && !chat.sending && !creationSaving && (Boolean(creationByMessageId[message.id].draft) && activeCreationDraftRef.current?.draft === creationByMessageId[message.id].draft || creationFormSession?.id === message.id) ? () => cancelCreationDraft(message.id) : undefined} /> : null}
-            {message.role === "flo" && creationFormSession?.id === message.id && creationFormSession.owner === creationOwnerKey && !creationFormSession.open ? <Pressable accessibilityRole="button" accessibilityLabel="Complete details" disabled={chat.sending || creationSaving || historyBusy} onPress={() => reopenCreationForm(message.id)} style={[styles.retryButton, { backgroundColor: colors.primary + "18", marginTop: 8 }]}><Feather name="edit-3" size={15} color={colors.primary} /><Text style={[styles.retryText, { color: colors.primary }]}>Complete details</Text></Pressable> : null}
+            {message.role === "flo" && creationFormSession?.id === message.id && creationFormSession.owner === creationOwnerKey && !creationFormSession.open && floCreationAllowed ? <Pressable accessibilityRole="button" accessibilityLabel="Complete details" disabled={chat.sending || creationSaving || historyBusy} onPress={() => reopenCreationForm(message.id)} style={[styles.retryButton, { backgroundColor: colors.primary + "18", marginTop: 8 }]}><Feather name="edit-3" size={15} color={colors.primary} /><Text style={[styles.retryText, { color: colors.primary }]}>Complete details</Text></Pressable> : null}
           </View>
         ))}
       </ScrollView>
 
-      {creationFormSession && creationFormSession.owner === creationOwnerKey ? <FloCreationForm key={`${creationFormSession.owner}:${creationFormSession.id}:${creationFormSession.revision}`} creation={creationFormSession.creation} initialDraft={creationFormSession.draft} onDraftChange={draft => retainCreationFormDraft(creationFormSession.id, creationFormSession.revision, draft)} visible={creationFormSession.open} suspended={Boolean(creationSafety)} busy={creationFormBusy || creationSaving || historyBusy} error={chatError} accounts={accounts} onClose={() => closeCreationForm(creationFormSession.id)} onBackFromSafety={() => creationSafety?.cancel()} onSave={value => submitCreationForm(creationFormSession.id, value)} /> : null}
+      {creationFormSession && creationFormSession.owner === creationOwnerKey ? <FloCreationForm key={`${creationFormSession.owner}:${creationFormSession.id}:${creationFormSession.revision}`} creation={creationFormSession.creation} initialDraft={creationFormSession.draft} onDraftChange={draft => retainCreationFormDraft(creationFormSession.id, creationFormSession.revision, draft)} visible={creationFormSession.open && floCreationAllowed} suspended={Boolean(creationSafety)} busy={creationFormBusy || creationSaving || historyBusy} error={chatError} accounts={accounts} onClose={() => closeCreationForm(creationFormSession.id)} onBackFromSafety={() => creationSafety?.cancel()} onSave={value => submitCreationForm(creationFormSession.id, value)} /> : null}
 
       <FloSafetyStopModal manageBackHistory={!creationFormSession?.open} visible={Boolean(creationSafety)} warning={creationSafety?.warning ?? null} onKeepEditing={() => creationSafety?.cancel()} onScheduleAnyway={() => creationSafety?.proceed()} />
 
-      <Modal visible={!floV4Preview && Boolean(reviewProposal)} transparent animationType={isDesktop ? "fade" : "slide"} onRequestClose={() => proposalConfirmState !== "confirming" && setReviewProposal(null)}>
-        <Pressable style={[styles.modalOverlay, isDesktop && styles.reviewOverlayDesktop]} onPress={() => proposalConfirmState !== "confirming" && setReviewProposal(null)}>
+      <Modal visible={!floV4Preview && Boolean(reviewProposal) && proposalReviewOwnerRef.current?.owner === creationOwnerKey && proposalReviewOwnerRef.current?.conversationId === activeConversationId} transparent animationType={isDesktop ? "fade" : "slide"} onRequestClose={() => proposalConfirmState !== "confirming" && (proposalReviewOwnerRef.current = null, setReviewProposal(null))}>
+        <Pressable style={[styles.modalOverlay, isDesktop && styles.reviewOverlayDesktop]} onPress={() => proposalConfirmState !== "confirming" && (proposalReviewOwnerRef.current = null, setReviewProposal(null))}>
           <Pressable style={[styles.followSheet, isDesktop && styles.reviewDialogDesktop, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => undefined}>
             <View style={[styles.sheetHandle, { backgroundColor: colors.mutedForeground }]} />
             <View style={[styles.reviewProposalIcon, { backgroundColor: proposalReceipt ? colors.success + "18" : colors.primary + "18" }]}><Feather name={proposalReceipt ? "check" : "shield"} size={20} color={proposalReceipt ? colors.success : colors.primary} /></View>
@@ -1478,13 +1538,19 @@ export default function FloScreen() {
             {proposalConfirmError ? <Text accessibilityRole="alert" style={[styles.saveDecisionError, { color: colors.destructive }]}>{proposalConfirmError}</Text> : null}
             <Text style={[styles.reviewSafety, { color: colors.mutedForeground }]}>{proposalReceipt ? `Confirmed ${new Date(proposalReceipt.confirmedAt).toLocaleString()}` : "Nothing changes until you press Confirm change."}</Text>
             <View style={styles.followActions}>
-              <Pressable accessibilityRole="button" disabled={proposalConfirmState === "confirming"} onPress={() => setReviewProposal(null)} style={[styles.followButton, { backgroundColor: colors.muted, opacity: proposalConfirmState === "confirming" ? 0.5 : 1 }]}><Text style={[styles.followButtonText, { color: colors.foreground }]}>{proposalReceipt ? "Done" : "Cancel"}</Text></Pressable>
+              <Pressable accessibilityRole="button" disabled={proposalConfirmState === "confirming"} onPress={() => { proposalReviewOwnerRef.current = null; setReviewProposal(null); }} style={[styles.followButton, { backgroundColor: colors.muted, opacity: proposalConfirmState === "confirming" ? 0.5 : 1 }]}><Text style={[styles.followButtonText, { color: colors.foreground }]}>{proposalReceipt ? "Done" : "Cancel"}</Text></Pressable>
               {!proposalReceipt ? <Pressable accessibilityRole="button" disabled={proposalConfirmState === "confirming"} onPress={() => void confirmProposal()} style={[styles.followButton, { backgroundColor: colors.primary, opacity: proposalConfirmState === "confirming" ? 0.6 : 1 }]}><Text style={styles.followPrimaryText}>{proposalConfirmState === "confirming" ? "Confirming..." : "Confirm change"}</Text></Pressable> : null}
             </View>
           </Pressable>
         </Pressable>
       </Modal>
 
+      <Modal visible={essentialsOpen} animationType="slide" onRequestClose={closeEssentials}>
+        <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: Platform.OS === "web" ? 8 : insets.top }}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Back to Flo chat" onPress={closeEssentials} style={[styles.allowanceButton, { alignSelf: "flex-start", flexDirection: "row", gap: 8 }]}><Feather name="arrow-left" size={18} color={colors.primary} /><Text style={{ color: colors.primary, fontFamily: "Inter_600SemiBold" }}>Back to chat</Text></Pressable>
+          <BasicFlo facts={facts} baseline={baseline} />
+        </View>
+      </Modal>
       <Modal visible={Boolean(aiConsentPrompt)} transparent animationType="fade" onRequestClose={() => setAiConsentPrompt(null)}>
         <Pressable
           style={[
@@ -1534,11 +1600,11 @@ export default function FloScreen() {
             nativeID="guided-tour-flo"
             accessibilityLabel="Ask Flo anything"
             value={input}
-            editable={!historyBusy && preferencesReady}
+            editable={!historyBusy && preferencesReady && canAskNewQuestion}
             maxLength={4000}
             onChangeText={setInput}
             onSubmitEditing={() => void send()}
-            placeholder={preferencesReady ? "Ask Flo…" : "Getting ready…"}
+            placeholder={monthlyAllowanceExhausted ? "Chat allowance used — Essentials is available" : preferencesReady && canAskNewQuestion ? "Ask Flo…" : "Getting ready…"}
             placeholderTextColor={colors.mutedForeground}
             style={[styles.input, { color: colors.foreground }]}
             returnKeyType="send"
@@ -1550,7 +1616,7 @@ export default function FloScreen() {
             accessibilityRole="button"
             accessibilityLabel={chat.sending || creationSaving ? "Stop response" : "Send message"}
             onPress={chat.sending || creationSaving ? stopStreaming : () => void send()}
-            disabled={historyBusy || !preferencesReady || (!chat.sending && !creationSaving && !input.trim())}
+            disabled={historyBusy || !preferencesReady || (!chat.sending && !creationSaving && (!input.trim() || !canAskNewQuestion))}
             style={[
               styles.send,
               { backgroundColor: chat.sending || creationSaving ? colors.destructive : colors.primary, opacity: !chat.sending && !creationSaving && !input.trim() ? 0.45 : 1 },
@@ -1651,6 +1717,10 @@ const styles = StyleSheet.create({
   saveDecisionButton: { minHeight: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, paddingHorizontal: 12 },
   saveDecisionText: { color: "#fff", fontSize: 13, fontFamily: "Inter_700Bold" },
   saveDecisionHint: { fontSize: 11, lineHeight: 15, textAlign: "center" },
+  allowanceBar: { marginHorizontal: 16, marginTop: 10, borderWidth: 1, borderRadius: 16, padding: 12, flexDirection: "row", gap: 8, alignItems: "center" },
+  allowanceTitle: { fontSize: 12, fontFamily: "Inter_700Bold", lineHeight: 17 },
+  allowanceCopy: { fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 16, marginTop: 2 },
+  allowanceButton: { minHeight: 42, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, justifyContent: "center" },
   saveDecisionError: { fontSize: 11, fontFamily: "Inter_600SemiBold", textAlign: "center" },
   reductionTargetCard: { borderWidth: 1, borderRadius: 12, padding: 10, gap: 2 },
   reductionTargetLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.5 },

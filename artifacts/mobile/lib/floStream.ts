@@ -30,6 +30,15 @@ export function floFailureDisplay(code: unknown): FloFailureDisplay {
   if (code === "usage_limited") {
     return { answer: "You've reached today's Flo question limit.", action: "Try again tomorrow. Your account screens and calculations are still available.", retryable: false };
   }
+  if (code === "plan_usage_limited") {
+    return { answer: "Your household has used this month’s Flo chat allowance.", action: "Use Flo Essentials or check Membership. Saved chats remain available.", retryable: false };
+  }
+  if (code === "plan_access_unavailable" || code === "usage_limit_unavailable") {
+    return { answer: "I couldn’t confirm your current Flo allowance.", action: "Retry the access check. Flo Essentials remains available.", retryable: true };
+  }
+  if (code === "flo_creation_pro_required") {
+    return { answer: "Flo can add items with Pro.", action: "You can add them yourself for free using the app’s Add controls, or check Membership.", retryable: false };
+  }
   if (code === "pro_required") {
     return { answer: "Account chat isn't included in the plan currently enabled for this household.", action: "Check your membership in Settings.", retryable: false };
   }

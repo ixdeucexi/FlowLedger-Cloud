@@ -2,19 +2,21 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { transpileModule, ModuleKind } from "typescript";
+import { floCreationAccessMessage } from "./floPlanAccess";
 import { parseFloCreationResult, FLO_CREATION_ROUTES, type FloCreationResult } from "./floCreationProtocol";
 const commandId = "11111111-1111-4111-8111-111111111111", householdId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ready = (kind: "create_income" | "create_bucket" | "create_manual_transaction" = "create_income"): FloCreationResult => ({ status: "ready", kind, commandId, householdId, prompt: "Ready to add.", missingFields: [], payload: kind === "create_bucket" ? { name: "Fictional trip", target_amount: 100, target_date: "2026-11-01" } : kind === "create_manual_transaction" ? { amount: 30, direction: "expense", date: "2026-10-28", category: "Food", note: "Fictional lunch", account_id: "33333333-3333-4333-8333-333333333333" } : { name: "Fictional salary", amount: 1000, frequency: "monthly", first_date: "2026-11-01" } });
-function harness(options: { demo?: boolean; edit?: boolean; text?: string; owner?: string; structured?: boolean } = {}) {
+function harness(options: { demo?: boolean; edit?: boolean; text?: string; owner?: string; structured?: boolean; creationAllowed?: boolean; receipt?: FloCreationResult } = {}) {
   const source = readFileSync("app/(tabs)/flo.tsx", "utf8"), start = source.indexOf("    const seenCreationCommands ="), end = source.indexOf("    const verifiedFallback:", start); assert.ok(start > 0 && end > start);
-  const state: any = { current: true, calls: [], refreshes: 0, creations: {}, safety: null, input: "", actions: [], error: null, saving: false, preview: [], warning: null, fail: false, held: null, owner: options.owner ?? "actor:" + householdId + ":budget-a:owner:real:edit", budgets: [] };
+  const state: any = { current: true, receiptReads: [], receipt: options.receipt ?? null, calls: [], refreshes: 0, creations: {}, safety: null, input: "", actions: [], error: null, saving: false, preview: [], warning: null, fail: false, held: null, owner: options.owner ?? "actor:" + householdId + ":budget-a:owner:real:edit", budgets: [] };
   const bindings: Record<string, any> = {
+    requestUserId: "actor", floCreationAccessMessage, floCreationAllowedRef: { current: options.creationAllowed ?? true }, readFloCreationReceipt: async (...input: any[]) => { state.receiptReads.push(input); return state.receipt; },
     parseFloCreationResult, requestIsCurrent: () => state.current, requestCreationOwnerKey: state.owner, creationOwnerKeyRef: { get current() { return state.owner; } }, demoMode: options.demo ?? false, canEditHousehold: options.edit ?? true, requestBudgetId: "33333333-3333-4333-8333-333333333333", retryCreationRef: { current: null }, activeRequestRef: { current: 9 }, requestGeneration: 9, requestScopeKey: "actor:" + householdId, requestHouseholdId: householdId, userMessageId: commandId, assistantMessageId: "answer", clean: options.text ?? "Add the fictional record",
     creationForm: options.structured ? { kind: "create_income", fields: { name: "Salary" } } : undefined, creationFormRef: { current: options.structured ? { owner: state.owner, conversationId: null, creation: { kind: "create_income" } } : null },
     formFeedbackRevisionRef: { current: 0 }, historyEnabled: false, conversationId: null, activeConversationIdRef: { current: null }, setCreationFormSession: (value: any) => { state.formSession = value; }, setCreationFormBusy: (value: boolean) => { state.formBusy = value; }, activeCreationDraftRef: { current: null }, creationOperationRef: { current: null },
     setCreationByMessageId: (update: any) => { state.creations = update(state.creations); }, setCreationSafety: (value: any) => { state.safety = value; }, setCreationSaving: (value: boolean) => { state.saving = value; },
     commitFloCreation: async (creation: FloCreationResult, expectedBudgetId: string) => { state.budgets.push(expectedBudgetId); state.calls.push(creation); if (state.held) await state.held; if (state.fail) throw new Error("lost response"); return { status: "saved", kind: creation.kind, commandId, householdId, prompt: "Added Fictional record.", missingFields: [], receipt: { commandId, householdId, kind: creation.kind, entityId: "22222222-2222-4222-8222-222222222222", entityType: creation.kind === "create_bucket" ? "goal" : creation.kind === "create_manual_transaction" ? "transaction" : "income", title: "Fictional record", route: FLO_CREATION_ROUTES[creation.kind!], createdAt: "2026-10-28T12:00:00Z" } }; },
-    dispatch: (action: any) => state.actions.push(action), retryBudgetLoad: () => { state.refreshes++; }, setChatError: (error: any) => { state.error = error; }, setRetryAllowed() {}, settings: { safety_floor: 200, forecast_horizon_months: 6 }, getDailyBalances: () => [], buildBucketSafetyStop: () => state.warning,
+    dispatch: (action: any) => state.actions.push(action), retryBudgetLoad: () => { state.refreshes++; }, setChatError: (error: any) => { state.error = error; }, setRetryAllowed(value: boolean) { state.retry = value; }, settings: { safety_floor: 200, forecast_horizon_months: 6 }, getDailyBalances: () => [], buildBucketSafetyStop: () => state.warning,
     previewTransactionSafetyStop: (tx: any) => { state.preview.push(tx); return state.warning; }, setInput: (value: string) => { state.input = value; }, inputRef: { current: { focus() {} } },
   };
   const guardStart = source.indexOf("    const creationIsCurrent =");
@@ -94,7 +96,7 @@ test("a fields-only retry before any ready event retains its captured collection
   assert.ok(a > 0 && b > a);
   const code = transpileModule(source.slice(a, b), { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
   const draft = { kind: "create_income", householdId, fields: { name: "Fictional salary" }, evidence: { name: "Fictional salary" }, authorizationText: "Add income", userText: "Add income named Fictional salary", expiresAt: "2026-10-28T13:00:00Z" };
-  const bindings: Record<string, any> = { submittedForm: undefined, retry: true, clean: "$1000 monthly first date 2026-11-01", creationOwnerKey: "actor:home:budget:owner:real:edit", activeCreationDraftRef: { current: null }, retryRequestRef: { current: { text: "$1000 monthly first date 2026-11-01", creationOwner: "actor:home:budget:owner:real:edit", creationDraft: draft } } };
+  const bindings: Record<string, any> = { floCreationAllowedRef: { current: true }, submittedForm: undefined, retry: true, clean: "$1000 monthly first date 2026-11-01", creationOwnerKey: "actor:home:budget:owner:real:edit", activeCreationDraftRef: { current: null }, retryRequestRef: { current: { text: "$1000 monthly first date 2026-11-01", creationOwner: "actor:home:budget:owner:real:edit", creationDraft: draft } } };
   const selectDraft = () => new Function(...Object.keys(bindings), `${code};return creationDraft;`)(...Object.values(bindings));
   assert.deepEqual(selectDraft(), draft, "Stop cleared the active draft but the same explicit retry still has its request snapshot");
   bindings.creationOwnerKey += ":new-budget"; assert.equal(selectDraft(), undefined);
@@ -154,4 +156,55 @@ test("structured form unavailability is visible only to its current owned form a
   const natural = harness(); natural.run(result); assert.equal(natural.state.error, null); assert.deepEqual(natural.state.calls, []);
   const stale = harness({ structured: true }); stale.state.owner += ":new-epoch"; stale.run(result); assert.equal(stale.state.error, null);
   const otherChat = harness({ structured: true }); otherChat.bindings.activeConversationIdRef.current = "different-chat"; otherChat.run(result); assert.equal(otherChat.state.error, null);
+});
+
+
+test("a downgraded ready command only checks its old receipt and cannot create", async () => {
+  const h = harness({ creationAllowed: false }); h.run(ready()); await h.drain();
+  assert.deepEqual(h.state.calls, []); assert.equal(h.state.receiptReads.length, 1);
+  assert.match(h.reply() ?? "", /Pro/); assert.equal(h.state.retry, false);
+});
+test("a committed creation remains replayable after downgrade without a second financial write", async () => {
+  const saved: FloCreationResult = { status: "saved", prompt: "Already added.", missingFields: [], receipt: { commandId, householdId, kind: "create_income", entityId: "22222222-2222-4222-8222-222222222222", entityType: "income", title: "Salary", route: FLO_CREATION_ROUTES.create_income, createdAt: "2026-10-30T00:00:00Z" } };
+  const h = harness({ creationAllowed: false, receipt: saved }); h.run(ready()); await h.drain();
+  assert.deepEqual(h.state.calls, []); assert.equal(h.state.receiptReads.length, 1); assert.equal(h.state.creations.answer.status, "saved");
+});
+
+test("read-only Free chat rejects an incoming creation draft without opening a form or financial dispatch",()=>{
+ const h=harness({creationAllowed:false});
+ h.run({status:"needs_details",kind:"create_income",prompt:"What date?",missingFields:["first_date"],draft:{kind:"create_income",fields:{name:"Salary"},evidence:{name:"Salary"},authorizationText:"Add income",userText:"Add income named Salary",householdId,expiresAt:"2026-10-30T13:00:00Z"}});
+ assert.equal(h.state.formSession,null);assert.equal(h.bindings.activeCreationDraftRef.current,null);assert.deepEqual(h.state.calls,[]);assert.deepEqual(h.state.receiptReads,[]);assert.match(h.reply(),/Pro/);assert.equal(h.state.creations.answer.status,"unavailable");
+});
+function proposalHarness(){
+ const source=readFileSync("app/(tabs)/flo.tsx","utf8"),a=source.indexOf("  const openProposalReview ="),b=source.indexOf("  const searchHistory =",a);assert.ok(a>0&&b>a);
+ const code=transpileModule(source.slice(a,b),{compilerOptions:{module:ModuleKind.CommonJS}}).outputText;
+ const proposal={id:"proposal-a",kind:"recurring_bill_change",status:"review",payload:{expectedAmount:10,newAmount:12}};
+ const state:any={review:null,phase:"idle",error:"",receipt:null,writes:0,refreshes:0,published:0,holdRead:null,holdWrite:null};
+ const bindings:any={creationOwnerKey:"actor:home:budget:owner:0",creationOwnerKeyRef:{current:"actor:home:budget:owner:0"},proposalReviewOwnerRef:{current:null},activeConversationIdRef:{current:"chat-a"},floCreationAllowedRef:{current:true},user:{id:"actor"},canEditHousehold:true,floCreationAccessMessage,
+  setProposalConfirmState:(value:any)=>{state.phase=value;state.published++;},setProposalConfirmError:(value:any)=>{state.error=value;state.published++;},setProposalReceipt:(value:any)=>{state.receipt=value;state.published++;},setReviewProposal:(value:any)=>{state.review=value;state.published++;},setChatError:(value:any)=>{state.error=value;state.published++;},setConfirmedProposalIds:(value:any)=>{value(new Set());state.published++;},retryBudgetLoad:()=>state.refreshes++,
+  readAuthoritativeFloProposal:async()=>{if(state.holdRead)await state.holdRead;return proposal;},floProposalMatchesAuthoritative:()=>true,
+  confirmFloRecurringBillProposal:async(_id:string,scope:any)=>{assert.equal(scope.userId,"actor");assert.equal(scope.isCurrent(),true);state.writes++;if(state.holdWrite)await state.holdWrite;return {previousAmount:10,newAmount:12};},
+ };
+ const handlers=()=>new Function(...Object.keys(bindings),"reviewProposal","proposalReceipt","proposalConfirmState",`${code};return {open:openProposalReview,confirm:confirmProposal};`)(...Object.values(bindings),state.review,state.receipt,state.phase);
+ const open=async()=>{handlers().open(proposal);await new Promise<void>(resolve=>setImmediate(resolve));};
+ return {state,bindings,handlers,open};
+}
+test("late proposal review never reopens after owner ABA",async()=>{
+ const h=proposalHarness();let release!:()=>void;h.state.holdRead=new Promise<void>(r=>{release=r;});h.handlers().open({id:"proposal-a",kind:"recurring_bill_change"});
+ h.bindings.creationOwnerKeyRef.current="actor:home:budget:owner:2";const before=h.state.published;release();await new Promise<void>(r=>setImmediate(r));assert.equal(h.state.published,before);assert.equal(h.state.review,null);
+});
+test("proposal confirmation rechecks owner and creation capability after authoritative review",async()=>{
+ for(const transition of ["owner","capability","conversation"]){
+  const h=proposalHarness();await h.open();let release!:()=>void;h.state.holdRead=new Promise<void>(r=>{release=r;});const pending=h.handlers().confirm();
+  if(transition==="owner")h.bindings.creationOwnerKeyRef.current="actor:home:budget:owner:2";
+  if(transition==="capability")h.bindings.floCreationAllowedRef.current=false;
+  if(transition==="conversation")h.bindings.activeConversationIdRef.current="chat-b";
+  const before=h.state.published;release();await pending;assert.equal(h.state.writes,0);assert.equal(h.state.receipt,null);assert.equal(h.state.refreshes,0);
+  if(transition==="capability")assert.match(h.state.error,/Pro/);else assert.equal(h.state.published,before);
+ }
+});
+test("a late proposal receipt cannot publish across owner changes, while current duplicate confirmation dispatches once",async()=>{
+ const h=proposalHarness();await h.open();let release!:()=>void;h.state.holdWrite=new Promise<void>(r=>{release=r;});const pending=h.handlers().confirm();await new Promise<void>(r=>setImmediate(r));assert.equal(h.state.writes,1);
+ h.bindings.creationOwnerKeyRef.current="actor:home:budget:owner:2";const before=h.state.published;release();await pending;assert.equal(h.state.published,before);assert.equal(h.state.receipt,null);assert.equal(h.state.refreshes,0);
+ const current=proposalHarness();await current.open();const handlers=current.handlers();await Promise.all([handlers.confirm(),handlers.confirm()]);assert.equal(current.state.writes,1);assert.equal(current.state.refreshes,1);assert.equal(current.state.receipt.newAmount,12);
 });

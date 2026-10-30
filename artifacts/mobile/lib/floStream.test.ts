@@ -1,3 +1,4 @@
+import { floAllowanceLabel, floMonthlyAllowanceExhausted, floCreationAccessMessage } from "./floPlanAccess";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -114,9 +115,25 @@ test("send waits for scoped history preferences while routed prompts only prefil
   const routeDraft = screen.slice(screen.indexOf("// Route context can suggest a draft."), screen.indexOf("const composerBottom"));
   assert.match(routeDraft, /chatScopeKey !== floDataScopeKey/);
   assert.doesNotMatch(routeDraft, /send\(/);
-  assert.match(screen, /editable=\{!historyBusy && preferencesReady\}/);
+  assert.match(screen, /editable=\{!historyBusy && preferencesReady && canAskNewQuestion\}/);
   assert.match(screen, /loadedScope !== floDataScopeKeyRef.current/);
   assert.match(preferences, /catch \{[\s\S]*historyEnabled: false/);
   assert.match(bar, /Boolean\(props.disabled \|\| props.preferencesDisabled\)/);
   assert.match(bar, /Switch accessibilityLabel=\{label\} disabled=\{disabled\}/);
+});
+
+
+test("Flo monthly preview exhaustion preserves local Essentials and legacy configurable daily access", () => {
+  const base = { period: "month" as const, limit: 10, used: 10, remaining: 0, resetsAt: "2026-11-01T00:00:00Z", canCreate: false };
+  assert.equal(floMonthlyAllowanceExhausted(base), true);
+  assert.equal(floMonthlyAllowanceExhausted({ ...base, period: "day", used: 120 }), false);
+  assert.match(floAllowanceLabel(base), /0 of 10 household/);
+  assert.doesNotMatch(floAllowanceLabel({ ...base, period: "day", used: 120 }), /100/);
+  assert.match(floAllowanceLabel({ ...base, period: "day", used: 120 }), /120.*fair-use/);
+  assert.match(floFailureDisplay("plan_usage_limited").action, /Essentials.*Saved chats/);
+  assert.equal(floFailureDisplay("plan_usage_limited").retryable, false);
+  assert.match(floFailureDisplay("plan_access_unavailable").action, /Retry/);
+  assert.match(floCreationAccessMessage(false), /view-only/);
+  assert.doesNotMatch(floCreationAccessMessage(false), /Pro/);
+  assert.match(floCreationAccessMessage(true), /Pro.*free/);
 });

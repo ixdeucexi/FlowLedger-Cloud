@@ -1,3 +1,4 @@
+import { floMutationAccessToken, type FloMutationScope } from "./floCreation";
 import { parseFloCreationResult, type FloCreationDraft, type FloCreationResult, type FloCreationFormInput } from "./floCreationProtocol";
 import { fetch as expoFetch } from "expo/fetch";
 
@@ -271,15 +272,17 @@ export async function resetFloHouseholdMemory(householdId: string, userId: strin
   if (data) throw new Error("Flo memory could not be reset.");
 }
 
-export async function confirmFloRecurringBillProposal(proposalId: string): Promise<{
+export async function confirmFloRecurringBillProposal(proposalId: string, scope: FloMutationScope): Promise<{
   billId: string;
   previousAmount: number;
   newAmount: number;
   confirmedAt: string;
   auditId: number;
 }> {
-  const { data, error } = await supabase.rpc("confirm_flo_recurring_bill_proposal", { p_proposal_id: proposalId });
-  if (error) throw error;
+  const accessToken = await floMutationAccessToken(scope);
+  if (!scope.isCurrent()) throw new Error("flo_mutation_scope_changed");
+  const { data, error } = await supabase.rpc("confirm_flo_recurring_bill_proposal", { p_proposal_id: proposalId }).setHeader("Authorization", `Bearer ${accessToken}`);
+  if (error) throw new Error(error.code === "55P03" ? "lock_not_available" : error.message);
   const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null;
   if (!row || typeof row.billId !== "string") throw new Error("proposal_confirmation_invalid");
   const receipt = {

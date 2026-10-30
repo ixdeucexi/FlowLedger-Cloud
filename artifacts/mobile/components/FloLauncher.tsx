@@ -94,7 +94,7 @@ export function FloLauncher({ desktop }: { desktop: boolean }) {
 
   if (
     !preference.ready ||
-    isFeatureLocked("flo_account_chat") ||
+    isFeatureLocked("flo_basic") ||
     pathname.endsWith("/flo") ||
     (!preference.enabled && !showUndo)
   )
