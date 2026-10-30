@@ -1026,16 +1026,16 @@ export default function RootLayout() {
                 <BiometricLockProvider>
                   <BudgetProvider>
                     <MoneyPrivacyProvider>
-                    <BucketPersonalizationProvider>
-                    <MembershipProvider>
-                      <FloVolatileSessionProvider>
-                        <RootNavigator
-                          fontsReady={fontsReady}
-                          hideSplash={hideSplash}
-                        />
-                      </FloVolatileSessionProvider>
-                    </MembershipProvider>
-                    </BucketPersonalizationProvider>
+                      <BucketPersonalizationProvider>
+                        <MembershipProvider>
+                          <FloVolatileSessionProvider>
+                            <RootNavigator
+                              fontsReady={fontsReady}
+                              hideSplash={hideSplash}
+                            />
+                          </FloVolatileSessionProvider>
+                        </MembershipProvider>
+                      </BucketPersonalizationProvider>
                     </MoneyPrivacyProvider>
                   </BudgetProvider>
                 </BiometricLockProvider>

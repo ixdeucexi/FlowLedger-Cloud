@@ -1,14 +1,11 @@
+import {
+  PrivacyPressable as Pressable,
+  PrivacyText as Text,
+  PrivacyView as View,
+} from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import React, { useEffect, useRef, useState } from "react";
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  View,
-} from "react-native";
+import { Modal, ScrollView, StyleSheet, Switch } from "react-native";
 import { useBucketAppearance } from "@/hooks/useBucketAppearance";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";

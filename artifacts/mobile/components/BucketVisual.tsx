@@ -1,7 +1,13 @@
+import {
+  PrivacyPressable as Pressable,
+  PrivacyText as Text,
+  PrivacyView as View,
+} from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet } from "react-native";
+import { useMoneyPrivacy } from "@/context/MoneyPrivacyContext";
 import {
   useBucketAppearance,
   useBucketPhoto,
@@ -36,9 +42,10 @@ export function BucketThumbnail({
   size?: number;
   hidePhoto?: boolean;
 }) {
+  const { hidden } = useMoneyPrivacy();
   const c = useColors(),
     appearance = useBucketAppearance(goalId),
-    photo = useBucketPhoto(appearance, hidePhoto);
+    photo = useBucketPhoto(appearance, hidePhoto || hidden);
   return (
     <View
       accessibilityLabel={`${name} ${appearance.look.icon} icon${appearance.look.photoId ? ", personal photo" : ""}`}
@@ -94,9 +101,10 @@ export function BucketCover({
   force?: boolean;
   hidePhoto?: boolean;
 }) {
+  const { hidden } = useMoneyPrivacy();
   const c = useColors(),
     appearance = useBucketAppearance(goalId),
-    photo = useBucketPhoto(appearance, hidePhoto);
+    photo = useBucketPhoto(appearance, hidePhoto || hidden);
   if (!force && appearance.look.cover === "none" && !appearance.look.photoId)
     return null;
   if (force && appearance.look.cover === "none" && !appearance.look.photoId)

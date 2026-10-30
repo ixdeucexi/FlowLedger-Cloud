@@ -1,3 +1,8 @@
+import {
+  PrivacyPressable as Pressable,
+  PrivacyText as Text,
+  PrivacyView as View,
+} from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import React, {
   createContext,
@@ -7,7 +12,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, StyleSheet } from "react-native";
 import { BucketAppearanceModal } from "@/components/BucketAppearanceModal";
 import { useBudget } from "@/context/BudgetContext";
 import { useBucketAppearance } from "@/hooks/useBucketAppearance";

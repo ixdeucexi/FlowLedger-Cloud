@@ -1,3 +1,4 @@
+import { revealedPrivacyModule } from "./privacyTestHarness";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
@@ -39,6 +40,8 @@ function source(file: string, dependencies: Record<string, unknown>): any {
   const exports: Record<string, unknown> = {};
   new Function("exports", "require", js)(exports, (name: string) => {
     if (name in dependencies) return dependencies[name];
+    const privacyModule = revealedPrivacyModule(name);
+    if (privacyModule) return privacyModule;
     throw Error("Unexpected dependency " + name);
   });
   return exports;
@@ -292,6 +295,56 @@ test("personalization host rejects unavailable, unknown and stale entry callback
   current = true;
   render().props.value.open("holiday");
   assert.equal(render().props.value.active, true);
+});
+test("bucket thumbnails and covers suppress personal photos in Privacy Mode", () => {
+  let hidden = true;
+  const suppressed: boolean[] = [];
+  const createElement = (type: unknown, props: any, ...children: any[]) => ({
+    type,
+    props: { ...props, children },
+  });
+  const api = source("components/BucketVisual.tsx", {
+    react: { __esModule: true, default: { createElement } },
+    "@expo/vector-icons/Feather": "Feather",
+    "expo-linear-gradient": { LinearGradient: "LinearGradient" },
+    "react-native": {
+      Image: "Image",
+      StyleSheet: { create: (value: unknown) => value, absoluteFillObject: {} },
+    },
+    "@/context/MoneyPrivacyContext": { useMoneyPrivacy: () => ({ hidden }) },
+    "@/hooks/useColors": {
+      useColors: () => ({ primary: "#702fff", background: "#111111" }),
+    },
+    "@/hooks/useBucketAppearance": {
+      useBucketAppearance: () => ({
+        look: { ...model.DEFAULT_BUCKET_LOOK, photoId: photoA },
+      }),
+      useBucketPhoto: (_appearance: unknown, conceal: boolean) => {
+        suppressed.push(conceal);
+        return { uri: conceal ? null : "blob:personal-photo", error: null };
+      },
+    },
+  });
+  const images = (node: any): any[] =>
+    Array.isArray(node)
+      ? node.flatMap(images)
+      : node && typeof node === "object"
+        ? [
+            ...(node.type === "Image" ? [node] : []),
+            ...images(node.props?.children),
+          ]
+        : [];
+  const props = { goalId: "holiday", name: "Holiday" };
+  assert.equal(images(api.BucketThumbnail(props)).length, 0);
+  assert.equal(images(api.BucketCover(props)).length, 0);
+  assert.deepEqual(suppressed, [true, true]);
+  hidden = false;
+  assert.equal(images(api.BucketThumbnail(props)).length, 1);
+  assert.equal(images(api.BucketCover(props)).length, 1);
+  assert.equal(
+    images(api.BucketThumbnail({ ...props, hidePhoto: true })).length,
+    0,
+  );
 });
 test("bucket appearance is closed, bounded, scoped and separate from financial fields", () => {
   const value = model.normalizeBucketAppearance({
