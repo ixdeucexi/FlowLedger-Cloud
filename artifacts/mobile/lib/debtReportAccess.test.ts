@@ -51,7 +51,19 @@ function harness(kind: "debt" | "reports", options: { premium?: boolean; viewer?
     useMemo: (fn: () => any) => { cursor++; return fn(); },
     useEffect: (fn: () => void | (() => void), deps: any[]) => { const i = cursor++; if (!hooks[i] || deps.some((value, j) => !Object.is(value, hooks[i][j]))) { hooks[i] = deps; effects.push(() => { const cleanup = fn(); if (cleanup) cleanups.push(cleanup); }); } },
   };
-  const membership = { isFeatureLocked: (feature: string) => ["debt_strategies", "long_term_reports"].includes(feature) && !state.premium, bypassFeature() {}, isAdmin: false, previewTier: null };
+  const membership = {
+    get actualPlan() { return { householdId: budget.activeHousehold.householdId, tier: state.premium ? "pro" : "free", source: state.premium ? "billing" : "default" }; },
+    get effectiveTier() { return state.premium ? "pro" : "free"; },
+    loading: false,
+    accessReady: true,
+    accessError: null,
+    hasFoundingAccess: false,
+    refreshAccess: async () => {},
+    isFeatureLocked: (feature: string) => ["debt_strategies", "long_term_reports"].includes(feature) && !state.premium,
+    bypassFeature() {},
+    isAdmin: false,
+    previewTier: null,
+  };
   const colors = new Proxy({}, { get: () => "#000000" });
   const modules: Record<string, any> = { snowballPlanner: planner, snowball, debtPlanDomain: debtDomain, debtPaymentPlan: debtPayments, dateLabels: labels, snowballFunding: funding, reviewCenter: review, moneyFormInput: moneyInput, settingsLayout: reportLayout };
   const cache: Record<string, any> = {};
