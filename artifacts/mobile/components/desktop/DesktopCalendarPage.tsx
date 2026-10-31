@@ -70,7 +70,7 @@ type DesktopCalendarPageProps = {
 };
 
 function money(value: number, signed = false) {
-  const sign = signed ? (value > 0 ? "+" : value < 0 ? "−" : "") : "";
+  const sign = value < 0 ? "−" : signed && value > 0 ? "+" : "";
   return `${sign}${Math.abs(value).toLocaleString(undefined, {
     style: "currency",
     currency: "USD",
@@ -731,11 +731,11 @@ const styles = StyleSheet.create({
   primaryActionText: { color: "#ffffff", fontSize: 13, fontFamily: "Inter_700Bold" },
   disabledAction: { minHeight: 44, borderRadius: 8, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surfaceMuted, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, opacity: 0.72 },
   disabledActionText: { color: palette.faint, fontSize: 12, fontFamily: "Inter_600SemiBold" },
-  balanceCard: { minHeight: 92, borderRadius: 9, backgroundColor: palette.blueSoft, padding: 13, flexDirection: "row", alignItems: "center", gap: 10 },
+  balanceCard: { minHeight: 92, borderRadius: 9, backgroundColor: palette.blueSoft, padding: 13, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 10 },
   riskBalanceCard: { backgroundColor: palette.redSoft },
   balanceIcon: { width: 36, height: 36, borderRadius: 9, backgroundColor: palette.surface, alignItems: "center", justifyContent: "center" },
   riskBalanceIcon: { borderWidth: 1, borderColor: palette.red },
-  balanceCopy: { flex: 1, minWidth: 0 },
+  balanceCopy: { flex: 1, minWidth: 160, maxWidth: "100%" },
   balanceValue: { color: palette.text, fontSize: 18, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
   riskBalanceValue: { color: palette.red },
   balanceDetail: { color: palette.muted, fontSize: 11, lineHeight: 15, marginTop: 2 },
