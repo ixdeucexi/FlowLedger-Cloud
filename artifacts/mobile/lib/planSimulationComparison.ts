@@ -1,4 +1,4 @@
-import { projectPlanSimulation, type PlanSimulationBaseline, type PlanSimulationHorizon, type PlanSimulationMetricsBaseline, type PlanSimulationReferences } from "./planSimulator";
+import { hasSimulationDebtControls, projectPlanSimulation, type PlanSimulationBaseline, type PlanSimulationHorizon, type PlanSimulationMetricsBaseline, type PlanSimulationReferences } from "./planSimulator";
 import type { ScenarioDraft } from "./planSimulationLibrary";
 export type SavedComparisonOption = { key: string; source: "On this device" | "Household"; draft: ScenarioDraft };
 export function defaultScenarioComparisonHorizon(options: readonly SavedComparisonOption[]): PlanSimulationHorizon {
@@ -7,7 +7,7 @@ export function defaultScenarioComparisonHorizon(options: readonly SavedComparis
 /** All three projections receive the exact same immutable real-plan inputs. */
 export function compareSavedPlanScenarios(input: { baseline: PlanSimulationBaseline; options: readonly [SavedComparisonOption, SavedComparisonOption]; references: PlanSimulationReferences; metrics: PlanSimulationMetricsBaseline; safetyFloor: number }) {
   if (input.options[0].key === input.options[1].key) throw new Error("Choose two different saved scenarios.");
-  const shared = { baseline: input.baseline, references: input.references, metrics: input.metrics, safetyFloor: input.safetyFloor };
+  const shared = { baseline: input.baseline, references: input.references, metrics: input.metrics, safetyFloor: input.safetyFloor, useDebtControlTimeline: input.options.some(option => hasSimulationDebtControls(option.draft.changes)) };
   return {
     startDate: input.baseline.startDate, endDate: input.baseline.endDate,
     current: projectPlanSimulation({ ...shared, changes: [] }),
@@ -16,7 +16,7 @@ export function compareSavedPlanScenarios(input: { baseline: PlanSimulationBasel
       const coverage = option.draft.changes.filter(change => Object.entries(change).some(([key, value]) => ["date", "startDate", "effectiveDate", "occurrenceDate", "newDate"].includes(key) && typeof value === "string" && (value < input.baseline.startDate || value > input.baseline.endDate)))
         .filter(change => !result.issues.some(issue => issue.changeId === change.id && /horizon|range|outside|no open occurrence/.test(issue.message)))
         .map(change => ({ changeId: change.id, message: "This saved change has dates outside the common comparison range. Its full saved time span is not represented here." }));
-      return { ...option, result: coverage.length ? { ...result, complete: false, issues: [...result.issues, ...coverage] } : result };
+      return { ...option, result: coverage.length ? { ...result, complete: false, potentialDebtFreeDate: null, payoffImpactMonths: null, payoffStatus: "unavailable" as const, issues: [...result.issues, ...coverage] } : result };
     }),
   };
 }

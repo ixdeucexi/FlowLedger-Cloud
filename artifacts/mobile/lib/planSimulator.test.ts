@@ -516,6 +516,7 @@ test("payoff choices remain conditional with desktop navigation and explicit sel
   assert.match(source, /needsDebt \? references.debts.filter/);
   assert.match(source, /desktopDebtNavigation=\{needsDebt\}/);
   assert.doesNotMatch(source, /Choose a debt to pay off<\/FieldLabel>|styles.debtChoices/);
-  assert.match(source, /selected=\{targetId\} onSelect=\{id => setField\("targetId", id\)\}/);
+  assert.match(source, /selected=\{targetId\} onSelect=\{id => \{ const debt = needsDebt \? references\.debts\.find\(item => item\.id === id\)/);
+  assert.match(source, /selectSimulationEditorDebt\(previous, debt,/);
   assert.match(source, /debt.balance > 0.005 && \(!debt.endDate \|\| debt.endDate.slice\(0, 10\) >= startDate\)/);
 });

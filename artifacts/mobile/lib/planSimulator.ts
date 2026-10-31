@@ -1,6 +1,8 @@
 import type { FinancialEvent } from "./forecast";
 import { calculateFlowScore } from "./flowScorePolicy";
 import { allocateSnowballExtra, projectSnowballMonth, type DebtMethod, type SnowballDebtInput } from "./snowball";
+import { hasSimulationDebtControls, projectControlledSimulationDebt } from "./planSimulationDebtControls";
+export { hasSimulationDebtControls, simulationDebtReference } from "./planSimulationDebtControls";
 import { getBillOccurrenceDays, isBillActiveForMonth } from "./schedule";
 import { buildStabilityProgress } from "./stability";
 
@@ -22,6 +24,9 @@ export type PlanSimulationChange =
   | (ChangeBase & { type: "bill_move"; billId: string; occurrenceDate: string; newDate: string })
   | (ChangeBase & { type: "spending_once"; name: string; amount: number; date: string })
   | (ChangeBase & { type: "savings_once"; name: string; amount: number; date: string })
+  | (ChangeBase & { type: "debt_edit"; debtId: string; amount: number; effectiveDate: string })
+  | (ChangeBase & { type: "debt_pause"; debtId: string; effectiveDate: string; resumeDate: string })
+  | (ChangeBase & { type: "debt_add"; name: string; balance: number; apr: number; amount: number; frequency: SimulationBillFrequency; startDate: string })
   | (ChangeBase & { type: "debt_extra"; amount: number; date: string })
   | (ChangeBase & { type: "debt_payoff"; debtId: string; date: string });
 
@@ -87,8 +92,24 @@ export interface PlanSimulationBillReference {
 }
 
 export interface PlanSimulationDebtReference extends SnowballDebtInput {
+  /** Exact source-commitment snapshots, never month-wide paid totals. */
+  occurrences?: readonly {
+    date: string;
+    configuredAmount: number;
+    settledAmount: number;
+    remainingAmount: number;
+    /** An existing exact Forecast override replaces the automatic pool for its target month. */
+    exactPlan?: boolean;
+    immutable?: boolean;
+    /** False when this cash date has no actual regular obligation (global pool or pure carry). */
+    regular?: boolean;
+    /** A reserved overdue requirement re-dated to the visible anchor. */
+    carried?: boolean;
+    /** Original overdue commitments represented by one anchor-date cash row. */
+    carriedOccurrences?: readonly { date: string; configuredAmount: number; settledAmount: number }[];
+  }[];
   /**
-   * `minimum` is the original lender minimum per occurrence. Existing
+   * `minimum` is the configured regular payment per occurrence. Existing
    * rollover is a separate once-monthly payoff amount so weekly/biweekly
    * schedules cannot multiply it.
    */
@@ -107,6 +128,10 @@ export interface PlanSimulationReferences {
   debtMethod: DebtMethod;
   /** Existing live safe-extra strategy, keyed YYYY-MM, shared by both comparisons. */
   payoffStrategyExtrasByMonth?: Readonly<Record<string, number>>;
+  /** The preview map and canonical saved-extra rows represent the same funds. */
+  payoffStrategyExtrasAreSavedPlans?: boolean;
+  /** Full saved monthly budgets, including pre-anchor cash already absorbed by Forecast. */
+  payoffSavedPaymentsByMonth?: Readonly<Record<string, { amount: number; date: string }>>;
 }
 
 export interface PlanSimulationMetricsBaseline {
@@ -148,6 +173,7 @@ export interface PlanSimulationResult {
   debtExtraApplied: number;
   debtAllocations: Array<{ changeId: string; billId: string; billName: string; amount: number; date: string }>;
   potentialDebtFreeDate: string | null;
+  payoffStatus: "paid_off" | "projection_limit" | "unavailable";
   payoffImpactMonths: number | null;
   issues: PlanSimulationIssue[];
   complete: boolean;
@@ -168,7 +194,7 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const CHANGE_TYPES = new Set<PlanSimulationChange["type"]>([
   "income_add", "income_edit", "income_pause", "income_once",
   "bill_add", "bill_edit", "bill_pause", "bill_move",
-  "spending_once", "savings_once", "debt_extra", "debt_payoff",
+  "spending_once", "savings_once", "debt_edit", "debt_pause", "debt_add", "debt_extra", "debt_payoff",
 ]);
 
 function cents(value: number): number {
@@ -263,6 +289,25 @@ function decodeChange(value: unknown): PlanSimulationChange | null {
       return hasExactKeys(row, ["id", "type", "amount", "date"])
         && isAmount(row.amount) && isValidPlanSimulationDate(row.date)
         ? { id: row.id, type: row.type, amount: cents(row.amount), date: row.date }
+        : null;
+    case "debt_edit":
+      return hasExactKeys(row, ["id", "type", "debtId", "amount", "effectiveDate"])
+        && isId(row.debtId) && isAmount(row.amount) && isValidPlanSimulationDate(row.effectiveDate)
+        ? { id: row.id, type: row.type, debtId: row.debtId, amount: cents(row.amount), effectiveDate: row.effectiveDate }
+        : null;
+    case "debt_pause":
+      return hasExactKeys(row, ["id", "type", "debtId", "effectiveDate", "resumeDate"])
+        && isId(row.debtId) && isValidPlanSimulationDate(row.effectiveDate)
+        && isValidPlanSimulationDate(row.resumeDate) && row.resumeDate > row.effectiveDate
+        ? { id: row.id, type: row.type, debtId: row.debtId, effectiveDate: row.effectiveDate, resumeDate: row.resumeDate }
+        : null;
+    case "debt_add":
+      return hasExactKeys(row, ["id", "type", "name", "balance", "apr", "amount", "frequency", "startDate"])
+        && isName(row.name) && isAmount(row.balance) && isAmount(row.amount)
+        && typeof row.apr === "number" && Number.isFinite(row.apr) && row.apr >= 0 && row.apr <= 1000
+        && (row.frequency === "monthly" || row.frequency === "quarterly" || row.frequency === "biweekly" || row.frequency === "weekly")
+        && isValidPlanSimulationDate(row.startDate)
+        ? { id: row.id, type: row.type, name: row.name.trim(), balance: cents(row.balance), apr: row.apr, amount: cents(row.amount), frequency: row.frequency, startDate: row.startDate }
         : null;
     case "debt_payoff":
       return hasExactKeys(row, ["id", "type", "debtId", "date"])
@@ -490,7 +535,9 @@ function comparablePayoffDate(input: {
       method: input.references.debtMethod,
       startingBalances: balances,
       rolledPayment,
-      extraPayment: cents(strategyExtra + savedExtra + scenarioExtra),
+      extraPayment: cents((input.references.payoffStrategyExtrasAreSavedPlans
+        ? Math.max(strategyExtra, savedExtra)
+        : strategyExtra + savedExtra) + scenarioExtra),
       applyInterest: offset > 0,
     });
     plan.balances.forEach((balance, id) => balances.set(id, balance));
@@ -521,9 +568,17 @@ export function projectPlanSimulation(input: {
   metrics: PlanSimulationMetricsBaseline;
   safetyFloor: number;
   definitionIssue?: string | null;
+  /** Pair a baseline/old-only option with a new debt scenario's exact model. */
+  useDebtControlTimeline?: boolean;
 }): PlanSimulationResult {
   const baselineDays = input.baseline.days.map(day => ({ ...day, events: day.events.map(event => ({ ...event })) }));
-  const baselinePayoffDate = comparablePayoffDate({ baseline: input.baseline, references: input.references });
+  const useDebtControlTimeline = input.useDebtControlTimeline || hasSimulationDebtControls(input.changes);
+  const baselineControlled = useDebtControlTimeline
+    ? projectControlledSimulationDebt({ baseline: input.baseline, references: input.references, changes: [] })
+    : undefined;
+  const baselinePayoffDate = baselineControlled
+    ? baselineControlled.potentialDebtFreeDate
+    : comparablePayoffDate({ baseline: input.baseline, references: input.references });
   if (input.changes.length === 0 && !input.definitionIssue) {
     return summarizeProjection({
       baselineDays,
@@ -537,7 +592,7 @@ export function projectPlanSimulation(input: {
       debtAllocations: [],
       potentialDebtFreeDate: baselinePayoffDate,
       payoffImpactMonths: 0,
-      issues: [],
+      issues: baselineControlled?.issues ?? [],
     });
   }
 
@@ -589,7 +644,7 @@ export function projectPlanSimulation(input: {
   const addIssue = (changeId: string, message: string) => issues.push({ changeId, message });
 
   const nonDebtChanges = input.changes
-    .filter(change => change.type !== "debt_extra" && change.type !== "debt_payoff")
+    .filter(change => !change.type.startsWith("debt_"))
     .slice()
     .sort((left, right) => changeEffectiveDate(left).localeCompare(changeEffectiveDate(right)));
   nonDebtChanges.forEach(change => {
@@ -670,8 +725,20 @@ export function projectPlanSimulation(input: {
     }
   });
 
+  const controlledDebt = useDebtControlTimeline
+    ? projectControlledSimulationDebt({ baseline: input.baseline, references: input.references, changes: input.changes, historicalPrincipal: baselineControlled?.historicalPrincipal })
+    : undefined;
+  if (controlledDebt) {
+    removeEvents(event => controlledDebt.replacedEventIds.has(event.id));
+    controlledDebt.events.forEach(addEvent);
+    issues.push(...controlledDebt.issues);
+    debtAllocations.push(...controlledDebt.allocations);
+    debtExtraApplied = controlledDebt.debtExtraApplied;
+    requiredMonthlyOutflow += controlledDebt.addedRequiredCurrentMonth;
+  }
   const debtChanges = input.changes
     .filter((change): change is Extract<PlanSimulationChange, { type: "debt_extra" | "debt_payoff" }> => change.type === "debt_extra" || change.type === "debt_payoff")
+    .filter(() => !useDebtControlTimeline)
     .slice()
     .sort((left, right) => left.date.localeCompare(right.date) || left.id.localeCompare(right.id));
   let allocationDebts = input.references.debts.map(debt => ({ ...debt, balance: cents(Math.max(0, debt.balance)) }));
@@ -772,7 +839,7 @@ export function projectPlanSimulation(input: {
     requiredAmountCovered: input.metrics.flowScoreRequiredAmountCovered,
     protectedDays,
   }).score;
-  const potentialDebtFreeDate = comparablePayoffDate({
+  const potentialDebtFreeDate = controlledDebt ? controlledDebt.potentialDebtFreeDate : comparablePayoffDate({
     baseline: input.baseline,
     references: input.references,
     scenarioExtrasByMonth,
@@ -875,8 +942,9 @@ function summarizeProjection(input: {
     savingsAdded: cents(input.savingsAdded),
     debtExtraApplied: cents(input.debtExtraApplied),
     debtAllocations: input.debtAllocations,
-    potentialDebtFreeDate: input.potentialDebtFreeDate,
-    payoffImpactMonths: input.payoffImpactMonths,
+    potentialDebtFreeDate: input.issues.length ? null : input.potentialDebtFreeDate,
+    payoffStatus: input.issues.length ? "unavailable" : input.potentialDebtFreeDate ? "paid_off" : "projection_limit",
+    payoffImpactMonths: input.issues.length ? null : input.payoffImpactMonths,
     issues: input.issues,
     complete: input.issues.length === 0,
   };

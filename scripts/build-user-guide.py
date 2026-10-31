@@ -92,7 +92,7 @@ def page_base(c, page_number, eyebrow, title, intro, accent=PURPLE):
     c.line(42, intro_bottom - 6, PAGE_WIDTH - 42, intro_bottom - 6)
     c.setFillColor(MUTED)
     c.setFont("Helvetica", 8)
-    c.drawString(42, 24, "FlowLedger User Guide - Updated October 30, 2026")
+    c.drawString(42, 24, "FlowLedger User Guide - Updated October 31, 2026")
     c.drawRightString(PAGE_WIDTH - 42, 24, f"Page {page_number}")
     return intro_bottom - 25
 

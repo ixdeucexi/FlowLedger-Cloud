@@ -137,8 +137,8 @@
       {
         "title": "Try a what-if",
         "items": [
-          { "title": "Open Simulator", "body": "Free includes one current what-if draft. Test income or expense changes without editing your real plan.", "icon": "sliders" },
-          { "title": "Compare results", "body": "Review your draft against the real plan. Pro and eligible Founders can save and compare multiple scenarios.", "icon": "columns" },
+          { "title": "Open Simulator", "body": "Free includes one current what-if draft. Test income, expenses, debt payments, a pause with a resume date, or a hypothetical new debt without changing your real plan.", "icon": "sliders" },
+          { "title": "Compare results", "body": "Review cash flow and payoff timing. Pauses may add interest and delay payoff. Pro and eligible Founders can save and compare scenarios.", "icon": "columns" },
           { "title": "Leave safely", "body": "Exit the simulator to return to the unchanged Forecast.", "icon": "log-out" }
         ]
       }

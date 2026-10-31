@@ -12,7 +12,7 @@ import { useLocalDay } from "@/hooks/useLocalDay";
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { buildSimulationEditorChange, replaceSimulationChange, simulationEditorFields, type SimulationEditorFields } from "@/lib/planSimulationEditor";
+import { buildSimulationEditorChange, defaultSimulationResumeDate, replaceSimulationChange, selectSimulationEditorDebt, simulationDebtPaymentLabelAmount, simulationEditorFields, simulationEditorReferences, type SimulationEditorFields } from "@/lib/planSimulationEditor";
 
 import { ScenarioOptionPicker } from "@/components/ScenarioOptionPicker";
 import { SavedScenarioComparison } from "@/components/SavedScenarioComparison";
@@ -35,6 +35,7 @@ import { exportPlanScenario } from "@/lib/planSimulationExport";
 import {
   decodePlanSimulationChanges,
   firstNegativeBalanceDay,
+  hasSimulationDebtControls,
   isPlanSimulationHorizon,
   planSimulationStorageKey,
   projectPlanSimulation,
@@ -73,6 +74,9 @@ const CHANGE_OPTIONS: Array<{ type: ChangeKind; label: string; detail: string; i
   { type: "bill_move", label: "Move a bill", detail: "Move one open occurrence", icon: "calendar" },
   { type: "spending_once", label: "One-time spending", detail: "Test a future purchase", icon: "shopping-bag" },
   { type: "savings_once", label: "Add to savings", detail: "Move checking money once", icon: "archive" },
+  { type: "debt_edit", label: "Change debt payment", detail: "Test a different recurring payment", icon: "edit-3" },
+  { type: "debt_pause", label: "Pause a debt", detail: "Pause payments, then resume", icon: "pause-circle" },
+  { type: "debt_add", label: "Add a debt", detail: "Test a new balance and payments", icon: "plus-circle" },
   { type: "debt_extra", label: "Extra debt payment", detail: "Use your payoff method", icon: "trending-down" },
   { type: "debt_payoff", label: "Pay off a debt", detail: "Close one selected balance", icon: "check-circle" },
 ];
@@ -206,32 +210,40 @@ function ChangeComposer({
 }) {
   const c = useColors();
   const [fields, setFields] = useState(() => simulationEditorFields(editingChange, startDate));
+  const [dateCustomized, setDateCustomized] = useState(Boolean(editingChange));
   const [error, setError] = useState("");
-  const { type, name, amount, date, newDate, frequency, targetId } = fields;
+  const { type, name, amount, date, newDate, frequency, targetId, balance, apr, resumeDate } = fields;
   const setField = <K extends keyof SimulationEditorFields>(key: K, value: SimulationEditorFields[K]) => {
-    setFields(previous => ({ ...previous, [key]: value }));
+    if (key === "date") setDateCustomized(true);
+    setFields(previous => ({ ...previous, [key]: value, ...(key === "date" && previous.type === "debt_pause" && previous.resumeDate === defaultSimulationResumeDate(previous.date) ? { resumeDate: defaultSimulationResumeDate(value) } : {}) }));
     setError("");
   };
   const group = changeGroup(type);
   const option = CHANGE_OPTIONS.find(item => item.type === type)!;
   const needsIncome = type === "income_edit" || type === "income_pause";
   const needsBill = type === "bill_edit" || type === "bill_pause" || type === "bill_move";
-  const needsDebt = type === "debt_payoff";
-  const needsName = type === "income_add" || type === "income_once" || type === "bill_add" || type === "spending_once" || type === "savings_once";
-  const needsAmount = type !== "income_pause" && type !== "bill_pause" && type !== "bill_move" && type !== "debt_payoff";
-  const isRecurringAdd = type === "income_add" || type === "bill_add";
+  const needsDebt = type === "debt_payoff" || type === "debt_edit" || type === "debt_pause";
+  const needsName = type === "income_add" || type === "income_once" || type === "bill_add" || type === "debt_add" || type === "spending_once" || type === "savings_once";
+  const needsAmount = type !== "income_pause" && type !== "bill_pause" && type !== "bill_move" && type !== "debt_payoff" && type !== "debt_pause";
+  const isRecurringAdd = type === "income_add" || type === "bill_add" || type === "debt_add";
   const targetChoices = needsIncome
     ? references.incomes.map(income => ({ id: income.id, label: income.name }))
     : needsBill ? references.bills.filter(bill => !bill.isDebt).map(bill => ({ id: bill.id, label: bill.name }))
     : needsDebt ? references.debts.filter(debt => debt.balance > 0.005 && (!debt.endDate || debt.endDate.slice(0, 10) >= startDate)).map(debt => ({ id: debt.id, label: `${debt.name} · ${money(debt.balance)}` })) : [];
   const missingTarget = Boolean(targetId && !targetChoices.some(item => item.id === targetId));
+  const selectedDebt = needsDebt ? references.debts.find(debt => debt.id === targetId) : undefined;
+  const targetStartsOutsideRange = (type === "debt_edit" || type === "debt_pause") && selectedDebt?.startDate && selectedDebt.startDate.slice(0, 10) > endDate;
+  const currentRegularPayment = selectedDebt ? simulationDebtPaymentLabelAmount(selectedDebt, date) : 0;
+  const belowCurrentPayment = type === "debt_edit" && selectedDebt && Number(amount) > 0 && Number(amount) + 0.005 < currentRegularPayment;
   const outsideRange = date < startDate || date > endDate || type === "bill_move" && (newDate < startDate || newDate > endDate);
   const selectType = (next: ChangeKind) => {
     if (editingChange) return;
     setFields({ ...simulationEditorFields(null, startDate), type: next });
+    setDateCustomized(false);
     setError("");
   };
   const save = () => {
+    if (targetStartsOutsideRange) { setError("This debt starts outside the selected forecast range. Choose a different debt or a longer horizon.");return; }
     const result = buildSimulationEditorChange(fields, editingChange?.id ?? nextLocalId(), references, startDate, endDate);
     if (!result.change) { setError(result.error); return; }
     const failure = onSave(result.change);
@@ -259,16 +271,22 @@ function ChangeComposer({
       </> : <View style={[styles.editingBadge, { backgroundColor: c.primary + "12" }]}><Feather name={option.icon} size={16} color={c.primary} /><AppText style={[styles.editingBadgeText, { color: c.primary }]}>{option.label}</AppText></View>}
       {needsIncome || needsBill || needsDebt ? <View style={styles.field}><FieldLabel>{needsIncome ? "Income" : needsDebt ? "Debt" : "Bill"}</FieldLabel>
         {missingTarget ? <AppText accessibilityRole="alert" style={[styles.errorText, { color: c.warning }]}>The original {needsIncome ? "income" : needsDebt ? "debt" : "bill"} is unavailable. Choose a replacement below.</AppText> : null}
-        {targetChoices.length ? <ChoiceChips values={targetChoices} selected={targetId} onSelect={id => setField("targetId", id)} desktopDebtNavigation={needsDebt} /> : <AppText style={[styles.editSemantics, { color: c.mutedForeground }]}>No eligible {needsIncome ? "incomes" : needsDebt ? "open debts" : "non-debt bills"} are available. Add one to your live plan first.</AppText>}
+        {targetChoices.length ? <ChoiceChips values={targetChoices} selected={targetId} onSelect={id => { const debt = needsDebt ? references.debts.find(item => item.id === id) : undefined;if (debt) { setFields(previous => selectSimulationEditorDebt(previous, debt, { startDate, endDate, dateCustomized, editingExisting: Boolean(editingChange) }));setError(""); } else setField("targetId", id); }} desktopDebtNavigation={needsDebt} /> : <AppText style={[styles.editSemantics, { color: c.mutedForeground }]}>{needsDebt ? "No open debts are available. Choose Add a debt to test a hypothetical debt in this scenario." : `No eligible ${needsIncome ? "incomes" : "non-debt bills"} are available. Add one to your live plan first.`}</AppText>}
       </View> : null}
-      {needsName ? <View style={styles.field}><FieldLabel>Name</FieldLabel><Input label="Change name" value={name} onChangeText={value => setField("name", value)} placeholder={type === "savings_once" ? "Emergency fund" : "Name this change"} /></View> : null}
-      {needsAmount ? <View style={styles.field}><FieldLabel>Amount</FieldLabel><Input label="Change amount" value={amount} onChangeText={value => setField("amount", value)} placeholder="0.00" keyboardType="decimal-pad" /></View> : null}
-      {isRecurringAdd ? <View style={styles.field}><FieldLabel>Frequency</FieldLabel><ChoiceChips values={(type === "bill_add" ? ["monthly", "quarterly", "biweekly", "weekly"] : ["monthly", "biweekly", "weekly"]).map(id => ({ id, label: id[0].toUpperCase() + id.slice(1) }))} selected={frequency} onSelect={value => setField("frequency", value)} /></View> : null}
-      <View style={styles.field}><FieldLabel>{type === "bill_move" ? "Occurrence date" : type.endsWith("_pause") || type.endsWith("_edit") ? "Effective date" : "Date"}</FieldLabel><DatePickerField value={date} onChange={value => setField("date", value)} minDate={startDate} maxDate={endDate} placeholder="Choose a date" /></View>
+      {needsName ? <View style={styles.field}><FieldLabel>{type === "debt_add" ? "Debt name" : "Name"}</FieldLabel><Input label={type === "debt_add" ? "Debt name" : "Change name"} value={name} onChangeText={value => setField("name", value)} placeholder={type === "savings_once" ? "Emergency fund" : type === "debt_add" ? "New car loan" : "Name this change"} /></View> : null}
+      {type === "debt_add" ? <><View style={styles.field}><FieldLabel>Balance owed</FieldLabel><Input label="Debt balance" value={balance} onChangeText={value => setField("balance", value)} placeholder="0.00" keyboardType="decimal-pad" /></View><View style={styles.field}><FieldLabel>APR (%)</FieldLabel><Input label="Debt APR" value={apr} onChangeText={value => setField("apr", value)} placeholder="0 for no interest" keyboardType="decimal-pad" /></View></> : null}
+      {needsAmount ? <View style={styles.field}><FieldLabel>{type === "debt_edit" ? "Regular payment amount" : type === "debt_add" ? "Payment amount" : "Amount"}</FieldLabel><Input label={type === "debt_add" || type === "debt_edit" ? "Debt payment amount" : "Change amount"} value={amount} onChangeText={value => setField("amount", value)} placeholder="0.00" keyboardType="decimal-pad" /></View> : null}
+      {selectedDebt && type === "debt_edit" ? <AppText style={[styles.editSemantics, { color: c.mutedForeground }]}>Current regular payment: {money(currentRegularPayment)} · {selectedDebt.frequency ?? "monthly"}. Enter the full amount for each scheduled payment.</AppText> : null}
+      {belowCurrentPayment ? <View accessibilityRole="alert" style={[styles.editorWarning, { backgroundColor: c.warning + "12", borderColor: c.warning + "45" }]}><AppText style={[styles.attentionText, { color: c.warning }]}>This is less than your current planned payment. It may add interest and move your payoff date later; lender obligations are unchanged.</AppText></View> : null}
+      {isRecurringAdd ? <View style={styles.field}><FieldLabel>{type === "debt_add" ? "Payment frequency" : "Frequency"}</FieldLabel><ChoiceChips values={(type === "bill_add" || type === "debt_add" ? ["monthly", "quarterly", "biweekly", "weekly"] : ["monthly", "biweekly", "weekly"]).map(id => ({ id, label: id[0].toUpperCase() + id.slice(1) }))} selected={frequency} onSelect={value => setField("frequency", value)} /></View> : null}
+      <View style={styles.field}><FieldLabel>{type === "bill_move" ? "Occurrence date" : type === "debt_add" ? "First payment date" : type === "debt_pause" ? "Pause starts" : type.endsWith("_pause") || type.endsWith("_edit") ? "Effective date" : "Date"}</FieldLabel><DatePickerField value={date} onChange={value => setField("date", value)} minDate={startDate} maxDate={endDate} placeholder="Choose a date" /></View>
+      {type === "debt_pause" ? <><View style={styles.field}><FieldLabel>Payments resume</FieldLabel><DatePickerField value={resumeDate} onChange={value => setField("resumeDate", value)} minDate={date} placeholder="Choose a resume date" /></View><View accessibilityRole="alert" style={[styles.editorWarning, { backgroundColor: c.warning + "12", borderColor: c.warning + "45" }]}><AppText style={[styles.attentionTitle, { color: c.warning }]}>Pausing can delay your payoff date</AppText><AppText style={[styles.attentionText, { color: c.foreground }]}>Scheduled payments resume {shortDate(resumeDate)}. Interest continues and may increase what you owe. Already pending or recorded payments stay unchanged. This scenario does not pause real payments or change lender obligations.</AppText></View></> : null}
       {type === "bill_move" ? <View style={styles.field}><FieldLabel>New date</FieldLabel><DatePickerField value={newDate} onChange={value => setField("newDate", value)} minDate={startDate} maxDate={endDate} placeholder="Choose a new date" /></View> : null}
       {outsideRange ? <AppText accessibilityRole="alert" style={[styles.errorText, { color: c.warning }]}>This change has a date outside the selected horizon. Choose dates from {shortDate(startDate)} to {shortDate(endDate)}.</AppText> : null}
+      {targetStartsOutsideRange ? <AppText accessibilityRole="alert" style={[styles.errorText, { color: c.warning }]}>This debt starts on {shortDate(selectedDebt!.startDate!)} outside this forecast range. Choose a different debt or a longer horizon.</AppText> : null}
       {error ? <AppText accessibilityRole="alert" style={[styles.errorText, { color: c.destructive }]}>{error}</AppText> : null}
-      {type === "income_edit" || type === "bill_edit" ? <AppText style={[styles.editSemantics, { color: c.mutedForeground }]}>The new amount is the full intended occurrence total. Settled amounts stay unchanged; only the remaining Forecast amount is replaced.</AppText> : null}
+      {type === "income_edit" || type === "bill_edit" || type === "debt_edit" ? <AppText style={[styles.editSemantics, { color: c.mutedForeground }]}>{type === "debt_edit" ? "The new amount is the full regular scheduled payment. Recorded and pending amounts stay unchanged; only the remaining regular payment is replaced. Existing extra-payment plans are included separately." : "The new amount is the full scheduled amount. Recorded and pending amounts stay unchanged; only what remains planned is replaced."}</AppText> : null}
+      {type === "debt_add" ? <AppText style={[styles.editSemantics, { color: c.mutedForeground }]}>Starts with a payment on the selected date, without adding cash to checking. Payments stop at payoff; a payment below interest may not clear the debt.</AppText> : null}
       {type === "debt_payoff" ? <AppText style={[styles.editSemantics, { color: c.mutedForeground }]}>Flo tests paying that debt’s remaining balance on the selected date. It does not change the real debt or schedule a payment.</AppText> : null}
       <View style={styles.composerActions}><Button label={editingChange ? "Update change" : "Add to scenario"} icon={editingChange ? "check" : "plus"} onPress={save} primary /><Button label={editingChange ? "Cancel editing" : "Cancel"} onPress={onCancel} /></View>
     </View>
@@ -285,6 +303,8 @@ function changeLabel(change: PlanSimulationChange, references: PlanSimulationRef
 }
 
 function changeSummary(change: PlanSimulationChange) {
+  if (change.type === "debt_pause") return `Pause ${shortDate(change.effectiveDate)} · resume ${shortDate(change.resumeDate)}`;
+  if (change.type === "debt_add") return `${money(change.balance)} owed · ${change.apr}% APR · ${money(change.amount)} ${change.frequency} · first payment ${shortDate(change.startDate)}`;
   const date = "effectiveDate" in change ? `From ${shortDate(change.effectiveDate)}` : "startDate" in change ? `From ${shortDate(change.startDate)}` : "occurrenceDate" in change ? `${shortDate(change.occurrenceDate)} → ${shortDate(change.newDate)}` : shortDate(change.date);
   return ["amount" in change ? money(change.amount) : null, "frequency" in change ? change.frequency[0].toUpperCase() + change.frequency.slice(1) : null, date].filter(Boolean).join(" · ");
 }
@@ -299,6 +319,7 @@ function ChangeList({ changes, references, issues, editingId, onEdit, onRemove, 
     return <View key={change.id} style={[styles.changeRow, { backgroundColor: c.card, borderColor: active ? c.primary : issue ? c.warning : c.border }]}>
       <View style={styles.changeRowTop}><View style={[styles.changeNumber, { backgroundColor: c.primary + "12" }]}><AppText style={{ color: c.primary, fontFamily: "Inter_700Bold" }}>{index + 1}</AppText></View><View style={styles.changeRowCopy}><AppText style={[styles.changeRowTitle, { color: c.foreground }]}>{label}</AppText><AppText style={[styles.changeSummary, { color: c.mutedForeground }]}>{changeSummary(change)}</AppText></View></View>
       {issue ? <AppText style={[styles.changeIssue, { color: c.warning }]}>{issue.message}</AppText> : null}
+      {change.type === "debt_pause" ? <AppText style={[styles.changeIssue, { color: c.warning }]}>Interest continues during this pause; your payoff date may move later.</AppText> : null}
       <View style={styles.changeRowActions}><Pressable accessibilityRole="button" accessibilityLabel={`Edit ${label}`} accessibilityState={{ selected: active, disabled }} disabled={disabled} onPress={() => onEdit(change.id)} style={[styles.changeAction, { backgroundColor: c.primary + "12" }]}><Feather name="edit-3" size={15} color={c.primary} /><AppText style={[styles.changeActionText, { color: c.primary }]}>{active ? "Editing" : "Edit"}</AppText></Pressable><Pressable accessibilityRole="button" accessibilityLabel={`Remove ${label}`} accessibilityState={{ disabled }} disabled={disabled} onPress={() => onRemove(change.id)} style={styles.changeAction}><Feather name="trash-2" size={15} color={c.mutedForeground} /><AppText style={[styles.changeActionText, { color: c.mutedForeground }]}>Remove</AppText></Pressable></View>
     </View>;
   })}</View>;
@@ -322,6 +343,17 @@ function ResultsPanel({ baseline, scenario, safetyFloor }: { baseline: PlanSimul
   const maxFlow = Math.max(1, ...scenario.months.flatMap(month => [month.inflows, month.outflows]));
   const baselineNegativeDay = firstNegativeBalanceDay(baseline.days);
   const scenarioNegativeDay = firstNegativeBalanceDay(scenario.days);
+  const payoffDate = (result: PlanSimulationResult) => result.potentialDebtFreeDate
+    ? /^\d{4}-\d{2}$/.test(result.potentialDebtFreeDate) ? monthLabel(result.potentialDebtFreeDate) : shortDate(result.potentialDebtFreeDate)
+    : result.payoffStatus === "projection_limit" ? "Not paid off within 30 years" : "Not available";
+  const payoffNote = scenario.payoffStatus === "projection_limit"
+    ? "This payment plan does not pay off every debt within the 30-year projection. Lower payments or continued interest can extend the timeline."
+    : scenario.payoffStatus === "unavailable"
+      ? "Payoff timing cannot be calculated reliably for this scenario. Review any debt changes needing attention."
+      : scenario.payoffImpactMonths === null
+        ? "A reliable real-plan payoff comparison is unavailable. The scenario date uses the current debt details."
+        : scenario.payoffImpactMonths > 0 ? `${scenario.payoffImpactMonths} month${scenario.payoffImpactMonths === 1 ? "" : "s"} sooner`
+          : scenario.payoffImpactMonths < 0 ? `${Math.abs(scenario.payoffImpactMonths)} month${scenario.payoffImpactMonths === -1 ? "" : "s"} later` : "Same payoff timing";
   return (
     <View style={[styles.resultsCard, { backgroundColor: c.card, borderColor: c.border }]}>
       <View style={styles.resultsHeader}><View><AppText tone="label" style={[styles.eyebrow, { color: c.primary }]}>FORECAST COMPARISON</AppText><AppText tone="title" style={[styles.resultsTitle, { color: c.foreground }]}>See the difference</AppText></View>{scenario.complete ? <View style={[styles.statusBadge, { backgroundColor: c.success + "18" }]}><Feather name="check" size={12} color={c.success} /><AppText style={[styles.statusText, { color: c.success }]}>Complete</AppText></View> : <View style={[styles.statusBadge, { backgroundColor: c.warning + "18" }]}><Feather name="edit-3" size={12} color={c.warning} /><AppText style={[styles.statusText, { color: c.warning }]}>Ready to adjust</AppText></View>}</View>
@@ -335,7 +367,7 @@ function ResultsPanel({ baseline, scenario, safetyFloor }: { baseline: PlanSimul
         <Metric label="Protected Days" real={`${baseline.protectedDays} days`} scenario={`${scenario.protectedDays} days`} tone={scenario.protectedDays >= baseline.protectedDays ? "good" : "warn"} />
       </View>
       <View style={[styles.safetyRow, { borderColor: c.border }]}><View style={styles.safetyItem}><AppText style={[styles.safetyLabel, { color: c.mutedForeground }]}>Current safety floor</AppText><AppText tone="number" style={[styles.safetyValue, { color: c.foreground }]}>{money(safetyFloor)}</AppText></View><View style={styles.safetyItem}><AppText style={[styles.safetyLabel, { color: c.mutedForeground }]}>Hypothetical savings added</AppText><AppText tone="number" style={[styles.safetyValue, { color: c.success }]}>{money(scenario.savingsAdded)}</AppText></View></View>
-      <View style={[styles.debtImpact, { backgroundColor: c.background, borderColor: c.border }]}><Feather name="trending-down" size={18} color={c.primary} /><View style={styles.debtImpactCopy}><AppText style={[styles.debtImpactTitle, { color: c.foreground }]}>Potential debt-free date</AppText><AppText style={[styles.debtImpactValue, { color: c.primary }]}>{scenario.potentialDebtFreeDate ?? "Not available"}</AppText><AppText style={[styles.debtImpactNote, { color: c.mutedForeground }]}>{scenario.payoffImpactMonths === null ? "Complete the debt details to compare payoff timing." : scenario.payoffImpactMonths > 0 ? `${scenario.payoffImpactMonths} month${scenario.payoffImpactMonths === 1 ? "" : "s"} sooner` : scenario.payoffImpactMonths < 0 ? `${Math.abs(scenario.payoffImpactMonths)} month${scenario.payoffImpactMonths === -1 ? "" : "s"} later` : "Same payoff timing"}</AppText></View></View>
+      <View style={[styles.debtImpact, { backgroundColor: c.background, borderColor: c.border }]}><Feather name="trending-down" size={18} color={c.primary} /><View style={styles.debtImpactCopy}><AppText style={[styles.debtImpactTitle, { color: c.foreground }]}>Potential debt-free date</AppText><AppText style={[styles.debtImpactValue, { color: c.primary }]}>{payoffDate(scenario)}</AppText><AppText style={[styles.debtImpactNote, { color: c.mutedForeground }]}>Real plan: {payoffDate(baseline)}</AppText><AppText style={[styles.debtImpactNote, { color: c.mutedForeground }]}>{payoffNote}</AppText></View></View>
       <View style={styles.monthSection}><AppText tone="title" style={[styles.monthSectionTitle, { color: c.foreground }]}>Scenario timeline</AppText>{scenario.months.map(month => <View key={month.month} style={[styles.monthRow, { borderColor: c.border }]}><View style={styles.monthRowTop}><AppText style={[styles.monthName, { color: c.foreground }]}>{monthLabel(month.month)}</AppText><AppText tone="number" style={[styles.monthNet, { color: month.cashRemaining >= 0 ? c.success : c.destructive }]}>{money(month.cashRemaining)}</AppText></View><View style={styles.barTrack}><View style={[styles.bar, { backgroundColor: c.success, width: `${Math.max(2, month.inflows / maxFlow * 100)}%` }]} /><View style={[styles.bar, { backgroundColor: c.primary, width: `${Math.max(2, month.outflows / maxFlow * 100)}%` }]} /></View><View style={styles.monthDetails}><AppText style={[styles.monthDetail, { color: c.mutedForeground }]}>In {money(month.inflows)}</AppText><AppText style={[styles.monthDetail, { color: c.mutedForeground }]}>Out {money(month.outflows)}</AppText><AppText style={[styles.monthDetail, { color: c.mutedForeground }]}>Ends {money(month.endingBalance)}</AppText></View></View>)}</View>
     </View>
   );
@@ -368,10 +400,14 @@ function PlanSimulatorWorkspace({ canPersistScenarios, canSaveDevice, canCompare
     demoMode,
     forecastConfidence,
     getBillEffectiveMonthlyTotal,
+    getBillOccurrenceAmount,
     getBillMonthlyTotal,
     getBillOccurrencesInMonth,
     getCashFlow,
     getDailyBalances,
+    getDebtMonthSettlements,
+    getDebtSourceCommitment,
+    getExtraPayment,
     getMonthlyBills,
     getMonthlyIncome,
     getPaidAmount,
@@ -550,7 +586,55 @@ function PlanSimulatorWorkspace({ canPersistScenarios, canSaveDevice, canCompare
   const livePayoffPreview = useMemo(() => {
     try { return previewDebtSnowball(currentMonth, currentYear, 0); } catch { return null; }
   }, [currentMonth, currentYear, previewDebtSnowball]);
-  const buildReferences = useCallback((sourceBaseline: PlanSimulationBaseline): PlanSimulationReferences => ({
+  const buildReferences = useCallback((sourceBaseline: PlanSimulationBaseline): PlanSimulationReferences => {
+    const debtIds = new Set(bills.filter(bill => bill.is_debt).map(bill => bill.id));
+    const remainingByOccurrence = new Map<string, number>();
+    const immutableOccurrences = new Set<string>();
+    const requiredSourceDates = new Set<string>();
+    const carriedSourceDates = new Map<string, Set<string>>();
+    const remainingByOrigin = new Map<string, number>();
+    const sourceDates = new Map<string, Set<string>>();
+    let firstReferenceMonth = sourceBaseline.startDate.slice(0, 7);
+    sourceBaseline.days.forEach(day => day.events.forEach(event => {
+      const sourceDebt = debtIds.has(event.sourceId)
+        && (event.debtPlanSource === "canonical" && event.debtPlanAllocationKind !== "extra" || event.sourceType === "bill");
+      if (!sourceDebt) return;
+      const key = `${event.sourceId}:${event.date}`;
+      remainingByOccurrence.set(key, (remainingByOccurrence.get(key) ?? 0) + Math.abs(event.amount));
+      if (event.debtPlanAllocationKind === "required" || event.sourceType === "bill") {
+        // Anchoring overdue required payments changes cash timing, while the canonical ID retains the real occurrence date.
+        const originDate = event.id.match(/^debt-plan:(\d{4}-\d{2}-\d{2}):/)?.[1] ?? event.date;
+        const originKey = `${event.sourceId}:${originDate}`;
+        remainingByOrigin.set(originKey, (remainingByOrigin.get(originKey) ?? 0) + Math.abs(event.amount));
+        requiredSourceDates.add(originKey);
+        if (event.status !== "planned" && event.status !== "scheduled") immutableOccurrences.add(originKey);
+        if (originDate < event.date) {
+          const origins = carriedSourceDates.get(key) ?? new Set<string>();
+          origins.add(originDate);carriedSourceDates.set(key, origins);
+          if (originDate.slice(0, 7) < firstReferenceMonth) firstReferenceMonth = originDate.slice(0, 7);
+        }
+      }
+      if (event.status !== "planned" && event.status !== "scheduled") immutableOccurrences.add(key);
+      const dates = sourceDates.get(event.sourceId) ?? new Set<string>();
+      dates.add(event.date);sourceDates.set(event.sourceId, dates);
+    }));
+    const monthSettlements: Array<{ month: number; year: number; settlements: ReturnType<typeof getDebtMonthSettlements> }> = [];
+    const cursor = new Date(`${firstReferenceMonth}-01T12:00:00`);
+    const lastMonth = sourceBaseline.endDate.slice(0, 7);
+    while (`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}` <= lastMonth) {
+      monthSettlements.push({ month: cursor.getMonth(), year: cursor.getFullYear(), settlements: getDebtMonthSettlements(cursor.getMonth(), cursor.getFullYear()) });
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+    const payoffSavedPaymentsByMonth: Record<string, { amount: number; date: string }> = {};
+    const [savedStartYear, savedStartMonth] = sourceBaseline.startDate.slice(0, 7).split("-").map(Number);
+    for (let offset = 0; offset < 360; offset += 1) {
+      const absoluteMonth = savedStartYear * 12 + savedStartMonth - 1 + offset;
+      const year = Math.floor(absoluteMonth / 12), month = absoluteMonth % 12;
+      const prefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+      const saved = getExtraPayment(month, year);
+      if (saved && Number.isFinite(saved.amount) && saved.amount > 0) payoffSavedPaymentsByMonth[prefix] = { amount: saved.amount, date: saved.payment_date ?? `${prefix}-01` };
+    }
+    return {
     incomes: incomes.map(income => ({ id: income.id, name: income.name, amount: income.amount })),
     bills: bills.map(bill => {
       const occurrenceCount = getBillOccurrencesInMonth(bill, currentMonth, currentYear).length;
@@ -573,7 +657,45 @@ function PlanSimulatorWorkspace({ canPersistScenarios, canSaveDevice, canCompare
         currentMonthOpenOccurrenceCount: openOccurrenceCount,
       };
     }),
-    debts: bills.filter(bill => bill.is_debt).map(bill => ({
+    debts: bills.filter(bill => bill.is_debt).map(bill => {
+      const settlements = new Map(monthSettlements.flatMap(month => (month.settlements.get(bill.id)?.occurrences ?? []).map(occurrence => [occurrence.occurrenceDate, occurrence] as const)));
+      const exactPlanMonths = new Set(monthSettlements.filter(month => month.settlements.get(bill.id)?.plannedDebtAmount !== undefined)
+        .map(({ month, year }) => `${year}-${String(month + 1).padStart(2, "0")}`));
+      const regularDates = new Set(monthSettlements.flatMap(({ month, year }) => getBillOccurrencesInMonth(bill, month, year)
+        .map(day => `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`)));
+      const originalSourceDates = [...requiredSourceDates].filter(key => key.startsWith(`${bill.id}:`)).map(key => key.slice(bill.id.length + 1));
+      // Keep earlier nominal occurrences for monthly payment counts, including those whose allocation was capped to zero.
+      const dates = new Set([...(sourceDates.get(bill.id) ?? []), ...settlements.keys(), ...originalSourceDates, ...Array.from(regularDates).filter(date => date <= sourceBaseline.endDate)]);
+      const occurrences = [...dates].sort().map(date => {
+        const key = `${bill.id}:${date}`;
+        const settlement = settlements.get(date);
+        const commitment = getDebtSourceCommitment(bill.id, date);
+        const regular = regularDates.has(date) || settlements.has(date) || requiredSourceDates.has(key);
+        const remainingAmount = remainingByOccurrence.get(key) ?? 0;
+        const observedOrigins = carriedSourceDates.get(key);
+        let originCommitted = false;
+        const carriedOccurrences = observedOrigins ? [...dates].filter(origin => origin < date && origin.slice(0, 7) >= firstReferenceMonth
+          && (regularDates.has(origin) || settlements.has(origin) || observedOrigins.has(origin))).sort().flatMap(origin => {
+          const originSettlement = settlements.get(origin);
+          const originCommitment = getDebtSourceCommitment(bill.id, origin);
+          const committed = originCommitment?.state === "pending" || originCommitment?.state === "posted" || immutableOccurrences.has(`${bill.id}:${origin}`);
+          originCommitted ||= committed;
+          const originalRemaining = remainingByOrigin.get(`${bill.id}:${origin}`) ?? 0;
+          if (committed || originSettlement?.status === "settled" && originalRemaining <= 0.005) return [];
+          return [{ date: origin, configuredAmount: getBillOccurrenceAmount(bill, origin), settledAmount: originSettlement?.paidAmount ?? 0 }];
+        }) : undefined;
+        return {
+          date,
+          configuredAmount: regular ? getBillOccurrenceAmount(bill, date) : 0,
+          settledAmount: settlement?.paidAmount ?? 0,
+          remainingAmount,
+          immutable: settlement?.status === "settled" && Math.max(remainingAmount, remainingByOrigin.get(key) ?? 0) <= 0.005 || immutableOccurrences.has(key) || commitment?.state === "pending" || commitment?.state === "posted" || originCommitted,
+          regular,
+          ...(exactPlanMonths.has(date.slice(0, 7)) ? { exactPlan: true } : {}),
+          ...(observedOrigins ? { carried: true, carriedOccurrences } : {}),
+        };
+      });
+      return {
       id: bill.id,
       name: bill.name,
       balance: Math.max(0, bill.balance),
@@ -587,14 +709,19 @@ function PlanSimulatorWorkspace({ canPersistScenarios, canSaveDevice, canCompare
       nextPaymentDate: bill.next_payment_date,
       startDate: bill.start_date,
       endDate: bill.end_date,
-    })),
+      occurrences,
+    }; }),
     debtMethod: settings.paymentMethod,
+    payoffStrategyExtrasAreSavedPlans: true,
+    payoffSavedPaymentsByMonth,
     payoffStrategyExtrasByMonth: Object.fromEntries((livePayoffPreview?.months ?? []).map(month => [
       `${month.year}-${String(month.month + 1).padStart(2, "0")}`,
       Math.max(0, month.extraPayment),
     ])),
-  }), [bills, currentMonth, currentYear, getBillEffectiveMonthlyTotal, getBillMonthlyTotal, getBillOccurrencesInMonth, incomes, livePayoffPreview?.months, settings.paymentMethod]);
+    };
+  }, [bills, currentMonth, currentYear, getBillEffectiveMonthlyTotal, getBillMonthlyTotal, getBillOccurrenceAmount, getBillOccurrencesInMonth, getDebtMonthSettlements, getDebtSourceCommitment, getExtraPayment, incomes, livePayoffPreview?.months, settings.paymentMethod]);
   const references = useMemo(() => buildReferences(baseline), [baseline, buildReferences]);
+  const editorReferences = useMemo(() => simulationEditorReferences(references, draft.changes), [draft.changes, references]);
   const metrics = useMemo(() => ({
     flowScore: dashboardModel.algorithmSuite.flowScore.score,
     flowScoreRequiredAmountDue: dashboardModel.algorithmSuite.flowScore.requiredAmountDue,
@@ -604,7 +731,7 @@ function PlanSimulatorWorkspace({ canPersistScenarios, canSaveDevice, canCompare
     forecastConfidence: forecastConfidence.level,
     currentDebtFreeDate: livePayoffPreview?.debtFreeDate ?? null,
   }), [dashboardModel.algorithmSuite.flowScore.requiredAmountCovered, dashboardModel.algorithmSuite.flowScore.requiredAmountDue, dashboardModel.algorithmSuite.flowScore.score, dashboardModel.algorithmSuite.stability.protectedDays, dashboardModel.algorithmSuite.stability.reserveTarget, forecastConfidence.level, livePayoffPreview?.debtFreeDate]);
-  const baselineResult = useMemo(() => projectPlanSimulation({ baseline, changes: [], references, metrics, safetyFloor: settings.safety_floor }), [baseline, metrics, references, settings.safety_floor]);
+  const baselineResult = useMemo(() => projectPlanSimulation({ baseline, changes: [], references, metrics, safetyFloor: settings.safety_floor, useDebtControlTimeline: hasSimulationDebtControls(draft.changes) }), [baseline, draft.changes, metrics, references, settings.safety_floor]);
   const scenarioResult = useMemo(() => projectPlanSimulation({
     baseline,
     changes: draft.changes,
@@ -820,7 +947,7 @@ function PlanSimulatorWorkspace({ canPersistScenarios, canSaveDevice, canCompare
             {!desktop ? <View style={[styles.buildStatus, { backgroundColor: scenarioResult.complete && !scenarioRiskDay ? c.primary + "0B" : c.warning + "10", borderColor: scenarioResult.complete && !scenarioRiskDay ? c.primary + "35" : c.warning + "55" }]}>
               <View style={styles.changeRowCopy}><AppText style={[styles.buildStatusTitle, { color: c.foreground }]}>{scenarioRiskDay ? "This scenario goes below $0" : !scenarioResult.complete ? "Some changes need attention" : "Your comparison is ready"}</AppText><AppText style={[styles.buildStatusText, { color: c.mutedForeground }]}>{scenarioRiskDay ? `First below zero: ${shortDate(scenarioRiskDay.date)}. Open Compare for the full warning.` : !scenarioResult.complete ? "Review the highlighted changes. Compare shows the limits of this result." : `${draft.changes.length} ${draft.changes.length === 1 ? "change" : "changes"} · ${draft.horizonMonths}-month outlook`}</AppText></View><Button label="View comparison" icon="arrow-right" onPress={() => setMobileView("compare")} />
             </View> : null}
-            <View><View style={styles.changesToolbar}><View style={styles.sectionHeading}><AppText accessibilityRole="header" tone="title" style={[styles.sectionTitle, { color: c.foreground }]}>Your changes</AppText><View style={[styles.countBadge, { backgroundColor: c.primary + "12" }]}><AppText style={{ color: c.primary, fontFamily: "Inter_700Bold", fontSize: 12 }}>{draft.changes.length}</AppText></View></View><View style={!desktop ? styles.mobileAddChange : undefined}><Button label="Add change" icon="plus" onPress={() => openEditor()} disabled={saving || Boolean(draft.invalidDefinition)} primary /></View></View><ChangeList changes={draft.changes} references={references} issues={scenarioResult.issues} disabled={saving} editingId={editingId} onEdit={id => openEditor(id)} onRemove={removeChange} /></View>
+            <View><View style={styles.changesToolbar}><View style={styles.sectionHeading}><AppText accessibilityRole="header" tone="title" style={[styles.sectionTitle, { color: c.foreground }]}>Your changes</AppText><View style={[styles.countBadge, { backgroundColor: c.primary + "12" }]}><AppText style={{ color: c.primary, fontFamily: "Inter_700Bold", fontSize: 12 }}>{draft.changes.length}</AppText></View></View><View style={!desktop ? styles.mobileAddChange : undefined}><Button label="Add change" icon="plus" onPress={() => openEditor()} disabled={saving || Boolean(draft.invalidDefinition)} primary /></View></View><ChangeList changes={draft.changes} references={editorReferences} issues={scenarioResult.issues} disabled={saving} editingId={editingId} onEdit={id => openEditor(id)} onRemove={removeChange} /></View>
             {draft.invalidDefinition ? <AppText accessibilityRole="alert" style={[styles.editSemantics, { color: c.warning }]}>Reset unsupported changes before adding or editing this scenario.</AppText> : null}
           </View> : null}
           {desktop || mobileView === "compare" ? <View style={[styles.resultsColumn, desktop && styles.resultsColumnDesktop]}>{!canCompareSaved ? <ResultsPanel baseline={baselineResult} scenario={scenarioResult} safetyFloor={settings.safety_floor} /> : null}<PlanFeatureGate feature="scenario_comparison" compact><SavedScenarioComparison key={draftLoadScope} options={savedOptions} selected={comparisonKeys} onSelect={(index, key) => { if (!canCompareSaved || draftLoadScopeRef.current !== draftLoadScope || scenarioAccessRef.current !== scenarioAccessOwner) return;setComparisonKeys(previous => { const next: [string, string] = [...previous];next[index] = key;return next; });setComparisonHorizon(null); }} horizon={commonHorizon} onHorizon={value => { if (canCompareSaved && draftLoadScopeRef.current === draftLoadScope && scenarioAccessRef.current === scenarioAccessOwner) setComparisonHorizon(value); }} comparison={savedComparison} /></PlanFeatureGate>{canCompareSaved && !savedComparison ? <ResultsPanel baseline={baselineResult} scenario={scenarioResult} safetyFloor={settings.safety_floor} /> : null}</View> : null}
@@ -836,7 +963,7 @@ function PlanSimulatorWorkspace({ canPersistScenarios, canSaveDevice, canCompare
               <Pressable accessibilityRole="button" accessibilityLabel="Close change editor" onPress={closeEditor} style={styles.closeButton}><Feather name="x" size={22} color={c.mutedForeground} /></Pressable>
             </View>
             <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator contentContainerStyle={styles.editorScrollContent}>
-              <ChangeComposer key={`${draftStorageKey ?? householdId}:${selectedId ?? "local"}:${editorVersion}:${editingId ?? "new"}`} references={references} startDate={startDate} endDate={baseline.endDate} editingChange={editingChange} onSave={saveChange} onCancel={closeEditor} />
+              <ChangeComposer key={`${draftStorageKey ?? householdId}:${selectedId ?? "local"}:${editorVersion}:${editingId ?? "new"}`} references={editorReferences} startDate={startDate} endDate={baseline.endDate} editingChange={editingChange} onSave={saveChange} onCancel={closeEditor} />
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -866,6 +993,7 @@ const styles = StyleSheet.create({
   composerHeading: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginBottom: 16 }, editorIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   categoryTabs: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginBottom: 12 }, categoryTab: { minHeight: 44, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, alignItems: "center", justifyContent: "center" }, categoryTabText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   editingBadge: { padding: 11, borderRadius: 12, flexDirection: "row", alignItems: "center", gap: 8 }, editingBadgeText: { fontSize: 13, fontFamily: "Inter_700Bold" }, composerActions: { marginTop: 16, flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  editorWarning: { borderWidth: 1, borderRadius: 14, padding: 12, marginTop: 12 },
   sectionHeading: { flexDirection: "row", alignItems: "center", gap: 9 }, countBadge: { minWidth: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   changeRowTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 }, changeNumber: { width: 28, height: 28, borderRadius: 9, alignItems: "center", justifyContent: "center" }, changeSummary: { fontSize: 12, lineHeight: 18, marginTop: 4 }, changeRowActions: { flexDirection: "row", gap: 8, flexWrap: "wrap" }, changeAction: { minHeight: 44, paddingHorizontal: 12, borderRadius: 11, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 }, changeActionText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   changeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 }, changeOption: { width: "100%", minHeight: 60, borderWidth: 1, borderRadius: 14, padding: 10, flexDirection: "row", alignItems: "center", gap: 9 }, changeOptionCopy: { flex: 1 }, changeOptionTitle: { fontSize: 12, fontFamily: "Inter_800ExtraBold" }, changeOptionDetail: { fontSize: 12, marginTop: 2, lineHeight: 14 }, errorText: { fontSize: 12, fontFamily: "Inter_600SemiBold", marginVertical: 10 }, editSemantics: { fontSize: 12, lineHeight: 16, marginVertical: 10 },

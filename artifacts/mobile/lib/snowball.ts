@@ -21,6 +21,23 @@ export interface DatedSnowballDebtInput extends SnowballDebtInput {
   requiredPaymentsByDate?: ReadonlyMap<string, number>;
   /** Exact Forecast money above the requirement, targeted to this debt. */
   plannedExtraPayment?: number;
+  /** Earlier overflow is already absorbed by the scenario's observed cash anchor. */
+  suppressRequiredOverflowBefore?: string;
+}
+
+/** Optional dated scenario payments. Existing canonical callers need no changes. */
+export interface DatedSnowballAdditionalPayment {
+  id: string;
+  date: string;
+  amount?: number;
+  kind?: "rollover" | "extra";
+  targetBillId?: string;
+  sourceBillId?: string;
+  cascade?: boolean;
+  /** Resolve this creditor's remaining principal at the payment date. */
+  payoff?: boolean;
+  ignoreExtraEligibility?: boolean;
+  phase?: "before_required" | "before_pools" | "after_pools";
 }
 
 export interface SnowballAllocationResult {
@@ -86,6 +103,7 @@ export interface DatedDebtAllocation {
   balanceBefore: number;
   balanceAfter: number;
   paidOff: boolean;
+  externalPaymentId?: string;
 }
 
 export interface DatedSnowballMonthPlanResult extends SnowballMonthPlanResult {
@@ -430,6 +448,10 @@ export function projectDatedSnowballMonth(options: {
   startingBalances?: Map<string, number>;
   rolledPayment?: number;
   extraPayment?: { amount: number; date: string };
+  /** Keeps temporarily paused debts in balances/interest while excluding extra allocations. */
+  canReceiveExtra?: (debtId: string, date: string) => boolean;
+  additionalPayments?: readonly DatedSnowballAdditionalPayment[];
+  rolledPaymentDate?: string;
 }): DatedSnowballMonthPlanResult {
   const balances = new Map(
     options.debts.map(debt => [
@@ -466,6 +488,10 @@ export function projectDatedSnowballMonth(options: {
     cascade?: boolean;
     sourceBillId?: string;
     sourceBillName?: string;
+    externalPaymentId?: string;
+    payoff?: boolean;
+    ignoreExtraEligibility?: boolean;
+    phase?: "before_required" | "before_pools" | "after_pools";
   };
   const requiredEvents: RequiredEvent[] = [];
   const poolEvents: PoolEvent[] = [];
@@ -508,7 +534,7 @@ export function projectDatedSnowballMonth(options: {
     : [];
   if ((options.rolledPayment ?? 0) > 0.009) {
     poolEvents.push({
-      date: firstTargetDates[0] ?? isoMonthDate(options.year, options.month, firstTarget?.dueDay ?? 1),
+      date: options.rolledPaymentDate ?? firstTargetDates[0] ?? isoMonthDate(options.year, options.month, firstTarget?.dueDay ?? 1),
       amount: cents(Math.max(0, options.rolledPayment ?? 0)),
       kind: "rollover",
     });
@@ -520,6 +546,22 @@ export function projectDatedSnowballMonth(options: {
       kind: "extra",
     });
   }
+  options.additionalPayments?.forEach(payment => {
+    const amount = cents(Math.max(0, payment.amount ?? 0));
+    if (amount <= 0.009 && !payment.payoff) return;
+    poolEvents.push({
+      date: payment.date,
+      amount,
+      kind: payment.kind ?? "extra",
+      targetBillId: payment.targetBillId,
+      sourceBillId: payment.sourceBillId,
+      cascade: payment.cascade,
+      externalPaymentId: payment.id,
+      payoff: payment.payoff,
+      ignoreExtraEligibility: payment.ignoreExtraEligibility,
+      phase: payment.phase,
+    });
+  });
 
   const addAllocation = (
     target: SnowballDebtInput,
@@ -528,6 +570,7 @@ export function projectDatedSnowballMonth(options: {
     kind: DatedDebtAllocationKind,
     sourceAmount: number,
     source?: SnowballDebtInput,
+    externalPaymentId?: string,
   ) => {
     const payment = cents(amount);
     if (payment <= 0.009) return;
@@ -550,19 +593,26 @@ export function projectDatedSnowballMonth(options: {
       balanceBefore: before,
       balanceAfter: after,
       paidOff: after <= 0.009,
+      ...(externalPaymentId ? { externalPaymentId } : {}),
     });
   };
 
   const applyPool = (event: PoolEvent) => {
-    let remaining = cents(event.amount);
+    let remaining = event.payoff && event.targetBillId
+      ? cents(Math.max(0, balances.get(event.targetBillId) ?? 0))
+      : cents(event.amount);
+    const sourceAmount = remaining;
     let preferredTargetId = event.targetBillId;
     while (remaining > 0.009) {
       const preferred = preferredTargetId
-        ? options.debts.find(debt => debt.id === preferredTargetId && (balances.get(debt.id) ?? 0) > 0.009)
+        ? options.debts.find(debt => debt.id === preferredTargetId && (balances.get(debt.id) ?? 0) > 0.009
+          && (event.ignoreExtraEligibility || options.canReceiveExtra?.(debt.id, event.date) !== false))
         : undefined;
+      if (preferredTargetId && event.externalPaymentId && event.cascade === false && !preferred) break;
       const target = preferred ?? orderDebts(
         options.debts
-          .filter(debt => debt.included && (balances.get(debt.id) ?? 0) > 0.009)
+          .filter(debt => debt.included && (balances.get(debt.id) ?? 0) > 0.009
+            && options.canReceiveExtra?.(debt.id, event.date) !== false)
           .map(debt => ({ ...debt, balance: balances.get(debt.id) ?? 0 })),
         options.method,
       )[0];
@@ -570,8 +620,9 @@ export function projectDatedSnowballMonth(options: {
       const original = options.debts.find(debt => debt.id === target.id) ?? target;
       const before = balances.get(target.id) ?? 0;
       const applied = cents(Math.min(before, remaining));
-      addAllocation(original, applied, event.date, event.kind, event.amount,
-        event.sourceBillId ? options.debts.find(debt => debt.id === event.sourceBillId) : undefined);
+      addAllocation(original, applied, event.date, event.kind, sourceAmount,
+        event.sourceBillId ? options.debts.find(debt => debt.id === event.sourceBillId) : undefined,
+        event.externalPaymentId);
       remaining = cents(remaining - applied);
       if (preferredTargetId) {
         preferredTargetId = undefined;
@@ -588,6 +639,7 @@ export function projectDatedSnowballMonth(options: {
 
   for (const date of dates) {
     const overflowPools: PoolEvent[] = [];
+    poolEvents.filter(event => event.date === date && event.phase === "before_required").forEach(applyPool);
     requiredEvents
       .filter(event => event.date === date)
       .sort((left, right) => left.debt.id.localeCompare(right.debt.id))
@@ -599,7 +651,7 @@ export function projectDatedSnowballMonth(options: {
           minimumPayments = cents(minimumPayments + ownPayment);
         }
         const overflow = cents(event.amount - ownPayment);
-        if (overflow <= 0.009) return;
+        if (overflow <= 0.009 || event.debt.suppressRequiredOverflowBefore && date < event.debt.suppressRequiredOverflowBefore) return;
         if (event.debt.included) {
           overflowPools.push({
             date,
@@ -612,8 +664,9 @@ export function projectDatedSnowballMonth(options: {
           unusedAmount = cents(unusedAmount + overflow);
         }
       });
+    poolEvents.filter(event => event.date === date && event.phase === "before_pools").forEach(applyPool);
     overflowPools.forEach(applyPool);
-    poolEvents.filter(event => event.date === date).forEach(applyPool);
+    poolEvents.filter(event => event.date === date && event.phase !== "before_pools" && event.phase !== "before_required").forEach(applyPool);
   }
 
   const paidOffNames = options.debts

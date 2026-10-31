@@ -38,7 +38,7 @@ export function SavedScenarioComparison({ options, selected, onSelect, horizon, 
         { label: "Protected days", read: (result: typeof comparison.current) => String(result.protectedDays) },
         { label: "Savings added", read: (result: typeof comparison.current) => money(result.savingsAdded) },
         { label: "Extra debt applied", read: (result: typeof comparison.current) => money(result.debtExtraApplied) },
-        { label: "Potential debt-free date", read: (result: typeof comparison.current) => result.potentialDebtFreeDate ?? "Not available" },
+        { label: "Potential debt-free date", read: (result: typeof comparison.current) => result.potentialDebtFreeDate ?? (result.payoffStatus === "projection_limit" ? "Not paid off within 30 years" : "Payoff estimate unavailable") },
       ]).map(metric => <View key={metric.label} style={[styles.metricRow, { backgroundColor: c.background, borderColor: c.border }]}><AppText style={[styles.metricHeading, { color: c.foreground }]}>{metric.label}</AppText><View style={styles.cells}>{values.map((value, index) => <View key={value.key} style={[styles.cell, compact && index === 0 ? styles.currentCell : null]}><AppText style={[styles.metricLabel, { color: c.mutedForeground }]}>{value.name}</AppText><AppText style={[styles.amount, { color: c.foreground }]}>{metric.read(value.result)}</AppText></View>)}</View></View>)}
       <AppText style={[styles.note, { color: c.mutedForeground }]}>These are trade-offs, not a recommendation or a safe-to-spend promise. A partial or below-zero option needs review.</AppText>
     </> : null}

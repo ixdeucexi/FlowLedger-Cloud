@@ -18,6 +18,7 @@ test("missing references, unsupported definitions, out-of-common-range dates and
   const out = { ...b, draft: { ...b.draft, changes: [{ id: "future", type: "income_add" as const, name: "Later", amount: 100, frequency: "monthly" as const, startDate: "2027-12-01" }] } };
   const negative = { ...a, draft: { ...a.draft, changes: [{ ...a.draft.changes[0], amount: 6000 }] } } as SavedComparisonOption;
   const result = compareSavedPlanScenarios({ baseline: baseline(), options: [negative, out], references, metrics, safetyFloor: 400 });assert.ok(result.options[0].result.lowestBalance < 0);assert.equal(result.options[1].result.complete, false);assert.match(result.options[1].result.issues.map(issue => issue.message).join(" "), /common comparison range/);
+  assert.equal(result.options[1].result.potentialDebtFreeDate, null);assert.equal(result.options[1].result.payoffImpactMonths, null);assert.equal(result.options[1].result.payoffStatus, "unavailable");
   const missing = { ...a, draft: { ...a.draft, changes: [{ id: "missing", type: "income_edit" as const, incomeId: "gone", amount: 100, effectiveDate: "2026-11-01" }] } };
   assert.equal(compareSavedPlanScenarios({ baseline: baseline(), options: [missing, b], references, metrics, safetyFloor: 400 }).options[0].result.complete, false);
   assert.equal(compareSavedPlanScenarios({ baseline: baseline(), options: [{ ...a, draft: { ...a.draft, invalidDefinition: true } }, b], references, metrics, safetyFloor: 400 }).options[0].result.complete, false);
