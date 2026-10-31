@@ -209,7 +209,7 @@ function ActivityRowMoney({
 }) {
   const [width, setWidth] = useState(0);
   const labelUnits = (label: string) => Array.from(label)
-    .reduce((units, character) => units + (character === "." || character === "," ? 0.34 : 0.7), 0);
+    .reduce((units, character) => units + (character === "." || character === "," ? 0.34 : 0.68), 0);
   const amountUnits = labelUnits(amountLabel);
   const balanceUnits = balanceLabel ? labelUnits(balanceLabel) : 0;
   // A stable natural width keeps ordinary amounts compact. The row caps this
@@ -5544,7 +5544,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    gap: 10,
+    gap: 8,
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.10)",
     overflow: "hidden",
@@ -5597,7 +5597,7 @@ const styles = StyleSheet.create({
   debtBadgeText: { flexShrink: 1, fontSize: 9, fontFamily: "Inter_700Bold" },
   txDate: { fontSize: 9, fontFamily: "Inter_400Regular" },
   txRight: {
-    maxWidth: "43%",
+    maxWidth: "40%",
     minWidth: 0,
     flexShrink: 0,
     alignItems: "flex-end",
