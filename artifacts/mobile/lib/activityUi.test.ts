@@ -36,8 +36,10 @@ test("Activity keeps exact money and accessible modal and touch-target contracts
   assert.match(mobileActivity, /accessibilityViewIsModal/g);
   assert.match(
     mobileActivity,
-    /sourceIcon:\s*\{[\s\S]*?width: 44,[\s\S]*?height: 44,/,
+    /accessibilityHint="Opens activity details"\s+onPress=\{\(\) => openItem\(item\)\}\s+style=\{[\s\S]*?styles\.txRow/,
   );
+  const rowMinHeight = Number(mobileActivity.match(/txRow:\s*\{\s*minHeight:\s*(\d+)/)?.[1]);
+  assert.ok(rowMinHeight >= 44, "The whole Activity row is the accessible touch target.");
   assert.match(
     mobileActivity,
     /modalCloseButton:\s*\{[\s\S]*?width: 44,[\s\S]*?height: 44,/,

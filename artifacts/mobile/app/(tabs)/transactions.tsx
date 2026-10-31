@@ -196,6 +196,42 @@ function formatActivityMoney(value: number) {
   });
 }
 
+function ActivityRowMoney({
+  amountLabel,
+  balanceLabel,
+  amountColor,
+  mutedColor,
+}: {
+  amountLabel: string;
+  balanceLabel?: string;
+  amountColor: string;
+  mutedColor: string;
+}) {
+  const [width, setWidth] = useState(0);
+  const labelUnits = (label: string) => Array.from(label)
+    .reduce((units, character) => units + (character === "." || character === "," ? 0.34 : 0.7), 0);
+  const amountUnits = labelUnits(amountLabel);
+  const balanceUnits = balanceLabel ? labelUnits(balanceLabel) : 0;
+  // A stable natural width keeps ordinary amounts compact. The row caps this
+  // column on smaller screens; text then fits that measured width in full.
+  const naturalWidth = Math.ceil(Math.max(72, amountUnits * 15, balanceUnits * 9)) + 2;
+  const amountSize = width > 0 ? Math.max(10, Math.min(15, Math.floor((width - 1) / amountUnits))) : 15;
+  const balanceSize = width > 0 && balanceUnits > 0 ? Math.max(8, Math.min(9, Math.floor((width - 1) / balanceUnits))) : 9;
+
+  return (
+    <View
+      style={[styles.txRight, { width: naturalWidth }]}
+      onLayout={event => {
+        const nextWidth = Math.floor(event.nativeEvent.layout.width);
+        setWidth(current => current === nextWidth ? current : nextWidth);
+      }}
+    >
+      <Text style={[styles.txAmount, { color: amountColor, fontSize: amountSize }]}>{amountLabel}</Text>
+      {balanceLabel ? <Text style={[styles.txBalance, { color: mutedColor, fontSize: balanceSize }]}>{balanceLabel}</Text> : null}
+    </View>
+  );
+}
+
 function activityItemCountsInCashFlow(
   item: ActivityItem,
   connectedAccounts: Parameters<typeof isCheckingBalanceTransaction>[1],
@@ -3415,11 +3451,14 @@ export function ActivityScreen() {
             const statusColor =
               item.pending || needsIncomeReview ? c.warning : c.primary;
             const runningBalance = runningBalanceById.get(item.id);
+            const balanceLabel = runningBalance == null
+              ? undefined
+              : `Balance ${runningBalance < 0 ? "−" : ""}$${formatActivityMoney(runningBalance)}`;
 
             return (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`${item.label}, ${isExpense ? "outflow" : "inflow"} ${formatActivityMoney(item.amount)} dollars, ${sourceMeta.label}, ${item.category}, ${formatDate(item.date)}${statusLabel ? `, ${statusLabel}` : ""}${runningBalance == null ? "" : `, balance ${formatActivityMoney(runningBalance)} dollars`}`}
+                accessibilityLabel={`${item.label}, ${isExpense ? "outflow" : "inflow"} ${formatActivityMoney(item.amount)} dollars, ${sourceMeta.label}, ${item.category}, ${formatDate(item.date)}${statusLabel ? `, ${statusLabel}` : ""}${balanceLabel ? `, ${balanceLabel} dollars` : ""}`}
                 accessibilityHint="Opens activity details"
                 onPress={() => openItem(item)}
                 style={({ pressed }) => [
@@ -3456,7 +3495,7 @@ export function ActivityScreen() {
                 <View style={styles.txMid}>
                   <Text
                     style={[styles.txNote, { color: c.foreground }]}
-                    numberOfLines={1}
+                    numberOfLines={2}
                   >
                     {item.label}
                   </Text>
@@ -3485,37 +3524,22 @@ export function ActivityScreen() {
                 </View>
 
                 {/* Amount + action hint */}
-                <View style={styles.txRight}>
-                  <Text
-                    style={[
-                      styles.txAmount,
-                      { color: isExpense ? c.destructive : c.success },
-                    ]}
-
-
-
-                  >
-                    {isExpense ? "−" : "+"}${formatActivityMoney(item.amount)}
-                  </Text>
-                  {runningBalance != null ? (
-                    <Text
-                      style={[styles.txBalance, { color: c.mutedForeground }]}
-
-                    >
-                      Balance ${formatActivityMoney(runningBalance)}
-                    </Text>
-                  ) : null}
-                  <Feather
-                    name={
-                      needsIncomeReview || !item.editable
-                        ? "chevron-right"
-                        : "edit-2"
-                    }
-                    size={12}
-                    color={c.mutedForeground}
-                    style={{ marginTop: 3 }}
-                  />
-                </View>
+                <ActivityRowMoney
+                  amountLabel={`${isExpense ? "−" : "+"}$${formatActivityMoney(item.amount)}`}
+                  balanceLabel={balanceLabel}
+                  amountColor={isExpense ? c.destructive : c.success}
+                  mutedColor={c.mutedForeground}
+                />
+                <Feather
+                  name={
+                    needsIncomeReview || !item.editable
+                      ? "chevron-right"
+                      : "edit-2"
+                  }
+                  size={12}
+                  color={c.mutedForeground}
+                  style={styles.txActionHint}
+                />
               </Pressable>
             );
           }}
@@ -5516,12 +5540,11 @@ const styles = StyleSheet.create({
   txRow: {
     minHeight: 78,
     flexDirection: "row",
-    flexWrap: "wrap",
     alignItems: "center",
     marginHorizontal: 16,
-    paddingHorizontal: 13,
+    paddingHorizontal: 12,
     paddingVertical: 12,
-    gap: 12,
+    gap: 10,
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.10)",
     overflow: "hidden",
@@ -5533,13 +5556,14 @@ const styles = StyleSheet.create({
   },
   rowAccent: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3 },
   sourceIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    flexShrink: 0,
     alignItems: "center",
     justifyContent: "center",
   },
-  txMid: { flex: 1, minWidth: 150 },
+  txMid: { flex: 1, minWidth: 0 },
   txNote: { fontSize: 14, fontFamily: "Inter_800ExtraBold", marginBottom: 4 },
   txMetaLine: { fontSize: 10, fontFamily: "Inter_500Medium", lineHeight: 15 },
   txStatus: {
@@ -5573,13 +5597,14 @@ const styles = StyleSheet.create({
   debtBadgeText: { flexShrink: 1, fontSize: 9, fontFamily: "Inter_700Bold" },
   txDate: { fontSize: 9, fontFamily: "Inter_400Regular" },
   txRight: {
-    maxWidth: "100%",
-    minWidth: 170,
+    maxWidth: "43%",
+    minWidth: 0,
     flexShrink: 0,
     alignItems: "flex-end",
   },
-  txAmount: { fontSize: 15, fontFamily: "Inter_800ExtraBold" },
-  txBalance: { fontSize: 9, fontFamily: "Inter_500Medium", marginTop: 3 },
+  txAmount: { maxWidth: "100%", fontSize: 15, lineHeight: 19, textAlign: "right", fontFamily: "Inter_800ExtraBold" },
+  txBalance: { maxWidth: "100%", fontSize: 9, lineHeight: 13, textAlign: "right", fontFamily: "Inter_500Medium", marginTop: 3 },
+  txActionHint: { width: 14, flexShrink: 0 },
 
   // Detail bottom sheet
   sheetOverlay: {
