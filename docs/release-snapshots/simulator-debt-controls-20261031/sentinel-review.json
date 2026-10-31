@@ -1,0 +1,140 @@
+{
+  "status": "PASS",
+  "scope": "Independent financial, source, UI/editor and scenario-contract approval. Production release requires root browser/export/deployment gates.",
+  "base": "e905e2727edf1d54576592be43ab06abf4c7e38f",
+  "blockers": [],
+  "sourceHashes": {
+    "artifacts/mobile/lib/snowball.ts": "268b6d32b25a4a041943a4362f46c23be6f056aec81856f3810651dc72baa417",
+    "artifacts/mobile/lib/planSimulator.ts": "2e034f3c9deab6bf027114f0170ac7536079d2cfc3875b8067f2c93df9eb7ec8",
+    "artifacts/mobile/lib/planSimulationDebtControls.ts": "ff6802fe6c2cf2d8e874331eaa4b92266ab7b579191b2d9a753711a13d4a5d4a",
+    "artifacts/mobile/lib/planSimulationDebtControls.test.ts": "6e303b58e60341c7700b955d833e32362633a337944bfd5e56d5bfe54f334bd7",
+    "artifacts/mobile/lib/planSimulationComparison.ts": "64c784bb394a54f482415c3ab048d256af3035069427bf76de45fc54d959c33e",
+    "artifacts/mobile/lib/planSimulationEditor.ts": "a6ff5ea61febb45280f84b540046296e3e6cbecaff12a32fdf43c83167ab1076",
+    "artifacts/mobile/lib/planSimulationEditor.test.ts": "66dd865496b0a37545fd58b333158e3ea07f8d34e72b2739b8fc579900b4eece",
+    "artifacts/mobile/app/plan-simulator.tsx": "4514c3221b51530dc63b0ae2fac177419ee961ec977c11c02ba0ffd9fe9dddfe",
+    "artifacts/mobile/components/SavedScenarioComparison.tsx": "ec76b43d6f7d5189c70a349a6015919cdb995e95b549d7fe34fed49f866dab24"
+  },
+  "compiledHashes": {
+    "snowball.js": "79ae89a7e0f4f85268386f7787785c03dfc1c1f03e9051e38450e19d97141bc8",
+    "planSimulator.js": "aaf9d44e8a0b21051b544f244343703718463314c131b5328c2f8a622929d429",
+    "planSimulationDebtControls.js": "4a2781f649d5a3d95d70630da25b46e16aa9746b5585e6141767719c21991b43",
+    "planSimulationComparison.js": "10dfabcec007c2314e34440b90c2cdf7359fa79a18d8dba04a78c8dbcf21ae02"
+  },
+  "isolatedCompiledDist": "/tmp/simulator-debt-controls-20261031/sentinel-final-dist",
+  "verified": {
+    "noOptionCoreDifferentialComparisons": 480,
+    "unchangedCanonicalForecastMonthComparisons": 222,
+    "realSourceExactDatedCadenceAprAmountCases": 361,
+    "clonedOriginalBillAmountCases": 6,
+    "preanchorExactNoopAndNativeDateCases": 40,
+    "lateChangedWholeMonthCloneAssertionsReplacedByTemporalOracle": 56,
+    "temporalCashPrincipalCases": 80,
+    "actualMonthlyWeeklyPartialSettlementCases": 6,
+    "pendingCapBaselineEditCases": 6,
+    "pendingOnlyPauseCase": 1,
+    "genuineFuturePendingOverlapFailsClosed": true,
+    "historicalDatedSavedPlanCases": 8,
+    "futureSavedDateAndExclusiveResumeCase": 1,
+    "integerCentsZeroAprCadenceEditPauseNewDebtCases": 144,
+    "commonHorizonCase": 1,
+    "closedBeforeChangeFailClosedCases": 2,
+    "independentBigIntMonthlyInterestCases": 48,
+    "mixedIncomeSpendingCashAnchorCases": 3,
+    "actualSavedPreviewMixedColumnsAndV1WorkingDeviceJsonRoundTrip": true,
+    "noDebtAndIncompleteSelectedReferenceStatusCases": 6,
+    "editorReferenceTests": 33,
+    "comparisonLibraryTests": 24,
+    "unchangedWriteNavigationCallbacks": 18,
+    "productWritesByReviewer": 0
+  },
+  "temporalContract": "Changes at or after the observed anchor preserve original historical non-required principal; they cannot create free earlier principal repayment. Late full-month bill clones reprice historical allocations, so independently grounded temporal conservation replaces those clone expectations. Genuine no-op dated cash identities remain strict.",
+  "scopeNotes": [
+    "Hypothetical debts do not modify real bills, balances, transactions, auth, storage permissions or RLS.",
+    "Existing no-option Snowball and Forecast outputs match the pre-feature worktree across independent randomized fixtures.",
+    "Current debt-free states resolve to paid_off; selected missing debt/invalid new metadata resolve unavailable with null date/impact.",
+    "Saved definitions remain additive schema version1; fake-data tests performed no financial/provider writes."
+  ],
+  "evidence": {
+    "suite": "/tmp/simulator-debt-controls-20261031/sentinel-all-results.json",
+    "ui": "/tmp/simulator-debt-controls-20261031/sentinel-ui-review.json",
+    "originMetadata": "/tmp/simulator-debt-controls-20261031/sentinel-ui-origin-probes.json",
+    "status": "/tmp/simulator-debt-controls-20261031/sentinel-payoff-status-results.json"
+  },
+  "rootReportedValidation": {
+    "mobileUnitContract": 1560,
+    "performance": 5,
+    "releaseFixtures": 37,
+    "mobileTypes": "PASS",
+    "configGuideArtifactDiff": "PASS",
+    "bundle": "entry-c88c1c08ba25d59ba286e7a9331b9c79.js",
+    "bundleSha256": "27cd0fbcba287d8edc0eec351fae12820b442c950dd3062237f3d88d553a959d",
+    "browserReplay": "PENDING"
+  },
+  "resolvedFindings": [
+    {
+      "id": "real-canonical-rollover-double-funding",
+      "severity": "critical",
+      "repro": "/tmp/simulator-debt-controls-20261031/sentinel-real-projection.cjs",
+      "details": "Actual createFinancialProjection plus actual UI buildReferences: same regular amount100 for Small70/min100 plus Large3000/min50 leads monthly150/250/250 rather than150/150/150; actual core moves freed100 into target-credited global monthly pool while helper also reschedules source100.",
+      "expectedEnding": 9550,
+      "actualEnding": 9350,
+      "expectedPayoff": "2028-06",
+      "actualPayoff": "2028-05",
+      "resolution": "Independently passed in latest sentinel-all run"
+    },
+    {
+      "id": "weekly-to-monthly-freed-pool-double-funding",
+      "severity": "critical",
+      "repro": "/tmp/simulator-debt-controls-20261031/sentinel-real-projection-weekly.cjs",
+      "details": "Actual weekly100 debt paying off in five-Friday October yields real monthly550 thereafter; helper adds four-Friday400 on top and spends950.",
+      "resolution": "Independently passed in latest sentinel-all run"
+    },
+    {
+      "id": "real-first-month-interest-anchor",
+      "severity": "critical",
+      "repro": "/tmp/simulator-debt-controls-20261031/sentinel-real-projection-interest.cjs",
+      "details": "Actual single debt100/min100/APR12: canonical October100/November1.01; helper skips real current-month interest and closes October with100 only.",
+      "cashDifference": 1.01,
+      "expectedPayoff": "2026-11",
+      "actualPayoff": "2026-10",
+      "resolution": "Independently passed in latest sentinel-all run"
+    },
+    {
+      "id": "past-due-current-date-source-cap",
+      "severity": "high",
+      "repro": "/tmp/simulator-debt-controls-20261031/sentinel-real-projection-asof31.cjs",
+      "details": "As-ofOctober31 canonical carry caps Small70+Large50=120; helper recreates configured100 regular Small and invents30 current-day rollover, as well as future double funding.",
+      "resolution": "Independently passed in latest sentinel-all run"
+    },
+    {
+      "id": "partial-settlement-carry-provenance",
+      "severity": "critical",
+      "repro": "/tmp/simulator-debt-controls-20261031/sentinel-real-partial.cjs",
+      "details": "Real matched partial30 to Oct15, live balance70, carried Oct31. UI refs lose settled30 on carry; full edit50 pays50 instead of20. Need originating-occurrence metadata, including multi-occurrence carry counts. Unsettled balance70 must not be misinterpreted as paid30.",
+      "resolution": "Independently passed in latest sentinel-all run"
+    },
+    {
+      "id": "preanchor-full-month-principal-lifecycle",
+      "severity": "critical",
+      "repro": "/tmp/simulator-debt-controls-20261031/sentinel-preanchor-lifecycle.cjs",
+      "details": "Small balance70/min100 plus Large balance100/min50, asofOct31: actual canonical zero-change cash120 now +20 Nov; same100 scenario cash120 now +50 Nov. Historical optional rollover30 changes canonical future principal despite its cash not carrying. Reconstructing visible carry alone does not match full-original-month principal lifecycle. 44 of96 low-other-balance date/frequency/APR cases mismatch. Same-value special casing would mask the underlying model gap.",
+      "resolution": "Independently passed on final frozen source"
+    },
+    {
+      "id": "mixed-origin-pending-current-group-lock",
+      "severity": "high",
+      "repro": "/tmp/simulator-debt-controls-20261031/sentinel-ui-mixed-pending.json",
+      "details": "Actual weekly350 debt,5\u00d7100 dates, pending100 on Oct2 plus other unpaid origins carriedOct31. Edit50 retains350 rather than pending100+4\u00d750=300; pause retains350 rather than pending-only100. Original committed row must remain immutable while distinct uncommitted origins remain editable. Engine already implementing original-source classification.",
+      "resolution": "Independently passed on final frozen source"
+    }
+  ],
+  "approvedCommit": "513a26071133a0379c213dd8809d13c1488d3254",
+  "postTestWhitespaceAdjustment": {
+    "from": "00b0f34",
+    "to": "513a26071133a0379c213dd8809d13c1488d3254",
+    "file": "artifacts/mobile/lib/planSimulationDebtControls.ts",
+    "independentlyVerified": "Trailing EOF whitespace only; executable source identical",
+    "previousSha256": "d7883f05c52e8cf2f4e704d03122f1ff0bc68575bf416e16968c807a6468eedc",
+    "finalSha256": "ff6802fe6c2cf2d8e874331eaa4b92266ab7b579191b2d9a753711a13d4a5d4a"
+  }
+}

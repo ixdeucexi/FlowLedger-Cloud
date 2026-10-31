@@ -1,0 +1,299 @@
+{
+  "status": "PARTIAL",
+  "checkedAt": "2026-10-31T20:38:45.938Z",
+  "inspectionMode": "Authenticated read-only Vercel MCP; env metadata listing with decrypt=false. No secret values were requested, printed or saved.",
+  "projectIdentity": {
+    "status": "PASS",
+    "id": "prj_nOlgvktXdfLErqQvmESnvyLFnMj2",
+    "name": "flow-ledger-cloud",
+    "accountId": "team_jIrgjLphz4oeVh6WuFHaiWKq",
+    "nodeVersion": "24.x",
+    "rootDirectory": null,
+    "framework": null
+  },
+  "nodeRuntime": {
+    "status": "PASS",
+    "observed": "24.x",
+    "expected": "24.x"
+  },
+  "environmentScope": {
+    "status": "PASS",
+    "requiredCount": 13,
+    "requiredProductionOnly": [
+      "SUPABASE_SERVICE_ROLE_KEY",
+      "SUPABASE_URL",
+      "EXPO_PUBLIC_SUPABASE_URL",
+      "EXPO_PUBLIC_SUPABASE_ANON_KEY",
+      "PLAID_CLIENT_ID",
+      "PLAID_SECRET",
+      "PLAID_ENV",
+      "PLAID_REDIRECT_URI",
+      "PLAID_TOKEN_ENCRYPTION_KEY",
+      "PLAID_WEBHOOK_URL",
+      "CRON_SECRET",
+      "VAPID_PUBLIC_KEY",
+      "VAPID_PRIVATE_KEY"
+    ],
+    "checks": [
+      {
+        "key": "SUPABASE_SERVICE_ROLE_KEY",
+        "required": true,
+        "records": 1,
+        "status": "PASS",
+        "target": [
+          "production"
+        ],
+        "branchOverride": null
+      },
+      {
+        "key": "SUPABASE_URL",
+        "required": true,
+        "records": 1,
+        "status": "PASS",
+        "target": [
+          "production"
+        ],
+        "branchOverride": null
+      },
+      {
+        "key": "EXPO_PUBLIC_SUPABASE_URL",
+        "required": true,
+        "records": 1,
+        "status": "PASS",
+        "target": [
+          "production"
+        ],
+        "branchOverride": null
+      },
+      {
+        "key": "EXPO_PUBLIC_SUPABASE_ANON_KEY",
+        "required": true,
+        "records": 1,
+        "status": "PASS",
+        "target": [
+          "production"
+        ],
+        "branchOverride": null
+      },
+      {
+        "key": "PLAID_CLIENT_ID",
+        "required": true,
+        "records": 1,
+        "status": "PASS",
+        "target": [
+          "production"
+        ],
+        "branchOverride": null
+      },
+      {
+        "key": "PLAID_SECRET",
+        "required": true,
+        "records": 1,
+        "status": "PASS",
+        "target": [
+          "production"
+        ],
+        "branchOverride": null
+      },
+      {
+        "key": "PLAID_ENV",
+        "required": true,
+        "records": 1,
+        "status": "PASS",
+        "target": [
+          "production"
+        ],
+        "branchOverride": null
+      },
+      {
+        "key": "PLAID_REDIRECT_URI",
+        "required": true,
+        "records": 1,
+        "status": "PASS",
+        "target": [
+          "production"
+        ],
+        "branchOverride": null
+      },
+      {
+        "key": "PLAID_TOKEN_ENCRYPTION_KEY",
+        "required": true,
+        "records": 1,
+        "status": "PASS",
+        "target": [
+          "production"
+        ],
+        "branchOverride": null
+      },
+      {
+        "key": "PLAID_WEBHOOK_URL",
+        "required": true,
+        "records": 1,
+        "status": "PASS",
+        "target": [
+          "production"
+        ],
+        "branchOverride": null
+      },
+      {
+        "key": "CRON_SECRET",
+        "required": true,
+        "records": 1,
+        "status": "PASS",
+        "target": [
+          "production"
+        ],
+        "branchOverride": null
+      },
+      {
+        "key": "VAPID_PUBLIC_KEY",
+        "required": true,
+        "records": 1,
+        "status": "PASS",
+        "target": [
+          "production"
+        ],
+        "branchOverride": null
+      },
+      {
+        "key": "VAPID_PRIVATE_KEY",
+        "required": true,
+        "records": 1,
+        "status": "PASS",
+        "target": [
+          "production"
+        ],
+        "branchOverride": null
+      },
+      {
+        "key": "APPLE_TOKEN_ENCRYPTION_KEY",
+        "required": false,
+        "records": 0,
+        "status": "PASS",
+        "target": [],
+        "branchOverride": null
+      },
+      {
+        "key": "APPLE_TEAM_ID",
+        "required": false,
+        "records": 0,
+        "status": "PASS",
+        "target": [],
+        "branchOverride": null
+      },
+      {
+        "key": "APPLE_KEY_ID",
+        "required": false,
+        "records": 0,
+        "status": "PASS",
+        "target": [],
+        "branchOverride": null
+      },
+      {
+        "key": "APPLE_CLIENT_ID",
+        "required": false,
+        "records": 0,
+        "status": "PASS",
+        "target": [],
+        "branchOverride": null
+      },
+      {
+        "key": "APPLE_PRIVATE_KEY",
+        "required": false,
+        "records": 0,
+        "status": "PASS",
+        "target": [],
+        "branchOverride": null
+      },
+      {
+        "key": "REVENUECAT_SECRET_API_KEY",
+        "required": false,
+        "records": 0,
+        "status": "PASS",
+        "target": [],
+        "branchOverride": null
+      }
+    ],
+    "otherVisibleMetadata": [
+      {
+        "key": "VAPID_SUBJECT",
+        "target": [
+          "production"
+        ],
+        "gitBranch": null,
+        "type": "encrypted"
+      }
+    ]
+  },
+  "productionAliases": {
+    "status": "PASS",
+    "inspections": [
+      {
+        "host": "flowledger-algo.com",
+        "id": "dpl_9MRHuawxYTvLiVZE8skJVnJTFGoA",
+        "name": "flow-ledger-cloud",
+        "target": "production",
+        "readyState": "READY",
+        "source": "f6608e4c1986d4384d76da49ce63bbe239b2292b",
+        "url": "flow-ledger-cloud-8zdki6k7k-flow-ledger-s-projects.vercel.app"
+      },
+      {
+        "host": "www.flowledger-algo.com",
+        "id": "dpl_9MRHuawxYTvLiVZE8skJVnJTFGoA",
+        "name": "flow-ledger-cloud",
+        "target": "production",
+        "readyState": "READY",
+        "source": "f6608e4c1986d4384d76da49ce63bbe239b2292b",
+        "url": "flow-ledger-cloud-8zdki6k7k-flow-ledger-s-projects.vercel.app"
+      },
+      {
+        "host": "flow-ledger-cloud.vercel.app",
+        "id": "dpl_9MRHuawxYTvLiVZE8skJVnJTFGoA",
+        "name": "flow-ledger-cloud",
+        "target": "production",
+        "readyState": "READY",
+        "source": "f6608e4c1986d4384d76da49ce63bbe239b2292b",
+        "url": "flow-ledger-cloud-8zdki6k7k-flow-ledger-s-projects.vercel.app"
+      },
+      {
+        "host": "flow-ledger-cloud-flow-ledger-s-projects.vercel.app",
+        "id": "dpl_9MRHuawxYTvLiVZE8skJVnJTFGoA",
+        "name": "flow-ledger-cloud",
+        "target": "production",
+        "readyState": "READY",
+        "source": "f6608e4c1986d4384d76da49ce63bbe239b2292b",
+        "url": "flow-ledger-cloud-8zdki6k7k-flow-ledger-s-projects.vercel.app"
+      }
+    ]
+  },
+  "buildContract": {
+    "status": "UNVERIFIED",
+    "expected": {
+      "nodeVersion": "24.x",
+      "buildCommand": "pnpm --filter @workspace/mobile exec expo export --platform web",
+      "installCommand": "pnpm install",
+      "outputDirectory": "artifacts/mobile/dist",
+      "rootDirectory": null
+    },
+    "observedFieldsExposed": [
+      "nodeVersion",
+      "framework"
+    ],
+    "unexposedFields": [
+      "buildCommand",
+      "installCommand",
+      "outputDirectory",
+      "rootDirectory"
+    ],
+    "reason": "Authenticated get_project and list_projects MCP responses expose pruned metadata and do not return these build settings. Omitted fields are not evidence of drift. get_deployment also omits projectSettings.",
+    "releaseRequirement": "Use explicit projectSettings with the expected contract in create_deployment, then inspect deployment READY state and actual exported artifact/hash."
+  },
+  "literalRepositoryScript": {
+    "status": "NOT_RUN",
+    "path": "scripts/assert-production-env-scope.cjs",
+    "reason": "The local .vercel/project.json link is absent and no Vercel CLI authentication is configured; no credential discovery or CLI setup was attempted."
+  },
+  "mutationsPerformed": [],
+  "errors": [],
+  "overallExplanation": "Project identity, Node24, required environment metadata scope and all four production aliases pass. Complete build-setting verification is unavailable through the exposed read-only MCP metadata, so the overall inspection is PARTIAL rather than a false PASS."
+}

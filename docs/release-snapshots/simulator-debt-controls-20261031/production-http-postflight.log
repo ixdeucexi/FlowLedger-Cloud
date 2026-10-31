@@ -1,0 +1,2 @@
+Production postflight passed: dpl_7sMtM5zxUFvf5HgZGubmb6JBYBxi at clean commit 513a26071133a0379c213dd8809d13c1488d3254.
+{"status":"PASS","name":"simulator-debt-controls-20261031","source":"513a26071133a0379c213dd8809d13c1488d3254","deploymentId":"dpl_7sMtM5zxUFvf5HgZGubmb6JBYBxi","bundlePath":"/_expo/static/js/web/entry-c88c1c08ba25d59ba286e7a9331b9c79.js","bundleSha256":"27cd0fbcba287d8edc0eec351fae12820b442c950dd3062237f3d88d553a959d","exactBrowserTestedBundle":true}

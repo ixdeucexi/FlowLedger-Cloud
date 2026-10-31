@@ -1,0 +1,131 @@
+{
+  "status": "PASS",
+  "releaseClearance": true,
+  "applicationSource": "513a26071133a0379c213dd8809d13c1488d3254",
+  "entry": "entry-c88c1c08ba25d59ba286e7a9331b9c79.js",
+  "entrySHA256": "27cd0fbcba287d8edc0eec351fae12820b442c950dd3062237f3d88d553a959d",
+  "entryBytes": 5130384,
+  "origin": "local isolated static export",
+  "deployment": null,
+  "contexts": 13,
+  "actualEntryLoadsVerified": 26,
+  "coverage": {
+    "desktop": {
+      "contexts": 3,
+      "stages": 23,
+      "currencyGeometryChecks": 622,
+      "width": 1200,
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "flows": [
+        "payment100\u2192150",
+        "saved local and intercepted household JSON CRUD",
+        "new debt/edit/remove/reset/load",
+        "common saved comparisons including30year status",
+        "actual keyboard/debt chooser arrows"
+      ]
+    },
+    "stress": {
+      "contexts": 3,
+      "functionalChecks": 123,
+      "geometryScans": 27,
+      "widths": [
+        320,
+        390
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "flows": [
+        "full10kvalues/rates/frequency/date-picker",
+        "typefieldreset",
+        "large edit/pause",
+        "horizontal fullcurrency reachability",
+        "actualPrivacy hide/reveal"
+      ]
+    },
+    "phone": {
+      "contexts": 1,
+      "stages": 10,
+      "width": 390,
+      "flows": [
+        "samepayment no-op identity",
+        "150payment changes cash/payoff",
+        "one/two-month pause andexplicitresume/cancel",
+        "resume beyondcashhorizon",
+        "equalresume/start validation",
+        "belowinterest30year status inworking andsavedcomparison"
+      ]
+    },
+    "accessValidation": {
+      "contexts": 3,
+      "checks": 13,
+      "flows": [
+        "invalidname/balance/APR/payment/target",
+        "Free all3types inone persistedworkingdraft",
+        "Free named/cloud-save andmultiplecompare gates",
+        "Founder legacyv1 andnewlocal-save preservation"
+      ]
+    },
+    "actualSourceAdapter": {
+      "contexts": 3,
+      "stages": 9,
+      "flows": [
+        "Small70/100+Large3000/50 real-source no-op identity and150 futuremonthlyoutflow",
+        "synthetic addeddebt subsequentedit+pause+save/reload",
+        "remove referencedaddeddebt \u2192unavailable/nullpayoff \u2192resetrestore",
+        "pending commitment survivespause",
+        "pending-conflictingpayoff failsclosed withNotavailabledate"
+      ]
+    }
+  },
+  "financialSnapshotsUnchangedInAllContexts": true,
+  "actualCanonicalFinancialWrites": 0,
+  "unexpectedCanonicalWriteRequests": 0,
+  "actualProviderCalls": 0,
+  "providerRequests": 0,
+  "unknownRequests": 0,
+  "uncaughtAppErrors": 0,
+  "unresolvedConfirmedFeatureOrNumericBugs": 0,
+  "startupMaintenancePolicy": "Known sync_due_debt_transactions calls were explicitly intercepted as fictional no-ops; never executed against a database. All unexpected financial mutations were denied and would fail verification.",
+  "scenarioWritePolicy": "Only bounded household-scoped fictional plan_simulations JSON CRUD and isolated local scenario storage were writable.",
+  "screenshots": 65,
+  "selectedScreenshots": [
+    "phone-functional/390-pause-valid-composer.png",
+    "phone-functional/390-pause-valid-results.png",
+    "stress/320-dark-new-debt-filled.png",
+    "stress/320-light-privacy-hidden-new-debt.png",
+    "desktop/1200-dark-arrows-active.png",
+    "desktop/1200-light-functional-10-saved-non-amortizing-comparison.png",
+    "adapter/rollover-noop.png",
+    "adapter/pending-preserved.png"
+  ],
+  "proofFiles": [
+    "desktop/verification-summary.json",
+    "stress/results.json",
+    "phone-functional/verification-summary.json",
+    "access-validation/verification-summary.json",
+    "adapter/verification-summary.json"
+  ],
+  "sanitizedDetailedProof": [
+    "sanitized-proof/adapter.json",
+    "sanitized-proof/access-validation.json",
+    "sanitized-proof/phone-functional.json",
+    "sanitized-proof/stress.json",
+    "sanitized-proof/desktop.json"
+  ],
+  "archiveSanitization": {
+    "aggregateContainsNoAuthSessionOrRawStorageValues": true,
+    "rawSuccessTracesCredentialAndHeaderScanPassed": true,
+    "sanitizedCopiesRemoveStorageWorkingStateAndHeaderKeys": true
+  },
+  "allOwnedBrowsersContextsAndServersClosed": true,
+  "ownedQaProcesses": [],
+  "notClaimed": [
+    "Nativehardware orOSkeyboard verification",
+    "Realcustomer authentication orcanonical financial mutations"
+  ]
+}

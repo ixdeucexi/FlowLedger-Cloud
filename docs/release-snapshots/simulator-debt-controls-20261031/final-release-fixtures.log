@@ -1,0 +1,57 @@
+$ node --test scripts/seed-reviewer-fixture.test.mjs scripts/startup-shell-contract.test.cjs scripts/startup-icon-imports.test.cjs scripts/production-route-contract.test.cjs scripts/push-sw.test.cjs scripts/package-flo-edge.test.mjs
+file:///workspace/FlowLedger-Cloud/scripts/package-flo-edge.mjs:7
+if(!allowedFunctions.has(functionName))throw new Error(`Unsupported Flo function: ${functionName}`);
+                                             ^
+
+Error: Unsupported Flo function: ../billing-dispatcher
+    at file:///workspace/FlowLedger-Cloud/scripts/package-flo-edge.mjs:7:46
+    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)
+    at async node:internal/modules/esm/loader:643:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.19.0
+✔ Flo edge packaging defaults to v3 and allowlists isolated v4 (1592.918983ms)
+✔ Flo edge packaging rejects arbitrary function paths (306.294334ms)
+✔ SPA success and incidental route text cannot prove a required route exists (1.810717ms)
+✔ temporary gate defers legal/privacy without claiming those routes are verified (2.457101ms)
+✔ absent source tree is rejected rather than inferred from a SPA shell (0.198308ms)
+✔ health JSON contract rejects HTML, stale responses and extra private fields (33.751558ms)
+✔ missing API and bundle probes reject soft 200 and redirects (0.340152ms)
+✔ Vercel SPA fallback excludes API and Expo assets without blocking app routes (0.408495ms)
+✔ online navigation returns the live response unchanged; errors are not concealed (33.83353ms)
+✔ offline navigation shows a static retry page without any financial cache (3.173139ms)
+✔ API, cross-origin, mutations and static assets are never intercepted (2.00495ms)
+✔ reviewer fixture is explicitly fictional, guarded and credential-free (1.353058ms)
+✔ all fail-closed reads and validation complete before the first mutation (1.386318ms)
+✔ missing reviewer auth metadata fails before snapshot reads or writes (0.57727ms)
+✔ Pro, grandfathered, admin or billing plans fail closed before writes (0.500434ms)
+✔ any Plaid item, account or transaction fails closed before writes (0.593194ms)
+✔ non-fixture financial data and household contamination fail closed (0.528917ms)
+✔ pre-existing onboarding metadata without a known fixture fails closed (0.297638ms)
+✔ the database-triggered pristine household settings row is safe to initialize (0.573314ms)
+✔ non-pristine household planning settings fail closed (0.227533ms)
+✔ billing history fails closed even when the plan row still says Free (0.284048ms)
+✔ an exact or partial known fixture can be rerun idempotently (0.379672ms)
+✔ Founding Free fixture never grants Pro or administrator access (0.27195ms)
+✔ reviewer fixture activates a fully onboarded household-scoped budget (0.32557ms)
+✔ mobile icon imports do not bundle unused icon families through the barrel (32.191146ms)
+✔ the release shell contract accepts the real template structure (9.157213ms)
+✔ the approved floating-logo shell cannot silently restore the old tile (1.899811ms)
+✔ commented-out atomic hiding cannot satisfy the release shell contract (0.341955ms)
+✔ a commented inert root cannot satisfy the release shell contract (0.261103ms)
+✔ the controller must precede a real deferred bundle element (0.601206ms)
+✔ commented or string-only rearm statements cannot satisfy the controller contract (1.01568ms)
+✔ inactive containers and startup-style overrides fail closed (0.434665ms)
+✔ unreviewed controller flow and non-executable or duplicate bundles fail closed (1.829956ms)
+✔ the complete active document rejects unbalanced cover and page-level overrides (4.260999ms)
+✔ the optional Cloudflare beacon is accepted only in its reviewed post-bundle slot (8.758332ms)
+✔ entry hashes use the exact Expo format and document boundaries preserve browser parsing mode (2.090038ms)
+✔ artifact containment follows real paths and live bundles cannot redirect or return HTML (2.073754ms)
+ℹ tests 37
+ℹ suites 0
+ℹ pass 37
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1971.765932

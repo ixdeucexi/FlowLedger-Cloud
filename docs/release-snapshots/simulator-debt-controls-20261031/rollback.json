@@ -1,0 +1,8 @@
+{
+  "ref": "rollback/prod-before-simulator-debt-controls-20261031-1908",
+  "tagObject": "1c03a797044dd6ac3081cebaedf5b3f4962fdafa",
+  "source": "f6608e4c1986d4384d76da49ce63bbe239b2292b",
+  "deployment": "dpl_9MRHuawxYTvLiVZE8skJVnJTFGoA",
+  "createdBeforeProductionChanged": true,
+  "remoteVerified": true
+}

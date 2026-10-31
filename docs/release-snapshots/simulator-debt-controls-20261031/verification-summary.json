@@ -1,0 +1,39 @@
+{
+  "status": "LIVE_PASS",
+  "source": "513a26071133a0379c213dd8809d13c1488d3254",
+  "fullMobileTests": {
+    "tests": 1560,
+    "performance": 5,
+    "status": "PASS"
+  },
+  "releaseFixtures": {
+    "tests": 37,
+    "status": "PASS"
+  },
+  "mobileTypecheck": "PASS",
+  "mobileConfig": "PASS",
+  "guide": "PASS",
+  "artifactCopy": "PASS",
+  "financialSentinel": "PASS",
+  "bundle": {
+    "entry": "entry-c88c1c08ba25d59ba286e7a9331b9c79.js",
+    "sha256": "27cd0fbcba287d8edc0eec351fae12820b442c950dd3062237f3d88d553a959d"
+  },
+  "rollback": "rollback/prod-before-simulator-debt-controls-20261031-1908",
+  "productionChanged": true,
+  "production": {
+    "deploymentId": "dpl_7sMtM5zxUFvf5HgZGubmb6JBYBxi",
+    "immutableUrl": "flow-ledger-cloud-6e8cmn8h1-flow-ledger-s-projects.vercel.app",
+    "allFourAliases": "PASS",
+    "httpPostflight": "PASS",
+    "browserReplay": "PASS",
+    "runtimeContexts": 13,
+    "actualEntryLoadsVerified": 26,
+    "actualFinancialWrites": 0,
+    "actualProviderCalls": 0,
+    "allOwnedRunnersClosed": true,
+    "hostedCspBeaconBlocks": 9,
+    "unexpectedConsoleErrors": 0
+  },
+  "verifiedAt": "2026-10-31T20:50:00Z"
+}

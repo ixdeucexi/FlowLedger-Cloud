@@ -1,0 +1,79 @@
+{
+  "status": "PASS",
+  "scope": "UI/editor/reference/pairing source review only; this is not overall financial-engine or deployment approval.",
+  "base": "e905e27",
+  "fileSha256": {
+    "artifacts/mobile/app/plan-simulator.tsx": "4514c3221b51530dc63b0ae2fac177419ee961ec977c11c02ba0ffd9fe9dddfe",
+    "artifacts/mobile/components/SavedScenarioComparison.tsx": "ec76b43d6f7d5189c70a349a6015919cdb995e95b549d7fe34fed49f866dab24",
+    "artifacts/mobile/lib/planSimulationEditor.ts": "a6ff5ea61febb45280f84b540046296e3e6cbecaff12a32fdf43c83167ab1076",
+    "artifacts/mobile/lib/planSimulationEditor.test.ts": "66dd865496b0a37545fd58b333158e3ea07f8d34e72b2739b8fc579900b4eece",
+    "artifacts/mobile/lib/planSimulationComparison.ts": "64c784bb394a54f482415c3ab048d256af3035069427bf76de45fc54d959c33e"
+  },
+  "editorTests": {
+    "status": "PASS",
+    "count": 33,
+    "compileLog": "/tmp/simulator-debt-controls-20261031/sentinel-ui-compile.log",
+    "testLog": "/tmp/simulator-debt-controls-20261031/sentinel-ui-tests.log"
+  },
+  "unchangedExistingUseCallbacks": {
+    "count": 18,
+    "names": [
+      "focusEditor",
+      "closeEditor",
+      "openEditor",
+      "applySelection",
+      "requestSelection",
+      "makeLocalDraft",
+      "addChange",
+      "removeChange",
+      "saveChange",
+      "resetDraft",
+      "updateDraftName",
+      "updateDraftHorizon",
+      "saveDevice",
+      "saveDraft",
+      "saveHouseholdCopy",
+      "reloadLibraries",
+      "removeScenario",
+      "exportDraft"
+    ]
+  },
+  "checks": [
+    "Three new change kinds hydrate, validate, replace ID in place, reset fields and fail closed for stale targets.",
+    "Per-date settlement/source snapshots preserve regular-vs-global provenance, immutable pending/posted and editable retained planned amounts.",
+    "Editor-only hypothetical debt references never feed real baseline/scenario inputs.",
+    "New untouched payment-edit/pause draft date defaults to selected debt start only within horizon; explicitly selected start dates and existing saved edits are preserved.",
+    "Date customization state is unconditional, marks explicit selections including same default date, resets on category/type change and is captured by current onSelect handler.",
+    "Resolved selection date is used for regular-payment prefill; default one-month pause resume follows, while nondefault resume remains untouched.",
+    "Outside-horizon selected debt starts show alert and block save; domain before-start validation remains.",
+    "SavedScenarioComparison now distinguishes projection_limit from unavailable; current engine models payoff at month precision.",
+    "New controls and mixed saved comparisons pair all projection columns using the same canonical mode.",
+    "Existing ownership, persistence, permissions, editor history/cancel, real-write boundaries and NoApply controls remain unchanged.",
+    "Money inputs reuse PrivacyTextInput and all new state/hooks remain unconditional.",
+    "Carried required rows recover original occurrence dates from canonical allocation IDs; reference loading includes earlier origin months and nominal weekly dates whose allocation was capped to zero.",
+    "Per-origin configured amount and actual paid amount remain separate, with source/occurrence pending or recorded locks preserved and still-planned retained amounts kept mutable.",
+    "Actual fictional FinancialProjection probes: weekly paid80+paid30 yields170 under payment50; fully settled origin excluded yields200; mixed pending100 plus four editable origins yields300 under payment50 and100 during pause.",
+    "Regular payment label/prefill stays100 per scheduled occurrence for500 nominal weekly carry; carried cash totals never become the recurring payment field.",
+    "Full saved-month reference snapshot calls only existing read-only getExtraPayment, copies finite positive amount and original payment_date/month-first fallback for360 bounded months, and includes the getter in callback dependencies.",
+    "Saved-month snapshot does not expand settlement queries or retain mutable source object references; fixture proves source nonmutation and360/visible-month query bounds.",
+    "Per-occurrence exactPlan flag follows month settlement plannedDebtAmount !== undefined, including a plan equal to the base payment; labels and prefill continue to use per-occurrence configured amount."
+  ],
+  "findings": [],
+  "remainingScope": "Parent financial reviewer owns independent engine findings and final browser/release gate. UI PASS does not override a financial FAIL.",
+  "reviewedAt": "2026-10-31T20:37:50.933Z",
+  "originProbes": {
+    "status": "PASS",
+    "cases": 4,
+    "resultPath": "/tmp/simulator-debt-controls-20261031/sentinel-ui-origin-probes.json",
+    "compiledEngineScope": "Observed integration behavior only; financial engine final approval belongs to parent SENTINEL."
+  },
+  "comparisonLibraryTests": {
+    "status": "PASS",
+    "count": 24,
+    "log": "/tmp/simulator-debt-controls-20261031/sentinel-ui-comparison-library.log"
+  },
+  "integrationGate": {
+    "status": "PENDING_PARENT_FINANCIAL_REVIEW",
+    "note": "Parent owns full math, lifecycle, pending-cap and saved-payment final gate. UI PASS is not financial or release approval."
+  }
+}
