@@ -1,0 +1,206 @@
+{
+  "status": "PASS",
+  "baseline": "68fc30bb54caf5de4b779b465f174e74e833f389",
+  "reviewedSource": "8d6e782b2db95b2cab5ea96d3d603ce55ac3f66c",
+  "files": {
+    "artifacts/mobile/app/(tabs)/monthly.tsx": {
+      "sha256": "8e05ad98bc75b90b3a46001d0912456c791e9b08ae85b73de24b9f7426268d8c",
+      "parseErrors": 0,
+      "existingHandlersUnchanged": 127
+    },
+    "artifacts/mobile/components/desktop/DesktopCalendarPage.tsx": {
+      "sha256": "546c0cf8897021b4da602fc86a2606cb10640bbfe158263fb412b09bf5e7528b",
+      "parseErrors": 0,
+      "existingHandlersUnchanged": 23
+    }
+  },
+  "scopeOnlyTwoFiles": true,
+  "amountPaidLeftCharacterEquivalenceCases": 54,
+  "moneySignCases": 28,
+  "moneySignMatrix": [
+    {
+      "value": 0,
+      "signed": false,
+      "result": "$0.00"
+    },
+    {
+      "value": 0,
+      "signed": true,
+      "result": "$0.00"
+    },
+    {
+      "value": 0,
+      "signed": false,
+      "result": "$0.00"
+    },
+    {
+      "value": 0,
+      "signed": true,
+      "result": "$0.00"
+    },
+    {
+      "value": 0.01,
+      "signed": false,
+      "result": "$0.01"
+    },
+    {
+      "value": 0.01,
+      "signed": true,
+      "result": "+$0.01"
+    },
+    {
+      "value": -0.01,
+      "signed": false,
+      "result": "−$0.01"
+    },
+    {
+      "value": -0.01,
+      "signed": true,
+      "result": "−$0.01"
+    },
+    {
+      "value": 0.005,
+      "signed": false,
+      "result": "$0.01"
+    },
+    {
+      "value": 0.005,
+      "signed": true,
+      "result": "+$0.01"
+    },
+    {
+      "value": -0.005,
+      "signed": false,
+      "result": "−$0.01"
+    },
+    {
+      "value": -0.005,
+      "signed": true,
+      "result": "−$0.01"
+    },
+    {
+      "value": 1,
+      "signed": false,
+      "result": "$1.00"
+    },
+    {
+      "value": 1,
+      "signed": true,
+      "result": "+$1.00"
+    },
+    {
+      "value": -1,
+      "signed": false,
+      "result": "−$1.00"
+    },
+    {
+      "value": -1,
+      "signed": true,
+      "result": "−$1.00"
+    },
+    {
+      "value": 695.6,
+      "signed": false,
+      "result": "$695.60"
+    },
+    {
+      "value": 695.6,
+      "signed": true,
+      "result": "+$695.60"
+    },
+    {
+      "value": -695.6,
+      "signed": false,
+      "result": "−$695.60"
+    },
+    {
+      "value": -695.6,
+      "signed": true,
+      "result": "−$695.60"
+    },
+    {
+      "value": 9999.99,
+      "signed": false,
+      "result": "$9,999.99"
+    },
+    {
+      "value": 9999.99,
+      "signed": true,
+      "result": "+$9,999.99"
+    },
+    {
+      "value": -9999.99,
+      "signed": false,
+      "result": "−$9,999.99"
+    },
+    {
+      "value": -9999.99,
+      "signed": true,
+      "result": "−$9,999.99"
+    },
+    {
+      "value": 9999999.99,
+      "signed": false,
+      "result": "$9,999,999.99"
+    },
+    {
+      "value": 9999999.99,
+      "signed": true,
+      "result": "+$9,999,999.99"
+    },
+    {
+      "value": -9999999.99,
+      "signed": false,
+      "result": "−$9,999,999.99"
+    },
+    {
+      "value": -9999999.99,
+      "signed": true,
+      "result": "−$9,999,999.99"
+    }
+  ],
+  "explicitMinusCallsites": {
+    "summaryExpenses": "Nonnegative by summarizeCalendarEvents Math.abs accumulator",
+    "carriedForwardReserve": "deriveCarriedForwardReserves accepts only event.amount < -0.005 and stores cents(Math.abs(event.amount)); explicit minus cannot duplicate the formatter sign."
+  },
+  "hooks": "New unconditional useState; functional same-integer-width bailout. Measured row width is independent of font size; no async work or effect feedback.",
+  "privacy": "Original PrivacyText/PrivacyView aliases retained; original currency strings byte equivalent; no logging/persistence/data-source or handler edits.",
+  "native": "Only supported React Native flex, padding, fontSize, lineHeight, and onLayout used.",
+  "runtimeGate": "PASS: all23 final local cases, original strings, sign semantics, privacy and handlers verified. Production postflight remains a separate release check.",
+  "targetedTests": {
+    "status": "PASS",
+    "passed": 64,
+    "failed": 0,
+    "files": [
+      "desktopCalendar.test",
+      "forecastDisplay.test",
+      "moneyPrivacy.test",
+      "debtPaymentPlan.test"
+    ],
+    "log": "/tmp/forecast-horizontal-20261031/sentinel-focused-tests.log",
+    "execution": "Existing compiled tests; all relevant pure library source unchanged in this two-file diff. Run from artifacts/mobile as source-inspection tests require that cwd."
+  },
+  "diffCheck": "PASS",
+  "completedRuntimeEvidence": {
+    "status": "PASS",
+    "bundleSha256": "baa65fbfcba5640768d43c17b132df221827da84235865b9ba4076dd6087b484",
+    "counts": {
+      "mobile": 16,
+      "desktop": 4,
+      "applied": 1,
+      "privacy": 2
+    },
+    "total": 23,
+    "checkedEntryRecords": 21,
+    "geometry": "320 dark/light full $9999999.99 = 55.375px in 57.328px slot; 390 normal 13px horizontal values; desktop negative Projected close whole at18px with wrapped trend.",
+    "visualInspections": [
+      "local-browser/mobile/390-dark-normal-debt.png",
+      "local-browser/mobile/320-light-large-debt.png",
+      "local-browser/desktop/1200-dark-large-footer.png"
+    ],
+    "privacy": "Two390 dark/light fixtures used actual Hide/Reveal handlers; all three amounts masked and restored while tiles stay horizontal."
+  },
+  "findings": [],
+  "requiredRework": [],
+  "releaseRecommendation": "PASS for release of source8d6e782b / bundlebaa65fbf, subject to production postflight."
+}

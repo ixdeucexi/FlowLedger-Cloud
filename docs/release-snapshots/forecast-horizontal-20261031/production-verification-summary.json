@@ -1,0 +1,94 @@
+{
+  "status": "PASS",
+  "applicationSource": "8d6e782b2db95b2cab5ea96d3d603ce55ac3f66c",
+  "expectedEntry": "entry-b4766e9939b2750abe2135daaf613ed2.js",
+  "expectedEntrySHA256": "baa65fbfcba5640768d43c17b132df221827da84235865b9ba4076dd6087b484",
+  "entryBytes": 5101147,
+  "origin": "https://flowledger-algo.com",
+  "deployment": "dpl_44vSMCT21RkZ62arL89CFEs6TR4F",
+  "cases": 23,
+  "coverage": {
+    "mobile": {
+      "cases": 16,
+      "widths": [
+        320,
+        390,
+        430,
+        768
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "profiles": [
+        "normal695.60",
+        "large9999999.99 andnegativeprojectedclose"
+      ],
+      "assertions": [
+        "Amount/Paid/Left same y",
+        "three equal adjacent cells",
+        "full currency tokens single line inside each tile",
+        "siblingbill/income/positive-negativeActivity values retained",
+        "Edit/Change date/footer visible and hit tested",
+        "read-only Edit/cancel exercised390 both themes"
+      ]
+    },
+    "desktop": {
+      "cases": 4,
+      "widths": [
+        1200
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "profiles": [
+        "normal",
+        "large-negative"
+      ],
+      "assertions": [
+        "full negative projectedclose sign",
+        "projectedclose one-line18px",
+        "positive/zero and signed event money",
+        "grid and Tightest forecast fullARIA signs",
+        "Close/Addfooter reachable"
+      ]
+    },
+    "applied": {
+      "cases": 1,
+      "width": 390,
+      "theme": "dark",
+      "expected": [
+        "$695.60",
+        "$695.60",
+        "$0.00"
+      ]
+    },
+    "privacy": {
+      "cases": 2,
+      "width": 390,
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "actualHideRevealHandlers": true,
+      "hiddenThreeTileHorizontal": true
+    }
+  },
+  "unresolvedNumericOrPaintBugs": 0,
+  "uncaughtAppErrors": 0,
+  "unknownRequests": 0,
+  "actualCustomerFinancialOrProviderWrites": 0,
+  "allOwnedBrowsersAndServersClosed": true,
+  "ownedQaProcesses": [],
+  "intentionalPresentation": [
+    "Only debt payment facts use restored equal horizontal cells; unchanged sibling Bill/Activity facts may stack",
+    "Desktop uses its existing selected-day summary panel rather than mobile cards",
+    "Calendar grids retain intentional compact money formatting; full values checked in selected-day details andARIA"
+  ],
+  "visualReviews": [
+    "390darknormal debt13px",
+    "320darklarge debt8px"
+  ],
+  "screenshots": 29
+}

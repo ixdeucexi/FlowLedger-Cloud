@@ -1,0 +1,9 @@
+{
+  "status": "PASS",
+  "name": "Horizontal Forecast payment tiles",
+  "deploymentId": "dpl_44vSMCT21RkZ62arL89CFEs6TR4F",
+  "source": "8d6e782b2db95b2cab5ea96d3d603ce55ac3f66c",
+  "bundlePath": "/_expo/static/js/web/entry-b4766e9939b2750abe2135daaf613ed2.js",
+  "bundleSha256": "baa65fbfcba5640768d43c17b132df221827da84235865b9ba4076dd6087b484",
+  "exactBrowserTestedBundle": true
+}

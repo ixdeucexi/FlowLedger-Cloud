@@ -1,0 +1,7 @@
+{
+  "tag": "rollback/prod-before-forecast-horizontal-20261031-0004",
+  "annotatedTagObject": "5bc47d981ab5ecfabc2977f45cb8e142794aa4fc",
+  "source": "48de915d72d9fdefca3f8a447482eebf02b4d98e",
+  "deployment": "dpl_CUfiE8vDX8goGDp2W9wqDNr2HXm5",
+  "remotelyVerifiedBeforeProductionChange": true
+}
