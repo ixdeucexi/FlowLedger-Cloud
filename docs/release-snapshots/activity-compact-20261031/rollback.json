@@ -1,0 +1,7 @@
+{
+  "tag": "rollback/prod-before-activity-compact-20261031-0714",
+  "annotatedTagObject": "1ca644cb206add7007f72316b1e29031a3e3aa0a",
+  "source": "8d6e782b2db95b2cab5ea96d3d603ce55ac3f66c",
+  "deployment": "dpl_44vSMCT21RkZ62arL89CFEs6TR4F",
+  "remotelyVerifiedBeforeProductionChange": true
+}

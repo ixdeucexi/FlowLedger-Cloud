@@ -1,0 +1,21 @@
+# Compact Activity rows
+
+Live at https://flowledger-algo.com. READY production: `dpl_9MRHuawxYTvLiVZE8skJVnJTFGoA`. All four app aliases resolve to the exact application source below.
+
+Restores compact Activity cards with the saved transaction name and details beside a right-aligned amount. The numeric audit's 150px middle-column minimum, 170px amount-column minimum and wrapping row had moved amounts underneath the name and left large empty areas. The source icon is smaller, names can use two lines, and the existing edit/open hint sits at the far right.
+
+The mobile changes are in `artifacts/mobile/app/(tabs)/transactions.tsx`. A local presentation component reserves a stable natural amount-column width, caps it to the available row space and fits complete currency text. Running balances retain their minus sign in both visible text and the row's accessible label. A one-call correction in `DesktopActivityPage.tsx` also keeps negative running-balance signs; positive and zero balances retain their existing format. Data selection, saved-name resolution, calculations, matching and navigation are unchanged. Review confirmed all 89 mobile and 20 desktop event handlers, plus 35 mobile memo/callback declarations, are unchanged.
+
+The existing `activityUi.test.ts` accessibility assertion now checks the actual row Pressable and its minimum touch height, instead of treating the decorative source icon as a separate button. The 78px row and existing 44px modal-close target remain valid. Independent review passed seven Activity UI tests, 14 privacy tests, ten exact amount-label cases and eight signed-balance/accessibility cases. Mobile typecheck, Expo export, configuration, guide, artifact and clean-source checks passed.
+
+Application source: `f6608e4c1986d4384d76da49ce63bbe239b2292b`. Entry: `entry-d24d80c3c9ecd747fc89ff85894ae629.js`, SHA-256 `f624a1fa6060557d52bfa69a63f96fef2925772ea07c9a253b868585a9c47141`.
+
+Final local verification passed 20 cases: 16 phone/tablet cases at 320/390/430/768px and four desktop cases at 1200px, in light/dark themes with ordinary and large signed amounts. Checks cover 120 rows and 336 numeric instances, authoritative dated running balances, unavailable-anchor omission, saved names, pending/applied status, actual Privacy hide/reveal, row opening/closing and hit targets above the bottom navigation. Ordinary phone amounts retain 15px type; extreme $9,999,999.99 values remain complete at 12px on 320px. Spacing also keeps the regular word “Streaming” together on that narrow layout. Stable list-focused screenshots were reviewed in both themes.
+
+No numeric/sign/paint issues, uncaught application errors, unknown requests or real financial/provider writes remain. A pre-existing desktop running-balance sign defect found by the initial smoke was fixed and included in the final checks. Initial fixtures were corrected to respect the ledger's dated-anchor and same-day ordering rules; final evidence uses valid anchors and the exact approved entry above. All owned QA browsers, runners and servers were closed.
+
+Published verification repeated and passed the same 20 cases on the exact approved entry bytes: 120 row checks and 336 numeric instances, with correct negative/positive/zero balances, full amounts, actual Privacy and row controls. Stable actual-scrolled phone screenshots were visually reviewed in both themes; no rows or action hints are covered by the bottom navigation. No unresolved findings or real writes remain, and all QA processes were closed. HTTP postflight passed startup, deep routes, health, missing resources, cache rules, service worker, guide PDF, source/alias provenance and the exact browser-tested entry hash.
+
+Rollback: `rollback/prod-before-activity-compact-20261031-0714`, created and remotely verified before production changes. It captures previous source `8d6e782b2db95b2cab5ea96d3d603ce55ac3f66c` and READY deployment `dpl_44vSMCT21RkZ62arL89CFEs6TR4F`. The unchanged backend remains compatible with this frontend rollback.
+
+Evidence: [release snapshot](release-snapshots/activity-compact-20261031/). Financial/authentication fixtures are fictional and intercepted; no actual financial/provider writes or native hardware execution are claimed.

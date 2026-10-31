@@ -1,0 +1,188 @@
+{
+  "status": "PASS",
+  "baseline": "8ab34ff5d950c2875d002beb0caeec628fdf8106",
+  "file": "artifacts/mobile/app/(tabs)/transactions.tsx",
+  "sourceSha256": "e1ffda61d0076b6b1f4236cb560ff67c4a855324d70d9cb4d959281b607266a2",
+  "parseErrors": 0,
+  "unchangedExistingHandlers": 89,
+  "unchangedMemoAndCallbackDeclarations": 35,
+  "formatterUnchanged": true,
+  "allOtherTopLevelStatementsUnchanged": true,
+  "amountLabelEquivalenceCases": 10,
+  "balanceAndAriaCases": 8,
+  "hooks": "New unconditional local useState in module-scoped component; same floored-width bailout. Column width derives only from original label strings and40% parent cap, never measured font; no width feedback loop or async work.",
+  "privacy": "Same PrivacyText and PrivacyView aliases, labels remain currency strings; no callback/data source/mutation changes.",
+  "native": "Supported flex, width, fontSize, lineHeight, onLayout only.",
+  "touchTarget": "Entire existing Pressable minHeight78 remains actual interactive target. Decorative icon38 does not reduce row tap area.",
+  "runtimeGate": "PASS: final fresh20 cases on f624a1fa bundle include exact desktop negative/positive/zero signs; prior findings resolved. Production postflight separate.",
+  "findings": [],
+  "resolvedFindings": [
+    {
+      "issue": "Decorative icon size mistaken for actual touch target in prior source assertion.",
+      "resolution": "Existing Activity UI test now verifies actual row openItem/txRow Pressable and minHeight>=44; modal44 checks retained."
+    },
+    {
+      "issue": "Desktop Activity running balance omitted negative sign",
+      "resolution": "One conditional signed argument; final actual large row Balance −$19,999,999.98 and zero/positive rows verified in both themes."
+    }
+  ],
+  "focusedTests": {
+    "passed": 21,
+    "failed": 0,
+    "activityUi": {
+      "passed": 7,
+      "execution": "Fresh TypeScript direct Node strip-types",
+      "log": "/tmp/activity-compact-20261031/sentinel-activity-ui-tests-final.log"
+    },
+    "moneyPrivacy": {
+      "passed": 14,
+      "execution": "Existing compiled unchanged privacy source",
+      "log": "/tmp/activity-compact-20261031/sentinel-money-privacy-tests.log"
+    }
+  },
+  "reviewedSource": "f6608e4c1986d4384d76da49ce63bbe239b2292b",
+  "testSourceSha256": "378eae826c712669d8dd2db6725387750ddd82115c3925d3f07cef978df569c2",
+  "scope": [
+    "artifacts/mobile/app/(tabs)/transactions.tsx",
+    "artifacts/mobile/lib/activityUi.test.ts"
+  ],
+  "priorSourceSha256": "5d4972873e7f2d632b9669a2c6ebd67c030737423db5be4fecdcc2086be30825",
+  "polishReview": {
+    "status": "SOURCE PASS",
+    "onlyThreeConstantsChanged": true,
+    "constants": {
+      "glyphEstimate": ".70→.68",
+      "rowGap": "10→8",
+      "moneyColumnMaximum": "43%→40%"
+    },
+    "parseErrors": 0,
+    "unchangedPriorHandlerMemoLabelPrivacyReview": true
+  },
+  "requiredRework": [],
+  "releaseRecommendation": "PASS for f6608e4 / f624a1fa…c47141, subject to production postflight.",
+  "priorCompletedRuntimeEvidence": {
+    "status": "PASS",
+    "applicationSource": "2af4a94292fe4e70a126c9e952c51742500d7109",
+    "bundleSha256": "af0046273eb38febd4837d1dc4e9a0f99e10ced46fd2a33abb1b469bf4b19668",
+    "cases": 20,
+    "groups": {
+      "mobile": 16,
+      "desktop": 4
+    },
+    "widths": [
+      320,
+      390,
+      430,
+      768,
+      1200
+    ],
+    "themes": [
+      "dark",
+      "light"
+    ],
+    "fixtures": [
+      "ordinary signed amounts",
+      "large signed amounts9,999,999.99",
+      "positive observed-anchor balances",
+      "negative observed-anchor balances to39,999,999.96",
+      "missing-anchor balances omitted",
+      "manual editor and pending detail opened/closed",
+      "actual Privacy Hide/Reveal both themes"
+    ],
+    "visualInspections": [
+      "local-browser/mobile/320-dark-large.png",
+      "local-browser/mobile/390-dark-normal.png",
+      "local-browser/mobile/390-light-privacy.png"
+    ],
+    "large320Geometry": {
+      "middleWidth": 81.203125,
+      "rightColumnWidth": 104.796875,
+      "amountGlyphWidth": 98.65625,
+      "amountFont": 12,
+      "amountLines": 1,
+      "balanceFont": 8,
+      "balanceLines": 1,
+      "wholeStreamingWord": true
+    },
+    "ordinary390AmountFont": 15,
+    "unresolvedNumericOrPaintBugs": 0,
+    "errors": 0,
+    "unknownRequests": 0,
+    "actualFinancialOrProviderWrites": 0,
+    "allOwnedBrowsersAndServerClosed": true,
+    "proofs": [
+      "local-browser/mobile/verification-summary.json",
+      "local-browser/desktop/verification-summary.json"
+    ]
+  },
+  "priorReviewedSource": "2af4a94292fe4e70a126c9e952c51742500d7109",
+  "desktopRunningBalanceReview": {
+    "status": "SOURCE PASS",
+    "file": "artifacts/mobile/components/desktop/DesktopActivityPage.tsx",
+    "sourceSha256": "b76552dc4328b25c564063c22f4248e44fb5a373a1a9ef5f6a7fade2c525ec1e",
+    "parseErrors": 0,
+    "unchangedExistingHandlers": 20,
+    "scope": "Exactly one money() call adds signed=true only for negative row.runningBalance; guard, formatter and all other calls unchanged.",
+    "actualExtractedCallCases": 7,
+    "positive": "$7,439.22 no+",
+    "negative": "−$19,999,999.98 exactly one−",
+    "zero": "$0.00 unchanged",
+    "privacy": "Same existing PrivacyText; no callback/navigation/calculation/persistence changes."
+  },
+  "expectedEntry": {
+    "path": "/_expo/static/js/web/entry-d24d80c3c9ecd747fc89ff85894ae629.js",
+    "sha256": "f624a1fa6060557d52bfa69a63f96fef2925772ea07c9a253b868585a9c47141",
+    "bytes": 5102268
+  },
+  "typecheckAndExportEvidence": {
+    "status": "PASS",
+    "typecheckLog": "/tmp/activity-compact-20261031/typecheck-final.log",
+    "exportLog": "/tmp/activity-compact-20261031/export-final.log"
+  },
+  "completedRuntimeEvidence": {
+    "status": "PASS",
+    "applicationSource": "f6608e4c1986d4384d76da49ce63bbe239b2292b",
+    "bundleSha256": "f624a1fa6060557d52bfa69a63f96fef2925772ea07c9a253b868585a9c47141",
+    "cases": 20,
+    "groups": {
+      "mobile": 16,
+      "desktop": 4
+    },
+    "widths": [
+      320,
+      390,
+      430,
+      768,
+      1200
+    ],
+    "themes": [
+      "dark",
+      "light"
+    ],
+    "observedDesktop": {
+      "positive": "Balance $7,439.22",
+      "negative": "Balance −$19,999,999.98",
+      "zero": "Balance $0.00",
+      "runningBalanceSignIssues": 0,
+      "paintOverlapPx": 0
+    },
+    "mobileRows": 96,
+    "desktopRows": 24,
+    "desktopNumericChecks": 160,
+    "observations": "Full original amounts, compact adjacent columns, saved labels, whole Streaming word at320, actual negative/positive/zero balances, unavailable-anchor omission, actual Privacy Hide/Reveal and detail/editor open-close.",
+    "visualInspections": [
+      "local-browser/mobile/320-dark-large.png",
+      "local-browser/mobile/390-dark-normal.png",
+      "local-browser/desktop/1200-dark-large-rows.png"
+    ],
+    "proofs": [
+      "local-browser/mobile/verification-summary.json",
+      "local-browser/desktop/verification-summary.json"
+    ],
+    "unresolvedNumericOrPaintBugs": 0,
+    "errors": 0,
+    "unknownRequests": 0,
+    "actualFinancialOrProviderWrites": 0,
+    "allOwnedBrowsersAndServerClosed": true
+  }
+}

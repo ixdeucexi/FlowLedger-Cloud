@@ -1,0 +1,2 @@
+Production postflight passed: dpl_9MRHuawxYTvLiVZE8skJVnJTFGoA at clean commit f6608e4c1986d4384d76da49ce63bbe239b2292b.
+{"status":"PASS","name":"Compact Activity transaction rows","deploymentId":"dpl_9MRHuawxYTvLiVZE8skJVnJTFGoA","source":"f6608e4c1986d4384d76da49ce63bbe239b2292b","bundlePath":"/_expo/static/js/web/entry-d24d80c3c9ecd747fc89ff85894ae629.js","bundleSha256":"f624a1fa6060557d52bfa69a63f96fef2925772ea07c9a253b868585a9c47141","exactBrowserTestedBundle":true}

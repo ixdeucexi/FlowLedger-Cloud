@@ -1,0 +1,19 @@
+(node:312118) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/FlowLedger-Cloud/artifacts/mobile/lib/activityUi.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/FlowLedger-Cloud/artifacts/mobile/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ Activity uses the competitive money-movement hierarchy on phone and desktop (1.502045ms)
+✔ Activity keeps exact money and accessible modal and touch-target contracts (0.775479ms)
+✔ Activity reuses the complete account-aware ledger and keeps filtered weekly totals honest (0.537681ms)
+✔ review and pending attention remain separate actionable destinations (0.858604ms)
+✔ pending charges can create one prefilled replacement-safe Activity transaction (0.280653ms)
+✔ transaction creation blocks a second tap before React can rerender (0.195415ms)
+✔ compact desktop Activity keeps its hero and feed at intrinsic height (1.508024ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 144.293929

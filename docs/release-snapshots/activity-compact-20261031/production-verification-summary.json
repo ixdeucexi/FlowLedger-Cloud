@@ -1,0 +1,86 @@
+{
+  "status": "PASS",
+  "applicationSource": "f6608e4c1986d4384d76da49ce63bbe239b2292b",
+  "expectedEntry": "entry-d24d80c3c9ecd747fc89ff85894ae629.js",
+  "expectedEntrySHA256": "f624a1fa6060557d52bfa69a63f96fef2925772ea07c9a253b868585a9c47141",
+  "entryBytes": 5102268,
+  "origin": "https://flowledger-algo.com",
+  "deployment": "dpl_9MRHuawxYTvLiVZE8skJVnJTFGoA",
+  "cases": 20,
+  "coverage": {
+    "mobile": {
+      "cases": 16,
+      "widths": [
+        320,
+        390,
+        430,
+        768
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "profiles": [
+        "normal ownerlike amounts",
+        "large signed \u00b19,999,999.99 and negative observed anchor"
+      ],
+      "rowChecks": 96,
+      "numericInstances": 176,
+      "assertions": [
+        "source icon, saved label/metadata, full signed amount and hint remain adjacent",
+        "full sign/cents and running balances fit in one line",
+        "ordinary wordStreaming intact",
+        "normal cards compact78\u2013110px",
+        "all saved names retained in full accessible label; RAW BANK merchant not displayed",
+        "actual list scrolling, row/money/action hit testing above fixednav",
+        "positive/zero/negative observed balance signs",
+        "no balance without eligible datedanchor",
+        "actual Privacyhide/reveal and readonly editor/detailopenclose390both themes"
+      ]
+    },
+    "desktop": {
+      "cases": 4,
+      "widths": [
+        1200
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "profiles": [
+        "normal",
+        "large"
+      ],
+      "numericInstances": 160,
+      "rowChecks": 24,
+      "neighborPaintOverlapPx": 0,
+      "assertions": [
+        "saved labels/signedtransactionamounts/geometry",
+        "readonly pendingdetail open+Done",
+        "actualPrivacy hide/restore"
+      ],
+      "negativeRunningBalancesRetainOneMinus": true,
+      "positiveZeroRunningBalancesNoPlus": true
+    }
+  },
+  "rowChecks": 120,
+  "unresolvedNumericOrPaintBugs": 0,
+  "unresolvedNumericOrPaintBugsInChangedMobileRows": 0,
+  "desktopVisualLayoutIssues": 0,
+  "desktopRunningBalanceSignIssues": [],
+  "uncaughtAppErrors": 0,
+  "unknownRequests": 0,
+  "actualCustomerFinancialOrProviderWrites": 0,
+  "allOwnedBrowsersAndServersClosed": true,
+  "ownedQaProcesses": [],
+  "intentionalPresentation": [
+    "Saved names may use two lines and ellipsis; full names retained in row accessible label/details",
+    "Metadata and long debt badge ellipsis remain intentional",
+    "Only date-unambiguous transactions strictly after checking observation get running balances"
+  ],
+  "visualReviews": [
+    "390darknormal actualscrolledlist",
+    "320darklarge actualscrolledlist ordinaryStreaming word intact"
+  ],
+  "screenshots": 30
+}

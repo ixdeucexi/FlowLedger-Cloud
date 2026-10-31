@@ -1,0 +1,22 @@
+✔ display currency runs preserve signs, whitespace, compact amounts and ordinary dates exactly (20.866596ms)
+✔ currency run scanning and Privacy Mode remain independent across repeated calls (2.047955ms)
+✔ private display masks signed, compact, scientific and ISO currency without changing dates, counts or APR (0.321304ms)
+✔ every ordinary app currency value is removed from presentation and exactly restored (29.649996ms)
+✔ actual Intl currency and Activity strings in device locales conceal complete numbers (1.888805ms)
+✔ adjacent JSX currency fragments and nested styled text do not leak numeric children (0.396737ms)
+✔ screen reader and tooltip values are masked without mutating underlying control props (0.280993ms)
+✔ only a saved boolean enables privacy; preference scopes cannot collide (0.360312ms)
+✔ late hydration and save callbacks cannot overwrite a new choice, new household or ABA return (0.348605ms)
+✔ retained asynchronous alert callbacks use privacy at invocation and conceal unlabelled service amounts (0.389066ms)
+✔ returning to a household waits for its hide intent queued behind another interface write (0.267263ms)
+✔ a failed hide remains fail-closed even after the interface queue has been cleared (0.507475ms)
+✔ amount-capable search conceals numeric drafts without changing the query or clear date inputs (0.340102ms)
+✔ a settled legacy personal plan can toggle privacy; loading, errors and signout cannot reuse it (0.137507ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 134.071073
