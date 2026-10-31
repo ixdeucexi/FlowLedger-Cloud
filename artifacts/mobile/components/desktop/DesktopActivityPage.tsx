@@ -694,7 +694,7 @@ export function DesktopActivityPage({
                         </Text>
                         {row.runningBalance != null ? (
                           <Text style={styles.runningBalance}>
-                            Balance {money(row.runningBalance)}
+                            Balance {money(row.runningBalance, row.runningBalance < 0)}
                           </Text>
                         ) : null}
                       </View>
