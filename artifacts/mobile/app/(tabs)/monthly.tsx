@@ -185,6 +185,20 @@ function CalendarDebtPaymentCard({
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState<string>();
   const [showRetainedPaymentInfo, setShowRetainedPaymentInfo] = useState(false);
+  const [moneyRowWidth, setMoneyRowWidth] = useState(0);
+  const moneyLabels = [
+    `$${amount.toFixed(2)}`,
+    `$${(applied ? amount : 0).toFixed(2)}`,
+    `$${(applied ? 0 : amount).toFixed(2)}`,
+  ];
+  // Fit complete currency tokens in three equal tiles, including on web where
+  // native text auto-fitting is unavailable. Layout width is independent of type.
+  const moneyTextUnits = Math.max(...moneyLabels.map(label => Array.from(label)
+    .reduce((units, character) => units + (character === "." || character === "," ? 0.34 : 0.7), 0)));
+  const moneyFontSize = moneyRowWidth > 0
+    ? Math.max(8, Math.min(13, Math.floor(((moneyRowWidth - 12) / 3 - 8) / moneyTextUnits)))
+    : 13;
+  const moneyValueStyle = { fontSize: moneyFontSize, lineHeight: 17 };
   const parsedDraft = parsePlannedDebtAmount(draft);
 
   useEffect(() => {
@@ -246,18 +260,24 @@ function CalendarDebtPaymentCard({
         </View>
       </View>
 
-      <View style={styles.dayBillNumbers}>
-        <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
+      <View
+        style={[styles.dayBillNumbers, styles.dayDebtNumberRow]}
+        onLayout={event => {
+          const width = Math.floor(event.nativeEvent.layout.width);
+          setMoneyRowWidth(current => current === width ? current : width);
+        }}
+      >
+        <View style={[styles.dayBillNumberTile, styles.dayDebtNumberTile, { backgroundColor: c.background + "66" }]}>
           <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Amount</Text>
-          <Text    style={[styles.dayBillNumberValue, { color: c.foreground }]}>${amount.toFixed(2)}</Text>
+          <Text style={[styles.dayBillNumberValue, moneyValueStyle, { color: c.foreground }]}>{moneyLabels[0]}</Text>
         </View>
-        <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
+        <View style={[styles.dayBillNumberTile, styles.dayDebtNumberTile, { backgroundColor: c.background + "66" }]}>
           <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Paid</Text>
-          <Text    style={[styles.dayBillNumberValue, { color: applied ? c.success : c.mutedForeground }]}>${(applied ? amount : 0).toFixed(2)}</Text>
+          <Text style={[styles.dayBillNumberValue, moneyValueStyle, { color: applied ? c.success : c.mutedForeground }]}>{moneyLabels[1]}</Text>
         </View>
-        <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
+        <View style={[styles.dayBillNumberTile, styles.dayDebtNumberTile, { backgroundColor: c.background + "66" }]}>
           <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Left</Text>
-          <Text    style={[styles.dayBillNumberValue, { color: applied ? c.success : c.warning }]}>${(applied ? 0 : amount).toFixed(2)}</Text>
+          <Text style={[styles.dayBillNumberValue, moneyValueStyle, { color: applied ? c.success : c.warning }]}>{moneyLabels[2]}</Text>
         </View>
       </View>
 
@@ -3552,6 +3572,8 @@ const styles = StyleSheet.create({
   dayBillMeta: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
   dayBillNumbers: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   dayBillNumberTile: { flex: 1, minWidth: 160, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 8 },
+  dayDebtNumberRow: { flexWrap: "nowrap", gap: 6 },
+  dayDebtNumberTile: { minWidth: 0, paddingHorizontal: 4 },
   dayBillNumberLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.5 },
   dayBillNumberValue: { maxWidth: "100%", fontSize: 13, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
   dayDebtPlanSummary: { borderWidth: 1, borderRadius: 12, padding: 10, gap: 3 },
