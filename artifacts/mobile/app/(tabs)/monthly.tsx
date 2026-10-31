@@ -195,10 +195,12 @@ function CalendarDebtPaymentCard({
   // native text auto-fitting is unavailable. Layout width is independent of type.
   const moneyTextUnits = Math.max(...moneyLabels.map(label => Array.from(label)
     .reduce((units, character) => units + (character === "." || character === "," ? 0.34 : 0.7), 0)));
+  const moneyTilePadding = moneyRowWidth > 0 && moneyRowWidth < 230 ? 2 : 4;
   const moneyFontSize = moneyRowWidth > 0
-    ? Math.max(8, Math.min(13, Math.floor(((moneyRowWidth - 12) / 3 - 8) / moneyTextUnits)))
+    ? Math.max(8, Math.min(13, Math.floor(((moneyRowWidth - 12) / 3 - moneyTilePadding * 2) / moneyTextUnits)))
     : 13;
   const moneyValueStyle = { fontSize: moneyFontSize, lineHeight: 17 };
+  const moneyTileStyle = { paddingHorizontal: moneyTilePadding };
   const parsedDraft = parsePlannedDebtAmount(draft);
 
   useEffect(() => {
@@ -267,15 +269,15 @@ function CalendarDebtPaymentCard({
           setMoneyRowWidth(current => current === width ? current : width);
         }}
       >
-        <View style={[styles.dayBillNumberTile, styles.dayDebtNumberTile, { backgroundColor: c.background + "66" }]}>
+        <View style={[styles.dayBillNumberTile, styles.dayDebtNumberTile, moneyTileStyle, { backgroundColor: c.background + "66" }]}>
           <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Amount</Text>
           <Text style={[styles.dayBillNumberValue, moneyValueStyle, { color: c.foreground }]}>{moneyLabels[0]}</Text>
         </View>
-        <View style={[styles.dayBillNumberTile, styles.dayDebtNumberTile, { backgroundColor: c.background + "66" }]}>
+        <View style={[styles.dayBillNumberTile, styles.dayDebtNumberTile, moneyTileStyle, { backgroundColor: c.background + "66" }]}>
           <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Paid</Text>
           <Text style={[styles.dayBillNumberValue, moneyValueStyle, { color: applied ? c.success : c.mutedForeground }]}>{moneyLabels[1]}</Text>
         </View>
-        <View style={[styles.dayBillNumberTile, styles.dayDebtNumberTile, { backgroundColor: c.background + "66" }]}>
+        <View style={[styles.dayBillNumberTile, styles.dayDebtNumberTile, moneyTileStyle, { backgroundColor: c.background + "66" }]}>
           <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Left</Text>
           <Text style={[styles.dayBillNumberValue, moneyValueStyle, { color: applied ? c.success : c.warning }]}>{moneyLabels[2]}</Text>
         </View>
