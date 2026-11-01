@@ -16,6 +16,8 @@ import { buildSimulationEditorChange, defaultSimulationResumeDate, replaceSimula
 
 import { ScenarioOptionPicker } from "@/components/ScenarioOptionPicker";
 import { SavedScenarioComparison } from "@/components/SavedScenarioComparison";
+import { SimulatorCalendar } from "@/components/SimulatorCalendar";
+import { createCalendarEventLabelResolver } from "@/lib/desktopCalendar";
 import { compareSavedPlanScenarios, defaultScenarioComparisonHorizon, type SavedComparisonOption } from "@/lib/planSimulationComparison";
 import { scenarioDeviceKeys, emptyScenarioLibrary, loadScenarioDeviceState, persistScenarioLibrary, persistScenarioWorking, putDeviceScenario, deleteDeviceScenario, scenarioDraftFingerprint, type DeviceScenarioLibrary } from "@/lib/planSimulationLibrary";
 
@@ -419,6 +421,7 @@ function PlanSimulatorWorkspace({ canPersistScenarios, canSaveDevice, canCompare
     pendingPlanMatches,
     previewDebtSnowball,
     settings,
+    transactions,
   } = useBudget();
   const startDate = useLocalDay();
   const now = useMemo(() => new Date(`${startDate}T12:00:00`), [startDate]);
@@ -448,7 +451,7 @@ function PlanSimulatorWorkspace({ canPersistScenarios, canSaveDevice, canCompare
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editorVersion, setEditorVersion] = useState(0);
   const [editorOpen, setEditorOpen] = useState(false);
-  const [mobileView, setMobileView] = useState<"build" | "compare">("build");
+  const [mobileView, setMobileView] = useState<"build" | "compare" | "calendar">("build");
   const editorHeadingRef = useRef<View>(null);
   const returnFocusRef = useRef<{ focus: (options?: { preventScroll: boolean }) => void } | null>(null);
   const editingChange = draft.changes.find(change => change.id === editingId) ?? null;
@@ -731,6 +734,7 @@ function PlanSimulatorWorkspace({ canPersistScenarios, canSaveDevice, canCompare
     forecastConfidence: forecastConfidence.level,
     currentDebtFreeDate: livePayoffPreview?.debtFreeDate ?? null,
   }), [dashboardModel.algorithmSuite.flowScore.requiredAmountCovered, dashboardModel.algorithmSuite.flowScore.requiredAmountDue, dashboardModel.algorithmSuite.flowScore.score, dashboardModel.algorithmSuite.stability.protectedDays, dashboardModel.algorithmSuite.stability.reserveTarget, forecastConfidence.level, livePayoffPreview?.debtFreeDate]);
+  const resolveCalendarEventLabel = useMemo(() => createCalendarEventLabelResolver(transactions, bills, incomes), [transactions, bills, incomes]);
   const baselineResult = useMemo(() => projectPlanSimulation({ baseline, changes: [], references, metrics, safetyFloor: settings.safety_floor, useDebtControlTimeline: hasSimulationDebtControls(draft.changes) }), [baseline, draft.changes, metrics, references, settings.safety_floor]);
   const scenarioResult = useMemo(() => projectPlanSimulation({
     baseline,
@@ -915,10 +919,17 @@ function PlanSimulatorWorkspace({ canPersistScenarios, canSaveDevice, canCompare
         {!canEditHousehold && canPersistScenarios ? <View style={[styles.viewerNote, { backgroundColor: c.warning + "12", borderColor: c.warning + "40" }]}><Feather name="eye" size={16} color={c.warning} /><AppText style={[styles.viewerText, { color: c.foreground }]}>View-only access: saved household scenarios are readable. Your private working draft remains available. Named copies require Pro; household scenarios cannot be updated with view-only access.</AppText></View> : null}
         {message ? <View accessibilityRole="alert" style={[styles.message, { backgroundColor: c.card, borderColor: c.border }]}><AppText style={[styles.messageText, { color: c.foreground }]}>{message}</AppText><Pressable accessibilityRole="button" accessibilityLabel="Dismiss message" onPress={() => setMessage("")} hitSlop={8}><Feather name="x" size={16} color={c.mutedForeground} /></Pressable></View> : null}
         {pendingSwitch ? <View accessibilityRole="alert" style={[styles.card, { backgroundColor: c.background, borderColor: c.warning }]}><AppText accessibilityRole="header" style={[styles.cardTitle, { color: c.foreground }]}>Save your working changes?</AppText><AppText style={[styles.scopeNote, { color: c.mutedForeground }]}>Save before opening another scenario, discard these working changes, or keep editing. Saved options stay unchanged until you update them.</AppText><View style={styles.actionWrap}>{canSaveDevice ? <Button label="Save & switch" primary disabled={saving || (!deviceReady && !householdWriteEligible)} onPress={() => void (async () => { const next = pendingSwitch;if (await saveDraft()) applySelection(next); })()} /> : null}<Button label="Discard & switch" danger disabled={saving} onPress={() => applySelection(pendingSwitch)} /><Button label="Keep editing" disabled={saving} onPress={() => setPendingSwitch(null)} /></View></View> : null}
-        {!desktop ? <View accessibilityRole="tablist" accessibilityLabel="Simulator workspace" style={[styles.workspaceTabs, { backgroundColor: c.card, borderColor: c.border }]}>
-          {(["build", "compare"] as const).map(view => <Pressable key={view} accessibilityRole="tab" accessibilityLabel={view === "build" ? "Build" : "Compare"} accessibilityState={{ selected: mobileView === view }} aria-selected={mobileView === view} onPress={() => setMobileView(view)} style={[styles.workspaceTab, { backgroundColor: mobileView === view ? c.primary : "transparent" }]}><Feather name={view === "build" ? "sliders" : "bar-chart-2"} size={16} color={mobileView === view ? c.primaryForeground : c.mutedForeground} /><AppText style={[styles.workspaceTabText, { color: mobileView === view ? c.primaryForeground : c.foreground }]}>{view === "build" ? "Build" : "Compare"}{view === "compare" && (!scenarioResult.complete || scenarioRiskDay) ? " · !" : ""}</AppText></Pressable>)}
-        </View> : null}
-        <View style={[styles.workspace, desktop && styles.workspaceDesktop]}>
+        <View accessibilityRole="tablist" accessibilityLabel="Simulator workspace" style={[styles.workspaceTabs, { backgroundColor: c.card, borderColor: c.border }]}>
+          {((desktop ? ["build", "calendar"] : ["build", "compare", "calendar"]) as Array<"build" | "compare" | "calendar">).map(view => {
+            const label = view === "build" ? desktop ? "Workspace" : "Build" : view === "compare" ? "Compare" : "Calendar";
+            const selected = desktop && view === "build" ? mobileView !== "calendar" : mobileView === view;
+            return <Pressable key={view} accessibilityRole="tab" accessibilityLabel={label} accessibilityState={{ selected }} aria-selected={selected} onPress={() => setMobileView(view)} style={[styles.workspaceTab, { backgroundColor: selected ? c.primary : "transparent" }]}><Feather name={view === "build" ? "sliders" : view === "compare" ? "bar-chart-2" : "calendar"} size={16} color={selected ? c.primaryForeground : c.mutedForeground} /><AppText style={[styles.workspaceTabText, { color: selected ? c.primaryForeground : c.foreground }]}>{label}{view === "compare" && (!scenarioResult.complete || scenarioRiskDay) ? " · !" : ""}</AppText></Pressable>;
+          })}
+        </View>
+        <View style={mobileView !== "calendar" ? styles.calendarHidden : undefined} accessibilityElementsHidden={mobileView !== "calendar"} importantForAccessibility={mobileView !== "calendar" ? "no-hide-descendants" : "auto"} aria-hidden={mobileView !== "calendar"}>
+          <SimulatorCalendar key={draftLoadScope} baseline={baselineResult} scenario={scenarioResult} startDate={baseline.startDate} endDate={baseline.endDate} scenarioName={draft.name} safetyFloor={settings.safety_floor} resolveEventLabel={resolveCalendarEventLabel} />
+        </View>
+        {mobileView !== "calendar" ? <View style={[styles.workspace, desktop && styles.workspaceDesktop]}>
           {desktop || mobileView === "build" ? <View style={styles.editorColumn}>
             <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
               <AppText accessibilityRole="header" tone="title" style={[styles.cardTitle, { color: c.foreground }]}>Your scenario</AppText>
@@ -951,7 +962,7 @@ function PlanSimulatorWorkspace({ canPersistScenarios, canSaveDevice, canCompare
             {draft.invalidDefinition ? <AppText accessibilityRole="alert" style={[styles.editSemantics, { color: c.warning }]}>Reset unsupported changes before adding or editing this scenario.</AppText> : null}
           </View> : null}
           {desktop || mobileView === "compare" ? <View style={[styles.resultsColumn, desktop && styles.resultsColumnDesktop]}>{!canCompareSaved ? <ResultsPanel baseline={baselineResult} scenario={scenarioResult} safetyFloor={settings.safety_floor} /> : null}<PlanFeatureGate feature="scenario_comparison" compact><SavedScenarioComparison key={draftLoadScope} options={savedOptions} selected={comparisonKeys} onSelect={(index, key) => { if (!canCompareSaved || draftLoadScopeRef.current !== draftLoadScope || scenarioAccessRef.current !== scenarioAccessOwner) return;setComparisonKeys(previous => { const next: [string, string] = [...previous];next[index] = key;return next; });setComparisonHorizon(null); }} horizon={commonHorizon} onHorizon={value => { if (canCompareSaved && draftLoadScopeRef.current === draftLoadScope && scenarioAccessRef.current === scenarioAccessOwner) setComparisonHorizon(value); }} comparison={savedComparison} /></PlanFeatureGate>{canCompareSaved && !savedComparison ? <ResultsPanel baseline={baselineResult} scenario={scenarioResult} safetyFloor={settings.safety_floor} /> : null}</View> : null}
-        </View>
+        </View> : null}
       </ScrollView>
       {editorOpen ? <Modal visible transparent animationType={desktop ? "fade" : "slide"} onRequestClose={closeEditor} onShow={focusEditor}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.editorOverlay, desktop && DESKTOP_MODAL_OVERLAY]}>
@@ -987,7 +998,7 @@ const styles = StyleSheet.create({
   workspace: { gap: 16 }, workspaceDesktop: { flexDirection: "row", alignItems: "flex-start", gap: 20 }, editorColumn: { flex: 1, minWidth: 0, gap: 16 }, resultsColumn: { minWidth: 0, gap: 16 }, resultsColumnDesktop: { width: "42%", maxWidth: 600, position: Platform.OS === "web" ? "sticky" as any : "relative", top: 16 },
   card: { borderWidth: 1, borderRadius: 22, padding: 16 }, cardTitle: { fontSize: 18, fontFamily: "Inter_800ExtraBold" }, cardDescription: { fontSize: 12, marginTop: 4, lineHeight: 18 }, field: { marginTop: 13 }, fieldLabel: { fontSize: 12, fontFamily: "Inter_800ExtraBold", marginBottom: 6 }, input: { width: "100%", minHeight: 44, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, fontSize: 14, fontFamily: "Inter_500Medium" }, scopeNote: { fontSize: 12, lineHeight: 16, marginTop: 12 },
   button: { minHeight: 44, borderWidth: 1, borderRadius: 12, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 }, buttonText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" }, actionWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 14 }, savingRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 }, savingText: { fontSize: 11 },
-  workspaceTabs: { flexDirection: "row", borderWidth: 1, borderRadius: 15, padding: 4, gap: 4 }, workspaceTab: { flex: 1, minHeight: 44, borderRadius: 11, flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center" }, workspaceTabText: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  workspaceTabs: { flexDirection: "row", borderWidth: 1, borderRadius: 15, padding: 4, gap: 4 }, workspaceTab: { flex: 1, minHeight: 44, borderRadius: 11, flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center" }, workspaceTabText: { fontSize: 14, fontFamily: "Inter_700Bold" }, calendarHidden: { display: "none" },
   mobileAddChange: { width: "100%" }, changesToolbar: { flexDirection: "row", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between", marginBottom: 12 }, buildStatus: { borderWidth: 1, borderRadius: 17, padding: 13, gap: 12 }, buildStatusTitle: { fontSize: 14, fontFamily: "Inter_700Bold" }, buildStatusText: { fontSize: 12, lineHeight: 18, marginTop: 4 },
   editorOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(2,6,23,0.7)" }, editorSheet: { maxHeight: "92%", width: "100%", borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, overflow: "hidden" }, sheetHandle: { height: 4, width: 42, borderRadius: 2, alignSelf: "center", marginTop: 10 }, editorSheetHeader: { paddingHorizontal: 18, paddingVertical: 12, flexDirection: "row", alignItems: "center", gap: 12, borderBottomWidth: 1 }, editorScrollContent: { paddingBottom: 24 }, composerBody: { padding: 18 },
   composerHeading: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginBottom: 16 }, editorIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },

@@ -227,6 +227,7 @@
     ,"lib/planSimulationAccess.test.ts"
     ,"lib/debtReportAccess.test.ts"
     ,"lib/planSimulationComparison.test.ts"
+    ,"lib/planSimulationCalendar.test.ts"
     ,"lib/simulatorEditorHistory.test.ts"
     ,"lib/floExperience.ts"
     ,"lib/floExperience.test.ts"
