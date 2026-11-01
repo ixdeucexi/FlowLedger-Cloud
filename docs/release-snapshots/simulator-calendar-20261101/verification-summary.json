@@ -1,0 +1,36 @@
+{
+  "status": "LIVE_PASS",
+  "verifiedAt": "2026-11-01T22:11:40.345870+00:00",
+  "source": "d6209eafda2c099b1adead5570eeed3efa647e38",
+  "deployment": "dpl_FC4PUn65fZzCRU9bv6vG1gVKceQj",
+  "immutableUrl": "flow-ledger-cloud-palgwwn6f-flow-ledger-s-projects.vercel.app",
+  "productionAliases": 4,
+  "bundle": {
+    "entry": "entry-414105de47e0ef8974671d3683ce749e.js",
+    "bytes": 5151002,
+    "sha256": "109d40ca184ec43033f444a45b3a8c6bbd6d4a13f5291f10c0411afd3acd7a61"
+  },
+  "tests": {
+    "mobile": 1569,
+    "performance": 5,
+    "focusedForge": 80,
+    "focusedSentinel": 94,
+    "types": "PASS",
+    "configGuideArtifactSource": "PASS"
+  },
+  "browser": {
+    "local": "PASS",
+    "production": "PASS",
+    "contextsPerMainRun": 4,
+    "stagesPerMainRun": 20,
+    "entryLoadsPerMainRun": 5,
+    "supplementaryFocus": "PASS",
+    "financialSnapshotsUnchanged": true,
+    "actualFinancialWrites": 0,
+    "actualProviderCalls": 0,
+    "allRunnersClosed": true,
+    "hostedAnalyticsCspRefusal": "Observed and classified; no outbound beacon or app failure"
+  },
+  "httpPostflight": "PASS",
+  "rollback": "rollback/prod-before-simulator-calendar-20261101-2144"
+}

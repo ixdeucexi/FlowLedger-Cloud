@@ -1,0 +1,186 @@
+{
+  "status": "PASS",
+  "info": {
+    "rect": {
+      "x": 31,
+      "y": 443,
+      "width": 328,
+      "height": 25,
+      "top": 443,
+      "right": 359,
+      "bottom": 468,
+      "left": 31
+    },
+    "active": "Thursday, November 12, 2026",
+    "viewport": 900
+  },
+  "proof": {
+    "origin": "https://flowledger-algo.com",
+    "expectedSHA256": "109d40ca184ec43033f444a45b3a8c6bbd6d4a13f5291f10c0411afd3acd7a61",
+    "bundleLoads": [
+      {
+        "path": "/_expo/static/js/web/entry-414105de47e0ef8974671d3683ce749e.js",
+        "sha256": "109d40ca184ec43033f444a45b3a8c6bbd6d4a13f5291f10c0411afd3acd7a61",
+        "bytes": 5151002,
+        "status": 200
+      }
+    ],
+    "financialBefore": "1d044d000573280fa69c6bde8946d7ba9aabe231f1113d13fbd502ea94c82872",
+    "financialAfter": "1d044d000573280fa69c6bde8946d7ba9aabe231f1113d13fbd502ea94c82872",
+    "financialSnapshotsUnchanged": true,
+    "actualFinancialWrites": 0,
+    "actualProviderCalls": 0,
+    "blockedFinancialWrites": [],
+    "unknownRequests": [],
+    "uncaughtAppErrors": [],
+    "unexpectedConsoleErrors": [],
+    "hostedCspDiagnostics": 1,
+    "requests": [
+      {
+        "kind": "fictional_table",
+        "table": "feedback_admins",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "household_members",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "user_preferences",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "households",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "budgets",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "household_daily_checking_closes",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "transactions",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "household_settings",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "bills",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "monthly_overrides",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "plaid_transactions",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "pending_plan_matches",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "incomes",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "goals",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "extra_payments",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "accounts",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "plaid_accounts",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "decisions",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "bill_date_moves",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_rpc",
+        "name": "get_household_feature_access",
+        "method": "POST"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "app_diagnostics",
+        "method": "POST"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "category_budgets",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "plan_simulations",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_rpc",
+        "name": "get_household_members",
+        "method": "POST"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "household_activity",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "categories",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_rpc",
+        "name": "sync_due_debt_transactions",
+        "method": "POST"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "transactions",
+        "method": "GET"
+      },
+      {
+        "kind": "fictional_table",
+        "table": "bills",
+        "method": "GET"
+      }
+    ]
+  }
+}

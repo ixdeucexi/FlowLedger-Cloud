@@ -1,0 +1,8 @@
+{
+  "ref": "rollback/prod-before-simulator-calendar-20261101-2144",
+  "tagObject": "d46e1114dfa87c698732dcccf4ecd7acebd0c272",
+  "source": "513a26071133a0379c213dd8809d13c1488d3254",
+  "deployment": "dpl_7sMtM5zxUFvf5HgZGubmb6JBYBxi",
+  "remoteVerified": true,
+  "createdBeforeProductionChange": true
+}

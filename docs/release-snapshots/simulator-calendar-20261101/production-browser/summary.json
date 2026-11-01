@@ -1,0 +1,156 @@
+{
+  "status": "PASS",
+  "origin": "https://flowledger-algo.com",
+  "expectedSHA256": "109d40ca184ec43033f444a45b3a8c6bbd6d4a13f5291f10c0411afd3acd7a61",
+  "contexts": 4,
+  "stages": 20,
+  "actualEntryLoadsVerified": 5,
+  "financialSnapshotsUnchanged": true,
+  "actualFinancialWrites": 0,
+  "actualProviderCalls": 0,
+  "hostedCspDiagnostics": 5,
+  "unexpectedConsoleErrors": 0,
+  "uncaughtAppErrors": 0,
+  "unknownRequests": 0,
+  "allOwnedBrowsersContextsAndServersClosed": true,
+  "selectedScreenshots": [
+    "390-dark-initial-detail.png",
+    "390-dark-exact-day-details.png",
+    "320-dark-private-calendar.png",
+    "320-dark-revealed-calendar.png",
+    "320-light-free-risk-detail.png",
+    "1200-light-working-calendar.png"
+  ],
+  "checks": [
+    {
+      "name": "free-320-light",
+      "status": "PASS",
+      "stages": [
+        {
+          "name": "Free calendar is accessible with incomplete-change warning and real negative balance",
+          "actual": -10000.75,
+          "expected": -10000.75
+        },
+        {
+          "name": "Signed negative grid balances fit while selected",
+          "geometry": {
+            "width": 320,
+            "cells": 16,
+            "issues": []
+          }
+        },
+        {
+          "name": "Partial first month and after-horizon cells stay disabled without fabricated zero"
+        },
+        {
+          "name": "Small light grid fits",
+          "geometry": {
+            "width": 320,
+            "cells": 31,
+            "issues": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "privacy-320-dark",
+      "status": "PASS",
+      "stages": [
+        {
+          "name": "Hidden calendar cells/details/accessibility expose no amounts",
+          "checkedAccessibilityStrings": 135
+        },
+        {
+          "name": "Actual Show amounts toggle restores exact cents",
+          "actual": -123.45,
+          "expected": -123.45
+        },
+        {
+          "name": "Small dark grid fits",
+          "geometry": {
+            "width": 320,
+            "cells": 30,
+            "issues": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "desktop-1200-light",
+      "status": "PASS",
+      "stages": [
+        {
+          "name": "Grid and day details use current saved bill name instead of raw bank descriptor"
+        },
+        {
+          "name": "Added hypothetical debt appears on its actual payment date",
+          "actual": -80,
+          "expected": -80
+        },
+        {
+          "name": "Keyboard month/day controls and Dec\u2192Jan/final boundary pass"
+        },
+        {
+          "name": "Saved comparison12-month range does not replace working3-month calendar",
+          "actual": -80,
+          "expected": -80
+        },
+        {
+          "name": "Horizon shrink removes stale out-of-range date selection"
+        },
+        {
+          "name": "Full desktop calendar grid fits",
+          "geometry": {
+            "width": 1200,
+            "cells": 31,
+            "issues": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "phone-390-dark",
+      "status": "PASS",
+      "stages": [
+        {
+          "name": "Exact one-time change on selected day",
+          "actual": -123.45,
+          "expected": -123.45
+        },
+        {
+          "name": "Edited working amount refreshes calendar",
+          "actual": -200,
+          "expected": -200
+        },
+        {
+          "name": "Actual debt payment editor refreshes selected date",
+          "actual": -250,
+          "expected": -250
+        },
+        {
+          "name": "Actual pause removes scheduled cash while preserving baseline",
+          "actual": -100,
+          "expected": -100
+        },
+        {
+          "name": "Saved scenario and working state reload retain calendar result",
+          "actual": -100,
+          "expected": -100
+        },
+        {
+          "name": "Loading another saved scenario refreshes calendar data",
+          "actual": -25,
+          "expected": -25
+        },
+        {
+          "name": "Phone calendar grid fits",
+          "geometry": {
+            "width": 390,
+            "cells": 30,
+            "issues": []
+          }
+        }
+      ]
+    }
+  ]
+}

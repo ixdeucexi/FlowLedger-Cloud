@@ -1,0 +1,45 @@
+{
+  "status": "PASS",
+  "base": "f0fb872",
+  "unchangedUseCallbacks": 19,
+  "callbackNames": [
+    "focusEditor",
+    "closeEditor",
+    "openEditor",
+    "buildReferences",
+    "applySelection",
+    "requestSelection",
+    "makeLocalDraft",
+    "addChange",
+    "removeChange",
+    "saveChange",
+    "resetDraft",
+    "updateDraftName",
+    "updateDraftHorizon",
+    "saveDevice",
+    "saveDraft",
+    "saveHouseholdCopy",
+    "reloadLibraries",
+    "removeScenario",
+    "exportDraft"
+  ],
+  "unchangedFinanceAndPersistencePaths": [
+    "artifacts/mobile/lib/planSimulator.ts",
+    "artifacts/mobile/lib/planSimulationDebtControls.ts",
+    "artifacts/mobile/lib/snowball.ts",
+    "artifacts/mobile/lib/financialProjection.ts",
+    "artifacts/mobile/lib/planSimulationLibrary.ts",
+    "artifacts/mobile/lib/planSimulationComparison.ts",
+    "artifacts/mobile/lib/planSimulationPersistence.ts",
+    "artifacts/mobile/components/CalendarView.tsx",
+    "artifacts/mobile/components/desktop/DesktopCalendarPage.tsx",
+    "artifacts/mobile/context/BudgetContext.tsx"
+  ],
+  "sourceHashes": {
+    "artifacts/mobile/app/plan-simulator.tsx": "9eb0408d378be8d29c37b8dddd29d80d0b06a45bd8115d7170177bd0a69913cc",
+    "artifacts/mobile/components/SimulatorCalendar.tsx": "3b09dae7bbd3f3eeae7be4aa96c20c891db764e58599d0aa467a943b265f5013",
+    "artifacts/mobile/lib/planSimulationCalendar.ts": "f3f02e4c1803a3af1ec088f604278ecec9a105370c7e68a3bb49cbc59b670d14",
+    "artifacts/mobile/lib/planSimulationCalendar.test.ts": "8956e2fe130b230686ffc1449e9fe204fc74e19dba8433d7c81e89adb721145c",
+    "artifacts/mobile/tsconfig.tests.json": "d1cb413dee0c9e5b5b6a16711e89b8299ec9b2691c88337305d04f0734e9a9ad"
+  }
+}

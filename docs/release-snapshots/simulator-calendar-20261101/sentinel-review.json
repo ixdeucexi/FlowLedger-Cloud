@@ -1,0 +1,89 @@
+{
+  "status": "PASS",
+  "scope": "Independent calendar presentation/source/data approval. Root owns final exported browser and production gates.",
+  "checkedAt": "2026-11-01T22:04:56.346Z",
+  "base": "f0fb872",
+  "blockers": [],
+  "sourceHashes": {
+    "artifacts/mobile/app/plan-simulator.tsx": "9eb0408d378be8d29c37b8dddd29d80d0b06a45bd8115d7170177bd0a69913cc",
+    "artifacts/mobile/components/SimulatorCalendar.tsx": "3b09dae7bbd3f3eeae7be4aa96c20c891db764e58599d0aa467a943b265f5013",
+    "artifacts/mobile/lib/planSimulationCalendar.ts": "f3f02e4c1803a3af1ec088f604278ecec9a105370c7e68a3bb49cbc59b670d14",
+    "artifacts/mobile/lib/planSimulationCalendar.test.ts": "8956e2fe130b230686ffc1449e9fe204fc74e19dba8433d7c81e89adb721145c",
+    "artifacts/mobile/tsconfig.tests.json": "d1cb413dee0c9e5b5b6a16711e89b8299ec9b2691c88337305d04f0734e9a9ad"
+  },
+  "checks": {
+    "isolatedTypeScriptCompile": "PASS",
+    "focusedTests": 94,
+    "newCalendarTests": 9,
+    "exactCurrentAndScenarioRowIdentity": "PASS",
+    "actualProjectionVariantsPerTimeZone": 15,
+    "exactDayPairsPerTimeZone": 1155,
+    "exactEventRowsPerTimeZone": 149,
+    "timeZones": [
+      "UTC",
+      "America/Los_Angeles",
+      "Australia/Sydney"
+    ],
+    "missingNonfiniteVersusRealZero": "PASS",
+    "partialMonthLeapYearTransitionAndHorizonClamp": "PASS",
+    "savedNamePresentationPrecedence": "PASS",
+    "existingUseCallbacksUnchanged": 19,
+    "unchangedFinanceForecastAndPersistencePaths": [
+      "artifacts/mobile/lib/planSimulator.ts",
+      "artifacts/mobile/lib/planSimulationDebtControls.ts",
+      "artifacts/mobile/lib/snowball.ts",
+      "artifacts/mobile/lib/financialProjection.ts",
+      "artifacts/mobile/lib/planSimulationLibrary.ts",
+      "artifacts/mobile/lib/planSimulationComparison.ts",
+      "artifacts/mobile/lib/planSimulationPersistence.ts",
+      "artifacts/mobile/components/CalendarView.tsx",
+      "artifacts/mobile/components/desktop/DesktopCalendarPage.tsx",
+      "artifacts/mobile/context/BudgetContext.tsx"
+    ],
+    "smallScreenSharedFormatterCases": 6,
+    "finalComponentTsxParseAndWhitespace": "PASS",
+    "finalMobileTypecheck": {
+      "status": "PASS",
+      "runner": "Forge",
+      "log": "forge-typecheck.log",
+      "reportedExit": 0,
+      "componentSHA256": "3b09dae7bbd3f3eeae7be4aa96c20c891db764e58599d0aa467a943b265f5013"
+    }
+  },
+  "reviewedUiContracts": [
+    "Free calendar is outside Pro comparison gates",
+    "Working draft horizon is independent of saved-comparison horizon",
+    "Calendar mount preserves month/day across tab return; key resets household scope",
+    "Missing current rows show unavailable comparison without hiding valid scenario rows",
+    "Incomplete scenario issues remain visible",
+    "Exact day totals/events retain source values; category colors use existing calendar appearance",
+    "Money values use Privacy-aware sensitive text; day accessibility labels contain dates without financial values",
+    "Day tap scrolls and focuses details on web; calendar hidden view is excluded from focus/accessibility"
+  ],
+  "resolvedFindings": [
+    {
+      "id": "saved-calendar-event-name-precedence",
+      "resolution": "Memoized existing createCalendarEventLabelResolver uses live transactions/bills/incomes; chips and both day event lists share the resolver; synthetic scenario names and source financial events stay unchanged."
+    }
+  ],
+  "finalPresentationDelta": {
+    "componentSHA256": "3b09dae7bbd3f3eeae7be4aa96c20c891db764e58599d0aa467a943b265f5013",
+    "review": "SOURCE_PASS; final runtime browser gate remains with root",
+    "change": "Cell padding2; absolute empty pointerEvents-none selected-border overlay keeps content width fixed; grid font8/-.3 below360 and9/-.2 below400; existing compact formatter. Monetary values, day objects/events, helper, app and callbacks unchanged.",
+    "dataTestCarryForward": "Prior94 focused tests and15 actual-projection variants/1155 day pairs repeated in3 time zones remain valid: all corresponding data/helper/app/test hashes are unchanged."
+  },
+  "notClaimed": [
+    "Final exported browser layout/interaction gate (root/browser agent)",
+    "Real customer authentication, financial mutations or native hardware testing"
+  ],
+  "productWritesByReviewer": 0,
+  "approvedCommit": "d6209eafda2c099b1adead5570eeed3efa647e38",
+  "finalExportCandidate": {
+    "entry": "entry-414105de47e0ef8974671d3683ce749e.js",
+    "sha256": "109d40ca184ec43033f444a45b3a8c6bbd6d4a13f5291f10c0411afd3acd7a61",
+    "bytes": 5151002,
+    "source": "d6209eafda2c099b1adead5570eeed3efa647e38",
+    "staticBytesIndependentlyVerified": true,
+    "runtimeClearanceClaimed": false
+  }
+}

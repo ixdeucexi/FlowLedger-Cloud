@@ -1,0 +1,157 @@
+{
+  "status": "METADATA_PASS_BUILD_FIELDS_NOT_EXPOSED",
+  "project": {
+    "id": "prj_nOlgvktXdfLErqQvmESnvyLFnMj2",
+    "name": "flow-ledger-cloud",
+    "accountId": "team_jIrgjLphz4oeVh6WuFHaiWKq",
+    "nodeVersion": "24.x",
+    "framework": null
+  },
+  "environmentScope": [
+    {
+      "key": "SUPABASE_SERVICE_ROLE_KEY",
+      "status": "PASS",
+      "records": 1,
+      "targets": [
+        [
+          "production"
+        ]
+      ],
+      "branchOverride": false
+    },
+    {
+      "key": "SUPABASE_URL",
+      "status": "PASS",
+      "records": 1,
+      "targets": [
+        [
+          "production"
+        ]
+      ],
+      "branchOverride": false
+    },
+    {
+      "key": "EXPO_PUBLIC_SUPABASE_URL",
+      "status": "PASS",
+      "records": 1,
+      "targets": [
+        [
+          "production"
+        ]
+      ],
+      "branchOverride": false
+    },
+    {
+      "key": "EXPO_PUBLIC_SUPABASE_ANON_KEY",
+      "status": "PASS",
+      "records": 1,
+      "targets": [
+        [
+          "production"
+        ]
+      ],
+      "branchOverride": false
+    },
+    {
+      "key": "PLAID_CLIENT_ID",
+      "status": "PASS",
+      "records": 1,
+      "targets": [
+        [
+          "production"
+        ]
+      ],
+      "branchOverride": false
+    },
+    {
+      "key": "PLAID_SECRET",
+      "status": "PASS",
+      "records": 1,
+      "targets": [
+        [
+          "production"
+        ]
+      ],
+      "branchOverride": false
+    },
+    {
+      "key": "PLAID_ENV",
+      "status": "PASS",
+      "records": 1,
+      "targets": [
+        [
+          "production"
+        ]
+      ],
+      "branchOverride": false
+    },
+    {
+      "key": "PLAID_REDIRECT_URI",
+      "status": "PASS",
+      "records": 1,
+      "targets": [
+        [
+          "production"
+        ]
+      ],
+      "branchOverride": false
+    },
+    {
+      "key": "PLAID_TOKEN_ENCRYPTION_KEY",
+      "status": "PASS",
+      "records": 1,
+      "targets": [
+        [
+          "production"
+        ]
+      ],
+      "branchOverride": false
+    },
+    {
+      "key": "PLAID_WEBHOOK_URL",
+      "status": "PASS",
+      "records": 1,
+      "targets": [
+        [
+          "production"
+        ]
+      ],
+      "branchOverride": false
+    },
+    {
+      "key": "CRON_SECRET",
+      "status": "PASS",
+      "records": 1,
+      "targets": [
+        [
+          "production"
+        ]
+      ],
+      "branchOverride": false
+    },
+    {
+      "key": "VAPID_PUBLIC_KEY",
+      "status": "PASS",
+      "records": 1,
+      "targets": [
+        [
+          "production"
+        ]
+      ],
+      "branchOverride": false
+    },
+    {
+      "key": "VAPID_PRIVATE_KEY",
+      "status": "PASS",
+      "records": 1,
+      "targets": [
+        [
+          "production"
+        ]
+      ],
+      "branchOverride": false
+    }
+  ],
+  "valuesRequested": false,
+  "buildContract": "Explicit per-deployment build/install/output/root/node settings required; read-only MCP omits these project fields."
+}

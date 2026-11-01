@@ -1,0 +1,6 @@
+{
+  "status": "PASS",
+  "files": 6,
+  "findings": [],
+  "scope": "Success proof only; fixture source and diagnostic raw bodies are excluded."
+}
