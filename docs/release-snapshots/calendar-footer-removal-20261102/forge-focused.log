@@ -1,0 +1,48 @@
+✔ calendar balances round cents to the nearest whole dollar (16.553305ms)
+✔ dense calendar labels compact large amounts while preserving normal labels and signs (0.915597ms)
+✔ Flo can name the date protected by the safety floor (5.270437ms)
+✔ mobile calendar keeps full accessible balances and non-abbreviated grid labels (0.832182ms)
+✔ selected-day and desktop details identify the projected close (1.28987ms)
+✔ Forecast surfaces explain carried reserves and reviewed income plans (1.309919ms)
+✔ Forecast day details use the canonical debt occurrence instead of the current recurring minimum (2.876957ms)
+✔ calendar never substitutes empty financial arrays while cached data is available (4.490148ms)
+✔ groups forecast events into plain-language sections (1.114576ms)
+✔ labels an authoritative bank commitment as payment pending (0.354043ms)
+✔ keeps bank synchronization out of calendar items without removing real activity (0.225198ms)
+✔ explains a partial bill remainder relocated to the bank anchor exactly once (0.31907ms)
+✔ carried reserves omit fully settled and bank adjustment rows (0.270397ms)
+✔ carried reserves retain multiple original dates across a month boundary (0.953444ms)
+✔ carried reserve lookup mirrors first-ID forecast semantics for duplicate display rows (0.148023ms)
+✔ a later duplicate cannot invent or suppress a reserve chosen by first-ID semantics (0.123716ms)
+✔ desktop Forecast and Flo consume only calendar-visible event sources (0.737799ms)
+✔ calendar shows one chip when the same bill occurrence is present twice (0.224979ms)
+✔ a canonical child opens the editor for its source debt and occurrence (0.157707ms)
+✔ planned badges name the money type while real statuses stay intact (0.189055ms)
+✔ combines a routed surplus with the same debt's planned payment on that date (0.264929ms)
+✔ does not combine debt payments for different dates or debts (0.09338ms)
+✔ Forecast closes the selected-day modal before opening a planned debt editor (4.378155ms)
+✔ labels debt payments scheduled until the selected date arrives (0.215885ms)
+✔ builds a day-specific Flo prompt from forecast groups (0.336376ms)
+✔ builds a clear Flo prompt for a day with no activity (0.074603ms)
+✔ display currency runs preserve signs, whitespace, compact amounts and ordinary dates exactly (22.00196ms)
+✔ currency run scanning and Privacy Mode remain independent across repeated calls (1.607588ms)
+✔ private display masks signed, compact, scientific and ISO currency without changing dates, counts or APR (0.20557ms)
+✔ every ordinary app currency value is removed from presentation and exactly restored (31.064895ms)
+✔ actual Intl currency and Activity strings in device locales conceal complete numbers (2.171186ms)
+✔ adjacent JSX currency fragments and nested styled text do not leak numeric children (1.194036ms)
+✔ screen reader and tooltip values are masked without mutating underlying control props (0.415956ms)
+✔ only a saved boolean enables privacy; preference scopes cannot collide (0.218518ms)
+✔ late hydration and save callbacks cannot overwrite a new choice, new household or ABA return (0.205439ms)
+✔ retained asynchronous alert callbacks use privacy at invocation and conceal unlabelled service amounts (0.38558ms)
+✔ returning to a household waits for its hide intent queued behind another interface write (0.194532ms)
+✔ a failed hide remains fail-closed even after the interface queue has been cleared (0.533082ms)
+✔ amount-capable search conceals numeric drafts without changing the query or clear date inputs (0.207312ms)
+✔ a settled legacy personal plan can toggle privacy; loading, errors and signout cannot reuse it (0.141243ms)
+ℹ tests 40
+ℹ suites 0
+ℹ pass 40
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 145.392136

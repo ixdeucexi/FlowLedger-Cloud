@@ -1,0 +1,28 @@
+{
+  "status": "LIVE_PASS",
+  "verifiedAt": "2026-11-02T12:54:03.095867+00:00",
+  "source": "f032f4a82c739205e3103ef6f77f9ce84b18a09b",
+  "deployment": "dpl_7kFY5y5KP2urC5AqkrcfQoEaaZmr",
+  "immutableUrl": "flow-ledger-cloud-gjxp027x1-flow-ledger-s-projects.vercel.app",
+  "allFourAliases": "PASS",
+  "bundle": {
+    "entry": "entry-2609c22cc8f582157317846defa56899.js",
+    "bytes": 5154598,
+    "sha256": "4891e87994541e6d9d4191b63f81e7b679792989f1ee0c7aed71cebc616a8f13"
+  },
+  "checks": {
+    "freshDisplayPrivacy": 40,
+    "syntax": "PASS",
+    "sourceConfigGuideArtifact": "PASS",
+    "localBrowser": "PASS",
+    "publishedBrowser": "PASS",
+    "contextsPerRun": 2,
+    "stagesPerRun": 8,
+    "actualEntryLoadsPerRun": 2,
+    "noActualFinancialOrProviderWrites": true,
+    "closedRunners": true,
+    "hostedCspDiagnostics": 2,
+    "httpPostflight": "PASS"
+  },
+  "rollback": "rollback/prod-before-calendar-footer-removal-20261102-1241"
+}

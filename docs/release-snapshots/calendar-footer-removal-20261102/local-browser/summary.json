@@ -1,0 +1,20 @@
+{
+  "status": "PASS",
+  "origin": "local isolated static export",
+  "contexts": 2,
+  "stages": 8,
+  "actualEntryLoadsVerified": 2,
+  "expectedSHA256": "4891e87994541e6d9d4191b63f81e7b679792989f1ee0c7aed71cebc616a8f13",
+  "financialSnapshotsUnchanged": true,
+  "actualFinancialWrites": 0,
+  "actualProviderCalls": 0,
+  "unknownRequests": 0,
+  "unexpectedConsoleErrors": 0,
+  "uncaughtAppErrors": 0,
+  "allOwnedBrowsersContextsAndServersClosed": true,
+  "selectedScreenshots": [
+    "390-dark-main-no-footer.png",
+    "320-light-main-no-footer.png",
+    "390-dark-day-details.png"
+  ]
+}

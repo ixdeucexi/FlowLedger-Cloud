@@ -1,0 +1,15 @@
+{
+  "status": "PASS",
+  "source": "f032f4a82c739205e3103ef6f77f9ce84b18a09b",
+  "file": "artifacts/mobile/components/CalendarView.tsx",
+  "sha256": "f8f048fa6ad7c680b6b4f752e9c561a3bd81e9c2fee9544d94904a4489a99888",
+  "scope": "Delete bottom summary/hint and only unused imports/hook/styles; root reviewed17-line diff; grid/calendar/daycallbacks unchanged",
+  "checks": {
+    "freshFocusedDisplayPrivacy": 40,
+    "tsxSyntax": "PASS",
+    "whitespace": "PASS",
+    "config": "PASS",
+    "guide9675": "PASS",
+    "artifact": "PASS"
+  }
+}
