@@ -1942,18 +1942,21 @@ export default function MonthlyScreen() {
           styles.calendarMonthBar,
           isDesktop && styles.desktopMonthBar,
           {
-            backgroundColor: c.isDark ? "rgba(2,6,23,0.32)" : "rgba(255,255,255,0.82)",
-            borderColor: c.isDark ? "rgba(148,163,184,0.12)" : "rgba(15,23,42,0.10)",
+            backgroundColor: "transparent",
+            borderColor: c.border,
           },
         ]}
       >
         <Pressable
           onPress={() => changeMonth(-1)}
+          accessibilityRole="button"
+          accessibilityLabel="Previous forecast month"
           hitSlop={10}
           style={({ pressed }) => [
             styles.monthArrowBtn,
             {
-              backgroundColor: c.isDark ? "rgba(15,23,42,0.58)" : "rgba(226,232,240,0.85)",
+              backgroundColor: "transparent",
+              borderColor: c.border,
               opacity: pressed ? 0.55 : 1,
             },
           ]}
@@ -1966,18 +1969,18 @@ export default function MonthlyScreen() {
           accessibilityLabel={`Search months. Current month is ${MONTH_FULL[month]} ${selectedYear}`}
           style={({ pressed }) => [styles.monthCenterLabel, pressed && styles.monthCenterPressed]}
         >
-          <Text style={[styles.monthShortTitle, { color: c.foreground }]}>{MONTH_FULL[month].slice(0, 3).toUpperCase()}</Text>
-          {selectedYear !== todayYear && (
-            <Text style={[styles.monthSwipeHint, { color: c.mutedForeground }]}>{selectedYear}</Text>
-          )}
+          <Text style={[styles.monthShortTitle, { color: c.foreground }]}>{MONTH_FULL[month].toUpperCase()} {selectedYear}</Text>
         </Pressable>
         <Pressable
           onPress={() => changeMonth(1)}
+          accessibilityRole="button"
+          accessibilityLabel="Next forecast month"
           hitSlop={10}
           style={({ pressed }) => [
             styles.monthArrowBtn,
             {
-              backgroundColor: c.isDark ? "rgba(15,23,42,0.58)" : "rgba(226,232,240,0.85)",
+              backgroundColor: "transparent",
+              borderColor: c.border,
               opacity: pressed ? 0.55 : 1,
             },
           ]}
@@ -2365,7 +2368,7 @@ export default function MonthlyScreen() {
                         </Text>
                       </View>
                     </View>
-                    <Pressable onPress={() => setSelectedDate(null)} hitSlop={8}>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Close forecast day details" onPress={() => setSelectedDate(null)} hitSlop={8}>
                       <Feather name="x" size={22} color={c.mutedForeground} />
                     </Pressable>
                   </View>
@@ -3460,12 +3463,12 @@ const styles = StyleSheet.create({
   todayChip: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", borderWidth: 2 },
   narrowTodayChip: { width: 44, height: 44, borderRadius: 14 },
   todayChipText: { fontSize: 17, fontFamily: "Inter_800ExtraBold", lineHeight: 20 },
-  calendarMonthBar: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginHorizontal: 22, marginTop: 0, marginBottom: 14, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", backgroundColor: "rgba(2,6,23,0.32)", borderRadius: 26, paddingHorizontal: 10, paddingVertical: 11 },
+  calendarMonthBar: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginHorizontal: 20, marginTop: 0, marginBottom: 14, paddingVertical: 4, gap: 10 },
   desktopMonthBar: { width: "96%", maxWidth: 1440, alignSelf: "center", marginHorizontal: 0 },
-  monthArrowBtn: { width: 46, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: "rgba(15,23,42,0.58)" },
-  monthCenterLabel: { flex: 1, minHeight: 42, alignItems: "center", justifyContent: "center", borderRadius: 18 },
+  monthArrowBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 22, borderWidth: 1 },
+  monthCenterLabel: { flex: 1, minWidth: 0, minHeight: 44, alignItems: "center", justifyContent: "center" },
   monthCenterPressed: { opacity: 0.72, transform: [{ scale: 0.985 }] },
-  monthShortTitle: { fontSize: 28, fontFamily: "Inter_800ExtraBold", letterSpacing: 2.8 },
+  monthShortTitle: { fontSize: 18, fontFamily: "Inter_800ExtraBold", letterSpacing: .8, textAlign: "center" },
   monthSwipeHint: { fontSize: 10, fontFamily: "Inter_500Medium", marginTop: 1 },
   monthSearchBackdrop: { flex: 1, backgroundColor: "rgba(2,6,23,0.72)", justifyContent: "center", paddingHorizontal: 22 },
   monthSearchSheet: { borderWidth: 1, borderRadius: 28, padding: 18, shadowColor: "#8b5cf6", shadowOpacity: 0.32, shadowRadius: 26, shadowOffset: { width: 0, height: 12 }, elevation: 18 },

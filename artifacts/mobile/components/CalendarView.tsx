@@ -1,6 +1,8 @@
 import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import React from "react";
-import { StyleSheet, useWindowDimensions } from "react-native";
+import { ScrollView, StyleSheet, useWindowDimensions } from "react-native";
+import Feather from "@expo/vector-icons/Feather";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { DailyBalance, DecisionRecord, Goal, GoalExpense, Transaction } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
@@ -57,13 +59,12 @@ export function CalendarView({
   const c = useColors();
   const calendarColors = useCalendarAppearance();
   const isDesktop = useDesktopExperience();
+  const insets = useSafeAreaInsets();
   const { height: viewportHeight } = useWindowDimensions();
   const calendarTheme = {
-    surface: c.card, cell: c.background, selectedCell: c.primary + "22",
-    selectedBorder: c.primary, todayCell: c.secondary, line: c.border,
+    surface: c.background, cell: "transparent", selectedBorder: c.primary, line: c.border,
     text: c.foreground, muted: c.mutedForeground, faded: c.mutedForeground,
     today: c.primary, green: c.success, amber: c.warning, red: c.destructive,
-    shadow: c.primary,
   };
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -117,10 +118,14 @@ export function CalendarView({
   for (let d = 1; d <= daysInMonth; d += 1) cells.push(d);
   while (cells.length % 7 !== 0) cells.push(null);
   const calendarRowCount = cells.length / 7;
-  const desktopCellHeight = Math.max(72, Math.min(118, Math.floor((viewportHeight - 250) / calendarRowCount)));
+  const desktopCellHeight = Math.max(120, Math.min(152, Math.floor((viewportHeight - 250) / calendarRowCount)));
 
   const dateStr = (day: number) =>
     `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const summaryDate = selectedDate?.startsWith(monthPrefix) ? selectedDate : todayStr.startsWith(monthPrefix) ? todayStr : null;
+  const summaryDay = summaryDate && (!startDate || summaryDate >= startDate) ? balanceByDay[Number(summaryDate.slice(8, 10))] : undefined;
+  const visibleSummary = calendarBalanceIsVisible(summaryDay) ? summaryDay : undefined;
+  const summaryAmount = visibleSummary?.balance.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
     <View
@@ -128,8 +133,6 @@ export function CalendarView({
         styles.container,
         {
           backgroundColor: calendarTheme.surface,
-          borderColor: c.border,
-          shadowColor: calendarTheme.shadow,
         },
       ]}
     >
@@ -142,11 +145,12 @@ export function CalendarView({
       <>
         <View style={[styles.grid, { backgroundColor: calendarTheme.surface }]}>
           {cells.map((day, i) => {
-          if (!day) return <View key={`empty-${i}`} style={[styles.cellOuter, styles.emptyCell, { borderColor: calendarTheme.line }]} />;
+          if (!day) return <View key={`empty-${i}`} style={[styles.cellOuter, styles.emptyCell, { borderColor: calendarTheme.line }]}><View style={styles.cellInner}><View style={styles.dayTopRow}><View style={styles.todayCircle}><Text style={[styles.dayNum, { color: c.mutedForeground }]}>{new Date(year, month, i - firstDay + 1).getDate()}</Text></View></View></View></View>;
           const ds = dateStr(day);
           const isBeforeStart = Boolean(startDate && ds < startDate);
           const isToday = ds === todayStr;
           const isSelected = ds === selectedDate;
+          const isActive = isSelected || (!selectedDate && isToday);
           const db = isBeforeStart ? undefined : balanceByDay[day];
           const dayTxs = isBeforeStart ? [] : (txByDay[day] ?? []);
           const plannedExpenseGroups = groupPlannedExpenseAllocations(dayTxs);
@@ -234,27 +238,15 @@ export function CalendarView({
                   styles.cellInner,
                   isDesktop && styles.desktopCellInner,
                   { backgroundColor: calendarTheme.cell },
-                  isToday ? { backgroundColor: calendarTheme.todayCell } : null,
-                  isSelected
-                    ? {
-                        backgroundColor: calendarTheme.selectedCell,
-                        borderWidth: 1,
-                        borderColor: calendarTheme.selectedBorder,
-                        shadowColor: c.primary,
-                        shadowOffset: { width: 0, height: 0 },
-                        shadowOpacity: c.isDark ? 0.42 : 0.14,
-                        shadowRadius: 14,
-                      }
-                    : null,
                 ]}
               >
                 <View style={[styles.dayTopRow, isDesktop && styles.desktopDayTopRow]}>
-                  <View style={isToday ? [styles.todayCircle, { backgroundColor: calendarTheme.today }] : undefined}>
+                  <View style={[styles.todayCircle, (isSelected || isToday) && { backgroundColor: calendarTheme.today }]}>
                     <Text
                       style={[
                         styles.dayNum,
                         {
-                          color: isToday ? calendarHighlightText(c.primary) : calendarTheme.text,
+                          color: isToday || isSelected ? calendarHighlightText(c.primary) : calendarTheme.text,
                           fontFamily: isToday || isSelected ? "Inter_700Bold" : "Inter_500Medium",
                         },
                       ]}
@@ -274,7 +266,7 @@ export function CalendarView({
                       adjustsFontSizeToFit
                       minimumFontScale={0.55}
                     >
-                      {formatCompactCalendarAmount(visibleBalance.balance)}
+                      {formatCompactCalendarAmount(visibleBalance.balance, undefined, 1000)}
                     </Text>
                   ) : null}
                 </View>
@@ -291,6 +283,7 @@ export function CalendarView({
                   {hiddenCount > 0 ? <Text style={[styles.moreText, { color: calendarTheme.faded }]}>+{hiddenCount} more</Text> : null}
                 </View>
               </View>
+              {isActive ? <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, styles.activeOutline, { borderColor: calendarTheme.selectedBorder }]} /> : null}
             </Pressable>
           );
           })}
@@ -304,6 +297,11 @@ export function CalendarView({
           </View>
         ))}
       </View>
+      {summaryDate && visibleSummary && summaryAmount ? <Pressable accessibilityRole="button" accessibilityLabel={`View calendar day ${summaryDate}. Closing balance ${summaryAmount}`} onPress={() => onDayPress(summaryDate)} style={({ pressed }) => [styles.daySummary, !isDesktop && { marginRight: 72 + insets.right }, { borderColor: c.border, opacity: pressed ? .7 : 1 }]}>
+        <View style={styles.summaryCopy}><Text style={[styles.summaryDate, { color: c.foreground }]}>{new Date(`${summaryDate}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</Text><Text style={[styles.summaryCaption, { color: c.mutedForeground }]}>Closing balance</Text></View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.summaryAmountScroll}><Text sensitive style={[styles.summaryAmount, { color: visibleSummary.balance >= safetyFloor ? c.success : visibleSummary.balance < 0 ? c.destructive : c.warning }]}>{summaryAmount}</Text></ScrollView>
+        <Feather name="chevron-right" size={18} color={c.mutedForeground} />
+      </Pressable> : <Text style={[styles.summaryHint, { color: c.mutedForeground }]}>Select a day to view its details.</Text>}
     </View>
   );
 }
@@ -311,46 +309,39 @@ export function CalendarView({
 const styles = StyleSheet.create({
   container: {
     marginBottom: 10,
-    borderRadius: 26,
-    overflow: "hidden",
-    borderWidth: 1,
-    padding: 7,
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.18,
-    shadowRadius: 26,
+    padding: 0,
   },
   dayNames: {
     flexDirection: "row",
-    paddingTop: 2,
-    paddingBottom: 7,
+    paddingTop: 5,
+    paddingBottom: 12,
     borderBottomWidth: 1,
   },
   dayName: { flex: 1, textAlign: "center", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.1 },
   grid: { flexDirection: "row", flexWrap: "wrap" },
   cellOuter: {
     width: "14.285714%",
-    minHeight: 84,
+    minHeight: 112,
     padding: 0,
-    borderRightWidth: 1,
     borderBottomWidth: 1,
   },
   cellInner: {
     flex: 1,
     borderRadius: 0,
     borderWidth: 0,
-    paddingTop: 4,
-    paddingHorizontal: 1,
-    paddingBottom: 4,
+    paddingTop: 8,
+    paddingHorizontal: 2,
+    paddingBottom: 8,
   },
-  desktopCellInner: { paddingTop: 8, paddingHorizontal: 8, paddingBottom: 7 },
+  desktopCellInner: { paddingTop: 10, paddingHorizontal: 8, paddingBottom: 10 },
   emptyCell: { opacity: 0.35 },
-  dayTopRow: { alignItems: "center", gap: 1, minHeight: 27 },
-  desktopDayTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  todayCircle: { minWidth: 22, height: 22, borderRadius: 7, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
-  dayNum: { fontSize: 15 },
+  dayTopRow: { alignItems: "center", gap: 3, minHeight: 45 },
+  desktopDayTopRow: { alignItems: "center", gap: 4 },
+  todayCircle: { minWidth: 26, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center", paddingHorizontal: 5 },
+  dayNum: { fontSize: 16 },
   balanceText: { maxWidth: "100%", flexShrink: 1, fontSize: 9, fontFamily: "Inter_800ExtraBold" },
   desktopBalanceText: { fontSize: 10 },
-  eventStack: { marginTop: 4, gap: 2 },
+  eventStack: { marginTop: 6, gap: 3 },
   eventChip: {
     minHeight: 16,
     justifyContent: "center",
@@ -369,11 +360,15 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     columnGap: 10,
     rowGap: 5,
-    paddingTop: 7,
+    paddingTop: 14,
     paddingHorizontal: 6,
     paddingBottom: 4,
   },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 5, minHeight: 18 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontSize: 10, fontFamily: "Inter_700Bold" },
+  activeOutline: { borderWidth: 2, borderRadius: 12 },
+  daySummary: { minHeight: 58, borderWidth: 1, borderRadius: 17, marginTop: 14, paddingHorizontal: 12, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 10 },
+  summaryCopy: { flex: 1, minWidth: 0 }, summaryDate: { fontSize: 13, fontFamily: "Inter_700Bold" }, summaryCaption: { fontSize: 10, marginTop: 2 },
+  summaryAmountScroll: { flexGrow: 0, maxWidth: "58%" }, summaryAmount: { fontSize: 14, fontFamily: "Inter_700Bold" }, summaryHint: { fontSize: 11, marginTop: 14, textAlign: "center" },
 });

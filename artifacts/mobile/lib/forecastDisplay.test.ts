@@ -52,7 +52,7 @@ test("mobile calendar keeps full accessible balances with readable compact grid 
   assert.match(calendar, /accessibilityLabel=\{`Balance \$\{formatCalendarBalance\(visibleBalance\.balance\)\}`\}/);
   assert.doesNotMatch(calendar, /Actual close|Actual bank close/i);
   assert.doesNotMatch(calendar, />Projected</);
-  assert.match(calendar, /\{formatCompactCalendarAmount\(visibleBalance\.balance\)\}/);
+  assert.match(calendar, /\{formatCompactCalendarAmount\(visibleBalance\.balance(?:, undefined, 1000)?\)\}/);
   assert.doesNotMatch(calendar, /formatCompactCalendarBalance/);
 });
 

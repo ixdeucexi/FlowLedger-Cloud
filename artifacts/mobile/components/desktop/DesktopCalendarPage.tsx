@@ -28,6 +28,7 @@ import {
 import type { FinancialEvent } from "@/lib/forecast";
 import { calendarVisibleForecastEvents, deriveCarriedForwardReserves, formatEventStatus } from "@/lib/forecastDisplay";
 import { calendarBalanceIsVisible } from "@/lib/dailyCheckingClose";
+import { openCalendarMonthCells } from "@/lib/openCalendarWeeks";
 
 const MONTHS = [
   "January",
@@ -192,7 +193,7 @@ function CalendarHeader({
           style={({ pressed }) => [styles.monthSelector, pressed && styles.pressed]}
         >
           <Feather name="calendar" size={15} color={palette.textSecondary} />
-          <Text style={styles.monthSelectorText}>{MONTHS[month]} {year}</Text>
+          <Text style={styles.monthSelectorText}>{MONTHS[month].toUpperCase()} {year}</Text>
           <Feather name="chevron-down" size={15} color={palette.muted} />
         </Pressable>
         <Pressable
@@ -280,7 +281,7 @@ function DesktopMonthGrid({
   lowestBalance: number;
   compact: boolean;
 }) {
-  const cells = useMemo(() => desktopCalendarCells(year, month), [month, year]);
+  const cells = useMemo(() => openCalendarMonthCells(desktopCalendarCells(year, month)), [month, year]);
   const c = useColors();
   const balancesByDay = useMemo(
     () => new Map(dailyBalances.map((day) => [day.day, day] as const)),
@@ -292,8 +293,8 @@ function DesktopMonthGrid({
   }, []);
 
   return (
-    <DesktopCard style={styles.calendarCard}>
-      <View style={styles.weekdayRow}>
+    <View style={[styles.calendarCard, { backgroundColor: c.background }]}>
+      <View style={[styles.weekdayRow, { borderBottomColor: c.border }]}>
         {WEEKDAYS.map((day) => <Text key={day} style={styles.weekday}>{day}</Text>)}
       </View>
       <View style={styles.calendarGrid}>
@@ -305,6 +306,7 @@ function DesktopMonthGrid({
           const hiddenCount = Math.max(0, events.length - visibleEvents.length);
           const selected = selectedDate === cell.date;
           const isToday = today === cell.date;
+          const active = selected || (!selectedDate && isToday);
           const isLowest = Boolean(
             visibleBalance?.balanceSource === "projected"
             && cell.date === lowestBalanceDate
@@ -322,7 +324,7 @@ function DesktopMonthGrid({
                 styles.dayCell,
                 compact && styles.dayCellCompact,
                 !cell.inCurrentMonth && styles.dayCellOutside,
-                selected && styles.dayCellSelected,
+                { borderBottomColor: c.border },
                 pressed && cell.inCurrentMonth && styles.dayCellPressed,
               ]}
             >
@@ -332,6 +334,9 @@ function DesktopMonthGrid({
                 </View>
                 {isToday && !selected ? <Text style={styles.todayLabel}>Today</Text> : null}
               </View>
+              {visibleBalance ? (
+                <Text accessibilityLabel={`Balance ${money(visibleBalance.balance)}`} numberOfLines={1} style={[styles.dayBalanceSource, { color: visibleBalance.balance >= safetyFloor ? c.success : visibleBalance.balance < 0 ? c.destructive : c.warning }]}>{formatCompactCalendarAmount(visibleBalance.balance, undefined, 1000)}</Text>
+              ) : null}
               {visibleEvents.map((event) => (
                 <CalendarEventPill
                   key={event.id}
@@ -344,9 +349,6 @@ function DesktopMonthGrid({
               {hiddenCount > 0 ? (
                 <Text style={styles.moreText}>+{hiddenCount} more</Text>
               ) : null}
-              {visibleBalance ? (
-                <Text accessibilityLabel={`Balance ${money(visibleBalance.balance)}`} style={styles.dayBalanceSource}>{formatCompactCalendarAmount(visibleBalance.balance, money(visibleBalance.balance))}</Text>
-              ) : null}
               {isLowest ? (
                 <View style={[styles.lowestCellBadge, tightestForecastIsRisk && styles.riskCellBadge]}>
                   <Text style={[styles.lowestCellLabel, tightestForecastIsRisk && styles.riskCellLabel]}>
@@ -355,12 +357,13 @@ function DesktopMonthGrid({
                   <Text accessibilityLabel={`Tightest forecast ${money(lowestBalance)}`} style={[styles.lowestCellValue, tightestForecastIsRisk && styles.riskCellValue]}>{formatCompactCalendarAmount(lowestBalance, money(lowestBalance))}</Text>
                 </View>
               ) : null}
+              {active ? <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, styles.dayCellOutline, { borderColor: c.primary }]} /> : null}
             </Pressable>
           );
         })}
       </View>
       <CalendarLegend />
-    </DesktopCard>
+    </View>
   );
 }
 
@@ -654,10 +657,10 @@ const styles = StyleSheet.create({
   monthControlsCompact: { flexWrap: "wrap", justifyContent: "flex-end" },
   secondaryButton: { minHeight: 38, borderRadius: 7, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.border, paddingHorizontal: 13, alignItems: "center", justifyContent: "center" },
   secondaryButtonText: { color: palette.textSecondary, fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  arrowGroup: { flexDirection: "row" },
-  iconButton: { width: 38, height: 38, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surface, alignItems: "center", justifyContent: "center", marginLeft: -1 },
-  monthSelector: { minHeight: 38, borderRadius: 7, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surface, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 8 },
-  monthSelectorText: { color: palette.textSecondary, fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  arrowGroup: { flexDirection: "row", gap: 8 },
+  iconButton: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: palette.border, backgroundColor: "transparent", alignItems: "center", justifyContent: "center" },
+  monthSelector: { minHeight: 40, paddingHorizontal: 5, flexDirection: "row", alignItems: "center", gap: 8 },
+  monthSelectorText: { color: palette.text, fontSize: 15, fontFamily: "Inter_800ExtraBold", letterSpacing: .5 },
   addButton: { minHeight: 38, borderRadius: 7, backgroundColor: palette.purple, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
   addButtonText: { color: "#ffffff", fontSize: 13, fontFamily: "Inter_700Bold" },
   simulatorButton: { minHeight: 44, borderRadius: 7, borderWidth: 1, borderColor: palette.purple, backgroundColor: palette.purpleSoft, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
@@ -673,24 +676,24 @@ const styles = StyleSheet.create({
   weekdayRow: { minHeight: 48, flexDirection: "row", alignItems: "center", borderBottomWidth: 1, borderBottomColor: palette.border },
   weekday: { width: "14.2857%" as never, textAlign: "center", color: palette.textSecondary, fontSize: 12, fontFamily: "Inter_700Bold" },
   calendarGrid: { flexDirection: "row", flexWrap: "wrap" },
-  dayCell: { width: "14.2857%" as never, minHeight: 136, padding: 9, borderRightWidth: 1, borderBottomWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surface },
-  dayCellCompact: { minHeight: 120, padding: 7 },
-  dayCellOutside: { backgroundColor: palette.surfaceMuted, opacity: 0.62 },
-  dayCellSelected: { backgroundColor: palette.purpleSoft, borderColor: palette.purple },
+  dayCell: { width: "14.2857%" as never, minHeight: 152, paddingHorizontal: 9, paddingVertical: 10, borderBottomWidth: 1, backgroundColor: "transparent" },
+  dayCellCompact: { minHeight: 136, paddingHorizontal: 7 },
+  dayCellOutside: { opacity: 0.45 },
+  dayCellOutline: { borderWidth: 2, borderRadius: 14 },
   dayCellPressed: { opacity: 0.72 },
-  dayTopRow: { minHeight: 24, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
-  dayNumberWrap: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  dayTopRow: { minHeight: 42, alignItems: "center", marginBottom: 4 },
+  dayNumberWrap: { minWidth: 28, height: 30, paddingHorizontal: 5, borderRadius: 9, alignItems: "center", justifyContent: "center" },
   dayNumberActive: { backgroundColor: palette.purple },
-  dayNumber: { color: palette.textSecondary, fontSize: 12, fontFamily: "Inter_700Bold" },
+  dayNumber: { color: palette.text, fontSize: 16, fontFamily: "Inter_700Bold" },
   dayNumberMuted: { color: palette.faint },
   dayNumberActiveText: { color: "#ffffff" },
-  todayLabel: { color: palette.purple, fontSize: 11, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.5 },
+  todayLabel: { color: palette.purple, fontSize: 9, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.5 },
   eventPill: { minHeight: 24, borderRadius: 6, paddingHorizontal: 7, marginBottom: 4, flexDirection: "row", alignItems: "center", gap: 5, overflow: "hidden" },
   eventDot: { width: 7, height: 7, borderRadius: 4 },
   eventName: { flex: 1, minWidth: 0, color: palette.text, fontSize: 11, fontFamily: "Inter_600SemiBold" },
   eventAmount: { fontSize: 11, fontFamily: "Inter_700Bold" },
   moreText: { color: palette.purple, fontSize: 11, fontFamily: "Inter_700Bold", marginTop: 1 },
-  dayBalanceSource: { color: palette.textSecondary, fontSize: 10, fontFamily: "Inter_600SemiBold", marginTop: 3 },
+  dayBalanceSource: { fontSize: 13, fontFamily: "Inter_700Bold", textAlign: "center", marginBottom: 8 },
   lowestCellBadge: { marginTop: "auto", paddingTop: 5 },
   lowestCellLabel: { color: palette.blue, fontSize: 11, fontFamily: "Inter_700Bold", textTransform: "uppercase" },
   lowestCellValue: { color: palette.blue, fontSize: 12, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
