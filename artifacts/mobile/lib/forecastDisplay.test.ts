@@ -17,6 +17,9 @@ test("calendar balances round cents to the nearest whole dollar", () => {
   assert.equal(formatCalendarBalance(1689.99), "$1,690");
   assert.equal(formatCalendarBalance(-12.75), "-$13");
   assert.equal(formatCalendarBalance(0.49), "$0");
+  assert.equal(formatCalendarBalance(5100.49), "$5,100");
+  assert.equal(formatCalendarBalance(1000000.75), "$1,000,001");
+  assert.equal(formatCalendarBalance(-999499999.25), "-$999,499,999");
 });
 
 test("dense calendar labels compact large amounts while preserving normal labels and signs", () => {
@@ -46,13 +49,14 @@ test("Flo can name the date protected by the safety floor", () => {
   assert.equal(formatForecastDateLabel("2026-09-26"), "September 26, 2026");
 });
 
-test("mobile calendar keeps full accessible balances with readable compact grid labels", () => {
+test("mobile calendar keeps full accessible balances and non-abbreviated grid labels", () => {
   const calendar = readFileSync(path.resolve(process.cwd(), "components/CalendarView.tsx"), "utf8");
 
   assert.match(calendar, /accessibilityLabel=\{`Balance \$\{formatCalendarBalance\(visibleBalance\.balance\)\}`\}/);
   assert.doesNotMatch(calendar, /Actual close|Actual bank close/i);
   assert.doesNotMatch(calendar, />Projected</);
-  assert.match(calendar, /\{formatCompactCalendarAmount\(visibleBalance\.balance(?:, undefined, 1000)?\)\}/);
+  assert.match(calendar, /label=\{formatCalendarBalance\(visibleBalance\.balance\)\}/);
+  assert.doesNotMatch(calendar, /formatCompactCalendarAmount/);
   assert.doesNotMatch(calendar, /formatCompactCalendarBalance/);
 });
 

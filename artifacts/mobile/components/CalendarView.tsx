@@ -15,7 +15,8 @@ import { isConfirmedBillMatch } from "@/lib/billMatching";
 import { isSnowballPaymentTransaction, snowballPaymentName } from "@/lib/debtPaymentPlan";
 import { allocationLabel, groupPlannedExpenseAllocations, occurrenceKey } from "@/lib/reviewCenter";
 import { scenarioDates } from "@/lib/decisions";
-import { calendarVisibleForecastEvents, formatCalendarBalance, formatCompactCalendarAmount } from "@/lib/forecastDisplay";
+import { calendarVisibleForecastEvents, formatCalendarBalance } from "@/lib/forecastDisplay";
+import { CalendarAmountLabel } from "@/components/CalendarAmountLabel";
 
 const DAY_NAMES = ["S", "M", "T", "W", "T", "F", "S"];
 const EMPTY_OVERDUE_BILL_KEYS: ReadonlySet<string> = new Set();
@@ -255,19 +256,15 @@ export function CalendarView({
                     </Text>
                   </View>
                   {visibleBalance ? (
-                    <Text
-                      style={[
+                    <CalendarAmountLabel
+                      label={formatCalendarBalance(visibleBalance.balance)}
+                      textStyle={[
                         styles.balanceText,
                         isDesktop && styles.desktopBalanceText,
                         { color: visibleBalance.balance >= safetyFloor ? calendarTheme.green : visibleBalance.balance < 0 ? calendarTheme.red : calendarTheme.amber },
                       ]}
                       accessibilityLabel={`Balance ${formatCalendarBalance(visibleBalance.balance)}`}
-                      numberOfLines={1}
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.55}
-                    >
-                      {formatCompactCalendarAmount(visibleBalance.balance, undefined, 1000)}
-                    </Text>
+                    />
                   ) : null}
                 </View>
 
@@ -339,7 +336,7 @@ const styles = StyleSheet.create({
   desktopDayTopRow: { alignItems: "center", gap: 4 },
   todayCircle: { minWidth: 26, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center", paddingHorizontal: 5 },
   dayNum: { fontSize: 16 },
-  balanceText: { maxWidth: "100%", flexShrink: 1, fontSize: 9, fontFamily: "Inter_800ExtraBold" },
+  balanceText: { fontSize: 9, fontFamily: "Inter_800ExtraBold" },
   desktopBalanceText: { fontSize: 10 },
   eventStack: { marginTop: 6, gap: 3 },
   eventChip: {

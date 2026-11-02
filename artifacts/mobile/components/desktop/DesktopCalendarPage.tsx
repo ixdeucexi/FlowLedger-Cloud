@@ -1,4 +1,5 @@
-import { formatCompactCalendarAmount } from "@/lib/forecastDisplay";
+import { formatCalendarBalance } from "@/lib/forecastDisplay";
+import { CalendarAmountLabel } from "@/components/CalendarAmountLabel";
 import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import { useCalendarAppearance } from "@/hooks/useCalendarAppearance";
 import type { CalendarAppearance } from "@/lib/calendarAppearance";
@@ -236,9 +237,7 @@ function CalendarEventPill({
     >
       <View style={[styles.eventDot, { backgroundColor: tone.dot }]} />
       <Text numberOfLines={1} style={styles.eventName}>{resolveEventLabel(event)}</Text>
-      <Text style={[styles.eventAmount, { color: tone.color }]}>
-        {formatCompactCalendarAmount(event.amount, money(event.amount, true))}
-      </Text>
+      <CalendarAmountLabel inline label={money(event.amount, true)} textStyle={[styles.eventAmount, { color: tone.color }]} />
     </View>
   );
 }
@@ -335,7 +334,7 @@ function DesktopMonthGrid({
                 {isToday && !selected ? <Text style={styles.todayLabel}>Today</Text> : null}
               </View>
               {visibleBalance ? (
-                <Text accessibilityLabel={`Balance ${money(visibleBalance.balance)}`} numberOfLines={1} style={[styles.dayBalanceSource, { color: visibleBalance.balance >= safetyFloor ? c.success : visibleBalance.balance < 0 ? c.destructive : c.warning }]}>{formatCompactCalendarAmount(visibleBalance.balance, undefined, 1000)}</Text>
+                <CalendarAmountLabel label={formatCalendarBalance(visibleBalance.balance)} accessibilityLabel={`Balance ${money(visibleBalance.balance)}`} textStyle={[styles.dayBalanceSource, { color: visibleBalance.balance >= safetyFloor ? c.success : visibleBalance.balance < 0 ? c.destructive : c.warning }]} style={styles.dayBalanceSpacing} />
               ) : null}
               {visibleEvents.map((event) => (
                 <CalendarEventPill
@@ -354,7 +353,7 @@ function DesktopMonthGrid({
                   <Text style={[styles.lowestCellLabel, tightestForecastIsRisk && styles.riskCellLabel]}>
                     {tightestForecastIsRisk ? "Build room · Tightest forecast" : "Tightest forecast point"}
                   </Text>
-                  <Text accessibilityLabel={`Tightest forecast ${money(lowestBalance)}`} style={[styles.lowestCellValue, tightestForecastIsRisk && styles.riskCellValue]}>{formatCompactCalendarAmount(lowestBalance, money(lowestBalance))}</Text>
+                  <CalendarAmountLabel label={money(lowestBalance)} accessibilityLabel={`Tightest forecast ${money(lowestBalance)}`} textStyle={[styles.lowestCellValue, tightestForecastIsRisk && styles.riskCellValue]} />
                 </View>
               ) : null}
               {active ? <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, styles.dayCellOutline, { borderColor: c.primary }]} /> : null}
@@ -693,7 +692,8 @@ const styles = StyleSheet.create({
   eventName: { flex: 1, minWidth: 0, color: palette.text, fontSize: 11, fontFamily: "Inter_600SemiBold" },
   eventAmount: { fontSize: 11, fontFamily: "Inter_700Bold" },
   moreText: { color: palette.purple, fontSize: 11, fontFamily: "Inter_700Bold", marginTop: 1 },
-  dayBalanceSource: { fontSize: 13, fontFamily: "Inter_700Bold", textAlign: "center", marginBottom: 8 },
+  dayBalanceSource: { fontSize: 13, fontFamily: "Inter_700Bold", textAlign: "center" },
+  dayBalanceSpacing: { marginBottom: 8 },
   lowestCellBadge: { marginTop: "auto", paddingTop: 5 },
   lowestCellLabel: { color: palette.blue, fontSize: 11, fontFamily: "Inter_700Bold", textTransform: "uppercase" },
   lowestCellValue: { color: palette.blue, fontSize: 12, fontFamily: "Inter_800ExtraBold", marginTop: 2 },

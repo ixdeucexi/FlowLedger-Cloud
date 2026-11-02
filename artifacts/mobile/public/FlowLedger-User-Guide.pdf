@@ -132,7 +132,7 @@ endobj
 endobj
 16 0 obj
 <<
-/Author (FlowLedger) /CreationDate (D:20261101214644+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:31eb7831ceb292e367969ff094993dac39b3cbf8697f414d44f147500bbc5999) /ModDate (D:20261101214644+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+/Author (FlowLedger) /CreationDate (D:20261102120657+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:9675f8341dee2fe8c7596c9fc806c674eb23118466621390fa11f2f8a31ec97d) /ModDate (D:20261102120657+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
   /Subject (Current Dashboard, Activity, Bills, Forecast, payoff, Flo, and Settings guidance) /Title (FlowLedger User Guide) /Trapped /False
 >>
 endobj
@@ -322,7 +322,7 @@ BT /F1 9.5 Tf 11.4 TL ET
 BT 1 0 0 1 58 201 Tm (Continue paying bills and debts through your bank or provider.) Tj T* ET
 .666667 .701961 .784314 rg
 BT /F1 9 Tf 10.8 TL ET
-BT 1 0 0 1 48 30 Tm (Phone, installed PWA, and desktop - updated November 1, 2026) Tj T* ET
+BT 1 0 0 1 48 30 Tm (Phone, installed PWA, and desktop - updated November 2, 2026) Tj T* ET
  
 endstream
 endobj
@@ -366,7 +366,7 @@ BT 1 0 0 1 42 664 Tm (Set up recurring money once, then review it whenever life 
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 1, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 2, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 2) Tj T* ET
 .133333 .780392 .839216 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -612,7 +612,7 @@ BT 1 0 0 1 42 664 Tm (Use the same short path each day. Go deeper only when some
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 1, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 2, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 3) Tj T* ET
 .145098 .827451 .607843 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -800,7 +800,7 @@ BT 1 0 0 1 42 664 Tm (Activity is the history of what really happened. Review ne
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 1, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 2, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 4) Tj T* ET
 .219608 .741176 .972549 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -992,7 +992,7 @@ BT 1 0 0 1 42 664 Tm (Use Bills for recurring obligations. Switch to Debt to man
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 1, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 2, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 5) Tj T* ET
 .960784 .721569 .180392 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -1205,7 +1205,7 @@ endstream
 endobj
 23 0 obj
 <<
-/Length 7047
+/Length 7046
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -1243,7 +1243,7 @@ BT 1 0 0 1 42 664 Tm (Forecast shows when money should move and what each day's 
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 1, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 2, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 6) Tj T* ET
 .360784 .65098 1 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -1306,8 +1306,8 @@ BT /F2 9.5 Tf 11.4 TL ET
 BT 1 0 0 1 67 530 Tm (Open the day) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 515 Tm (Large calendar values are rounded to K/M/B. Tap a date for) Tj T* ET
-BT 1 0 0 1 56 504 Tm (the full amount and every item behind its closing balance.) Tj T* ET
+BT 1 0 0 1 56 515 Tm (Calendar cells show full whole-dollar amounts. Tap a date) Tj T* ET
+BT 1 0 0 1 56 504 Tm (for exact cents and every item behind its closing balance.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
@@ -1527,7 +1527,7 @@ BT 1 0 0 1 42 664 Tm (Use savings for purpose-based balances. Use Flo for explan
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 1, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 2, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 7) Tj T* ET
 .654902 .427451 1 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -1812,7 +1812,7 @@ BT 1 0 0 1 42 664 Tm (Use focused reminders and the Guided Tour when you need he
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 1, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 2, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 8) Tj T* ET
 1 .615686 .301961 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -2092,7 +2092,7 @@ BT 1 0 0 1 42 650 Tm (support.) Tj T* ET
 n 42 630 m 570 630 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 1, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 2, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 9) Tj T* ET
 .654902 .545098 .980392 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -2408,7 +2408,7 @@ BT 1 0 0 1 42 664 Tm (Choose the view that helps you plan, keep amounts private,
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 1, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 2, 2026) Tj T* ET
 BT 1 0 0 1 540.2 24 Tm (Page 10) Tj T* ET
 .607843 .360784 1 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -2607,7 +2607,7 @@ BT 1 0 0 1 42 664 Tm (Most differences come from status, recurrence, unmatched a
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 1, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 2, 2026) Tj T* ET
 BT 1 0 0 1 540.2 24 Tm (Page 11) Tj T* ET
 1 .435294 .568627 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -2991,15 +2991,15 @@ xref
 0000017693 00000 n 
 0000022678 00000 n 
 0000028928 00000 n 
-0000036027 00000 n 
-0000043129 00000 n 
-0000049761 00000 n 
-0000057877 00000 n 
-0000063337 00000 n 
+0000036026 00000 n 
+0000043128 00000 n 
+0000049760 00000 n 
+0000057876 00000 n 
+0000063336 00000 n 
 trailer
 <<
 /ID 
-[<60dbac98f30bcb105e1798ad634666bb><60dbac98f30bcb105e1798ad634666bb>]
+[<9f42193690a9f8430c628eeb4c362e04><9f42193690a9f8430c628eeb4c362e04>]
 % ReportLab generated PDF document -- digest (opensource)
 
 /Info 16 0 R
@@ -3007,5 +3007,5 @@ trailer
 /Size 29
 >>
 startxref
-72789
+72788
 %%EOF

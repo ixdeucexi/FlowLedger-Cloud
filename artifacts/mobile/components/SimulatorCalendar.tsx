@@ -1,12 +1,13 @@
 import { PrivacyPressable as Pressable, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import { AppText } from "@/components/AppText";
+import { CalendarAmountLabel } from "@/components/CalendarAmountLabel";
 import Feather from "@expo/vector-icons/Feather";
 import React, { useMemo, useRef, useState } from "react";
 import { Platform, ScrollView, StyleSheet, useWindowDimensions } from "react-native";
 import { useCalendarAppearance } from "@/hooks/useCalendarAppearance";
 import { useColors } from "@/hooks/useColors";
 import { CALENDAR_CATEGORIES } from "@/lib/calendarColors";
-import { formatCompactCalendarAmount, formatEventAmount, formatEventStatus } from "@/lib/forecastDisplay";
+import { formatCalendarBalance, formatEventAmount, formatEventStatus } from "@/lib/forecastDisplay";
 import { simulationCalendarCells, simulationCalendarDays, simulationCalendarDifference, simulationCalendarEventKind, simulationCalendarMonth, simulationCalendarMonths, simulationCalendarSelectedDay } from "@/lib/planSimulationCalendar";
 import type { CanonicalPlanSimulationDay, PlanSimulationResult } from "@/lib/planSimulator";
 import type { FinancialEvent } from "@/lib/forecast";
@@ -98,7 +99,7 @@ export function SimulatorCalendar({ baseline, scenario, startDate, endDate, scen
         const events: FinancialEvent[] = available ? cell.scenario!.events : [];
         return <Pressable key={cell.date} accessibilityRole="button" accessibilityLabel={available ? `Open simulator day ${cell.date}` : `Simulator day ${cell.date} is outside available results`} accessibilityState={{ disabled: !available, selected: active }} disabled={!available} onPress={() => selectDate(cell.date)} style={({ pressed }) => [styles.cell, width >= 768 && styles.cellWide, { borderColor: c.border, opacity: pressed ? .7 : 1 }]}>
           <View style={[styles.dayNumberWrap, active && { backgroundColor: c.primary }]}><AppText style={[styles.dayNumber, { color: active ? calendarHighlightText(c.primary) : available ? c.foreground : c.mutedForeground, opacity: cell.inCurrentMonth ? 1 : .35 }]}>{cell.day}</AppText></View>
-          {available && balance !== undefined ? <><AppText sensitive numberOfLines={1} style={[styles.gridBalance, width < 400 && styles.gridBalanceNarrow, width < 360 && styles.gridBalanceSmall, width >= 768 && styles.gridBalanceWide, { color: tone.color }]}>{formatCompactCalendarAmount(balance, undefined, 1000)}</AppText>{events.slice(0, width >= 768 ? 3 : 2).map((event, eventIndex) => { const eventTone = tones[simulationCalendarEventKind(event)];return <View key={`${event.id}:${eventIndex}`} style={[styles.chip, { backgroundColor: eventTone.bg, borderColor: eventTone.border }]}><AppText numberOfLines={1} style={[styles.chipLabel, { color: eventTone.text }]}>{resolveEventLabel(event)}</AppText></View>; })}{events.length > (width >= 768 ? 3 : 2) ? <AppText style={[styles.more, { color: c.mutedForeground }]}>+{events.length - (width >= 768 ? 3 : 2)} more</AppText> : null}</> : <AppText style={[styles.unavailable, { color: c.mutedForeground }]}>{cell.inCurrentMonth ? "—" : ""}</AppText>}
+          {available && balance !== undefined ? <><CalendarAmountLabel label={formatCalendarBalance(balance)} accessibilityLabel={`Balance ${formatCalendarBalance(balance)}`} textStyle={[styles.gridBalance, width < 400 && styles.gridBalanceNarrow, width < 360 && styles.gridBalanceSmall, width >= 768 && styles.gridBalanceWide, { color: tone.color }]} />{events.slice(0, width >= 768 ? 3 : 2).map((event, eventIndex) => { const eventTone = tones[simulationCalendarEventKind(event)];return <View key={`${event.id}:${eventIndex}`} style={[styles.chip, { backgroundColor: eventTone.bg, borderColor: eventTone.border }]}><AppText numberOfLines={1} style={[styles.chipLabel, { color: eventTone.text }]}>{resolveEventLabel(event)}</AppText></View>; })}{events.length > (width >= 768 ? 3 : 2) ? <AppText style={[styles.more, { color: c.mutedForeground }]}>+{events.length - (width >= 768 ? 3 : 2)} more</AppText> : null}</> : <AppText style={[styles.unavailable, { color: c.mutedForeground }]}>{cell.inCurrentMonth ? "—" : ""}</AppText>}
           {active ? <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, styles.selectedCellBorder, { borderColor: c.primary }]} /> : null}
         </Pressable>;
       })}</View>
