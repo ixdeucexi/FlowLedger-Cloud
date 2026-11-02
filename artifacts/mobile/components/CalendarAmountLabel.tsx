@@ -2,7 +2,7 @@ import { PrivacyText as Text, PrivacyView as View } from "@/components/privacy/P
 import { useMoneyPrivacy } from "@/context/MoneyPrivacyContext";
 import { useColors } from "@/hooks/useColors";
 import React, { useState } from "react";
-import { ScrollView, StyleSheet, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
+import { Platform, ScrollView, StyleSheet, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 
 /** Full calendar text. Large values scroll locally instead of losing digits or shrinking. */
 export function CalendarAmountLabel({ label, accessibilityLabel, textStyle, style, inline = false }: {
@@ -19,11 +19,12 @@ export function CalendarAmountLabel({ label, accessibilityLabel, textStyle, styl
   const [focused, setFocused] = useState(false);
   const overflowing = !hidden && viewportWidth > 0 && contentWidth > viewportWidth + .5;
 
+  // RN Web disables touch gestures on a disabled scroller, even when its text fits.
   return <View accessibilityLabel={accessibilityLabel} style={[styles.container, inline && styles.inline, style]}>
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      scrollEnabled={overflowing}
+      scrollEnabled={Platform.OS === "web" || overflowing}
       tabIndex={overflowing ? 0 : -1}
       focusable={overflowing}
       accessibilityLabel={overflowing ? "Scroll full calendar amount" : "Calendar amount"}
