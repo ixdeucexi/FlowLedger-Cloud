@@ -1,0 +1,23 @@
+{
+  "status": "PASS",
+  "origin": "local isolated static export",
+  "contexts": 4,
+  "stages": 25,
+  "actualEntryLoadsVerified": 8,
+  "expectedSHA256": "084d7d63fd417be9162468d70c2e4e85a89ad695cf67781261c9d04c5c13b861",
+  "financialSnapshotsUnchanged": true,
+  "actualFinancialWrites": 0,
+  "actualProviderCalls": 0,
+  "unknownRequests": 0,
+  "unexpectedConsoleErrors": 0,
+  "uncaughtAppErrors": 0,
+  "allOwnedBrowsersContextsAndServersClosed": true,
+  "selectedScreenshots": [
+    "390-dark-typical-main-full-values.png",
+    "320-dark-billion-main-full-values.png",
+    "320-light-negative-private-hidden-main.png",
+    "320-light-negative-private-main-day-detail.png",
+    "1200-light-zero-large-events-main-full-values.png",
+    "1200-light-zero-large-events-simulator-full-values.png"
+  ]
+}

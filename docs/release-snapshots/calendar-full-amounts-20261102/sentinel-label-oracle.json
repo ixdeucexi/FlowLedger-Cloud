@@ -1,0 +1,39 @@
+{
+  "status": "PASS",
+  "componentLabelStateCases": 6,
+  "source": "Actual CalendarAmountLabel function with mocked hooks/native tree and canonical shared Privacy functions",
+  "canonicalPrivacyMaskAndAccessibility": "PASS",
+  "measuredOverflowFocusAndCueState": "PASS",
+  "pointerTouchPropagationGuardState": "PASS",
+  "unchangedCallerTypographyAndFullLabel": "PASS",
+  "cases": [
+    {
+      "label": "$5,100",
+      "status": "PASS"
+    },
+    {
+      "label": "-$999,499,999",
+      "status": "PASS"
+    },
+    {
+      "label": "−$999,499,999.25",
+      "status": "PASS"
+    },
+    {
+      "label": "+$25,000.10",
+      "status": "PASS"
+    },
+    {
+      "label": "$0",
+      "status": "PASS"
+    },
+    {
+      "label": "Inline desktop amount without outer accessibility override",
+      "status": "PASS"
+    }
+  ],
+  "notClaimed": [
+    "Real browser scroll reachability or physical gestures",
+    "Native layout geometry or screen-reader hardware"
+  ]
+}

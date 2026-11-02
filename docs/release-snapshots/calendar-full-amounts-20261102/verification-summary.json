@@ -1,0 +1,38 @@
+{
+  "status": "LIVE_PASS",
+  "verifiedAt": "2026-11-02T12:36:42.787900+00:00",
+  "source": "cf23b38af66944668c5cd7017cd3838e472fad40",
+  "deployment": "dpl_He8SixsXGbDXrWNP6EGRVd1kvH4C",
+  "immutableUrl": "flow-ledger-cloud-po4dzd7gs-flow-ledger-s-projects.vercel.app",
+  "allFourAliases": "PASS",
+  "bundle": {
+    "entry": "entry-f617bbebdc9bb7ca03f64c478a90d09a.js",
+    "bytes": 5156985,
+    "sha256": "084d7d63fd417be9162468d70c2e4e85a89ad695cf67781261c9d04c5c13b861"
+  },
+  "tests": {
+    "forgeFocused": 80,
+    "sentinelFocused": 50,
+    "componentStateCases": 6,
+    "formatterSamples": 11,
+    "types": "PASS",
+    "sourceConfigGuideArtifact": "PASS"
+  },
+  "runtime": {
+    "local": "PASS",
+    "published": "PASS",
+    "contextsPerRun": 4,
+    "stagesPerRun": 25,
+    "entryLoadsPerRun": 8,
+    "keyboardTouchNoAccidentalDayAction": "PASS",
+    "privacyAndFloClearance": "PASS",
+    "financialSnapshotsUnchanged": true,
+    "actualFinancialWrites": 0,
+    "actualProviderCalls": 0,
+    "allRunnersClosed": true,
+    "hostedCspDiagnostics": 8,
+    "noPersistentLayoutMeasurementDefect": true
+  },
+  "httpPostflight": "PASS",
+  "rollback": "rollback/prod-before-calendar-full-amounts-20261102-1204"
+}

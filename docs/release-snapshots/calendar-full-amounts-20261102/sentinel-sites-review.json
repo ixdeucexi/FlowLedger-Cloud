@@ -1,0 +1,202 @@
+{
+  "status": "PASS",
+  "base": "27870a8",
+  "checkedAt": "2026-11-02T12:16:05.413Z",
+  "scope": "Five money call sites and source/data parity; component Privacy, accessibility, interaction and render behavior owned by parent",
+  "sourceHashes": {
+    "artifacts/mobile/components/CalendarView.tsx": "91cedc0edb48e72fb220f7e65e068011aa53380fd94581e02a0b0a02ce1ba824",
+    "artifacts/mobile/components/SimulatorCalendar.tsx": "ca129e5742f2164b7b2d24f61c2ef435f657b1b96b608f94e0a5ecb3ccdcc148",
+    "artifacts/mobile/components/desktop/DesktopCalendarPage.tsx": "f2cba6b7608c5b9f17db0b46169e3141cce21c19b0e943fad46fe6a2564255e4",
+    "artifacts/mobile/components/CalendarAmountLabel.tsx": "d07a4490e2c34fdf3eba1624701c11de9dd44795e5a2c4483632e7ecc46b61a0",
+    "artifacts/mobile/lib/forecastDisplay.ts": "a719b1039967ed1ca2b2689b3f49809d442feeb8a2df009f4519f5c45fd2afdb"
+  },
+  "checks": {
+    "fiveSites": [
+      {
+        "file": "artifacts/mobile/components/CalendarView.tsx",
+        "source": "visibleBalance.balance",
+        "label": "formatCalendarBalance(visibleBalance.balance)",
+        "originalColorStyleUnchanged": true
+      },
+      {
+        "file": "artifacts/mobile/components/SimulatorCalendar.tsx",
+        "source": "balance",
+        "label": "formatCalendarBalance(balance)",
+        "originalColorStyleUnchanged": true
+      },
+      {
+        "file": "artifacts/mobile/components/desktop/DesktopCalendarPage.tsx",
+        "source": "event.amount",
+        "label": "money(event.amount, true)",
+        "originalColorStyleUnchanged": true
+      },
+      {
+        "file": "artifacts/mobile/components/desktop/DesktopCalendarPage.tsx",
+        "source": "visibleBalance.balance",
+        "label": "formatCalendarBalance(visibleBalance.balance)",
+        "originalColorStyleUnchanged": true
+      },
+      {
+        "file": "artifacts/mobile/components/desktop/DesktopCalendarPage.tsx",
+        "source": "lowestBalance",
+        "label": "money(lowestBalance)",
+        "originalColorStyleUnchanged": true
+      }
+    ],
+    "allOtherRendererAstUnchangedAfterExcludingMoneySubtreesImportsAndStyles": true,
+    "originalMoneyColorExpressionsUnchanged": true,
+    "globalFormatterAndTwelveSharedPathsUntouched": true,
+    "untouchedPaths": [
+      {
+        "file": "artifacts/mobile/lib/forecast.ts",
+        "sha256": "c00771a9aef430a41c9ce6bbb1d4c6d6d8797f08a89f4e66db3fcf4e44d4360d",
+        "byteEqualToBase": true
+      },
+      {
+        "file": "artifacts/mobile/lib/financialProjection.ts",
+        "sha256": "a0b655544f4f179814be5d621117eebd693d8e33a69ba39ce168e265a4c6caec",
+        "byteEqualToBase": true
+      },
+      {
+        "file": "artifacts/mobile/lib/dailyCheckingClose.ts",
+        "sha256": "71207266697f9c35bebf3e28388217a6c77dd473dd976e40ffd0ca3fc6d39c63",
+        "byteEqualToBase": true
+      },
+      {
+        "file": "artifacts/mobile/lib/desktopCalendar.ts",
+        "sha256": "285edb043c28eb4a683c85e3209f8784fa9678dc7e905199bf9f02ee92eb57bf",
+        "byteEqualToBase": true
+      },
+      {
+        "file": "artifacts/mobile/lib/planSimulator.ts",
+        "sha256": "2e034f3c9deab6bf027114f0170ac7536079d2cfc3875b8067f2c93df9eb7ec8",
+        "byteEqualToBase": true
+      },
+      {
+        "file": "artifacts/mobile/lib/planSimulationCalendar.ts",
+        "sha256": "f3f02e4c1803a3af1ec088f604278ecec9a105370c7e68a3bb49cbc59b670d14",
+        "byteEqualToBase": true
+      },
+      {
+        "file": "artifacts/mobile/lib/planSimulationLibrary.ts",
+        "sha256": "c071b2be729d1c36b3facf9db8615158d94667579ebd20231326691ff64ae160",
+        "byteEqualToBase": true
+      },
+      {
+        "file": "artifacts/mobile/lib/planSimulationPersistence.ts",
+        "sha256": "cc7293ae5a0a05fb666c1da4d6b15814ae1000275b0f22380d39a74f22ec9c28",
+        "byteEqualToBase": true
+      },
+      {
+        "file": "artifacts/mobile/context/BudgetContext.tsx",
+        "sha256": "adb45f04d1250984cba2fa6b49b9df705d36ceca1589b69899cc980dc2226579",
+        "byteEqualToBase": true
+      },
+      {
+        "file": "artifacts/mobile/lib/calendarAppearance.ts",
+        "sha256": "4aefd1b8dfe9521b5a4c2a48b3ac889e66409bca7d4fb1e44565df1826abca1a",
+        "byteEqualToBase": true
+      },
+      {
+        "file": "artifacts/mobile/lib/calendarColors.ts",
+        "sha256": "47c5bb562a14c0a7e79824c2bb434c25df85d1268f3afc8508d99dba2fb512cf",
+        "byteEqualToBase": true
+      },
+      {
+        "file": "artifacts/mobile/components/privacy/PrivacyPrimitives.tsx",
+        "sha256": "98bba2d53fb6cca8f4a0925d28c9e49ea0313a15fc3f81fe8db673d311b7b2ed",
+        "byteEqualToBase": true
+      },
+      {
+        "file": "artifacts/mobile/lib/forecastDisplay.ts",
+        "sha256": "a719b1039967ed1ca2b2689b3f49809d442feeb8a2df009f4519f5c45fd2afdb",
+        "byteEqualToBase": true
+      },
+      {
+        "file": "artifacts/mobile/lib/openCalendarWeeks.ts",
+        "sha256": "91d5174509cf14e364b74552e3c897bd0db17f1752eeb7f301a73c5768dca94c",
+        "byteEqualToBase": true
+      },
+      {
+        "file": "artifacts/mobile/app/(tabs)/monthly.tsx",
+        "sha256": "ed445bf22bf3ab35aea72765b9ba90220cf3a2872f3e2bbc3ee9a0c8751b132e",
+        "byteEqualToBase": true
+      }
+    ],
+    "formatterSamples": [
+      {
+        "value": 0,
+        "gridWholeDollarLabel": "$0",
+        "desktopFullLabel": "$0.00",
+        "desktopSignedEventLabel": "$0.00"
+      },
+      {
+        "value": 0.4,
+        "gridWholeDollarLabel": "$0",
+        "desktopFullLabel": "$0.40",
+        "desktopSignedEventLabel": "+$0.40"
+      },
+      {
+        "value": -0.4,
+        "gridWholeDollarLabel": "$0",
+        "desktopFullLabel": "−$0.40",
+        "desktopSignedEventLabel": "−$0.40"
+      },
+      {
+        "value": 12.34,
+        "gridWholeDollarLabel": "$12",
+        "desktopFullLabel": "$12.34",
+        "desktopSignedEventLabel": "+$12.34"
+      },
+      {
+        "value": -999.99,
+        "gridWholeDollarLabel": "-$1,000",
+        "desktopFullLabel": "−$999.99",
+        "desktopSignedEventLabel": "−$999.99"
+      },
+      {
+        "value": 1000.01,
+        "gridWholeDollarLabel": "$1,000",
+        "desktopFullLabel": "$1,000.01",
+        "desktopSignedEventLabel": "+$1,000.01"
+      },
+      {
+        "value": -1540.5,
+        "gridWholeDollarLabel": "-$1,541",
+        "desktopFullLabel": "−$1,540.50",
+        "desktopSignedEventLabel": "−$1,540.50"
+      },
+      {
+        "value": 999999.99,
+        "gridWholeDollarLabel": "$1,000,000",
+        "desktopFullLabel": "$999,999.99",
+        "desktopSignedEventLabel": "+$999,999.99"
+      },
+      {
+        "value": 1000000,
+        "gridWholeDollarLabel": "$1,000,000",
+        "desktopFullLabel": "$1,000,000.00",
+        "desktopSignedEventLabel": "+$1,000,000.00"
+      },
+      {
+        "value": 1234567890.12,
+        "gridWholeDollarLabel": "$1,234,567,890",
+        "desktopFullLabel": "$1,234,567,890.12",
+        "desktopSignedEventLabel": "+$1,234,567,890.12"
+      },
+      {
+        "value": -1234567890.12,
+        "gridWholeDollarLabel": "-$1,234,567,890",
+        "desktopFullLabel": "−$1,234,567,890.12",
+        "desktopSignedEventLabel": "−$1,234,567,890.12"
+      }
+    ],
+    "formatterSampleCount": 11,
+    "presentationOnlyStyleChangesReviewed": [
+      "CalendarView balanceText maxWidth/flexShrink removed to allow local full-text scrolling",
+      "Desktop dayBalanceSource marginBottom8 moved to dayBalanceSpacing wrapper"
+    ]
+  },
+  "findings": [],
+  "productWritesByReviewer": 0
+}

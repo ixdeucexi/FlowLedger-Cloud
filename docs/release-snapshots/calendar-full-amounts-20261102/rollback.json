@@ -1,0 +1,8 @@
+{
+  "ref": "rollback/prod-before-calendar-full-amounts-20261102-1204",
+  "tagObject": "1f32eb53cd204ab768c9a2908729bbba5bb73436",
+  "source": "7239fda425c53a2837da80acb79ec3769e1245fd",
+  "deployment": "dpl_9S7CxBzinwPg986t4FGmAE4gtUWe",
+  "remoteVerified": true,
+  "createdBeforeProductionChange": true
+}

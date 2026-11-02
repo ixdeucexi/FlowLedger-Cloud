@@ -1,0 +1,8 @@
+{
+  "status": "PASS",
+  "source": "cf23b38af66944668c5cd7017cd3838e472fad40",
+  "deploymentId": "dpl_He8SixsXGbDXrWNP6EGRVd1kvH4C",
+  "bundlePath": "/_expo/static/js/web/entry-f617bbebdc9bb7ca03f64c478a90d09a.js",
+  "bundleSha256": "084d7d63fd417be9162468d70c2e4e85a89ad695cf67781261c9d04c5c13b861",
+  "exactBrowserTestedBundle": true
+}

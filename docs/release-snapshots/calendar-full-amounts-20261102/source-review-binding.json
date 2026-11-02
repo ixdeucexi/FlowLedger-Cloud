@@ -1,0 +1,11 @@
+{
+  "status": "PASS",
+  "source": "cf23b38af66944668c5cd7017cd3838e472fad40",
+  "sourceHashes": {
+    "artifacts/mobile/components/CalendarAmountLabel.tsx": "d07a4490e2c34fdf3eba1624701c11de9dd44795e5a2c4483632e7ecc46b61a0",
+    "artifacts/mobile/components/CalendarView.tsx": "91cedc0edb48e72fb220f7e65e068011aa53380fd94581e02a0b0a02ce1ba824",
+    "artifacts/mobile/components/SimulatorCalendar.tsx": "ca129e5742f2164b7b2d24f61c2ef435f657b1b96b608f94e0a5ecb3ccdcc148",
+    "artifacts/mobile/components/desktop/DesktopCalendarPage.tsx": "f2cba6b7608c5b9f17db0b46169e3141cce21c19b0e943fad46fe6a2564255e4",
+    "artifacts/mobile/lib/forecastDisplay.test.ts": "8ea99098bf0e996010766a98c92f9b347d57347447c59d824333d95f57762f62"
+  }
+}

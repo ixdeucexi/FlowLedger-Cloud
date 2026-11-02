@@ -1,0 +1,6 @@
+{
+  "status": "PASS",
+  "files": 5,
+  "findings": [],
+  "scope": "Successful settled proof only; fixtures and earlier transient raw diagnostics excluded."
+}

@@ -1,0 +1,78 @@
+{
+  "status": "IDENTITY_ENV_METADATA_PASS",
+  "project": {
+    "id": "prj_nOlgvktXdfLErqQvmESnvyLFnMj2",
+    "name": "flow-ledger-cloud",
+    "accountId": "team_jIrgjLphz4oeVh6WuFHaiWKq",
+    "nodeVersion": "24.x"
+  },
+  "checks": [
+    {
+      "key": "SUPABASE_SERVICE_ROLE_KEY",
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "SUPABASE_URL",
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "EXPO_PUBLIC_SUPABASE_URL",
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "EXPO_PUBLIC_SUPABASE_ANON_KEY",
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "PLAID_CLIENT_ID",
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "PLAID_SECRET",
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "PLAID_ENV",
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "PLAID_REDIRECT_URI",
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "PLAID_TOKEN_ENCRYPTION_KEY",
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "PLAID_WEBHOOK_URL",
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "CRON_SECRET",
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "VAPID_PUBLIC_KEY",
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "VAPID_PRIVATE_KEY",
+      "records": 1,
+      "status": "PASS"
+    }
+  ],
+  "secretValuesRequested": false,
+  "buildContract": "Project build fields omitted by MCP; explicit repository build/install/output/root/node settings on deployment."
+}

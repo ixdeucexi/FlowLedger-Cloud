@@ -1,0 +1,25 @@
+{
+  "status": "PASS",
+  "classification": "Native async overflow-measurement readiness at the initial test snapshot, not a persistent product defect",
+  "source": "cf23b38af66944668c5cd7017cd3838e472fad40",
+  "entrySHA256": "084d7d63fd417be9162468d70c2e4e85a89ad695cf67781261c9d04c5c13b861",
+  "productSourceChangedForThisClassification": false,
+  "samples": [
+    {
+      "waitMsSincePreviousSample": 250,
+      "cumulativeMinimumWaitMs": 250,
+      "allFirstFiveLongCellsHaveCueFocusableScroll": true
+    },
+    {
+      "waitMsSincePreviousSample": 1000,
+      "cumulativeMinimumWaitMs": 1250,
+      "allFirstFiveLongCellsHaveCueFocusableScroll": true
+    },
+    {
+      "waitMsSincePreviousSample": 2500,
+      "cumulativeMinimumWaitMs": 3750,
+      "allFirstFiveLongCellsHaveCueFocusableScroll": true
+    }
+  ],
+  "settledFourContextLocalAndPublishedGates": "PASS"
+}
