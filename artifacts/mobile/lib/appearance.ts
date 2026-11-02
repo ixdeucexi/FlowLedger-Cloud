@@ -2,6 +2,7 @@ import {
   normalizeCalendarColors,
   type CalendarColorOverrides,
 } from "./calendarColors";
+import { compositeColor, normalizeHexColor, type HexColor } from "./customColors";
 export type ThemeMode = "auto" | "dark" | "light";
 export type AccentChoice =
   | "default"
@@ -9,7 +10,8 @@ export type AccentChoice =
   | "teal"
   | "rose"
   | "amber"
-  | "slate";
+  | "slate"
+  | HexColor;
 export type BackdropChoice = "ambient" | "subtle" | "plain";
 export type AppearanceContrast = "standard" | "high";
 export interface AppearancePreferences {
@@ -110,7 +112,7 @@ export function normalizeAppearance(
     themeMode: isThemeMode(v.themeMode) ? v.themeMode : fallback.themeMode,
     accent: ACCENT_CHOICES.some((x) => x.id === v.accent)
       ? (v.accent as AccentChoice)
-      : "default",
+      : normalizeHexColor(v.accent) ?? "default",
     backdrop:
       v.backdrop === "subtle" || v.backdrop === "plain"
         ? v.backdrop
@@ -176,16 +178,33 @@ export function contrastRatio(a: string, b: string) {
   return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 }
 export function appearancePalette<
-  T extends { primary: string; background: string },
+  T extends { primary: string; background: string; card?: string },
 >(mode: "dark" | "light", p: AppearancePreferences, base: T) {
   const dark = mode === "dark",
     accent = ACCENT_CHOICES.find((a) => a.id === p.accent) ?? ACCENT_CHOICES[0];
-  const primary =
+  const chosenHex = normalizeHexColor(p.accent);
+  let primary =
     p.accent === "default"
       ? base.primary
       : dark
         ? accent.darkColor
         : accent.color;
+  if (chosenHex) {
+    // One accent serves links and buttons. Keep the saved hex while deriving a
+    // readable shade against both the tinted canvas and the actual card surface.
+    const target = dark ? "#ffffff" : "#000000";
+    primary = chosenHex;
+    for (let step = 0; step <= 100; step += 1) {
+      const candidate = mixColor(chosenHex, target, step / 100);
+      const background = mixColor(base.background, candidate, dark ? .025 : .035);
+      const card = p.contrast === "high" ? dark ? "#080c14" : "#ffffff" : base.card ?? background;
+      // A small margin also covers the browser's fractional RGBA compositing.
+      if (contrastRatio(candidate, background) >= 4.6 && contrastRatio(candidate, compositeColor(card, background)) >= 4.6) {
+        primary = candidate;
+        break;
+      }
+    }
+  }
   const primaryForeground =
     contrastRatio(primary, "#ffffff") >= 4.5 ? "#ffffff" : "#020617";
   return {

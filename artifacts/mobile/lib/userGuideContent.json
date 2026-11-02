@@ -255,6 +255,11 @@
             "icon": "layout"
           },
           {
+            "title": "Custom colors",
+            "body": "Open Settings > Appearance to choose a custom app accent or calendar category color. Pick visually or enter a hex code, preview, then Apply. Colors save on this device; calendar overrides stay when you change presets.",
+            "icon": "sliders"
+          },
+          {
             "title": "Privacy Mode",
             "body": "Use the Dashboard eye or Settings > Appearance to hide amounts and Flo conversations. Show amounts restores the view. Your saved numbers and calculations stay the same.",
             "icon": "eye-off"

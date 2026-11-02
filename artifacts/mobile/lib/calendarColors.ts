@@ -1,3 +1,5 @@
+import { normalizeHexColor, type HexColor } from "./customColors";
+
 export const CALENDAR_CATEGORIES = [
   { id: "income", label: "Income" },
   { id: "bill", label: "Bills" },
@@ -18,7 +20,7 @@ export const CALENDAR_COLOR_CHOICES = [
   { id: "slate", name: "Slate", dark: "#94a3b8", light: "#475569" },
   { id: "cyan", name: "Cyan", dark: "#22d3ee", light: "#0e7490" },
 ] as const;
-export type CalendarColorChoice = (typeof CALENDAR_COLOR_CHOICES)[number]["id"];
+export type CalendarColorChoice = (typeof CALENDAR_COLOR_CHOICES)[number]["id"] | HexColor;
 export type CalendarColorOverrides = Partial<
   Record<CalendarCategory, CalendarColorChoice>
 >;
@@ -35,7 +37,9 @@ export function normalizeCalendarColors(
     const choice = CALENDAR_COLOR_CHOICES.find(
       (color) => color.id === input[category.id],
     );
+    const hex = normalizeHexColor(input[category.id]);
     if (choice) result[category.id] = choice.id;
+    else if (hex) result[category.id] = hex;
   }
   return Object.keys(result).length ? result : undefined;
 }

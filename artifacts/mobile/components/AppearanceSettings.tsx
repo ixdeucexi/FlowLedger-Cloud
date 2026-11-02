@@ -1,9 +1,12 @@
 import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
-import React from "react";
+import React, { useState } from "react";
 import { StyleSheet } from "react-native";
 import { useThemeMode } from "@/context/ThemeContext";
 import { CalendarAppearanceSettings } from "@/components/CalendarAppearanceSettings";
+import { CustomColorPicker } from "@/components/CustomColorPicker";
+import { normalizeHexColor } from "@/lib/customColors";
+import { calendarHighlightText } from "@/lib/calendarAppearance";
 import { MoneyPrivacySetting } from "@/components/privacy/MoneyPrivacyControls";
 import { useColors } from "@/hooks/useColors";
 import colors from "@/constants/colors";
@@ -33,6 +36,8 @@ export function AppearanceSettings() {
     retryLoad,
   } = useThemeMode();
   const basePreset = appearanceBasePreset(appearance);
+  const [customAccentOpen, setCustomAccentOpen] = useState(false);
+  const customAccent = normalizeHexColor(appearance.accent);
   const currentLabel = basePreset
     ? `${basePreset.name}${presetName === "Custom" ? " · Custom colors" : ""}`
     : "Custom";
@@ -351,7 +356,11 @@ export function AppearanceSettings() {
             </Pressable>
           );
         })}
+        <Pressable accessibilityRole="button" accessibilityLabel="Choose custom accent color" accessibilityState={{ selected: Boolean(customAccent), disabled: !ready }} aria-pressed={Boolean(customAccent)} disabled={!ready} onPress={() => setCustomAccentOpen(true)} style={({ pressed }) => [styles.accentOption, { backgroundColor: c.card, borderColor: customAccent ? c.primary : c.border, opacity: pressed ? .78 : 1 }]}>
+          <View style={[styles.swatch, { backgroundColor: customAccent ?? c.primary, borderWidth: 1, borderColor: c.border }]}><Feather name={customAccent ? "check" : "edit-3"} size={14} color={calendarHighlightText(customAccent ?? c.primary)} /></View><Text style={[styles.accentName, { color: c.foreground }]}>Custom</Text>
+        </Pressable>
       </View>
+      {customAccent ? <Text style={[styles.copy, { color: c.mutedForeground }]}>Custom · {customAccent}</Text> : null}
       <Text style={[styles.label, { color: c.foreground }]}>Background</Text>
       <View style={styles.options}>
         {(["ambient", "subtle", "plain"] as BackdropChoice[]).map((id) => {
@@ -430,6 +439,7 @@ export function AppearanceSettings() {
           Reset to original look
         </Text>
       </Pressable>
+      {customAccentOpen ? <CustomColorPicker title="Custom accent color" initialColor={customAccent ?? c.primary} onCancel={() => setCustomAccentOpen(false)} onApply={accent => { updateAppearance({ accent });setCustomAccentOpen(false); }} /> : null}
     </View>
   );
 }

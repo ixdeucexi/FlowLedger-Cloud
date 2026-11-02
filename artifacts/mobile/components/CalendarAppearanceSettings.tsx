@@ -5,6 +5,8 @@ import { StyleSheet } from "react-native";
 import { useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import { useCalendarAppearance } from "@/hooks/useCalendarAppearance";
+import { CustomColorPicker } from "@/components/CustomColorPicker";
+import { normalizeHexColor } from "@/lib/customColors";
 import {
   CALENDAR_CATEGORIES,
   CALENDAR_COLOR_CHOICES,
@@ -17,6 +19,7 @@ export function CalendarAppearanceSettings() {
   const tones = useCalendarAppearance();
   const { appearance, updateAppearance, ready } = useThemeMode();
   const [expanded, setExpanded] = useState<CalendarCategory | null>(null);
+  const [pickerCategory, setPickerCategory] = useState<CalendarCategory | null>(null);
   const choose = (kind: CalendarCategory, choice?: CalendarColorChoice) => {
     updateAppearance((current) => {
       const next = { ...current.calendarColors };
@@ -64,6 +67,7 @@ export function CalendarAppearanceSettings() {
         const custom = CALENDAR_COLOR_CHOICES.find(
           (choice) => choice.id === appearance.calendarColors?.[id],
         );
+        const hex = normalizeHexColor(appearance.calendarColors?.[id]);
         return (
           <View
             key={id}
@@ -90,7 +94,7 @@ export function CalendarAppearanceSettings() {
                 {label}
               </Text>
               <Text style={[styles.value, { color: c.mutedForeground }]}>
-                {custom?.name ?? "Follow theme"}
+                {hex ? `Custom · ${hex}` : custom?.name ?? "Follow theme"}
               </Text>
               <Feather
                 name={expanded === id ? "chevron-up" : "chevron-down"}
@@ -145,6 +149,7 @@ export function CalendarAppearanceSettings() {
                     </Pressable>
                   );
                 })}
+                <Pressable accessibilityRole="button" accessibilityLabel={`Choose custom ${label} color`} accessibilityState={{ selected: Boolean(hex), disabled: !ready }} aria-pressed={Boolean(hex)} disabled={!ready} onPress={() => setPickerCategory(id)} style={({ pressed }) => [styles.choice, { borderColor: hex ? c.primary : c.border, backgroundColor: hex ? c.secondary : c.card, opacity: pressed ? .75 : 1 }]}><View style={[styles.dot, { backgroundColor: hex ?? tones[id].color, borderWidth: 1, borderColor: c.border }]} /><Text style={[styles.sampleText, { color: c.foreground }]}>Custom</Text>{hex ? <Feather name="check" size={13} color={c.primary} /> : null}</Pressable>
               </View>
             ) : null}
           </View>
@@ -169,6 +174,7 @@ export function CalendarAppearanceSettings() {
           Use theme colors for calendar
         </Text>
       </Pressable>
+      {pickerCategory ? <CustomColorPicker key={pickerCategory} title={`Custom ${CALENDAR_CATEGORIES.find(category => category.id === pickerCategory)!.label} color`} initialColor={normalizeHexColor(appearance.calendarColors?.[pickerCategory]) ?? tones[pickerCategory].color} onCancel={() => setPickerCategory(null)} onApply={color => { choose(pickerCategory, color);setPickerCategory(null); }} /> : null}
     </View>
   );
 }

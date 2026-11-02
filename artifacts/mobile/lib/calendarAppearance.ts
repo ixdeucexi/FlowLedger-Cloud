@@ -7,6 +7,7 @@ import {
   CALENDAR_COLOR_CHOICES,
   type CalendarCategory,
 } from "./calendarColors";
+import { normalizeHexColor } from "./customColors";
 
 export type CalendarChipKind = CalendarCategory | "goal" | "expense";
 export interface CalendarTone {
@@ -61,7 +62,7 @@ export function calendarAppearance(
     const custom = CALENDAR_COLOR_CHOICES.find(
       (choice) => choice.id === appearance.calendarColors?.[kind],
     );
-    const color = custom ? custom[mode] : defaults[kind];
+    const color = custom ? custom[mode] : normalizeHexColor(appearance.calendarColors?.[kind]) ?? defaults[kind];
     const bg = mixColor(colors.background, color, dark ? 0.18 : 0.1);
     const text =
       contrastRatio(colors.foreground, bg) >= 4.5

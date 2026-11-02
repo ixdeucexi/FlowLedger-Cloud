@@ -3,6 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { transpileModule, ModuleKind, JsxEmit } from "typescript";
 import * as appearance from "./appearance";
+import { compositeColor } from "./customColors";
 import { CALENDAR_CATEGORIES, CALENDAR_COLOR_CHOICES } from "./calendarColors";
 import {
   calendarAppearance,
@@ -186,7 +187,7 @@ test("appearance parser bounds storage, migrates legacy mode, and rejects inject
   const v = normalizeAppearance({
     version: 1,
     themeMode: "javascript:bad",
-    accent: "#fff",
+    accent: "rgb(255,255,255)",
     backdrop: "external-image",
     contrast: "super",
     success: "#123456",
@@ -447,7 +448,7 @@ test("calendar preferences validate closed keys and migrate old five-field recor
     calendarColors: {
       income: "blue",
       bill: "rose",
-      risk: "#fff",
+      risk: "rgb(255,255,255)",
       unknown: "green",
     },
   });
@@ -684,5 +685,146 @@ test("desktop Original Light calendar fills match their computed foreground", ()
     const foreground = flattenStyle(text.props.style).color;
     assert.equal(foreground, calendarHighlightText(actual.backgroundColor));
     assert.ok(contrastRatio(actual.backgroundColor, foreground) >= 4.5);
+  }
+});
+
+test("custom accent and all six calendar hex choices survive normalized storage round trips", () => {
+  const input = {
+    ...DEFAULT_APPEARANCE,
+    themeMode: "auto",
+    accent: "  #AbC  ",
+    calendarColors: {
+      income: "#123", bill: "#A17F09", debt: " #00FFFF ",
+      plan: "#000", spending: "#fff", risk: "#F0F",
+      unknown: "#112233",
+    },
+  };
+  const normalized = normalizeAppearance(input);
+  assert.equal(normalized.accent, "#aabbcc");
+  assert.equal(normalized.themeMode, "auto");
+  assert.deepEqual(normalized.calendarColors, {
+    income: "#112233", bill: "#a17f09", debt: "#00ffff",
+    plan: "#000000", spending: "#ffffff", risk: "#ff00ff",
+  });
+  assert.deepEqual(parseAppearance(JSON.stringify(normalized)), normalized);
+  assert.equal(appearancePreset(normalized), null);
+  assert.equal(appearanceBasePreset(normalized), null);
+  assert.equal(input.accent, "  #AbC  ", "normalization does not mutate its caller");
+  for (const invalid of ["#1234", "#12345678", "red", "rgba(0,0,0,1)", "var(--accent)"]) {
+    const rejected = normalizeAppearance({ ...input, accent: invalid, calendarColors: { income: invalid, extra: "#fff" } });
+    assert.equal(rejected.accent, "default");
+    assert.equal(rejected.calendarColors, undefined);
+  }
+});
+
+test("provider saves and reloads custom colors; presets and reset scopes stay independent", async () => {
+  const h = provider();
+  await h.settle();
+  h.value.updateAppearance({ accent: "#ABC", calendarColors: { income: "#123", risk: "#fff" } });
+  await h.settle();
+  assert.equal(h.value.appearance.accent, "#aabbcc");
+  assert.equal(h.value.presetName, "Custom");
+  const saved = h.data.get(APPEARANCE_STORAGE_KEY)!;
+  const restored = provider({ getItem: async key => key === APPEARANCE_STORAGE_KEY ? saved : null });
+  await restored.settle();
+  assert.deepEqual(restored.value.appearance, h.value.appearance);
+  assert.equal(restored.writes.length, 0, "loading custom colors does not write defaults");
+
+  h.value.applyPreset("mint");
+  await h.settle();
+  assert.equal(h.value.appearance.accent, "teal");
+  assert.deepEqual(h.value.appearance.calendarColors, { income: "#112233", risk: "#ffffff" });
+  h.value.updateAppearance({ accent: "#000" });
+  h.value.setThemeMode("auto");
+  await h.settle();
+  assert.equal(h.value.appearance.accent, "#000000");
+  assert.equal(h.value.appearance.themeMode, "auto");
+  h.value.updateAppearance({ accent: "blue" });
+  await h.settle();
+  assert.equal(h.value.appearance.accent, "blue", "a named accent replaces a custom accent");
+  assert.deepEqual(h.value.appearance.calendarColors, { income: "#112233", risk: "#ffffff" });
+  h.value.updateAppearance({ accent: "#f0f" });
+  h.value.updateAppearance((current: appearance.AppearancePreferences) => {
+    const next = { ...current.calendarColors };
+    delete next.income;
+    return { calendarColors: next };
+  });
+  await h.settle();
+  assert.deepEqual(h.value.appearance.calendarColors, { risk: "#ffffff" });
+  h.value.updateAppearance({ calendarColors: undefined });
+  await h.settle();
+  assert.equal(h.value.appearance.calendarColors, undefined);
+  assert.equal(h.value.appearance.accent, "#ff00ff", "calendar reset preserves the custom app accent");
+  h.value.updateAppearance({ calendarColors: { debt: "#abcdef" } });
+  h.value.resetAppearance();
+  await h.settle();
+  assert.deepEqual(h.value.appearance, DEFAULT_APPEARANCE);
+  assert.deepEqual(JSON.parse(h.data.get(APPEARANCE_STORAGE_KEY)!), DEFAULT_APPEARANCE);
+  assert.ok(h.writes.every(write => write.key === APPEARANCE_STORAGE_KEY));
+  h.unmount();
+  restored.unmount();
+});
+
+test("a late saved theme cannot overwrite a newer normalized custom color choice", async () => {
+  const read = deferred<string | null>();
+  const h = provider({ getItem: key => key === APPEARANCE_STORAGE_KEY ? read.promise : Promise.resolve(null) });
+  h.value.updateAppearance({ accent: "#F80", calendarColors: { bill: "#123" } });
+  read.resolve(JSON.stringify({ ...DEFAULT_APPEARANCE, accent: "#000", calendarColors: { income: "#fff" } }));
+  await h.settle();
+  assert.equal(h.value.ready, true);
+  assert.equal(h.value.appearance.accent, "#ff8800");
+  assert.deepEqual(h.value.appearance.calendarColors, { bill: "#112233" });
+  assert.equal(h.writes.length, 1);
+  assert.deepEqual(JSON.parse(h.writes[0].value), h.value.appearance);
+  h.unmount();
+});
+
+test("extreme custom accents stay readable on actual canvas, card and button surfaces", () => {
+  // CSS composites fractional channels; rounding them to a hex swatch can make
+  // a borderline failing contrast look like a pass. Keep the oracle unrounded.
+  const actualCardContrast = (foreground: string, card: string, background: string) => {
+    const rgb = (hex: string) => [1, 3, 5].map(index => parseInt(hex.slice(index, index + 2), 16));
+    const rgba = card.match(/^rgba\(([^)]+)\)$/);
+    const channels = rgba ? rgba[1].split(",").map(Number) : [...rgb(card), 1];
+    const behind = rgb(background);
+    const luminance = (values: number[]) => values.map(channel => {
+      const value = channel / 255;
+      return value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4;
+    }).reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
+    const surface = luminance(channels.slice(0, 3).map((value, index) => value * channels[3] + behind[index] * (1 - channels[3])));
+    const ink = luminance(rgb(foreground));
+    return (Math.max(ink, surface) + .05) / (Math.min(ink, surface) + .05);
+  };
+  for (const mode of ["dark", "light"] as const)
+    for (const contrast of ["standard", "high"] as const)
+      for (const accent of ["#000000", "#ffffff", "#ffff00", "#00ffff", "#ff00ff", "#ff0000", "#00ff00", "#0000ff", "#808080", "#e04000", "#0060e0", "#606080"]) {
+        const preferences = normalizeAppearance({ ...DEFAULT_APPEARANCE, accent, contrast });
+        const before = JSON.stringify(preferences);
+        const c = appearancePalette(mode, preferences, colors[mode]);
+        const label = `${mode}/${contrast}/${accent}`;
+        assert.ok(contrastRatio(c.primary, c.background) >= 4.5, label + " canvas text");
+        assert.ok(contrastRatio(c.primary, compositeColor(c.card, c.background)) >= 4.5, label + " card text");
+        assert.ok(actualCardContrast(c.primary, c.card, c.background) >= 4.5, label + " actual fractional CSS card text");
+        assert.ok(contrastRatio(c.primary, c.primaryForeground) >= 4.5, label + " button text");
+        assert.equal(preferences.accent, accent, "readability derivation preserves the selected raw color");
+        assert.equal(JSON.stringify(preferences), before);
+        for (const semantic of ["success", "warning", "destructive"] as const)
+          assert.equal(c[semantic], colors[mode][semantic], label + " semantic color");
+      }
+});
+
+test("custom calendar hex changes one category while keeping chip text legible", () => {
+  for (const mode of ["dark", "light"] as const) {
+    const base = appearancePalette(mode, DEFAULT_APPEARANCE, colors[mode]);
+    const original = calendarAppearance(mode, DEFAULT_APPEARANCE, base);
+    for (const { id } of CALENDAR_CATEGORIES)
+      for (const hex of ["#000000", "#ffffff", "#ffff00", "#ff00ff", "#123456"]) {
+        const preferences = normalizeAppearance({ ...DEFAULT_APPEARANCE, calendarColors: { [id]: hex } });
+        const tones = calendarAppearance(mode, preferences, base);
+        assert.equal(tones[id].color, hex);
+        assert.ok(contrastRatio(tones[id].text, tones[id].bg) >= 4.5, `${mode}/${id}/${hex}`);
+        for (const other of CALENDAR_CATEGORIES.filter(category => category.id !== id))
+          assert.deepEqual(tones[other.id], original[other.id]);
+      }
   }
 });
