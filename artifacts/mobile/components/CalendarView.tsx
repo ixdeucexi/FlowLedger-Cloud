@@ -1,8 +1,6 @@
 import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import React from "react";
-import { ScrollView, StyleSheet, useWindowDimensions } from "react-native";
-import Feather from "@expo/vector-icons/Feather";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StyleSheet, useWindowDimensions } from "react-native";
 
 import type { DailyBalance, DecisionRecord, Goal, GoalExpense, Transaction } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
@@ -60,7 +58,6 @@ export function CalendarView({
   const c = useColors();
   const calendarColors = useCalendarAppearance();
   const isDesktop = useDesktopExperience();
-  const insets = useSafeAreaInsets();
   const { height: viewportHeight } = useWindowDimensions();
   const calendarTheme = {
     surface: c.background, cell: "transparent", selectedBorder: c.primary, line: c.border,
@@ -123,10 +120,6 @@ export function CalendarView({
 
   const dateStr = (day: number) =>
     `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-  const summaryDate = selectedDate?.startsWith(monthPrefix) ? selectedDate : todayStr.startsWith(monthPrefix) ? todayStr : null;
-  const summaryDay = summaryDate && (!startDate || summaryDate >= startDate) ? balanceByDay[Number(summaryDate.slice(8, 10))] : undefined;
-  const visibleSummary = calendarBalanceIsVisible(summaryDay) ? summaryDay : undefined;
-  const summaryAmount = visibleSummary?.balance.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
     <View
@@ -294,11 +287,6 @@ export function CalendarView({
           </View>
         ))}
       </View>
-      {summaryDate && visibleSummary && summaryAmount ? <Pressable accessibilityRole="button" accessibilityLabel={`View calendar day ${summaryDate}. Closing balance ${summaryAmount}`} onPress={() => onDayPress(summaryDate)} style={({ pressed }) => [styles.daySummary, !isDesktop && { marginRight: 72 + insets.right }, { borderColor: c.border, opacity: pressed ? .7 : 1 }]}>
-        <View style={styles.summaryCopy}><Text style={[styles.summaryDate, { color: c.foreground }]}>{new Date(`${summaryDate}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</Text><Text style={[styles.summaryCaption, { color: c.mutedForeground }]}>Closing balance</Text></View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.summaryAmountScroll}><Text sensitive style={[styles.summaryAmount, { color: visibleSummary.balance >= safetyFloor ? c.success : visibleSummary.balance < 0 ? c.destructive : c.warning }]}>{summaryAmount}</Text></ScrollView>
-        <Feather name="chevron-right" size={18} color={c.mutedForeground} />
-      </Pressable> : <Text style={[styles.summaryHint, { color: c.mutedForeground }]}>Select a day to view its details.</Text>}
     </View>
   );
 }
@@ -365,7 +353,4 @@ const styles = StyleSheet.create({
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontSize: 10, fontFamily: "Inter_700Bold" },
   activeOutline: { borderWidth: 2, borderRadius: 12 },
-  daySummary: { minHeight: 58, borderWidth: 1, borderRadius: 17, marginTop: 14, paddingHorizontal: 12, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 10 },
-  summaryCopy: { flex: 1, minWidth: 0 }, summaryDate: { fontSize: 13, fontFamily: "Inter_700Bold" }, summaryCaption: { fontSize: 10, marginTop: 2 },
-  summaryAmountScroll: { flexGrow: 0, maxWidth: "58%" }, summaryAmount: { fontSize: 14, fontFamily: "Inter_700Bold" }, summaryHint: { fontSize: 11, marginTop: 14, textAlign: "center" },
 });
