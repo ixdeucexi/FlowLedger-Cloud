@@ -1924,12 +1924,6 @@ export default function MonthlyScreen() {
               {todayDayNumber}
             </Text>
           </Pressable>
-          <CommandPlusButton
-            onPress={() => openAddTransaction(selectedDate)}
-            accessibilityLabel="Add to calendar"
-            size={isNarrowForecastLayout ? 44 : 54}
-            iconSize={isNarrowForecastLayout ? 20 : 22}
-          />
         </View>
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel="Safety floor days for the year" onPress={openSafetyYear} style={{ alignSelf: "flex-start", marginHorizontal: 20, paddingVertical: 10 }}>
