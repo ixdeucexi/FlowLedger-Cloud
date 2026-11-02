@@ -1,0 +1,35 @@
+{
+  "status": "PASS",
+  "origin": "local isolated static export",
+  "contexts": 4,
+  "stages": 45,
+  "actualEntryLoadsVerified": 32,
+  "expectedSHA256": "c2e232e75ec58b0fae3c35afe0ede42d74eba6a26a0b3f9ef3f92ae3093f9a0f",
+  "financialSnapshotsUnchanged": true,
+  "actualFinancialWrites": 0,
+  "actualProviderCalls": 0,
+  "unknownRequests": 0,
+  "unexpectedConsoleErrors": 0,
+  "uncaughtAppErrors": 0,
+  "allOwnedBrowsersContextsAndServersClosed": true,
+  "selectedScreenshots": [
+    "390-dark-main-open-weeks.png",
+    "390-dark-selected-main-detail.png",
+    "1200-light-main-open-weeks.png",
+    "320-dark-custom-main-open-weeks.png",
+    "320-dark-custom-private-main.png",
+    "320-light-full-signed-summary.png",
+    "390-dark-simulator-details.png",
+    "1200-light-simulator-details.png"
+  ],
+  "fontSupport": {
+    "status": "PASS",
+    "syntheticOffscreenLabels": true,
+    "labelsPerGrid": 28,
+    "grids": [
+      "320px Forecast selected/unselected",
+      "320px Simulator selected/unselected"
+    ],
+    "scope": "Actual loaded fonts and content widths; not extra financial-data scenarios"
+  }
+}

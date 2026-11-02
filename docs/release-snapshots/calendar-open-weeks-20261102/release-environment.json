@@ -1,0 +1,128 @@
+{
+  "status": "IDENTITY_ENV_METADATA_PASS",
+  "project": {
+    "id": "prj_nOlgvktXdfLErqQvmESnvyLFnMj2",
+    "name": "flow-ledger-cloud",
+    "accountId": "team_jIrgjLphz4oeVh6WuFHaiWKq",
+    "nodeVersion": "24.x",
+    "framework": null
+  },
+  "checks": [
+    {
+      "key": "SUPABASE_SERVICE_ROLE_KEY",
+      "required": true,
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "SUPABASE_URL",
+      "required": true,
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "EXPO_PUBLIC_SUPABASE_URL",
+      "required": true,
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "EXPO_PUBLIC_SUPABASE_ANON_KEY",
+      "required": true,
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "PLAID_CLIENT_ID",
+      "required": true,
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "PLAID_SECRET",
+      "required": true,
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "PLAID_ENV",
+      "required": true,
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "PLAID_REDIRECT_URI",
+      "required": true,
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "PLAID_TOKEN_ENCRYPTION_KEY",
+      "required": true,
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "PLAID_WEBHOOK_URL",
+      "required": true,
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "CRON_SECRET",
+      "required": true,
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "VAPID_PUBLIC_KEY",
+      "required": true,
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "VAPID_PRIVATE_KEY",
+      "required": true,
+      "records": 1,
+      "status": "PASS"
+    },
+    {
+      "key": "APPLE_TOKEN_ENCRYPTION_KEY",
+      "required": false,
+      "records": 0,
+      "status": "ABSENT_OPTIONAL"
+    },
+    {
+      "key": "APPLE_TEAM_ID",
+      "required": false,
+      "records": 0,
+      "status": "ABSENT_OPTIONAL"
+    },
+    {
+      "key": "APPLE_KEY_ID",
+      "required": false,
+      "records": 0,
+      "status": "ABSENT_OPTIONAL"
+    },
+    {
+      "key": "APPLE_CLIENT_ID",
+      "required": false,
+      "records": 0,
+      "status": "ABSENT_OPTIONAL"
+    },
+    {
+      "key": "APPLE_PRIVATE_KEY",
+      "required": false,
+      "records": 0,
+      "status": "ABSENT_OPTIONAL"
+    },
+    {
+      "key": "REVENUECAT_SECRET_API_KEY",
+      "required": false,
+      "records": 0,
+      "status": "ABSENT_OPTIONAL"
+    }
+  ],
+  "secretValuesRequested": false,
+  "projectBuildContract": "MCP omits build/install/output/root fields; final deployment will supply explicit repository settings."
+}

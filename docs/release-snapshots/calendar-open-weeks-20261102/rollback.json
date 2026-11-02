@@ -1,0 +1,8 @@
+{
+  "ref": "rollback/prod-before-calendar-open-weeks-20261102-0716",
+  "tagObject": "2960194efbfd9527655e9a3ed1a08d3d9bbac389",
+  "source": "d6209eafda2c099b1adead5570eeed3efa647e38",
+  "deployment": "dpl_FC4PUn65fZzCRU9bv6vG1gVKceQj",
+  "remoteVerified": true,
+  "createdBeforeProductionChange": true
+}

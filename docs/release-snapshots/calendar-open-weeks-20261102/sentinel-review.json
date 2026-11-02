@@ -1,0 +1,92 @@
+{
+  "status": "PASS",
+  "scope": "Independent open-week calendar source, date and display-data approval. Root/Browser own final actual-font layout, overlay overlap and production gates.",
+  "checkedAt": "2026-11-02T07:38:53.066Z",
+  "base": "25358a7",
+  "blockers": [],
+  "sourceHashes": {
+    "artifacts/mobile/app/(tabs)/monthly.tsx": "ed445bf22bf3ab35aea72765b9ba90220cf3a2872f3e2bbc3ee9a0c8751b132e",
+    "artifacts/mobile/components/CalendarView.tsx": "50e5f9587e38c30f0efef499a935b1d7745ecdb8bfb0364e47e9d9405bb14299",
+    "artifacts/mobile/components/desktop/DesktopCalendarPage.tsx": "269ddbab9d14bd0a6d8c3f4bd4c4f87777b724a78b04988a5ab188521b385b17",
+    "artifacts/mobile/components/SimulatorCalendar.tsx": "8656bbf4823c528e0abd09fff8462d27b0a02b55ab06deabdcb86d8a76ee7819",
+    "artifacts/mobile/lib/openCalendarWeeks.ts": "91d5174509cf14e364b74552e3c897bd0db17f1752eeb7f301a73c5768dca94c",
+    "artifacts/mobile/lib/openCalendarWeeks.test.ts": "9ef04b4ce34d1976aa58e628756f699c44badd6ca6010023c2a0671abb4f5161",
+    "artifacts/mobile/lib/forecastDisplay.test.ts": "ebdbc6ea72fec2c6fcb6b377de5cc7502159eb131529b21864af0d6d0cd18ab3",
+    "artifacts/mobile/tsconfig.tests.json": "6e3a124a9ec73fe1b3364c79deadeb524c32f289faecccff3c1abb797db82e0e"
+  },
+  "checks": {
+    "isolatedTypeScriptCompile": "PASS",
+    "focusedCalendarDisplayPrivacyAppearanceCloseTests": 90,
+    "componentFunctionRenderCases": 13,
+    "mainPhoneCaptionCases": 7,
+    "desktopRenderCases": 3,
+    "simulatorRenderCases": 3,
+    "dateHelperReview": "PASS",
+    "independentMonthTimeZoneCases": 540,
+    "mainClosingSummary": [
+      "exact projected cents",
+      "canonical recorded close value",
+      "genuinezero",
+      "negative subdollar close",
+      "unavailable placeholder does not createzero",
+      "missing row does not createzero",
+      "before-start date does not create summary",
+      "existing onDayPress called only on explicit press"
+    ],
+    "unchangedMonthlyHooks": 87,
+    "unchangedMonthlyEventHandlers": 128,
+    "preservedMonthlyCRLF": 682,
+    "unchangedFinanceDisplayStateAndPrivacyPaths": [
+      "artifacts/mobile/lib/forecast.ts",
+      "artifacts/mobile/lib/financialProjection.ts",
+      "artifacts/mobile/lib/dailyCheckingClose.ts",
+      "artifacts/mobile/lib/desktopCalendar.ts",
+      "artifacts/mobile/lib/planSimulator.ts",
+      "artifacts/mobile/lib/planSimulationCalendar.ts",
+      "artifacts/mobile/lib/planSimulationLibrary.ts",
+      "artifacts/mobile/lib/planSimulationPersistence.ts",
+      "artifacts/mobile/context/BudgetContext.tsx",
+      "artifacts/mobile/lib/calendarAppearance.ts",
+      "artifacts/mobile/lib/calendarColors.ts",
+      "artifacts/mobile/components/privacy/PrivacyPrimitives.tsx"
+    ],
+    "originalInMonthGridDataStatements": "PASS",
+    "noAutomaticSelection": "PASS",
+    "finalFourViewTsxParse": "PASS",
+    "newFileWhitespace": "PASS",
+    "fullMobileTypes": {
+      "status": "PASS",
+      "runner": "Forge",
+      "log": "forge-types.log",
+      "finalCalendarViewSHA256": "50e5f9587e38c30f0efef499a935b1d7745ecdb8bfb0364e47e9d9405bb14299"
+    }
+  },
+  "reviewedContracts": [
+    "Only wholly-outside trailing week cells are removed in desktop and simulator; global six-week helper is unchanged",
+    "Existing financial/day/event objects and statuses remain unchanged",
+    "Original date callbacks and saved-name resolver paths remain unchanged",
+    "New main phone summary is exact and read-only until user presses it",
+    "Calendar summary uses existing calendarBalanceIsVisible and canonical .balance (including actual-close overlay), no new current-account calculation",
+    "All three views keep Privacy-aware money text and accessibility wrappers",
+    "Shared six-category calendar colors are preserved",
+    "Monthly file edits are localized presentation/ARIA changes;87 hooks and128 handlers are byte-equivalent after line-ending normalization"
+  ],
+  "finalPresentationRepair": {
+    "calendarViewSHA256": "50e5f9587e38c30f0efef499a935b1d7745ecdb8bfb0364e47e9d9405bb14299",
+    "change": "Read-only useSafeAreaInsets and mobile-only summary marginRight72+insets.right reserve room for existing Flo. No global Flo change, amount/callback/data change or financial effect.",
+    "sourceReview": "PASS",
+    "actualOverlayGeometry": "Root Browser final gate pending"
+  },
+  "supportingProof": [
+    "sentinel-source.json",
+    "sentinel-render-oracle.json",
+    "sentinel-focused.log",
+    "week-dates-review.json"
+  ],
+  "notClaimed": [
+    "Final exported browser or production clearance",
+    "Native hardware layout or keyboard proof",
+    "Actual customer data/provider writes"
+  ],
+  "productWritesByReviewer": 0
+}

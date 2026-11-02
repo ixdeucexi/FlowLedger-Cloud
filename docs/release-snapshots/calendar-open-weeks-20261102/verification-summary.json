@@ -1,0 +1,35 @@
+{
+  "status": "LIVE_PASS",
+  "verifiedAt": "2026-11-02T07:46:36.241170+00:00",
+  "source": "7239fda425c53a2837da80acb79ec3769e1245fd",
+  "deployment": "dpl_9S7CxBzinwPg986t4FGmAE4gtUWe",
+  "immutableUrl": "flow-ledger-cloud-dx2e4srda-flow-ledger-s-projects.vercel.app",
+  "productionAliases": 4,
+  "bundle": {
+    "entry": "entry-128f577717bcecffced5de0ba31dd5fc.js",
+    "bytes": 5154314,
+    "sha256": "c2e232e75ec58b0fae3c35afe0ede42d74eba6a26a0b3f9ef3f92ae3093f9a0f"
+  },
+  "sourceChecks": {
+    "forgeFocused": 80,
+    "sentinelFocused": 90,
+    "componentRenderCases": 13,
+    "dateTimeZoneCases": 540,
+    "mobileTypes": "PASS",
+    "sourceConfigGuideArtifact": "PASS"
+  },
+  "runtimeChecks": {
+    "local": "PASS",
+    "published": "PASS",
+    "contextsPerRun": 4,
+    "stagesPerRun": 45,
+    "entryLoadsPerRun": 32,
+    "financialSnapshotsUnchanged": true,
+    "actualFinancialWrites": 0,
+    "actualProviderCalls": 0,
+    "allRunnersClosed": true,
+    "hostedCloudflareCspDiagnostics": "32 main +2 font-support documents; no outbound beacon or app error"
+  },
+  "httpPostflight": "PASS",
+  "rollback": "rollback/prod-before-calendar-open-weeks-20261102-0716"
+}
