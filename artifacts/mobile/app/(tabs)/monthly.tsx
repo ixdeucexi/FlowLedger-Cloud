@@ -22,7 +22,6 @@ import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import { EmptyState } from "@/components/EmptyState";
 import { FullPaymentPromptModal } from "@/components/FullPaymentPromptModal";
 import { GoalModal } from "@/components/GoalModal";
-import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { SafetyFloorYearModal } from "@/components/SafetyFloorYearModal";
 import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
 import colors from "@/constants/colors";
@@ -1887,7 +1886,6 @@ export default function MonthlyScreen() {
         />
       ) : (
         <>
-      <PremiumBackdrop variant="purple" />
       <View style={[
         styles.header,
         isDesktop && styles.desktopHeader,
