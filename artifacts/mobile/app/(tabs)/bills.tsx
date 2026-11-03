@@ -993,9 +993,9 @@ export default function BillsScreen() {
                     ? "Not included in your payoff plan"
                     : isUnranked
                       ? `Not active in the ${MONTH_FULL[debtPlanMonth]} payoff order`
-                      : strategyRank === 1
-                        ? "Target first — put all extra here"
-                        : `Pay off #${(strategyRank ?? 1) - 1} first, then cascade here`}
+                      : settings.debtPayoffEnabled && activeDebtTarget?.id === item.id
+                        ? "Current payoff target"
+                        : "Follows your saved payoff order"}
             </Text>
           </View>
         </View>

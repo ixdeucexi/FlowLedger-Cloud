@@ -385,8 +385,29 @@ test("mobile debt hero renders canonical remaining cash for pause-only and no-re
   const scheduled = harness("BillsScreen", {}, { budget: { bills: [upcoming] } });
   const scheduledCard = copy(scheduled.child("FlatList").props.renderItem({ item: upcoming }));
   assert.match(scheduledCard, /#1.*First card.*Pause scheduled/);
-  assert.match(scheduledCard, /Target first — put all extra here/);
+  assert.match(scheduledCard, /Current payoff target/);
   assert.doesNotMatch(scheduledCard, /Payments paused — keeps its payoff position/);
+  for (const enabled of [true, false]) {
+    for (const paused of [true, false]) {
+      const ordered = [
+        { ...debt, debt_payment_pauses: [{ ...savedPause, start_date: paused ? "2026-01-31" : "2026-02-01" }] },
+        { ...debt, id: "second", name: "Second card", balance: 2400 },
+        { ...debt, id: "third", name: "Third card", balance: 6400 },
+      ];
+      const h = harness("BillsScreen", {}, { budget: { bills: ordered, settings: { debtPayoffEnabled: enabled } } });
+      const list = h.child("FlatList");
+      assert.deepEqual(list.props.data.map((bill: any) => bill.id), ["first", "second", "third"]);
+      const cards = ordered.map(bill => copy(list.props.renderItem({ item: bill })));
+      cards.forEach((card, index) => {
+        assert.match(card, new RegExp(`#${index + 1}`));
+        assert.doesNotMatch(card, /Target first|Pay off #[0-9]+ first/);
+      });
+      assert.match(cards[0], paused ? /Payments paused — keeps its payoff position/ : enabled ? /Current payoff target/ : /Follows your saved payoff order/);
+      assert.match(cards[1], enabled && paused ? /Current payoff target/ : /Follows your saved payoff order/);
+      assert.match(cards[2], /Follows your saved payoff order/);
+      assert.equal(cards.filter(card => card.includes("Current payoff target")).length, enabled ? 1 : 0);
+    }
+  }
 });
 
 test("desktop dashboard selects the currently eligible debt while preserving open debt totals through automatic resume", () => {
