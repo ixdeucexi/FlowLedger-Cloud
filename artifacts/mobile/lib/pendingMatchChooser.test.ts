@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { transpileModule, ModuleKind, JsxEmit } from "typescript";
 import { rankBillMatches, manualActivityMatchCandidates } from "./billMatching";
 import { pendingMatchesForKind, strongestPendingMatch } from "./pendingMatchChooser";
+import { isInferredPendingBankHold } from "./plaidActivity";
 
 const ranked = rankBillMatches({ date: "2026-10-22", amount: -100, description: "Rent" }, [
   { billId: "rent", name: "Rent", category: "Housing", plannedAmount: 100, occurrenceDates: ["2026-10-22"] },
@@ -34,7 +35,7 @@ test("manual choices retain canonical same-month and eligibility exclusions", ()
 });
 const source = () => readFileSync("app/(tabs)/transactions.tsx", "utf8");
 function extract(start: string, end: string, bindings: Record<string, unknown>) {
-  bindings = revealedPrivacyBindings(bindings);
+  bindings = revealedPrivacyBindings({ isInferredPendingBankHold, ...bindings });
   const s = source(); const a = s.indexOf(`  const ${start} =`); const b = s.indexOf(`  const ${end} =`, a);
   return new Function(...Object.keys(bindings), `${transpileModule(s.slice(a,b), { compilerOptions: { module: ModuleKind.CommonJS } }).outputText}; return ${start};`)(...Object.values(bindings));
 }
@@ -141,4 +142,103 @@ test("suggestion is before filters in one unmatched scroll region and independen
   assert.doesNotMatch(s.slice(suggestion, filters), /pendingMatchKind[^L]/);
   assert.doesNotMatch(s.slice(s.indexOf("const pendingMatchSuggestion ="), s.indexOf("const bucketMatchOptions =")), /pendingMatchKind/);
   assert.equal((s.slice(s.lastIndexOf("<ScrollView", create), emptyCopy).match(/<ScrollView/g) ?? []).length, 1);
+});
+
+function extractBudgetCallback(name: string, bindings: Record<string, unknown>) {
+  const context = readFileSync("context/BudgetContext.tsx", "utf8");
+  const marker = `  const ${name} = useCallback(`;
+  const start = context.indexOf(marker) + marker.length;
+  assert.ok(start >= marker.length, `actual ${name} callback exists`);
+  const end = context.indexOf("\n  }, [", start) + 4;
+  assert.ok(end > start);
+  const js = transpileModule(`const callback = ${context.slice(start, end)};`, {
+    compilerOptions: { module: ModuleKind.CommonJS },
+  }).outputText;
+  return new Function(...Object.keys(bindings), `${js}; return callback;`)(...Object.values(bindings));
+}
+
+test("actual matching and creation callbacks reject inferred holds before demo state or persistence", async () => {
+  for (const demoMode of [false, true]) {
+    for (const pending of [
+      { plaid_transaction_id: "pending-hold:checking:50.00", name: "Pending bank hold" },
+      { plaid_transaction_id: "cached-hold", name: "Pending BANK hold" },
+    ]) {
+      let calls = 0;
+      const forbidden = () => { calls++; throw new Error("unexpected state or persistence"); };
+      const bindings = {
+        user: { id: "owner" }, assertCanEditHousehold: () => {},
+        pendingBankTransactions: [{ ...pending, amount: -50, transaction_date: "2026-11-03" }],
+        isInferredPendingBankHold, demoMode,
+        setPendingPlanMatches: forbidden, setTransactions: forbidden,
+        supabase: { from: forbidden }, createPendingActivityTransactionAtomically: forbidden,
+        markSaveStarted: forbidden, runTrackedFinancialMutation: forbidden,
+      };
+      const match = extractBudgetCallback("matchPendingTransactionToPlan", bindings);
+      const create = extractBudgetCallback("createTransactionForPendingCharge", bindings);
+      await assert.rejects(match(pending.plaid_transaction_id, "bill", "debt", "2026-11-03", 50), /transaction details for this balance hold/);
+      await assert.rejects(create(pending.plaid_transaction_id, { amount: -50, date: "2026-11-03", category: "Other" }), /transaction details for this balance hold/);
+      assert.equal(calls, 0);
+    }
+  }
+});
+
+test("actual matching callback upserts real debt and manual targets with the original source identity", async () => {
+  for (const targetType of ["bill", "manual"] as const) {
+    const requests: { table: string; payload?: Record<string, unknown>; conflict?: unknown }[] = [];
+    let savedRows: unknown[] = [];
+    let completed = false;
+    const pending = { plaid_transaction_id: "real-pending", plaid_account_id: "checking", amount: -50, transaction_date: "2026-11-03", name: "Card payment" };
+    const target = { id: "debt", name: "Card", is_debt: true };
+    const manual = { id: "manual", date: "2026-11-03", amount: -50, category: "Other", source: "manual", note: "Card payment" };
+    const fn = extractBudgetCallback("matchPendingTransactionToPlan", {
+      user: { id: "owner" }, assertCanEditHousehold: () => {}, pendingBankTransactions: [pending],
+      bills: [target], transactions: [manual], pendingPlanMatches: [], demoMode: false,
+      isInferredPendingBankHold, manualActivityMatchCandidates,
+      genId: () => "match", roundMoney: (n: number) => Math.round(n * 100) / 100,
+      scopedPayload: (payload: Record<string, unknown>) => ({ ...payload, household_id: "household", budget_id: "budget" }),
+      markSaveStarted: () => "operation", markSaveCompleted: () => { completed = true; },
+      markSaveFailed: () => assert.fail("real pending match should save"),
+      normalizePendingPlanMatchRow: (row: unknown) => row,
+      setPendingPlanMatches: (update: (rows: unknown[]) => unknown[]) => { savedRows = update(savedRows); },
+      supabase: { from(table: string) {
+        const request: (typeof requests)[number] = { table }; requests.push(request);
+        return { upsert(payload: Record<string, unknown>, conflict: unknown) {
+          request.payload = payload; request.conflict = conflict;
+          return { select: () => ({ single: async () => ({ data: { id: "saved", ...payload }, error: null }) }) };
+        } };
+      } },
+    });
+    await fn(pending.plaid_transaction_id, targetType, targetType === "bill" ? target.id : manual.id, "2026-11-03", 50);
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].table, "pending_plan_matches");
+    assert.deepEqual(requests[0].conflict, { onConflict: "household_id,pending_plaid_transaction_id" });
+    assert.equal(requests[0].payload?.pending_plaid_transaction_id, pending.plaid_transaction_id);
+    assert.equal(requests[0].payload?.pending_account_id, pending.plaid_account_id);
+    assert.equal(requests[0].payload?.target_id, targetType === "bill" ? target.id : manual.id);
+    assert.equal(requests[0].payload?.target_type, targetType);
+    assert.equal(requests[0].payload?.household_id, "household");
+    assert.equal(requests[0].payload?.pending_amount, 50);
+    assert.equal(requests[0].payload?.status, "active");
+    assert.equal(requests[0].payload?.user_id, "owner");
+    assert.equal(requests[0].payload?.created_by, "owner");
+    assert.equal(completed, true);
+    assert.equal(savedRows.length, 1);
+  }
+});
+
+test("pending matcher refuses inferred sources and stale hold actions without opening or saving", async () => {
+  const pending = { plaid_transaction_id: "pending-hold:checking:50.00", name: "Pending bank hold", amount: -50 };
+  let selected: unknown = "unset";
+  const set = extract("setPendingMatchTx", "[pendingTransactionSource, setPendingTransactionSource]", {
+    useCallback: (fn: unknown) => fn, setPendingMatchKind: () => {}, setPendingMatchTxState: (v: unknown) => { selected = v; },
+  });
+  set(pending); assert.equal(selected, null);
+  for (const [start, end] of [
+    ["handleMatchPendingBill", "handleMatchPendingManual"],
+    ["handleMatchPendingManual", "openPendingTransactionCreator"],
+    ["openPendingTransactionCreator", "pendingTransactionInitialValues"],
+  ]) {
+    const fn = extract(start, end, { pendingMatchTx: pending, savingMatch: false });
+    await fn("debt");
+  }
 });

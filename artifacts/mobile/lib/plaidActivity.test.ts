@@ -3,11 +3,20 @@ import test from "node:test";
 
 import {
   canonicalConnectedAccounts,
+  isInferredPendingBankHold,
   pendingPlaidActivityWithBalanceHolds,
   summarizePendingCheckingActivity,
   unplannedPendingExpenses,
   visiblePendingPlaidActivity,
 } from "./plaidActivity";
+
+test("inferred balance holds are distinct from actual pending bank charges", () => {
+  assert.equal(isInferredPendingBankHold({ plaid_transaction_id: "pending-hold:checking:50.00" }), true);
+  assert.equal(isInferredPendingBankHold({ plaid_transaction_id: "cached-hold", name: "  Pending   Bank HOLD " }), true);
+  assert.equal(isInferredPendingBankHold({ plaid_transaction_id: "cached-hold", merchant_name: "Pending bank hold" }), true);
+  assert.equal(isInferredPendingBankHold({ plaid_transaction_id: "actual-charge", name: "Card payment" }), false);
+  assert.equal(isInferredPendingBankHold({ plaid_transaction_id: "pending-charge" }), false);
+});
 
 const duplicateAccounts = [
   { id: "account-old", name: "Checking", mask: "1234", account_type: "depository", account_subtype: "checking", is_active: true, updated_at: "2026-07-14T00:00:00Z", current_balance: 2171.13 },

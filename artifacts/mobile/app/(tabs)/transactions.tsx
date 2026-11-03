@@ -113,6 +113,7 @@ import {
   pendingDraftStaysInChargeMonth,
 } from "@/lib/pendingTransactionDraft";
 import { transactionDebt } from "@/lib/transactionDebt";
+import { isInferredPendingBankHold } from "@/lib/plaidActivity";
 import {
   readInterfacePreferences,
   updateInterfacePreferences,
@@ -570,7 +571,7 @@ export function ActivityScreen() {
     useState<PendingBankTransaction | null>(null);
   const setPendingMatchTx = useCallback((pending: PendingBankTransaction | null) => {
     setPendingMatchKind(null);
-    setPendingMatchTxState(pending);
+    setPendingMatchTxState(pending && !isInferredPendingBankHold(pending) ? pending : null);
   }, []);
   const [pendingTransactionSource, setPendingTransactionSource] =
     useState<PendingBankTransaction | null>(null);
@@ -733,9 +734,11 @@ export function ActivityScreen() {
         pendingMatchLabel: pendingMatch
           ? pendingMatchStatusLabel(pendingMatch)
           : undefined,
-        detail: pendingMatch
-          ? `${pendingMatchStatusLabel(pendingMatch)} for ${pendingMatch.target_name}. It is not paid or counted until the bank posts it.`
-          : "Pending at your bank. FlowLedger is showing this as a preview and will not count it until it posts.",
+        detail: isInferredPendingBankHold(pending)
+          ? "Estimated from your bank's balance difference. Transaction details are not available yet. Match the charge when it appears."
+          : pendingMatch
+            ? `${pendingMatchStatusLabel(pendingMatch)} for ${pendingMatch.target_name}. It is not paid or counted until the bank posts it.`
+            : "Pending at your bank. FlowLedger is showing this as a preview and will not count it until it posts.",
       });
     }
 
@@ -1511,7 +1514,7 @@ export function ActivityScreen() {
     getBillMonthlyTotal,
   ]);
   const pendingBillMatchOptions = useMemo(() => {
-    if (!pendingMatchTx || pendingMatchTx.amount >= 0) return [];
+    if (!pendingMatchTx || isInferredPendingBankHold(pendingMatchTx) || pendingMatchTx.amount >= 0) return [];
     const candidates = adjacentBillMatchCandidates(
       pendingMatchTx.transaction_date,
       getMonthlyBills,
@@ -1572,7 +1575,7 @@ export function ActivityScreen() {
     );
   }, [matchTx, transactions, bills, pendingPlanMatches]);
   const pendingManualMatchOptions = useMemo(() => {
-    if (!pendingMatchTx || pendingMatchTx.amount >= 0) return [];
+    if (!pendingMatchTx || isInferredPendingBankHold(pendingMatchTx) || pendingMatchTx.amount >= 0) return [];
     return rankBillMatches(
       {
         date: pendingMatchTx.transaction_date,
@@ -1812,7 +1815,7 @@ export function ActivityScreen() {
   };
 
   const handleMatchPendingBill = async (billId: string) => {
-    if (!pendingMatchTx || savingMatch) return;
+    if (!pendingMatchTx || isInferredPendingBankHold(pendingMatchTx) || savingMatch) return;
     const option = pendingBillMatchOptions.find(
       (item) => item.billId === billId,
     );
@@ -1842,7 +1845,7 @@ export function ActivityScreen() {
   };
 
   const handleMatchPendingManual = async (transactionId: string) => {
-    if (!pendingMatchTx || savingMatch) return;
+    if (!pendingMatchTx || isInferredPendingBankHold(pendingMatchTx) || savingMatch) return;
     const option = pendingManualMatchOptions.find(
       (item) => item.billId === transactionId,
     );
@@ -1870,7 +1873,7 @@ export function ActivityScreen() {
   };
 
   const openPendingTransactionCreator = () => {
-    if (!pendingMatchTx || savingMatch) return;
+    if (!pendingMatchTx || isInferredPendingBankHold(pendingMatchTx) || savingMatch) return;
     setPendingTransactionSource(pendingMatchTx);
     setPendingMatchTx(null);
   };
@@ -2612,6 +2615,7 @@ export function ActivityScreen() {
     if (!detailItem) return null;
     const meta = SOURCE_META[detailItem.source];
     const isExpense = detailItem.amount < 0;
+    const isBalanceHold = Boolean(detailItem.rawPending && isInferredPendingBankHold(detailItem.rawPending));
 
     return (
       <Modal
@@ -2782,22 +2786,24 @@ export function ActivityScreen() {
                 >
                   {detailItem.source === "bill_payment"
                     ? "Edit this entry by adjusting the paid amount in Monthly view."
-                    : detailItem.pending
-                      ? isExpense
-                        ? "This is a bank preview. A temporary match can connect it to a bill or manual Activity entry, but the bank charge is not counted until it posts."
-                        : "This is a bank deposit preview. It is not counted until it posts."
-                      : detailItem.source === "income"
-                        ? "Edit this entry by updating your income in More → Income Sources."
-                        : "Edit this entry from the Bills → Debt tab."}
+                    : isBalanceHold
+                      ? "This balance hold is an estimate, not an individual bank charge. Transaction details must arrive before it can be matched."
+                      : detailItem.pending
+                        ? isExpense
+                          ? "This is a bank preview. A temporary match can connect it to a bill or manual Activity entry, but the bank charge is not counted until it posts."
+                          : "This is a bank deposit preview. It is not counted until it posts."
+                        : detailItem.source === "income"
+                          ? "Edit this entry by updating your income in More → Income Sources."
+                          : "Edit this entry from the Bills → Debt tab."}
                 </Text>
               </View>
 
-              {detailItem.pending && isExpense ? (
+              {detailItem.pending && isExpense && !isBalanceHold ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`Match pending ${detailItem.label} to a bill or manual Activity entry`}
                   onPress={() => {
-                    if (!detailItem.rawPending) return;
+                    if (!detailItem.rawPending || isInferredPendingBankHold(detailItem.rawPending)) return;
                     if (isFeatureLocked("transaction_matching")) {
                       privacyAlert(
                         "Pending matching is planned for Pro",
@@ -2848,7 +2854,7 @@ export function ActivityScreen() {
                 </Pressable>
               ) : null}
 
-              {detailItem.pending && isExpense ? (
+              {detailItem.pending && isExpense && !isBalanceHold ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`Set aside ${Math.abs(detailItem.amount).toFixed(2)} dollars for ${detailItem.label}`}
@@ -3437,7 +3443,9 @@ export function ActivityScreen() {
               item.rawTx?.source === "plaid" &&
               item.rawTx.amount > 0 &&
               item.rawTx.review_status === "needs_review";
-            const statusLabel = item.pending
+            const statusLabel = item.rawPending && isInferredPendingBankHold(item.rawPending)
+              ? "Balance hold"
+              : item.pending
               ? item.pendingMatchLabel
                 ? "Payment pending"
                 : isExpense

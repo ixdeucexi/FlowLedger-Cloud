@@ -36,6 +36,16 @@ function normalizedText(value: string | null | undefined): string {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+/** Balance-derived placeholders have no bank transaction to match or replace. */
+export function isInferredPendingBankHold(row: {
+  plaid_transaction_id: string;
+  name?: string | null;
+  merchant_name?: string | null;
+}): boolean {
+  return row.plaid_transaction_id.startsWith("pending-hold:")
+    || normalizedText(row.merchant_name || row.name) === "pending bank hold";
+}
+
 export function plaidAccountIdentity(account: PlaidAccountIdentityRow): string {
   const persistentId = normalizedText(account.persistent_account_id);
   if (persistentId) return `persistent:${persistentId}`;
@@ -150,8 +160,7 @@ export function unplannedPendingExpenses<T extends PendingPlaidActivityRow>(
   return pendingRows
     .filter(row => Number(row.amount) < 0)
     .filter(row => !matchedIds.has(row.plaid_transaction_id))
-    .filter(row => !row.plaid_transaction_id.startsWith("pending-hold:"))
-    .filter(row => normalizedText(row.merchant_name || row.name) !== "pending bank hold")
+    .filter(row => !isInferredPendingBankHold(row))
     .sort((left, right) =>
       right.transaction_date.localeCompare(left.transaction_date)
       || left.plaid_transaction_id.localeCompare(right.plaid_transaction_id)

@@ -12,6 +12,17 @@ import {
   type PendingPlanMatch,
 } from "./pendingPlanMatches";
 
+test("match queues exclude balance holds while preserving previews and real charges", () => {
+  const hold = { plaid_transaction_id: "pending-hold:checking:50.00", name: "Pending bank hold", amount: -50 };
+  const cachedHold = { plaid_transaction_id: "cached-hold", name: " Pending BANK hold ", amount: -50 };
+  const actual = { plaid_transaction_id: "actual-charge", name: "Card payment", amount: -50 };
+  const previews = [hold, cachedHold, actual];
+  assert.deepEqual(unmatchedPendingTransactions([], [hold]), []);
+  assert.deepEqual(unmatchedPendingTransactions([], previews), [actual]);
+  assert.deepEqual(previews, [hold, cachedHold, actual]);
+  assert.deepEqual(unmatchedPendingTransactions([match({ pending_plaid_transaction_id: actual.plaid_transaction_id })], previews), []);
+});
+
 function match(overrides: Partial<PendingPlanMatch> = {}): PendingPlanMatch {
   return {
     id: "match-1",

@@ -143,7 +143,7 @@ import { addDebtPaymentPause, editDebtPaymentPauseHistory, isDebtPaymentPauseDat
 import { localDateString } from "@/lib/dateLabels";
 import { spendingBucketSummary, validateCreateSpendingBucketMatch } from "@/lib/spendingBuckets";
 import { hasBucketRemainderFunding, latestBucketRemainderAvailableDate, removeBucketRemainderFundingSource, resizeSnowballFundingSources } from "@/lib/snowballFunding";
-import { canonicalConnectedAccounts, pendingPlaidActivityWithBalanceHolds } from "@/lib/plaidActivity";
+import { canonicalConnectedAccounts, isInferredPendingBankHold, pendingPlaidActivityWithBalanceHolds } from "@/lib/plaidActivity";
 
 import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
 
@@ -4351,6 +4351,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!user) throw new Error("Sign in to match a pending payment");
     assertCanEditHousehold("match a pending payment");
     const pending = pendingBankTransactions.find(item => item.plaid_transaction_id === pendingPlaidTransactionId);
+    if (pending && isInferredPendingBankHold(pending)) {
+      throw new Error("Your bank has not provided transaction details for this balance hold yet. Match the charge when it appears.");
+    }
     const eligibleManualIds = pending && targetType === "manual"
       ? new Set(manualActivityMatchCandidates(transactions, pending.transaction_date, undefined, bills).map(item => item.billId))
       : undefined;
@@ -4487,6 +4490,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const pending = pendingBankTransactions.find(
       item => item.plaid_transaction_id === pendingPlaidTransactionId,
     );
+    if (pending && isInferredPendingBankHold(pending)) {
+      throw new Error("Your bank has not provided transaction details for this balance hold yet. Create an entry from the charge when it appears.");
+    }
     if (!pending || pending.amount >= 0) {
       throw new Error("This pending money-out charge is no longer available");
     }

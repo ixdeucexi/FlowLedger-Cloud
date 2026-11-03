@@ -1,4 +1,5 @@
 import type { DebtSourceCommitment } from "./debtPlanDomain";
+import { isInferredPendingBankHold } from "./plaidActivity";
 
 export type PendingPlanMatchStatus = "active" | "ready_review" | "completed" | "expired" | "cancelled";
 
@@ -164,7 +165,8 @@ export function unmatchedPendingTransactions<T extends PendingTransactionIdentit
       .map(match => match.pending_plaid_transaction_id),
   );
   return pendingTransactions.filter(
-    transaction => !matchedPendingIds.has(transaction.plaid_transaction_id),
+    transaction => !isInferredPendingBankHold(transaction)
+      && !matchedPendingIds.has(transaction.plaid_transaction_id),
   );
 }
 
