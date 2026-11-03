@@ -18,7 +18,7 @@ import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { useLocalDay } from "@/hooks/useLocalDay";
 import { localDateInTimeZone } from "@/lib/dailyCheckingClose";
-import { activeDebtPaymentPause } from "@/lib/debtPaymentPause";
+import { activeDebtPaymentPause, type DebtPaymentPause } from "@/lib/debtPaymentPause";
 import { DESKTOP_MODAL_HANDLE, DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_WIDE } from "@/lib/desktopModal";
 import type { ConfirmActionOptions } from "@/lib/confirmAction";
 import { MONTH_NAMES, dateOnlyToLocalDate } from "@/lib/dateLabels";
@@ -67,7 +67,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   const privacyAlerts = usePrivacyAlerts();
   const c = useColors();
   const isDesktop = useDesktopExperience();
-  const { bills, categories, settings, activeHousehold, canEditHousehold, householdTimeZone, pauseDebtPayments, resumeDebtPayments } = useBudget();
+  const { bills, categories, settings, activeHousehold, canEditHousehold, householdTimeZone, pauseDebtPayments, editDebtPaymentPause, resumeDebtPayments } = useBudget();
   useLocalDay();
   const today = localDateInTimeZone(new Date(), householdTimeZone);
   const currentDebt = editBill?.is_debt ? bills.find(bill => bill.id === editBill.id && bill.is_debt) : undefined;
@@ -78,7 +78,6 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
     : !currentDebt || currentDebt.balance <= 0.009 || Boolean(currentDebt.end_date) ? "Payment pauses are available for open debts with a balance." : "";
   const pauseScopeKey = `${activeHousehold?.householdId ?? "local"}:${activeHousehold?.budgetId ?? "local"}`;
   const pauseAccessRef = useRef({ scopeKey: pauseScopeKey, canEdit: canEditHousehold, visible, billId: editBill?.id });
-  pauseAccessRef.current = { scopeKey: pauseScopeKey, canEdit: canEditHousehold, visible, billId: editBill?.id };
 
   const [name,          setName]          = useState("");
   const [amount,        setAmount]        = useState("");
@@ -103,12 +102,17 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   const [actionMenuVisible, setActionMenuVisible] = useState(false);
   const [historyVisible, setHistoryVisible] = useState(false);
   const [pauseVisible, setPauseVisible] = useState(false);
+  const [editingPaymentPause, setEditingPaymentPause] = useState<DebtPaymentPause | undefined>();
+  const [pauseDraftRevision, setPauseDraftRevision] = useState(0);
   const [pauseDateField, setPauseDateField] = useState<DebtPaymentPauseDateField>(null);
   const [pauseStep, setPauseStep] = useState<DebtPaymentPauseStep>("dates");
   const [pauseActionSaving, setPauseActionSaving] = useState(false);
   const [pauseActionError, setPauseActionError] = useState("");
   const [pauseBackRevision, setPauseBackRevision] = useState(0);
   const pausePendingRef = useRef(false);
+  const pauseDraftRef = useRef({ visible: pauseVisible, revision: pauseDraftRevision });
+  pauseDraftRef.current = { visible: pauseVisible, revision: pauseDraftRevision };
+  pauseAccessRef.current = { scopeKey: pauseScopeKey, canEdit: canEditHousehold, visible, billId: editBill?.id };
   const dismissLayer = () => {
     if (confirmation) { setConfirmation(null); return; }
     if (pauseVisible) {
@@ -127,19 +131,30 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
 
   useEffect(() => {
     setPauseVisible(false);
+    setEditingPaymentPause(undefined);
     setPauseDateField(null);
     setPauseStep("dates");
     setPauseActionError("");
   }, [editBill?.id, currentDebt?.id, visible, pauseScopeKey]);
 
-  const openPaymentPause = () => {
+  const beginPaymentPause = (selected?: DebtPaymentPause) => {
     if (pausePendingRef.current || saving || pauseUnavailable) return;
     Keyboard.dismiss();
     setActionMenuVisible(false);
+    // Keep the selected interval as the edit baseline through refreshes/retries.
+    setEditingPaymentPause(selected ? Object.freeze({
+      id: selected.id,
+      start_date: selected.start_date,
+      resume_date: selected.resume_date,
+      redirect_payment: selected.redirect_payment,
+    }) : undefined);
+    setPauseDraftRevision(revision => revision + 1);
     setPauseDateField(null);
     setPauseStep("dates");
     setPauseVisible(true);
   };
+  const openPaymentPause = () => beginPaymentPause();
+  const openEditPaymentPause = () => { if (paymentPause) beginPaymentPause(paymentPause); };
   const assertPauseAccess = () => {
     const latest = pauseAccessRef.current;
     if (!latest.canEdit || !latest.visible || latest.scopeKey !== pauseScopeKey || latest.billId !== editBill?.id) {
@@ -149,7 +164,11 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   const savePaymentPause = async (input: DebtPaymentPauseInput) => {
     assertPauseAccess();
     if (!currentDebt || pauseUnavailable) throw new Error(pauseUnavailable || "Reopen this debt to try again.");
-    await pauseDebtPayments(currentDebt.id, input);
+    if (!pauseDraftRef.current.visible || pauseDraftRef.current.revision !== pauseDraftRevision) {
+      throw new Error("This pause editor changed. Reopen this debt to try again.");
+    }
+    if (editingPaymentPause) await editDebtPaymentPause(currentDebt.id, editingPaymentPause, input);
+    else await pauseDebtPayments(currentDebt.id, input);
   };
   const resumePaymentPause = async () => {
     if (saving || pausePendingRef.current || !currentDebt || !paymentPause) return;
@@ -450,6 +469,22 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
                   </View>
                 </Pressable>
               ) : null}
+              {editBill.is_debt && paymentPause ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit saved payment pause"
+                  accessibilityState={{ disabled: Boolean(pauseUnavailable) || saving || pauseActionSaving }}
+                  disabled={Boolean(pauseUnavailable) || saving || pauseActionSaving}
+                  onPress={openEditPaymentPause}
+                  style={({ pressed }) => [styles.actionMenuItem, { backgroundColor: pressed ? c.warning + "12" : "transparent", opacity: pauseUnavailable || saving || pauseActionSaving ? 0.55 : 1 }]}
+                >
+                  <Feather name="edit-2" size={17} color={c.warning} />
+                  <View style={styles.actionMenuCopy}>
+                    <Text style={[styles.actionMenuLabel, { color: c.foreground }]}>Edit pause</Text>
+                    <Text style={[styles.actionMenuHelp, { color: c.mutedForeground }]}>Change the resume date or what happens to this payment</Text>
+                  </View>
+                </Pressable>
+              ) : null}
               {onDelete ? (
                 <Pressable
                   accessibilityRole="button"
@@ -469,21 +504,114 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
 
           {historyVisible && editBill ? <BillPaymentHistoryPanel billId={editBill.id} billName={editBill.name} /> : <ScrollView showsVerticalScrollIndicator={isDesktop} keyboardShouldPersistTaps="handled">
 
-            {editBill?.is_debt ? <View style={[styles.pauseStatus, { backgroundColor: c.warning + "10", borderColor: c.warning + "45" }]}>
-              <View style={styles.actionMenuCopy}>
-                <Text style={[styles.actionMenuLabel, { color: c.foreground }]}>{activePause ? "Payments paused" : upcomingPause ? "Pause scheduled" : "Need a payment break?"}</Text>
-                <Text style={[styles.actionMenuHelp, { color: c.mutedForeground }]}>{paymentPause
-                  ? `${activePause ? "Payments resume" : `Starts ${pauseDateLabel(paymentPause.start_date)} · resumes`} ${pauseDateLabel(paymentPause.resume_date)}. Your debt stays open and keeps its payoff order.`
-                  : pauseUnavailable || "Choose a temporary pause without closing this debt."}</Text>
-                {paymentPause && Boolean(pauseUnavailable) ? <Text style={[styles.actionMenuHelp, { color: c.mutedForeground }]}>{pauseUnavailable}</Text> : null}
-                {Boolean(pauseActionError) && <Text accessibilityRole="alert" style={[styles.actionMenuHelp, { color: c.destructive }]}>{pauseActionError}</Text>}
+            {editBill?.is_debt ? (
+              <View
+                style={[
+                  styles.pauseStatus,
+                  { backgroundColor: c.warning + "10", borderColor: c.warning + "45" },
+                ]}
+              >
+                <View style={styles.actionMenuCopy}>
+                  <Text style={[styles.actionMenuLabel, { color: c.foreground }]}>
+                    {activePause
+                      ? "Payments paused"
+                      : upcomingPause
+                        ? "Pause scheduled"
+                        : "Need a payment break?"}
+                  </Text>
+                  <Text style={[styles.actionMenuHelp, { color: c.mutedForeground }]}>
+                    {paymentPause
+                      ? `${activePause ? "Payments resume" : `Starts ${pauseDateLabel(paymentPause.start_date)} · resumes`} ${pauseDateLabel(paymentPause.resume_date)}. Your debt stays open and keeps its payoff order.`
+                      : pauseUnavailable || "Choose a temporary pause without closing this debt."}
+                  </Text>
+                  {paymentPause && Boolean(pauseUnavailable) ? (
+                    <Text style={[styles.actionMenuHelp, { color: c.mutedForeground }]}>
+                      {pauseUnavailable}
+                    </Text>
+                  ) : null}
+                  {Boolean(pauseActionError) && (
+                    <Text
+                      accessibilityRole="alert"
+                      style={[styles.actionMenuHelp, { color: c.destructive }]}
+                    >
+                      {pauseActionError}
+                    </Text>
+                  )}
+                </View>
+                {paymentPause ? (
+                  <View style={styles.pauseStatusActions}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Edit pause"
+                      accessibilityState={{
+                        disabled: saving || pauseActionSaving || Boolean(pauseUnavailable),
+                      }}
+                      disabled={saving || pauseActionSaving || Boolean(pauseUnavailable)}
+                      onPress={openEditPaymentPause}
+                      style={[
+                        styles.pauseStatusAction,
+                        styles.pauseStatusActionGrow,
+                        {
+                          borderColor: c.warning + "55",
+                          opacity: saving || pauseActionSaving || pauseUnavailable ? 0.55 : 1,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.pauseStatusActionText, { color: c.foreground }]}>
+                        Edit pause
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={activePause ? "Resume now" : "Cancel scheduled pause"}
+                      accessibilityState={{
+                        disabled: saving || pauseActionSaving || Boolean(pauseUnavailable),
+                        busy: pauseActionSaving,
+                      }}
+                      disabled={saving || pauseActionSaving || Boolean(pauseUnavailable)}
+                      onPress={resumePaymentPause}
+                      style={[
+                        styles.pauseStatusAction,
+                        styles.pauseStatusActionGrow,
+                        {
+                          borderColor: c.warning + "55",
+                          opacity: saving || pauseActionSaving || pauseUnavailable ? 0.55 : 1,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.pauseStatusActionText, { color: c.foreground }]}>
+                        {pauseActionSaving
+                          ? "Saving…"
+                          : activePause
+                            ? "Resume now"
+                            : "Cancel scheduled pause"}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Pause debt payments"
+                    accessibilityState={{
+                      disabled: Boolean(pauseUnavailable) || saving || pauseActionSaving,
+                    }}
+                    disabled={Boolean(pauseUnavailable) || saving || pauseActionSaving}
+                    onPress={openPaymentPause}
+                    style={[
+                      styles.pauseStatusAction,
+                      {
+                        borderColor: c.warning + "55",
+                        opacity: pauseUnavailable || saving || pauseActionSaving ? 0.55 : 1,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.pauseStatusActionText, { color: c.foreground }]}>
+                      Pause payments
+                    </Text>
+                  </Pressable>
+                )}
               </View>
-              {paymentPause ? <Pressable accessibilityRole="button" accessibilityLabel={activePause ? "Resume now" : "Cancel scheduled pause"} accessibilityState={{ disabled: saving || pauseActionSaving || Boolean(pauseUnavailable), busy: pauseActionSaving }} disabled={saving || pauseActionSaving || Boolean(pauseUnavailable)} onPress={resumePaymentPause} style={[styles.pauseStatusAction, { borderColor: c.warning + "55", opacity: saving || pauseActionSaving || pauseUnavailable ? 0.55 : 1 }]}>
-                <Text style={[styles.pauseStatusActionText, { color: c.foreground }]}>{pauseActionSaving ? "Saving…" : activePause ? "Resume now" : "Cancel scheduled pause"}</Text>
-              </Pressable> : <Pressable accessibilityRole="button" accessibilityLabel="Pause debt payments" accessibilityState={{ disabled: Boolean(pauseUnavailable) || saving || pauseActionSaving }} disabled={Boolean(pauseUnavailable) || saving || pauseActionSaving} onPress={openPaymentPause} style={[styles.pauseStatusAction, { borderColor: c.warning + "55", opacity: pauseUnavailable || saving || pauseActionSaving ? 0.55 : 1 }]}>
-                <Text style={[styles.pauseStatusActionText, { color: c.foreground }]}>Pause payments</Text>
-              </Pressable>}
-            </View> : null}
+            ) : null}
 
             {editBill ? <Pressable accessibilityRole="button" accessibilityLabel={`Payment history for ${editBill.name}`}
               onPress={() => { Keyboard.dismiss(); setActionMenuVisible(false); setHistoryVisible(true); }}
@@ -808,6 +936,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       {currentDebt && <DebtPaymentPauseModal
         visible={visible && pauseVisible}
         bill={currentDebt}
+        editingPause={editingPaymentPause}
         today={today}
         canEdit={canEditHousehold}
         redirectEnabled={settings.debtPayoffEnabled}
@@ -816,7 +945,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
         onStepChange={setPauseStep}
         onOpenDateFieldChange={setPauseDateField}
         onSavingChange={pending => { pausePendingRef.current = pending; }}
-        onClose={() => { setPauseVisible(false); setPauseDateField(null); setPauseStep("dates"); }}
+        onClose={() => { setPauseVisible(false); setEditingPaymentPause(undefined); setPauseDateField(null); setPauseStep("dates"); }}
         onSave={savePaymentPause}
       />}
     </Modal>
@@ -836,6 +965,8 @@ const styles = StyleSheet.create({
   actionMenuItem: { minHeight: 54, flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, borderRadius: 10 },
   actionMenuCopy: { flex: 1, minWidth: 0 },
   pauseStatus: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 12, borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 12 },
+  pauseStatusActions: { width: "100%", flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  pauseStatusActionGrow: { flex: 1, minWidth: 0 },
   pauseStatusAction: { minHeight: 42, justifyContent: "center", alignItems: "center", borderWidth: 1, borderRadius: 10, paddingHorizontal: 12 },
   pauseStatusActionText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   actionMenuLabel: { fontSize: 14, fontFamily: "Inter_600SemiBold" },

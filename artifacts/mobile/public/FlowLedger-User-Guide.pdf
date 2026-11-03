@@ -132,7 +132,7 @@ endobj
 endobj
 16 0 obj
 <<
-/Author (FlowLedger) /CreationDate (D:20261103144015+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:787f115f1efbcff00538caee40bf09c2b87b342dd7abc2e8c73342c5ef7d883f) /ModDate (D:20261103144015+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+/Author (FlowLedger) /CreationDate (D:20261103160948+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:08535854e65db01eeacdc30b82d4e2eef51e5e59f901595bcb296987c00568b2) /ModDate (D:20261103160948+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
   /Subject (Current Dashboard, Activity, Bills, Forecast, payoff, Flo, and Settings guidance) /Title (FlowLedger User Guide) /Trapped /False
 >>
 endobj
@@ -954,7 +954,7 @@ endstream
 endobj
 22 0 obj
 <<
-/Length 7465
+/Length 7740
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -1182,15 +1182,15 @@ BT 1 0 0 1 327 442 Tm (Change an amount or date when it no longer fits real life
 .160784 .207843 .321569 RG
 .8 w
 n
-329 295 m
-554 295 l
-562.8448 295 570 302.1552 570 311 c
+329 262 m
+554 262 l
+562.8448 262 570 269.1552 570 278 c
 570 400 l
 570 408.8448 562.8448 416 554 416 c
 329 416 l
 320.1552 416 313 408.8448 313 400 c
-313 311 l
-313 302.1552 320.1552 295 329 295 c
+313 278 l
+313 269.1552 320.1552 262 329 262 c
 h
 B*
 .960784 .721569 .180392 rg
@@ -1212,8 +1212,11 @@ BT 1 0 0 1 327 364 Tm (question, choose whether to move the payment to other) Tj
 BT 1 0 0 1 327 353 Tm (debts in payoff order or keep it available. Redirecting) Tj T* ET
 BT 1 0 0 1 327 342 Tm (requires Debt Payoff Plan to be on. The debt stays open in) Tj T* ET
 BT 1 0 0 1 327 331 Tm (order and resumes automatically, or choose Resume now.) Tj T* ET
-BT 1 0 0 1 327 320 Tm (This changes your FlowLedger plan only; lender payments) Tj T* ET
-BT 1 0 0 1 327 309 Tm (and interest may still apply.) Tj T* ET
+BT 1 0 0 1 327 320 Tm (Use Edit pause to change the resume date or payment) Tj T* ET
+BT 1 0 0 1 327 309 Tm (choice. Scheduled pauses can also change their start date.) Tj T* ET
+BT 1 0 0 1 327 298 Tm (Earlier pause history stays intact; changes apply going) Tj T* ET
+BT 1 0 0 1 327 287 Tm (forward. This changes your FlowLedger plan only; lender) Tj T* ET
+BT 1 0 0 1 327 276 Tm (payments and interest may still apply.) Tj T* ET
 .062745 .094118 .168627 rg
 .960784 .721569 .180392 RG
 .8 w
@@ -3058,16 +3061,16 @@ xref
 0000013134 00000 n 
 0000017693 00000 n 
 0000022678 00000 n 
-0000030195 00000 n 
-0000037293 00000 n 
-0000044395 00000 n 
-0000051027 00000 n 
-0000059143 00000 n 
-0000065504 00000 n 
+0000030470 00000 n 
+0000037568 00000 n 
+0000044670 00000 n 
+0000051302 00000 n 
+0000059418 00000 n 
+0000065779 00000 n 
 trailer
 <<
 /ID 
-[<5ede9bb6db5f385c7f2fd76cf2026c79><5ede9bb6db5f385c7f2fd76cf2026c79>]
+[<eb5cc8ec030ddb77bfc2fd48b16e9e85><eb5cc8ec030ddb77bfc2fd48b16e9e85>]
 % ReportLab generated PDF document -- digest (opensource)
 
 /Info 16 0 R
@@ -3075,5 +3078,5 @@ trailer
 /Size 29
 >>
 startxref
-74956
+75231
 %%EOF

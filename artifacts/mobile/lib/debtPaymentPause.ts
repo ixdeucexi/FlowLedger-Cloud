@@ -7,6 +7,12 @@ export type DebtPaymentPause = {
   redirect_payment: boolean;
 };
 
+export type DebtPaymentPauseEditInput = {
+  startDate: string;
+  resumeDate: string;
+  redirectPayment: boolean;
+};
+
 export const MAX_DEBT_PAYMENT_PAUSES = 120;
 
 export function isDebtPaymentPauseDate(value: unknown): value is string {
@@ -77,4 +83,44 @@ export function resumeDebtPaymentPause(existing: unknown, pauseId: string, resum
     throw new Error("The resume date must be after the pause starts and no later than its saved resume date.");
   }
   return normalizeDebtPaymentPauses(pauses.map(item => item.id === pauseId ? { ...item, resume_date: resumeDate } : item));
+}
+
+/** Edit the captured interval while keeping elapsed planning history intact. */
+export function editDebtPaymentPauseHistory(
+  existing: unknown,
+  expectedPause: DebtPaymentPause,
+  input: DebtPaymentPauseEditInput,
+  today: string,
+  newId: string,
+): DebtPaymentPause[] {
+  const pauses = normalizeDebtPaymentPauses(existing);
+  const expected = normalizeDebtPaymentPauses([expectedPause])[0];
+  if (!isDebtPaymentPauseDate(today)) throw new Error("A valid current date is required to edit this payment pause.");
+  const current = pauses.find(pause => pause.id === expected.id);
+  if (!current || current.resume_date <= today
+    || current.start_date !== expected.start_date || current.resume_date !== expected.resume_date
+    || current.redirect_payment !== expected.redirect_payment) {
+    throw new Error("This payment pause changed or ended. Reopen the debt and try again.");
+  }
+  if (!isDebtPaymentPauseDate(input.startDate) || !isDebtPaymentPauseDate(input.resumeDate)
+    || typeof input.redirectPayment !== "boolean") {
+    throw new Error("Choose valid pause dates and a payment transfer option.");
+  }
+  const elapsed = current.start_date < today;
+  if (elapsed && input.startDate !== current.start_date) {
+    throw new Error("This pause has already started. Its original start date cannot be changed.");
+  }
+  if (!elapsed && input.startDate < today) throw new Error("Choose a pause start date today or later.");
+  if (input.resumeDate <= (elapsed ? today : input.startDate)) {
+    throw new Error(elapsed
+      ? "Choose a resume date after today. Use Resume now to end the pause today."
+      : "Choose a resume date after the pause starts.");
+  }
+  const replacement: DebtPaymentPause[] = elapsed && input.redirectPayment !== current.redirect_payment
+    ? [
+        { ...current, resume_date: today },
+        { id: newId, start_date: today, resume_date: input.resumeDate, redirect_payment: input.redirectPayment },
+      ]
+    : [{ ...current, start_date: input.startDate, resume_date: input.resumeDate, redirect_payment: input.redirectPayment }];
+  return normalizeDebtPaymentPauses(pauses.flatMap(pause => pause.id === current.id ? replacement : [pause]));
 }

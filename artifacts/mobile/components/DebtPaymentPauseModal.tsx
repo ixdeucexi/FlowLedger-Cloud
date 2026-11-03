@@ -12,7 +12,12 @@ import type { Bill } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { addDateOnlyDays, addDateOnlyMonths, dateOnlyToLocalDate } from "@/lib/dateLabels";
-import { isDebtPaymentPauseDate, normalizeDebtPaymentPauses } from "@/lib/debtPaymentPause";
+import {
+  editDebtPaymentPauseHistory,
+  isDebtPaymentPauseDate,
+  normalizeDebtPaymentPauses,
+  type DebtPaymentPause,
+} from "@/lib/debtPaymentPause";
 import { DESKTOP_MODAL_COMPACT, DESKTOP_MODAL_OVERLAY } from "@/lib/desktopModal";
 
 export type DebtPaymentPauseInput = {
@@ -27,6 +32,7 @@ export type DebtPaymentPauseStep = "dates" | "transfer";
 interface Props {
   visible: boolean;
   bill: Bill;
+  editingPause?: DebtPaymentPause;
   today: string;
   canEdit: boolean;
   redirectEnabled: boolean;
@@ -53,6 +59,7 @@ function readableDate(value: string) {
 export function DebtPaymentPauseModal({
   visible,
   bill,
+  editingPause,
   today,
   canEdit,
   redirectEnabled,
@@ -76,34 +83,46 @@ export function DebtPaymentPauseModal({
 
   useEffect(() => {
     if (!visible) return;
-    setStartDate(today);
-    setResumeDate(addDateOnlyMonths(today, 2));
-    setRedirectPayment(null);
+    setStartDate(editingPause?.start_date ?? today);
+    setResumeDate(editingPause?.resume_date ?? addDateOnlyMonths(today, 2));
+    setRedirectPayment(editingPause?.redirect_payment ?? null);
     setError("");
     // Opening starts a new draft; confirmed-row refreshes preserve this draft.
-  }, [visible, bill.id]);
+  }, [visible, bill.id, editingPause?.id]);
 
   useEffect(() => {
-    if (!redirectEnabled) setRedirectPayment((value) => (value === true ? null : value));
-  }, [redirectEnabled]);
+    if (!redirectEnabled && editingPause?.redirect_payment !== true) {
+      setRedirectPayment((value) => (value === true ? null : value));
+    }
+  }, [redirectEnabled, editingPause?.id, editingPause?.redirect_payment]);
 
   useEffect(() => {
     if (visible) scrollRef.current?.scrollTo({ y: 0, animated: false });
   }, [visible, step]);
 
+  const isEditing = editingPause !== undefined;
+  const elapsedStart = Boolean(editingPause && editingPause.start_date < today);
+  const savedRedirectMayStay = editingPause?.redirect_payment === true;
+  const redirectUnavailable = redirectPayment === true && !redirectEnabled && !savedRedirectMayStay;
   const unavailable = !canEdit
     ? "Only household editors can pause debt payments."
     : !bill.is_debt || bill.balance <= 0.009 || Boolean(bill.end_date)
       ? "Payment pauses are available for open debts with a balance."
-      : "";
+      : editingPause && editingPause.resume_date <= today
+        ? "This payment pause has ended. Reopen the debt to see its current payments."
+        : "";
   const dateError =
     !isDebtPaymentPauseDate(startDate) || !isDebtPaymentPauseDate(resumeDate)
       ? "Choose valid start and resume dates."
-      : startDate < today
-        ? "The pause must start today or later."
-        : resumeDate <= startDate
-          ? "Payments must resume after the pause starts."
-          : "";
+      : elapsedStart && startDate !== editingPause?.start_date
+        ? "This pause has already started. Its original start date cannot be changed."
+        : !elapsedStart && startDate < today
+          ? "The pause must start today or later."
+          : resumeDate <= (elapsedStart ? today : startDate)
+            ? elapsedStart
+              ? "Choose a resume date after today. Use Resume now to end the pause today."
+              : "Payments must resume after the pause starts."
+            : "";
   const close = () => {
     if (!savingRef.current) onClose();
   };
@@ -114,14 +133,17 @@ export function DebtPaymentPauseModal({
   };
   // RN Web's PressResponder handles Enter for radio roles, but only handles
   // Space for button roles. Preserve native press behavior and add radio Space.
-  const choiceKeyboardProps = (move: boolean) => Platform.OS === "web" ? {
-    onKeyDown: (event: React.KeyboardEvent) => {
-      if (event.key !== " " && event.key !== "Spacebar") return;
-      event.preventDefault();
-      event.stopPropagation();
-      choosePayment(move);
-    },
-  } : {};
+  const choiceKeyboardProps = (move: boolean) =>
+    Platform.OS === "web"
+      ? {
+          onKeyDown: (event: React.KeyboardEvent) => {
+            if (event.key !== " " && event.key !== "Spacebar") return;
+            event.preventDefault();
+            event.stopPropagation();
+            choosePayment(move);
+          },
+        }
+      : {};
   const validateDates = () => {
     if (unavailable || dateError) {
       setError(unavailable || dateError);
@@ -132,15 +154,29 @@ export function DebtPaymentPauseModal({
       let draftId = "pause-draft";
       let draftIndex = 0;
       while (history.some((pause) => pause.id === draftId)) draftId = `pause-draft-${++draftIndex}`;
-      normalizeDebtPaymentPauses([
-        ...history,
-        {
-          id: draftId,
-          start_date: startDate,
-          resume_date: resumeDate,
-          redirect_payment: redirectEnabled && redirectPayment === true,
-        },
-      ]);
+      if (editingPause) {
+        editDebtPaymentPauseHistory(
+          history,
+          editingPause,
+          {
+            startDate,
+            resumeDate,
+            redirectPayment: redirectPayment ?? editingPause.redirect_payment,
+          },
+          today,
+          draftId,
+        );
+      } else {
+        normalizeDebtPaymentPauses([
+          ...history,
+          {
+            id: draftId,
+            start_date: startDate,
+            resume_date: resumeDate,
+            redirect_payment: redirectEnabled && redirectPayment === true,
+          },
+        ]);
+      }
       return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Check the pause dates and try again.");
@@ -160,11 +196,7 @@ export function DebtPaymentPauseModal({
   };
   const save = async () => {
     if (savingRef.current || !validateDates()) return;
-    if (
-      step !== "transfer" ||
-      redirectPayment === null ||
-      (redirectPayment === true && !redirectEnabled)
-    ) {
+    if (step !== "transfer" || redirectPayment === null || redirectUnavailable) {
       setError("Choose whether to move this payment or keep it available.");
       return;
     }
@@ -202,10 +234,8 @@ export function DebtPaymentPauseModal({
           : "each month";
   const choosingTransfer = step === "transfer";
   const saveDisabled =
-    saving ||
-    Boolean(unavailable || dateError) ||
-    redirectPayment === null ||
-    (redirectPayment === true && !redirectEnabled);
+    saving || Boolean(unavailable || dateError) || redirectPayment === null || redirectUnavailable;
+  const finalSaveLabel = isEditing ? "Save changes" : "Pause payments";
 
   return (
     <KeyboardAvoidingView
@@ -233,7 +263,7 @@ export function DebtPaymentPauseModal({
               STEP {choosingTransfer ? "2" : "1"} OF 2
             </Text>
             <Text accessibilityRole="header" style={[styles.title, { color: c.foreground }]}>
-              Pause debt payments
+              {isEditing ? "Edit payment pause" : "Pause debt payments"}
             </Text>
           </View>
           <Pressable
@@ -315,15 +345,17 @@ export function DebtPaymentPauseModal({
                     Yes, use payoff order
                   </Text>
                   <Text style={[styles.copy, { color: c.mutedForeground }]}>
-                    Available payments go to your next eligible debts in payoff order. Unused money
-                    stays available.
+                    {!redirectEnabled && savedRedirectMayStay
+                      ? "Your saved choice will apply if Debt Payoff Plan is turned on."
+                      : "Available payments go to your next eligible debts in payoff order. Unused money stays available."}
                   </Text>
                 </View>
               </Pressable>
               {!redirectEnabled && (
                 <Text style={[styles.copy, { color: c.mutedForeground }]}>
-                  Turn on Debt Payoff Plan in Settings to move payments. You can still pause this
-                  debt.
+                  {savedRedirectMayStay && redirectPayment === true
+                    ? "Saved choice kept. No payments move while Debt Payoff Plan is off."
+                    : `Turn on Debt Payoff Plan in Settings to move payments. You can still ${isEditing ? "edit this pause" : "pause this debt"}.`}
                 </Text>
               )}
               <Pressable
@@ -357,6 +389,14 @@ export function DebtPaymentPauseModal({
                   </Text>
                 </View>
               </Pressable>
+              {elapsedStart &&
+                editingPause &&
+                redirectPayment !== null &&
+                redirectPayment !== editingPause.redirect_payment && (
+                  <Text style={[styles.copy, { color: c.mutedForeground }]}>
+                    Payment choice changes apply from today. Earlier paused dates stay recorded.
+                  </Text>
+                )}
             </>
           ) : (
             <>
@@ -364,14 +404,22 @@ export function DebtPaymentPauseModal({
                 label="Pause starts"
                 value={startDate}
                 onChange={(value) => {
+                  if (elapsedStart) return;
                   setStartDate(value);
                   setError("");
                 }}
-                minDate={today}
-                disabled={saving}
-                open={openDateField === "start"}
-                onOpenChange={(open) => onOpenDateFieldChange(open ? "start" : null)}
+                minDate={elapsedStart ? undefined : today}
+                disabled={saving || elapsedStart}
+                open={!elapsedStart && openDateField === "start"}
+                onOpenChange={(open) => {
+                  if (!elapsedStart) onOpenDateFieldChange(open ? "start" : null);
+                }}
               />
+              {elapsedStart && (
+                <Text style={[styles.copy, { color: c.mutedForeground }]}>
+                  This pause has already started. Its start date stays the same.
+                </Text>
+              )}
               <DatePickerField
                 label="Payments resume"
                 value={resumeDate}
@@ -379,7 +427,7 @@ export function DebtPaymentPauseModal({
                   setResumeDate(value);
                   setError("");
                 }}
-                minDate={addDateOnlyDays(startDate, 1)}
+                minDate={addDateOnlyDays(elapsedStart ? today : startDate, 1)}
                 disabled={saving}
                 open={openDateField === "resume"}
                 onOpenChange={(open) => onOpenDateFieldChange(open ? "resume" : null)}
@@ -426,7 +474,7 @@ export function DebtPaymentPauseModal({
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={choosingTransfer ? "Pause payments" : "Continue"}
+            accessibilityLabel={choosingTransfer ? finalSaveLabel : "Continue"}
             accessibilityState={{
               disabled: choosingTransfer
                 ? saveDisabled
@@ -449,7 +497,7 @@ export function DebtPaymentPauseModal({
             ]}
           >
             <Text style={[styles.buttonText, { color: c.primaryForeground }]}>
-              {saving ? "Saving…" : choosingTransfer ? "Pause payments" : "Continue"}
+              {saving ? "Saving…" : choosingTransfer ? finalSaveLabel : "Continue"}
             </Text>
           </Pressable>
         </View>

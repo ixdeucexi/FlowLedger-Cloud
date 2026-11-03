@@ -139,7 +139,7 @@ import { isActiveTransaction, isConfirmedBillMatch, manualActivityMatchCandidate
 import { countReviewQueue } from "@/lib/reviewCenter";
 import { normalizePlanningTools } from "@/lib/planningMode";
 import { canonicalDebtPaymentMethod } from "@/lib/debtOrder";
-import { addDebtPaymentPause, isDebtPaymentPauseDate, normalizeDebtPaymentPauses, resumeDebtPaymentPause } from "@/lib/debtPaymentPause";
+import { addDebtPaymentPause, editDebtPaymentPauseHistory, isDebtPaymentPauseDate, normalizeDebtPaymentPauses, resumeDebtPaymentPause, type DebtPaymentPause, type DebtPaymentPauseEditInput } from "@/lib/debtPaymentPause";
 import { localDateString } from "@/lib/dateLabels";
 import { spendingBucketSummary, validateCreateSpendingBucketMatch } from "@/lib/spendingBuckets";
 import { hasBucketRemainderFunding, latestBucketRemainderAvailableDate, removeBucketRemainderFundingSource, resizeSnowballFundingSources } from "@/lib/snowballFunding";
@@ -338,6 +338,7 @@ interface BudgetContextType {
   ) => Promise<void>;
   pauseDebtPayments: (billId: string, input: { startDate: string; resumeDate: string; redirectPayment: boolean }) => Promise<void>;
   resumeDebtPayments: (billId: string, pauseId: string) => Promise<void>;
+  editDebtPaymentPause: (billId: string, expectedPause: DebtPaymentPause, input: DebtPaymentPauseEditInput) => Promise<void>;
   stopFutureBill: (id: string) => Promise<void>;
   deleteBill: (id: string) => Promise<void>;
   deleteBillMistake: (id: string) => Promise<void>;
@@ -3247,6 +3248,32 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const next = today <= pause.start_date
       ? previous.filter(item => item.id !== pauseId)
       : resumeDebtPaymentPause(previous, pauseId, today);
+    debtPaymentPauseInFlightRef.current.add(key);
+    try {
+      await updateBill({ ...bill, debt_payment_pauses: next }, ["debt_payment_pauses"], { debt_payment_pauses: previous });
+    } finally {
+      debtPaymentPauseInFlightRef.current.delete(key);
+    }
+  }, [debtPaymentPauseBill, householdTimeZone, user?.id, activeHousehold?.householdId, activeHousehold?.budgetId, updateBill]);
+
+  const editDebtPaymentPause = useCallback(async (
+    billId: string,
+    expectedPause: DebtPaymentPause,
+    input: DebtPaymentPauseEditInput,
+  ) => {
+    const bill = debtPaymentPauseBill(billId);
+    const key = `${user?.id}:${activeHousehold?.householdId ?? "personal"}:${activeHousehold?.budgetId ?? ""}:${billId}`;
+    if (debtPaymentPauseInFlightRef.current.has(key)) throw new Error("This debt payment change is already saving.");
+    if (!Number.isFinite(bill.balance) || bill.balance <= 0 || bill.end_date) {
+      throw new Error("Payment pauses are available for open debts with a balance.");
+    }
+    const today = safeLocalDateInTimeZone(new Date(), householdTimeZone);
+    const previous = normalizeDebtPaymentPauses(bill.debt_payment_pauses);
+    const next = editDebtPaymentPauseHistory(previous, expectedPause, input, today, genId());
+    if (input.redirectPayment && !expectedPause.redirect_payment && !settingsRef.current.debtPayoffEnabled) {
+      throw new Error("Turn on Debt Payoff Plan before redirecting a paused payment.");
+    }
+    if (billEditableValuesEqual("debt_payment_pauses", previous, next)) return;
     debtPaymentPauseInFlightRef.current.add(key);
     try {
       await updateBill({ ...bill, debt_payment_pauses: next }, ["debt_payment_pauses"], { debt_payment_pauses: previous });
@@ -6399,7 +6426,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       forecastConfidence, loading, startupCoreReady, loadError, dataUpdatedAt, retryBudgetLoad, refreshBankData, demoMode,
       saveStatus, saveError, retryLastSave, clearSaveError,
       dashboardFilter, setDashboardFilter,
-      addBill, updateBill, pauseDebtPayments, resumeDebtPayments, stopFutureBill, deleteBill, deleteBillMistake, getBillById,
+      addBill, updateBill, pauseDebtPayments, resumeDebtPayments, editDebtPaymentPause, stopFutureBill, deleteBill, deleteBillMistake, getBillById,
       getOverride, getAmount, getPaidAmount, setPaidAmount, setCustomAmount, setPlannedDebtAmount, getCustomDueDay, setCustomDueDay,
       setBillOccurrenceAmount, skipBillOccurrence, endBillSeriesBeforeOccurrence,
       moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence, getBillDateMovesForMonth,

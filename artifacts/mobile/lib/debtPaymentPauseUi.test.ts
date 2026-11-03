@@ -43,7 +43,7 @@ function browserHistory() {
 const compiled = new Map<string, string>();
 function harness(component: string, props: Record<string, any> = {}, options: { budget?: Record<string, any>; browser?: ReturnType<typeof browserHistory>; native?: boolean; today?: string; view?: string } = {}) {
   const states: any[] = [], effects: (() => void)[] = [], cleanups = new Map<number, () => void>();
-  const budget: any = { bills: [{ ...debt }], categories: ["Other", "Debt"], settings: { debtPayoffEnabled: true }, householdTimeZone: "Pacific/Kiritimati", activeHousehold: { householdId: "home", budgetId: "budget", role: "owner" }, canEditHousehold: true, pauseDebtPayments: async () => {}, resumeDebtPayments: async () => {}, getDebtMonthSettlements: () => new Map(), pendingPlanMatches: [], pendingBankTransactions: [], getMonthlyBills: () => budget.bills, getBillOccurrencesInMonth: () => [15], getBillMonthlyTotal: (bill: any) => bill.amount, getBillEffectiveMonthlyTotal: (bill: any) => bill.amount, getPaidAmount: () => 0, getExtraPayment: () => undefined, getDebtPlanForMonth: () => null, getRemainingDebtPlanForMonth: () => null, previewDebtSnowball: () => ({ safeMaximum: 0 }), ...options.budget };
+  const budget: any = { bills: [{ ...debt }], categories: ["Other", "Debt"], settings: { debtPayoffEnabled: true }, householdTimeZone: "Pacific/Kiritimati", activeHousehold: { householdId: "home", budgetId: "budget", role: "owner" }, canEditHousehold: true, pauseDebtPayments: async () => {}, editDebtPaymentPause: async () => {}, resumeDebtPayments: async () => {}, getDebtMonthSettlements: () => new Map(), pendingPlanMatches: [], pendingBankTransactions: [], getMonthlyBills: () => budget.bills, getBillOccurrencesInMonth: () => [15], getBillMonthlyTotal: (bill: any) => bill.amount, getBillEffectiveMonthlyTotal: (bill: any) => bill.amount, getPaidAmount: () => 0, getExtraPayment: () => undefined, getDebtPlanForMonth: () => null, getRemainingDebtPlanForMonth: () => null, previewDebtSnowball: () => ({ safeMaximum: 0 }), ...options.budget };
   let cursor = 0, dirty = false, lastBack: (() => void) | undefined, lastDepth: boolean | number | undefined;
   const zones: string[] = [];
   const react = { createElement: (type: any, elementProps: any, ...children: any[]) => ({ type, props: { ...elementProps, children } }) };
@@ -439,4 +439,170 @@ test("mobile bills and debt cards retain exact full currency and cents beside th
   assert.match(copy(billCard), /\$1,234,567\.89/);
   const amount = flatten(billCard).find(node => node.type === "Text" && copy(node).includes("$1,234,567.89"));
   assert.equal(amount.props.sensitive, true);
+});
+
+
+function editPauseHarness(pause = savedPause, extra: Record<string, any> = {}) {
+  return pauseHarness({ bill: { ...debt, debt_payment_pauses: [{ ...pause }] }, editingPause: { ...pause }, ...extra });
+}
+
+function pauseField(h: ReturnType<typeof pauseHarness>, label: string) {
+  return flatten(h.render()).find(node => node.type === "DatePickerField" && node.props.label === label);
+}
+
+test("edit pause prefills the captured dates and choice, locking only an elapsed start", () => {
+  for (const [start, locked, move] of [["2026-01-01", true, true], ["2026-01-31", false, false], ["2026-02-15", false, true]] as const) {
+    const interval = { ...savedPause, start_date: start, redirect_payment: move };
+    const h = editPauseHarness(interval);
+    assert.match(copy(h.render()), /Edit payment pause/);
+    assert.equal(pauseField(h, "Pause starts").props.value, start);
+    assert.equal(pauseField(h, "Pause starts").props.disabled, locked);
+    assert.equal(pauseField(h, "Payments resume").props.value, interval.resume_date);
+    if (locked) {
+      pauseField(h, "Pause starts").props.onChange("2026-02-02");
+      pauseField(h, "Pause starts").props.onOpenChange(true);
+      assert.equal(pauseField(h, "Pause starts").props.value, start);
+      assert.equal(h.props.openDateField, null);
+      assert.match(copy(h.render()), /start date stays the same/);
+      assert.equal(pauseField(h, "Payments resume").props.minDate, "2026-02-01");
+    }
+    h.button("Continue").props.onPress();
+    assert.equal(h.button("Yes, use payoff order").props["aria-checked"], move);
+    assert.equal(h.button("No, keep it available").props["aria-checked"], !move);
+    assert.equal(h.button("Save changes").props.disabled, false);
+    assert.equal(h.button("Pause payments"), undefined);
+    assert.deepEqual(h.writes, []);
+    h.button("Back").props.onPress(); h.button("Cancel").props.onPress();
+    assert.deepEqual(h.writes, []);
+  }
+});
+
+test("editing an active pause keeps draft dates and choice through rejection, Back, duplicate submit and retry", async () => {
+  const original = { ...savedPause, start_date: "2026-01-01" };
+  let reject!: (error: Error) => void, finish!: () => void;
+  let pending = new Promise<void>((resolve, fail) => { finish = resolve; reject = fail; });
+  const writes: any[] = [];
+  const h = editPauseHarness(original, { onSave: (input: any) => { writes.push(input); return pending; } });
+  pauseField(h, "Payments resume").props.onChange("2026-04-05");
+  h.button("Continue").props.onPress(); h.button("No, keep it available").props.onPress();
+  assert.match(copy(h.render()), /changes apply from today/);
+  const submit = h.button("Save changes");
+  const first = submit.props.onPress(); await submit.props.onPress();
+  assert.deepEqual(writes, [{ startDate: "2026-01-01", resumeDate: "2026-04-05", redirectPayment: false }]);
+  h.button("Back").props.onPress(); h.button("Close debt payment pause").props.onPress();
+  assert.equal(h.props.step, "transfer"); assert.equal(h.closes(), 0);
+  assert.equal(h.button("Save changes").props.disabled, true);
+  reject(new Error("Fictional edit unavailable")); await first;
+  assert.match(copy(h.render()), /Fictional edit unavailable/);
+  assert.equal(h.button("No, keep it available").props["aria-checked"], true);
+  h.button("Back").props.onPress();
+  assert.equal(pauseField(h, "Pause starts").props.value, "2026-01-01");
+  assert.equal(pauseField(h, "Payments resume").props.value, "2026-04-05");
+  h.props.bill = { ...h.props.bill, name: "Refreshed display name" };
+  assert.equal(pauseField(h, "Payments resume").props.value, "2026-04-05");
+  h.button("Continue").props.onPress();
+  pending = new Promise<void>(resolve => { finish = resolve; });
+  const retry = h.button("Save changes").props.onPress(); finish(); await retry;
+  assert.deepEqual(writes, [writes[0], writes[0]]); assert.equal(h.closes(), 1);
+});
+
+test("edit validation rejects missing, changed, ended and overlapping saved intervals without creating a pause", async () => {
+  const original = { ...savedPause, start_date: "2026-02-01" };
+  for (const history of [[], [{ ...original, resume_date: "2026-04-01" }], [{ ...original, redirect_payment: false }]]) {
+    const h = editPauseHarness(original, { bill: { ...debt, debt_payment_pauses: history } });
+    h.button("Continue").props.onPress();
+    assert.match(copy(h.render()), /changed or ended.*Reopen/);
+    assert.deepEqual(h.writes, []); assert.equal(h.props.step, "dates");
+    assert.match(copy(h.render()), /Edit payment pause/);
+  }
+  const ended = editPauseHarness({ ...savedPause, start_date: "2026-01-01", resume_date: "2026-01-20" });
+  ended.button("Continue").props.onPress();
+  assert.match(copy(ended.render()), /pause has ended.*Reopen/); assert.deepEqual(ended.writes, []);
+  const overlap = editPauseHarness(original, { bill: { ...debt, debt_payment_pauses: [original, { id: "later", start_date: "2026-04-01", resume_date: "2026-05-01", redirect_payment: false }] } });
+  pauseField(overlap, "Payments resume").props.onChange("2026-04-15");
+  overlap.button("Continue").props.onPress();
+  assert.match(copy(overlap.render()), /cannot overlap/); assert.deepEqual(overlap.writes, []);
+  const active = editPauseHarness({ ...savedPause, start_date: "2026-01-01" });
+  pauseField(active, "Payments resume").props.onChange("2026-01-31");
+  active.button("Continue").props.onPress(); assert.match(copy(active.render()), /Use Resume now/);
+  assert.deepEqual(active.writes, []);
+});
+
+test("plan-off edits retain an existing true choice without enabling new transfers or resetting an explicit No", async () => {
+  for (const move of [true, false]) {
+    const h = editPauseHarness({ ...savedPause, redirect_payment: move }, { redirectEnabled: false });
+    pauseField(h, "Payments resume").props.onChange("2026-04-05");
+    h.button("Continue").props.onPress();
+    assert.equal(h.button("Yes, use payoff order").props.disabled, true);
+    assert.equal(h.button("Yes, use payoff order").props["aria-checked"], move);
+    assert.equal(h.button("Save changes").props.disabled, false);
+    if (move) assert.match(copy(h.render()), /Saved choice kept.*No payments move while Debt Payoff Plan is off/);
+    h.button("Yes, use payoff order").props.onPress();
+    await h.button("Save changes").props.onPress();
+    assert.deepEqual(h.writes, [{ startDate: "2026-01-31", resumeDate: "2026-04-05", redirectPayment: move }]);
+  }
+  const no = editPauseHarness(savedPause, { redirectEnabled: false });
+  no.button("Continue").props.onPress(); no.button("No, keep it available").props.onPress();
+  no.props.redirectEnabled = true; no.render(); no.props.redirectEnabled = false; no.render();
+  assert.equal(no.button("No, keep it available").props["aria-checked"], true);
+  assert.doesNotMatch(copy(no.render()), /Saved choice kept/);
+  await no.button("Save changes").props.onPress(); assert.equal(no.writes[0].redirectPayment, false);
+});
+
+test("shared editor exposes active/future Edit pause entries with a frozen selected snapshot and preserves unsaved debt fields", async () => {
+  for (const start of ["2026-01-01", "2026-02-15"]) {
+    const selected = { ...savedPause, start_date: start };
+    const writes: any[] = [], creates: any[] = [], updates: any[] = [];
+    const editedHistory = [{ ...selected, resume_date: "2026-04-05" }];
+    const h = editorHarness({ budget: { bills: [{ ...debt, debt_payment_pauses: [selected] }], pauseDebtPayments: async (...args: any[]) => { creates.push(args); }, editDebtPaymentPause: async (...args: any[]) => { writes.push(args); h.budget.bills = [{ ...debt, debt_payment_pauses: editedHistory }]; } } });
+    h.props.onSave = async (...args: any[]) => { updates.push(args); };
+    flatten(h.render()).find(node => node.type === "TextInput" && node.props.placeholder === "e.g. Car Loan").props.onChangeText("Unsaved edited name");
+    assert.ok(h.button("Edit pause")); assert.ok(h.button(start < "2026-01-31" ? "Resume now" : "Cancel scheduled pause"));
+    h.button("More bill actions").props.onPress(); assert.ok(h.button("Edit saved payment pause"));
+    h.button("Edit saved payment pause").props.onPress();
+    const overlay = h.child("DebtPaymentPauseModal");
+    assert.equal(overlay.props.visible, true); assert.deepEqual(overlay.props.editingPause, selected);
+    assert.notEqual(overlay.props.editingPause, selected); assert.equal(Object.isFrozen(overlay.props.editingPause), true);
+    h.budget.bills = [{ ...debt, debt_payment_pauses: [{ ...selected }] }]; h.render();
+    assert.equal(h.child("DebtPaymentPauseModal").props.editingPause, overlay.props.editingPause);
+    const input = { startDate: start, resumeDate: "2026-04-05", redirectPayment: true };
+    await overlay.props.onSave(input); overlay.props.onClose();
+    assert.deepEqual(writes, [["first", selected, input]]); assert.deepEqual(creates, []);
+    assert.equal(h.closes(), 0);
+    const update = flatten(h.render()).find(node => node.type === "Pressable" && copy(node).includes("Update Debt")); await update.props.onPress();
+    assert.equal(updates[0][0].name, "Unsaved edited name"); assert.equal(updates[0][0].amount, 100);
+    assert.deepEqual(updates[0][0].debt_payment_pauses, editedHistory); assert.deepEqual(updates[0][1], ["name"]);
+  }
+});
+
+test("edit callbacks never fall back to create after role, scope, close or a reopened draft changes", async () => {
+  for (const change of ["role", "scope", "close", "reopen"]) {
+    const creates: any[] = [], edits: any[] = [];
+    const h = editorHarness({ budget: { bills: [{ ...debt, debt_payment_pauses: [savedPause] }], pauseDebtPayments: async (...args: any[]) => { creates.push(args); }, editDebtPaymentPause: async (...args: any[]) => { edits.push(args); } } });
+    h.button("Edit pause").props.onPress();
+    const overlay = h.child("DebtPaymentPauseModal"), retained = overlay.props.onSave;
+    if (change === "role") h.budget.canEditHousehold = false;
+    else if (change === "scope") h.budget.activeHousehold = { ...h.budget.activeHousehold, householdId: "different" };
+    else { overlay.props.onClose(); h.render(); if (change === "reopen") h.button("Edit pause").props.onPress(); }
+    h.render();
+    await assert.rejects(retained({ startDate: savedPause.start_date, resumeDate: "2026-04-05", redirectPayment: true }), /editing access changed|pause editor changed/);
+    assert.deepEqual(creates, []); assert.deepEqual(edits, []);
+  }
+});
+
+test("edit confirmation and calendar Back cancel drafts without saving or losing their parent editor", () => {
+  const browser = browserHistory(), calls: any[] = [];
+  const h = editorHarness({ browser, budget: { bills: [{ ...debt, debt_payment_pauses: [{ ...savedPause, start_date: "2026-02-01" }] }], editDebtPaymentPause: async (...args: any[]) => { calls.push(args); } } });
+  h.button("Edit pause").props.onPress(); h.render();
+  h.child("DebtPaymentPauseModal").props.onOpenDateFieldChange("resume"); h.render();
+  browser.host.history.back(); browser.flush(); h.render();
+  assert.equal(h.child("DebtPaymentPauseModal").props.openDateField, null);
+  h.child("DebtPaymentPauseModal").props.onStepChange("transfer"); h.render();
+  browser.host.history.back(); browser.flush(); h.render();
+  assert.equal(h.child("DebtPaymentPauseModal").props.step, "dates");
+  assert.equal(h.child("DebtPaymentPauseModal").props.visible, true);
+  browser.host.history.back(); browser.flush(); h.render();
+  assert.equal(h.child("DebtPaymentPauseModal").props.visible, false); assert.equal(h.closes(), 0);
+  assert.deepEqual(calls, []);
+  h.unmount();
 });

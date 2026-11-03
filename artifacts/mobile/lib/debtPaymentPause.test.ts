@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import golden from "./financialProjection.golden.json";
-import { normalizeDebtPaymentPauses, isDebtPaymentPaused, resumeDebtPaymentPause, type DebtPaymentPause } from "./debtPaymentPause";
+import { editDebtPaymentPauseHistory, normalizeDebtPaymentPauses, isDebtPaymentPaused, resumeDebtPaymentPause, type DebtPaymentPause } from "./debtPaymentPause";
 import { normalizeBillRow } from "./financialProjectionInput";
 import { createFinancialProjection } from "./financialProjection";
 import { buildSnowballPlannerRows } from "./snowballPlanner";
@@ -393,5 +393,80 @@ test("protected recipient cash states reserve principal and consume redirect cre
       assert.equal(result.complete, true, label + ": " + JSON.stringify(result.issues));
       assert.equal(result.endingBalance, input.baseline.days.at(-1)!.balance - 1, label);
     }
+  }
+});
+
+test("unelapsed pause edits keep the original ID and validate inclusive start and exclusive resume dates", () => {
+  for (const start of ["2026-11-03", "2026-11-10"]) {
+    const selected = pause({ start_date: start, resume_date: "2026-12-10" });
+    const history = [selected];
+    const before = structuredClone(history);
+    assert.deepEqual(editDebtPaymentPauseHistory(history, selected, {
+      startDate: "2026-11-05", resumeDate: "2028-02-29", redirectPayment: false,
+    }, "2026-11-03", selected.id), [{ ...selected, start_date: "2026-11-05", resume_date: "2028-02-29", redirect_payment: false }]);
+    assert.deepEqual(history, before);
+    assert.throws(() => editDebtPaymentPauseHistory(history, selected, { startDate: "2026-11-02", resumeDate: "2026-12-10", redirectPayment: true }, "2026-11-03", "new"), /today or later/);
+    assert.throws(() => editDebtPaymentPauseHistory(history, selected, { startDate: start, resumeDate: start, redirectPayment: true }, "2026-11-03", "new"), /after the pause starts/);
+    assert.throws(() => editDebtPaymentPauseHistory(history, selected, { startDate: start, resumeDate: "2027-02-29", redirectPayment: true }, "2026-11-03", "new"), /valid pause dates/);
+  }
+});
+
+test("elapsed edits lock the original start and split only when the transfer choice changes", () => {
+  const selected = pause({ start_date: "2026-10-01", resume_date: "2026-12-01" });
+  const history = [selected];
+  assert.deepEqual(editDebtPaymentPauseHistory(history, selected, { startDate: selected.start_date, resumeDate: "2027-01-01", redirectPayment: true }, "2026-11-03", "unused"), [{ ...selected, resume_date: "2027-01-01" }]);
+  assert.deepEqual(editDebtPaymentPauseHistory(history, selected, { startDate: selected.start_date, resumeDate: "2026-12-15", redirectPayment: false }, "2026-11-03", "new-choice"), [
+    { ...selected, resume_date: "2026-11-03" },
+    { id: "new-choice", start_date: "2026-11-03", resume_date: "2026-12-15", redirect_payment: false },
+  ]);
+  assert.throws(() => editDebtPaymentPauseHistory(history, selected, { startDate: "2026-10-02", resumeDate: "2026-12-01", redirectPayment: true }, "2026-11-03", "new"), /original start date/);
+  assert.throws(() => editDebtPaymentPauseHistory(history, selected, { startDate: selected.start_date, resumeDate: "2026-11-03", redirectPayment: true }, "2026-11-03", "new"), /Resume now/);
+  assert.throws(() => editDebtPaymentPauseHistory(history, selected, { startDate: selected.start_date, resumeDate: "2026-12-01", redirectPayment: false }, "2026-11-03", selected.id), /unique valid ID/);
+});
+
+test("editing a stale, missing or expired captured interval never creates a replacement pause", () => {
+  const selected = pause({ start_date: "2026-11-01", resume_date: "2026-12-01" });
+  const input = { startDate: selected.start_date, resumeDate: "2026-12-15", redirectPayment: true };
+  for (const current of [[], [{ ...selected, id: "replacement" }], [{ ...selected, start_date: "2026-10-31" }],
+    [{ ...selected, resume_date: "2026-12-02" }], [{ ...selected, redirect_payment: false }]]) {
+    const before = structuredClone(current);
+    assert.throws(() => editDebtPaymentPauseHistory(current, selected, input, "2026-11-03", "new"), /changed or ended.*Reopen/);
+    assert.deepEqual(current, before);
+  }
+  assert.throws(() => editDebtPaymentPauseHistory([selected], selected, input, selected.resume_date, "new"), /changed or ended/);
+});
+
+test("full-history edits reject overlap and allow date-only or no-op edits at interval capacity", () => {
+  const selected = pause({ start_date: "2026-11-01", resume_date: "2026-12-01" });
+  const previous = Array.from({ length: 119 }, (_, index) => pause({ id: `history-${index}`, start_date: `${1900 + index}-01-01`, resume_date: `${1900 + index}-02-01` }));
+  const history = [...previous, selected];
+  const before = structuredClone(history);
+  assert.deepEqual(editDebtPaymentPauseHistory(history, selected, { startDate: selected.start_date, resumeDate: selected.resume_date, redirectPayment: selected.redirect_payment }, "2026-11-03", "unused"), history);
+  const extended = editDebtPaymentPauseHistory(history, selected, { startDate: selected.start_date, resumeDate: "2026-12-15", redirectPayment: true }, "2026-11-03", "unused");
+  assert.equal(extended.length, 120);
+  assert.equal(extended.at(-1)?.id, selected.id);
+  assert.throws(() => editDebtPaymentPauseHistory(history, selected, { startDate: selected.start_date, resumeDate: "2026-12-15", redirectPayment: false }, "2026-11-03", "split"), /at most 120/);
+  assert.deepEqual(history, before);
+  const neighbor = pause({ id: "next", start_date: "2026-12-10", resume_date: "2027-01-01" });
+  assert.throws(() => editDebtPaymentPauseHistory([selected, neighbor], selected, { startDate: selected.start_date, resumeDate: "2026-12-15", redirectPayment: false }, "2026-11-03", "split"), /overlap/);
+});
+
+test("changing the transfer choice preserves every projection day before the edit date", () => {
+  for (const originalChoice of [true, false]) {
+    const snapshot = fixture();
+    const selected = { ...snapshot.bills[0].debt_payment_pauses![0], redirect_payment: originalChoice };
+    snapshot.bills[0].debt_payment_pauses = [selected];
+    const edited = structuredClone(snapshot);
+    edited.bills[0].debt_payment_pauses = editDebtPaymentPauseHistory(snapshot.bills[0].debt_payment_pauses, selected, {
+      startDate: selected.start_date, resumeDate: "2026-12-15", redirectPayment: !originalChoice,
+    }, "2026-11-03", "new-choice");
+    const before = project(snapshot), after = project(edited);
+    const previousDays = (projection: ReturnType<typeof project>) => [9, 10].flatMap(month => projection.getDailyBalances(month, 2026))
+      .filter(day => day.balanceDate < "2026-11-03");
+    assert.deepEqual(previousDays(after), previousDays(before));
+    const futureRedirect = after.getRemainingDebtPlanForMonth(10, 2026)?.allocations.find(allocation => allocation.pauseRedirect);
+    assert.equal(Boolean(futureRedirect), !originalChoice);
+    assert.equal(isDebtPaymentPaused(edited.bills[0], "2026-11-02"), true);
+    assert.equal(isDebtPaymentPaused(edited.bills[0], "2026-11-03"), true);
   }
 });

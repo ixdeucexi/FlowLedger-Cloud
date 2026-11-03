@@ -12,7 +12,7 @@ import {
   type BillEditableField,
 } from "./billEditPersistence";
 import { activeVersionedPatch, assertFinancialMutationScope, enqueueMutationByKey, enqueueMutationByKeys, monthlyOverridePatchDbPayload, runRecoverableFinancialMutation } from "./financialMutationRecovery";
-import { addDebtPaymentPause, isDebtPaymentPauseDate, normalizeDebtPaymentPauses, resumeDebtPaymentPause, type DebtPaymentPause } from "./debtPaymentPause";
+import { addDebtPaymentPause, editDebtPaymentPauseHistory, isDebtPaymentPauseDate, normalizeDebtPaymentPauses, resumeDebtPaymentPause, type DebtPaymentPause, type DebtPaymentPauseEditInput } from "./debtPaymentPause";
 import { normalizeBillRow, normalizeMonthlyOverrideRow } from "./financialProjectionInput";
 import type { Bill } from "./financialProjectionTypes";
 import { parseBudgetPlanCache } from "./budgetPlanCache";
@@ -183,7 +183,7 @@ function pausePersistenceHarness(initialPauses: DebtPaymentPause[] | undefined =
     safeLocalDateInTimeZone: (_date: Date, zone: string) => { assert.equal(zone, "Pacific/Honolulu"); return state.today; },
     genId: (() => { let id = 0; return () => `save-${++id}`; })(),
     billEditablePatch, billEditableDbPatch, billEditableValuesEqual, normalizedBillEditableFields,
-    addDebtPaymentPause, isDebtPaymentPauseDate, normalizeDebtPaymentPauses, resumeDebtPaymentPause,
+    addDebtPaymentPause, editDebtPaymentPauseHistory, isDebtPaymentPauseDate, normalizeDebtPaymentPauses, resumeDebtPaymentPause,
     activeVersionedPatch, enqueueMutationByKey, enqueueMutationByKeys, monthlyOverridePatchDbPayload,
     assertFinancialMutationScope, runRecoverableFinancialMutation, normalizeBillRow, normalizeMonthlyOverrideRow,
     overridesRef: { current: [] }, billOverrideRetryIdsRef: { current: new Map() },
@@ -219,9 +219,10 @@ function pausePersistenceHarness(initialPauses: DebtPaymentPause[] | undefined =
   const js = transpileModule(`${tracked}\n${actions}`, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
   const render = () => {
     const values = { ...bindings, bills: state.bills, activeHousehold: { ...householdScopeRef.current } };
-    return new Function(...Object.keys(values), `${js}; return {pauseDebtPayments,resumeDebtPayments,updateBill};`)(...Object.values(values)) as {
+    return new Function(...Object.keys(values), `${js}; return {pauseDebtPayments,resumeDebtPayments,editDebtPaymentPause,updateBill};`)(...Object.values(values)) as {
       pauseDebtPayments: (id: string, input: { startDate: string; resumeDate: string; redirectPayment: boolean }) => Promise<void>;
       resumeDebtPayments: (id: string, pauseId: string) => Promise<void>;
+      editDebtPaymentPause: (id: string, expectedPause: DebtPaymentPause, input: DebtPaymentPauseEditInput) => Promise<void>;
     };
   };
   return { state, render, householdScopeRef, userScopeIdRef, financialDataUserIdRef, financialScopeGenerationRef, settingsRef, startupCoreReadyScopeKeyRef,
@@ -374,4 +375,159 @@ test("actual resume preserves ended history, truncates active pauses and cancels
   await ended.render().resumeDebtPayments("card", "pause-history");
   assert.equal(ended.state.writes.length, 0);
   assert.deepEqual(ended.state.bills[0].debt_payment_pauses, [pause()]);
+});
+
+const editablePause = (patch: Partial<DebtPaymentPause> = {}): DebtPaymentPause => pause({
+  id: "editable", start_date: "2026-11-01", resume_date: "2026-12-01", redirect_payment: true, ...patch,
+});
+const editInput = (selected: DebtPaymentPause, patch: Partial<DebtPaymentPauseEditInput> = {}): DebtPaymentPauseEditInput => ({
+  startDate: selected.start_date, resumeDate: "2026-12-15", redirectPayment: selected.redirect_payment, ...patch,
+});
+
+test("actual edit uses the latest whole-history CAS and changes only pause history", async () => {
+  const selected = editablePause();
+  const harness = pausePersistenceHarness([selected]);
+  const historical = pause();
+  harness.state.bills[0].debt_payment_pauses = [historical, structuredClone(selected)];
+  harness.state.stored.debt_payment_pauses = structuredClone(harness.state.bills[0].debt_payment_pauses);
+  const before = structuredClone(harness.state.bills[0]);
+  await harness.render().editDebtPaymentPause("card", selected, editInput(selected));
+  assert.equal(harness.state.writes.length, 1);
+  const { name, args } = harness.state.writes[0];
+  assert.equal(name, "update_bill_with_override_intents");
+  assert.deepEqual(args.p_expected, { debt_payment_pauses: [historical, selected] });
+  assert.deepEqual(args.p_patch, { debt_payment_pauses: [historical, { ...selected, resume_date: "2026-12-15" }] });
+  assert.deepEqual(args.p_overrides, []);
+  const saved = normalizeBillRow(JSON.parse(JSON.stringify(harness.state.stored)));
+  for (const field of ["name", "amount", "balance", "priority", "interest_rate", "due_day", "start_date", "end_date", "include_in_snowball", "is_recurring", "frequency"] as const) {
+    assert.equal(saved[field], before[field], field);
+  }
+});
+
+test("actual elapsed choice edits save one atomic split and retries retain its new ID", async () => {
+  const selected = editablePause();
+  const harness = pausePersistenceHarness([pause(), selected]);
+  harness.state.error = "Connection lost";
+  await assert.rejects(harness.render().editDebtPaymentPause("card", selected, editInput(selected, { redirectPayment: false })), /Connection lost/);
+  assert.deepEqual(harness.state.bills[0].debt_payment_pauses, [pause(), selected]);
+  const expected = [pause(), { ...selected, resume_date: "2026-11-03" }, {
+    id: "save-1", start_date: "2026-11-03", resume_date: "2026-12-15", redirect_payment: false,
+  }];
+  assert.deepEqual(harness.state.writes[0].args.p_patch, { debt_payment_pauses: expected });
+  harness.state.bills[0].name = "Renamed after failure";
+  harness.state.error = null;
+  await harness.state.retry!();
+  assert.deepEqual(harness.state.writes[1].args, harness.state.writes[0].args);
+  assert.deepEqual(harness.state.bills[0].debt_payment_pauses, expected);
+  assert.equal(harness.state.bills[0].name, "Renamed after failure");
+});
+
+test("plan-off edits preserve a captured true choice, allow No, and reject new Yes", async () => {
+  for (const start of ["2026-11-01", "2026-11-03", "2026-11-10"]) {
+    const selected = editablePause({ start_date: start });
+    const dateOnly = pausePersistenceHarness([selected]);
+    dateOnly.settingsRef.current.debtPayoffEnabled = false;
+    await dateOnly.render().editDebtPaymentPause("card", selected, editInput(selected));
+    assert.deepEqual(dateOnly.state.stored.debt_payment_pauses, [{ ...selected, resume_date: "2026-12-15" }]);
+    const chooseNo = pausePersistenceHarness([selected]);
+    chooseNo.settingsRef.current.debtPayoffEnabled = false;
+    await chooseNo.render().editDebtPaymentPause("card", selected, editInput(selected, { redirectPayment: false }));
+    assert.equal(chooseNo.state.stored.debt_payment_pauses?.at(-1)?.redirect_payment, false);
+    assert.equal(chooseNo.state.stored.debt_payment_pauses?.length, start < "2026-11-03" ? 2 : 1);
+    if (start < "2026-11-03") assert.deepEqual(chooseNo.state.stored.debt_payment_pauses?.[0], { ...selected, resume_date: "2026-11-03" });
+    const savedNo = { ...selected, redirect_payment: false };
+    const chooseYes = pausePersistenceHarness([savedNo]);
+    chooseYes.settingsRef.current.debtPayoffEnabled = false;
+    await assert.rejects(chooseYes.render().editDebtPaymentPause("card", savedNo, editInput(savedNo, { redirectPayment: true })), /Turn on Debt Payoff Plan/);
+    assert.equal(chooseYes.state.writes.length, 0);
+    assert.deepEqual(chooseYes.state.bills[0].debt_payment_pauses, [savedNo]);
+  }
+});
+
+test("actual no-op edits make no RPC or optimistic record changes", async () => {
+  for (const start of ["2026-11-01", "2026-11-03", "2026-11-10"]) {
+    const selected = editablePause({ start_date: start });
+    const harness = pausePersistenceHarness([selected]);
+    harness.settingsRef.current.debtPayoffEnabled = false;
+    const before = structuredClone(harness.state.bills);
+    await harness.render().editDebtPaymentPause("card", selected, editInput(selected, { resumeDate: selected.resume_date }));
+    assert.equal(harness.state.writes.length, 0);
+    assert.deepEqual(harness.state.bills, before);
+    assert.deepEqual(harness.state.stored, before[0]);
+  }
+});
+
+test("actual edit rejects a stale captured interval locally and a concurrent remote history through CAS", async () => {
+  const selected = editablePause();
+  for (const current of [[], [{ ...selected, start_date: "2026-10-31" }], [{ ...selected, resume_date: "2026-12-02" }], [{ ...selected, redirect_payment: false }]]) {
+    const harness = pausePersistenceHarness(current);
+    await assert.rejects(harness.render().editDebtPaymentPause("card", selected, editInput(selected)), /changed or ended.*Reopen/);
+    assert.equal(harness.state.writes.length, 0);
+    assert.deepEqual(harness.state.bills[0].debt_payment_pauses, current);
+  }
+  const expired = pausePersistenceHarness([selected]);
+  expired.state.today = selected.resume_date;
+  await assert.rejects(expired.render().editDebtPaymentPause("card", selected, editInput(selected)), /changed or ended/);
+  assert.equal(expired.state.writes.length, 0);
+  const remote = pausePersistenceHarness([selected]);
+  remote.state.stored.debt_payment_pauses = [{ ...selected, resume_date: "2026-12-02" }];
+  await assert.rejects(remote.render().editDebtPaymentPause("card", selected, editInput(selected)), /changed/);
+  assert.equal(remote.state.writes.length, 1);
+  assert.deepEqual(remote.state.bills[0].debt_payment_pauses, [selected]);
+  assert.deepEqual(remote.state.stored.debt_payment_pauses, [{ ...selected, resume_date: "2026-12-02" }]);
+});
+
+test("actual edits share the pause mutation lock and reject role, offline, closed and wrong-scope calls", async () => {
+  const selected = editablePause();
+  const pending = pausePersistenceHarness([selected]);
+  let release!: () => void;
+  pending.state.gate = new Promise<void>(resolve => { release = resolve; });
+  const actions = pending.render();
+  const saving = actions.editDebtPaymentPause("card", selected, editInput(selected));
+  await tick();
+  await assert.rejects(actions.editDebtPaymentPause("card", selected, editInput(selected)), /already saving/);
+  await assert.rejects(actions.resumeDebtPayments("card", selected.id), /already saving/);
+  await assert.rejects(actions.pauseDebtPayments("card", newPause), /already saving/);
+  release();
+  await saving;
+  assert.equal(pending.state.writes.length, 1);
+  for (const reason of ["readonly", "offline", "balance", "ended", "household", "budget", "user", "loading", "missing"]) {
+    const harness = pausePersistenceHarness([selected]);
+    if (reason === "readonly") harness.state.canEdit = false;
+    if (reason === "offline") harness.state.online = false;
+    if (reason === "balance") harness.state.bills[0].balance = 0;
+    if (reason === "ended") harness.state.bills[0].end_date = "2026-12-01";
+    const staleActions = harness.render();
+    if (reason === "household") harness.householdScopeRef.current.householdId = "home-b";
+    if (reason === "budget") harness.householdScopeRef.current.budgetId = "budget-b";
+    if (reason === "user") harness.userScopeIdRef.current = "user-b";
+    if (reason === "loading") harness.startupCoreReadyScopeKeyRef.current = null;
+    await assert.rejects(staleActions.editDebtPaymentPause(reason === "missing" ? "missing" : "card", selected, editInput(selected)), reason);
+    assert.equal(harness.state.writes.length, 0, reason);
+    assert.deepEqual(harness.state.bills[0].debt_payment_pauses, [selected], reason);
+  }
+});
+
+test("queued edits recheck edit access and scope and roll back only owned pause history", async () => {
+  for (const reason of ["readonly", "offline", "household"]) {
+    const selected = editablePause();
+    const harness = pausePersistenceHarness([selected]);
+    let release!: () => void;
+    harness.billWriteQueuesRef.current.set("card", new Promise<void>(resolve => { release = resolve; }));
+    const saving = harness.render().editDebtPaymentPause("card", selected, editInput(selected));
+    assert.equal(harness.state.bills[0].debt_payment_pauses?.[0].resume_date, "2026-12-15");
+    harness.state.bills[0] = { ...harness.state.bills[0], name: "Renamed while queued", debt_payment_pauses: structuredClone(harness.state.bills[0].debt_payment_pauses) };
+    if (reason === "readonly") harness.state.canEdit = false;
+    else if (reason === "offline") harness.state.online = false;
+    else { harness.householdScopeRef.current.householdId = "home-b"; harness.financialScopeGenerationRef.current++; }
+    release();
+    await assert.rejects(saving, reason === "readonly" ? /View-only/ : reason === "offline" ? /offline/ : /household changed/);
+    assert.equal(harness.state.writes.length, 0, reason);
+    assert.deepEqual(harness.state.stored.debt_payment_pauses, [selected], reason);
+    if (reason === "household") assert.ok(harness.state.clears > 0);
+    else {
+      assert.deepEqual(harness.state.bills[0].debt_payment_pauses, [selected], reason);
+      assert.equal(harness.state.bills[0].name, "Renamed while queued", reason);
+    }
+  }
 });
