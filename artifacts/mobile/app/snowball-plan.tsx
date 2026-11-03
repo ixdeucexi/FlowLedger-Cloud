@@ -29,6 +29,7 @@ import {
   snowballTransactionEditDraft,
 } from "@/lib/debtPaymentPlan";
 import { debtOccurrenceProgress, isValidExtraPaymentPlan } from "@/lib/debtPlanDomain";
+import { activeDebtPaymentPause } from "@/lib/debtPaymentPause";
 import { localDateString, MONTH_NAMES } from "@/lib/dateLabels";
 import { matchedOccurrenceAllocations } from "@/lib/reviewCenter";
 import { hasBucketRemainderFunding, latestBucketRemainderAvailableDate, resizeSnowballFundingSources } from "@/lib/snowballFunding";
@@ -73,7 +74,8 @@ function readableMonth(value: string | null) {
   return parsed.toLocaleDateString(undefined, { month: "short", year: "numeric" });
 }
 
-function allocationLabel(kind: "required" | "rollover" | "extra") {
+function allocationLabel(kind: "required" | "rollover" | "extra", pausedPayment = false) {
+  if (pausedPayment) return "PAUSED PAYMENT";
   if (kind === "rollover") return "ROLLOVER EXTRA";
   if (kind === "extra") return "SAFE EXTRA";
   return "TOWARD REQUIRED";
@@ -209,6 +211,7 @@ function SnowballPlanScreen() {
       apr: debt.interest_rate,
       dueDay: debt.due_day,
       included: debt.include_in_snowball !== false,
+      debt_payment_pauses: debt.debt_payment_pauses,
     })),
     "snowball",
     remainingDatedPlan,
@@ -218,7 +221,7 @@ function SnowballPlanScreen() {
   const timeline = buildSnowballTimeline(remainingDatedPlan?.allocations ?? []);
   const target = editDraft
     ? monthDebts.find(debt => debt.id === editDraft.debtId) ?? bills.find(debt => debt.id === editDraft.debtId && debt.is_debt)
-    : plannerRows.find(row => row.settlement.status !== "settled") ?? null;
+    : plannerRows.find(row => row.settlement.status !== "settled" && !activeDebtPaymentPause(row, paymentDate)) ?? null;
   const scheduledForecast = (remainingDatedPlan?.allocations ?? [])
     .filter(allocation => allocation.kind !== "extra")
     .reduce((total, allocation) => total + allocation.amount, 0);
@@ -239,7 +242,7 @@ function SnowballPlanScreen() {
     && (editTransaction ? Boolean(target) : preview.allocations.length > 0);
   const monthLabel = `${MONTH_NAMES[planDate.month]} ${planDate.year}`;
   const strategyName = "Snowball";
-  const comparisonDebts = plannerRows.filter(row => row.balance > 0.005).map(row => ({
+  const comparisonDebts = plannerRows.filter(row => row.balance > 0.005 && !activeDebtPaymentPause(row, paymentDate)).map(row => ({
     id: row.id, name: row.name, balance: row.balance,
     minimum: row.minimum, apr: row.apr, dueDay: row.dueDay, included: true,
   }));
@@ -461,7 +464,11 @@ function SnowballPlanScreen() {
                   </View>
                 </View>
 
-                {plannerRows.length ? plannerRows.map((row, index) => (
+                {plannerRows.length ? plannerRows.map((row, index) => {
+                  const activePause = activeDebtPaymentPause(row, paymentDate);
+                  const nextPause = row.debt_payment_pauses?.filter(pause => pause.start_date > paymentDate).sort((left, right) => left.start_date.localeCompare(right.start_date))[0];
+                  const paymentPause = activePause ?? nextPause;
+                  return (
                   <View key={row.id} style={styles.ladderItem}>
                     <View style={styles.ladderRail}>
                       <View style={[styles.rankBubble, { backgroundColor: row.id === target?.id ? c.primary : c.background, borderColor: row.id === target?.id ? c.primary : c.border }]}>
@@ -475,6 +482,7 @@ function SnowballPlanScreen() {
                       <View style={styles.debtHeader}>
                         <View style={styles.debtHeaderCopy}>
                           <View style={styles.inlineBadges}>
+                            {activePause ? <Text style={[styles.paidBadge, { color: c.warning }]}>PAYMENTS PAUSED</Text> : nextPause ? <Text style={[styles.paidBadge, { color: c.warning }]}>PAUSE SCHEDULED</Text> : null}
                             {row.id === target?.id ? <Text style={[styles.targetBadge, { color: c.primary }]}>TARGET NOW</Text> : null}
                             {row.settlement.status !== "scheduled" ? <Text style={[styles.paidBadge, { color: debtOccurrenceProgress(row.settlement).hasPartial ? c.warning : c.success }]}>{debtOccurrenceProgress(row.settlement).label}</Text> : null}
                             {row.settlement.plannedDebtAmount === 0 ? <Text style={[styles.paidBadge, { color: c.warning }]}>SKIPPED IN FORECAST</Text> : null}
@@ -482,6 +490,7 @@ function SnowballPlanScreen() {
                             {row.paidOffThisMonth ? <Text style={[styles.paidBadge, { color: c.success }]}>PAYS OFF THIS MONTH</Text> : null}
                           </View>
                           <Text style={[styles.debtName, { color: c.foreground }]}>{row.name}</Text>
+                          {paymentPause ? <Text style={[styles.smallCopy, { color: c.warning }]}>{activePause ? "Payments resume" : `Pause starts ${readableDate(paymentPause.start_date)} · payments resume`} {readableDate(paymentPause.resume_date)}</Text> : null}
                         </View>
                         <Text style={[styles.debtBalance, { color: row.paidOffThisMonth ? c.success : c.foreground }]}>{money(row.balance)}</Text>
                       </View>
@@ -492,7 +501,7 @@ function SnowballPlanScreen() {
                         </View>
                         <View style={styles.debtStat}>
                           <Text style={[styles.debtStatLabel, { color: c.mutedForeground }]}>{row.paymentStatusLabel}</Text>
-                          <Text style={[styles.debtStatValue, { color: c.primary }]}>{moneyOrDash(row.paymentStatusAmount)}</Text>
+                          <Text style={[styles.debtStatValue, { color: c.primary }]}>{activePause ? money(row.paymentStatusAmount) : moneyOrDash(row.paymentStatusAmount)}</Text>
                         </View>
                         <View style={styles.debtStat}>
                           <Text style={[styles.debtStatLabel, { color: c.mutedForeground }]}>EST. MONTH-END</Text>
@@ -539,7 +548,7 @@ function SnowballPlanScreen() {
                       ) : null}
                     </View>
                   </View>
-                )) : (
+                ); }) : (
                   <View style={[styles.emptyCard, { backgroundColor: c.background + "88", borderColor: c.border }]}>
                     <Feather name="check-circle" size={24} color={c.success} />
                     <View style={styles.flexOne}>
@@ -573,12 +582,14 @@ function SnowballPlanScreen() {
                       {group.allocations.map(allocation => (
                         <View key={allocation.id} style={[styles.timelineAllocation, { borderTopColor: c.border }]}>
                           <View style={[styles.kindBadge, { backgroundColor: allocation.kind === "rollover" ? c.success + "18" : allocation.kind === "extra" ? c.primary + "18" : c.background }]}>
-                            <Text style={[styles.kindBadgeText, { color: allocation.kind === "rollover" ? c.success : allocation.kind === "extra" ? c.primary : c.mutedForeground }]}>{allocationLabel(allocation.kind)}</Text>
+                            <Text style={[styles.kindBadgeText, { color: allocation.kind === "rollover" ? c.success : allocation.kind === "extra" ? c.primary : c.mutedForeground }]}>{allocationLabel(allocation.kind, Boolean(allocation.pauseRedirect))}</Text>
                           </View>
                           <View style={styles.allocationCopy}>
                             <Text style={[styles.allocationName, { color: c.foreground }]}>{allocation.targetBillName}</Text>
                             <Text style={[styles.allocationDetail, { color: c.mutedForeground }]}>
-                              {allocation.kind === "rollover"
+                              {allocation.pauseRedirect
+                                ? `Temporary paused payment from ${bills.find(bill => bill.id === allocation.pauseRedirect?.fromBillId)?.name ?? "another debt"}`
+                                : allocation.kind === "rollover"
                                 ? allocation.sourceBillName
                                   ? `Unused payment from ${allocation.sourceBillName}`
                                   : "Planned payoff extra above the lender minimum"

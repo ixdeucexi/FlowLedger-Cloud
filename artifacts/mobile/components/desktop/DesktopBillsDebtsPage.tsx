@@ -27,6 +27,10 @@ import { useBudget } from "@/context/BudgetContext";
 import { orderActiveDebtsForStrategy } from "@/lib/debtOrder";
 import { requiredDebtPlanTotal } from "@/lib/debtPaymentPlan";
 import { debtOccurrenceProgress } from "@/lib/debtPlanDomain";
+import { activeDebtPaymentPause } from "@/lib/debtPaymentPause";
+import { localDateInTimeZone } from "@/lib/dailyCheckingClose";
+import { dateOnlyToLocalDate } from "@/lib/dateLabels";
+import { useLocalDay } from "@/hooks/useLocalDay";
 import type { BillEditableBaseline, BillEditableField } from "@/lib/billEditPersistence";
 
 const MONTHS = [
@@ -826,7 +830,9 @@ function DebtsDesktop({
   datedPlan: ReturnType<ReturnType<typeof useBudget>["getDebtPlanForMonth"]>;
   now: Date;
 }) {
-  const { getDebtMonthSettlements } = useBudget();
+  const { getDebtMonthSettlements, householdTimeZone } = useBudget();
+  useLocalDay();
+  const pauseToday = localDateInTimeZone(new Date(), householdTimeZone);
   const settlements = getDebtMonthSettlements(now.getMonth(), now.getFullYear());
   const active = bills.filter((bill) => bill.balance > 0.005);
   const ordered = orderActiveDebtsForStrategy(active, "snowball");
@@ -982,7 +988,7 @@ function DebtsDesktop({
             Interest Rate
           </Text>
           <Text style={[table.headerText, styles.debtColMinimum]}>
-            Forecast Payment
+            {datedPlan ? "Forecast Payment" : "Required Payment"}
           </Text>
           <Text style={[table.headerText, styles.debtColDue]}>Due Date</Text>
           <Text style={[table.headerText, styles.debtColStatus]}>
@@ -993,6 +999,10 @@ function DebtsDesktop({
           filtered.map((bill) => {
             const next = nextOccurrenceFor(bill, getOccurrences, now);
             const position = rank.get(bill.id);
+            const activePause = bill.balance > 0.005 ? activeDebtPaymentPause(bill, pauseToday) : undefined;
+            const nextPause = bill.balance > 0.005 ? bill.debt_payment_pauses?.filter(pause => pause.start_date > pauseToday).sort((left, right) => left.start_date.localeCompare(right.start_date))[0] : undefined;
+            const paymentPause = activePause ?? nextPause;
+            const pauseDate = paymentPause ? dateOnlyToLocalDate(activePause ? paymentPause.resume_date : paymentPause.start_date)?.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : undefined;
             const occurrenceCount = getOccurrences(bill, now.getMonth(), now.getFullYear()).length;
             const settlement = settlements.get(bill.id);
             const progress = settlement ? debtOccurrenceProgress(settlement) : undefined;
@@ -1013,7 +1023,7 @@ function DebtsDesktop({
                       color={palette.purple}
                     />
                   </View>
-                  <View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={table.cellStrong}>{bill.name}</Text>
                     <Text style={styles.rowMuted}>
                       {bill.is_recurring ? "Recurring debt" : "Debt"}
@@ -1052,7 +1062,11 @@ function DebtsDesktop({
                 <Text style={[table.cellText, styles.debtColDue]}>
                   {next ? displayDate(next.year, next.month, next.day) : "—"}
                 </Text>
-                <View style={styles.debtColStatus}>
+                <View style={[styles.debtColStatus, { gap: 5 }]}>
+                  {paymentPause ? <>
+                    <StatusBadge label={activePause ? "Payments paused" : "Pause scheduled"} tone="amber" />
+                    <Text style={styles.rowMuted}>{activePause ? "Resumes" : "Starts"} {pauseDate}</Text>
+                  </> : null}
                   <StatusBadge
                     label={
                       position === 1

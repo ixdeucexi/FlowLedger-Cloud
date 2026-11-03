@@ -2,6 +2,7 @@ import { ALGORITHM_CATALOG, type AlgorithmId, type AlgorithmSettingsShape } from
 import { buildStabilityProgress, STABILITY_POLICY, type StabilityProgress } from "./stability";
 import { isRequiredBill, normalizeBillImportance, type BillImportance } from "./billImportance";
 import { isBillEligibleForUpcomingPlan } from "./billEligibility";
+import { isDebtPaymentPaused, type DebtPaymentPause } from "./debtPaymentPause";
 import {
   calculateFlowScore,
   type FlowScoreComponent,
@@ -31,6 +32,7 @@ export interface AlgorithmBill {
   snowballRollover?: number;
   frequency?: "monthly" | "quarterly" | "biweekly" | "weekly";
   includeInSnowball?: boolean;
+  debt_payment_pauses?: DebtPaymentPause[];
   category: string;
   due_day: number;
   is_debt: boolean;
@@ -316,9 +318,11 @@ function buildAlgorithmSuiteForEligibleBills(input: AlgorithmSuiteInput): Algori
   const lowBalanceWarning = buildLowBalanceWarning(lowestBalance, lowestDay, input.safetyFloor, input);
   const billPriority = prioritizeBills(input.bills, input.todayDay, input.safetyFloor, lowestDay, input);
   const activeDebts = input.bills.filter(bill => bill.is_debt && bill.includeInSnowball !== false && (bill.balance ?? 0) > 0.009);
-  const topDebtSnowball = activeDebts.slice().sort((a, b) => (a.balance ?? 0) - (b.balance ?? 0) || a.name.localeCompare(b.name))[0] ?? null;
-  const topDebtAvalanche = activeDebts.slice().sort((a, b) => (b.interest_rate ?? 0) - (a.interest_rate ?? 0) || (a.balance ?? 0) - (b.balance ?? 0) || a.name.localeCompare(b.name))[0] ?? null;
-  const topDebtCashFlow = activeDebts.slice().sort((a, b) => {
+  const payoffDate = input.todayDate ?? `${input.year}-${String(input.month + 1).padStart(2, "0")}-${String(input.todayDay).padStart(2, "0")}`;
+  const eligibleDebts = activeDebts.filter(bill => !isDebtPaymentPaused(bill, payoffDate));
+  const topDebtSnowball = eligibleDebts.slice().sort((a, b) => (a.balance ?? 0) - (b.balance ?? 0) || a.name.localeCompare(b.name))[0] ?? null;
+  const topDebtAvalanche = eligibleDebts.slice().sort((a, b) => (b.interest_rate ?? 0) - (a.interest_rate ?? 0) || (a.balance ?? 0) - (b.balance ?? 0) || a.name.localeCompare(b.name))[0] ?? null;
+  const topDebtCashFlow = eligibleDebts.slice().sort((a, b) => {
     const aMinimum = Math.max(0.01, a.amount);
     const bMinimum = Math.max(0.01, b.amount);
     const aMonths = (a.balance ?? 0) / aMinimum;
@@ -893,12 +897,12 @@ function buildDebtPayoffDetails(targets: {
       currentRolloverExtra,
       nextDebtNameAfterTarget: null,
       totalMonthlyMinimum,
-      status: "done",
-      nextMove: "No active debt is left to attack.",
-      detail: "No active debt is left to attack.",
-      whyItMatters: "Once active debts are gone, I stop pushing payoff moves and help send money toward savings and goals.",
+      status: orderedDebts.length ? "hold" : "done",
+      nextMove: orderedDebts.length ? "Resume a paused debt before adding payoff money." : "No active debt is left to attack.",
+      detail: orderedDebts.length ? "Your debts remain open while their planned payments are paused." : "No active debt is left to attack.",
+      whyItMatters: orderedDebts.length ? "Pausing the plan keeps balances and lender requirements in view until payments resume." : "Once active debts are gone, I stop pushing payoff moves and help send money toward savings and goals.",
       sourceNumbers: [
-        { label: "Active debts", value: "0", tone: "safe" },
+        { label: "Active debts", value: String(orderedDebts.length), tone: orderedDebts.length ? "watch" : "safe" },
         { label: "Required minimums", value: `$${totalMonthlyMinimum.toFixed(0)}/mo`, tone: "safe" },
         ...(currentRolloverExtra > 0
           ? [{ label: "Snowball rollover extra", value: `$${currentRolloverExtra.toFixed(0)}/mo`, tone: "info" as const }]

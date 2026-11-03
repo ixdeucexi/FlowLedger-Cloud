@@ -60,6 +60,12 @@ function conciseResultFromFacts(result: AnalysisResult, scope: AnalysisAnswerSco
   // Never rewrite a clarification or an unsupported/ambiguous result as a fact.
   if (result.choices || f.recordedPlanOnly === true || !Object.keys(f).length) return result.text;
   if (wantsAnalysisDetails(question)) return result.text;
+  if (scope?.domain === "debt" && s("debtProjectionModel") === "paused_method_hypothetical_unavailable") return `Your configured debt-plan balance is ${cash("totalDebt")}. I cannot verify the ${s("requestedDebtMethod")??"requested"} payoff scenario with saved pauses; open Debt Payoff Planner for a dated comparison.`;
+  if (scope?.purpose === "debt_timeline" && s("debtProjectionModel") === "paused_hypothetical_unavailable") return `Your configured debt-plan balance is ${cash("totalDebt")}. I cannot verify this extra-payment payoff scenario with saved pauses; open Debt Payoff Planner for a dated preview.`;
+  if (scope?.purpose === "debt_timeline" && s("debtProjectionModel") === "recorded_dated_plan") {
+    const date=s("namedDebt")?s("namedDebtPayoffMonth"):s("scenarioDebtFreeMonth");
+    return date?`${s("namedDebt")??"The included debt plan"} is projected to be paid off in ${date} under the recorded dated plan, including saved pauses and resume dates. This assumes unchanged APRs and no new borrowing or fees.`:"The recorded dated debt plan includes saved pauses and resume dates, but does not establish a payoff month within 240 months.";
+  }
   if (scope?.purpose === "debt_timeline" && (s("namedDebtPayoffMonth") || s("scenarioDebtFreeMonth"))) {
     return `${s("namedDebt") ?? "The included debt plan"} is projected to be paid off in ${s("namedDebtPayoffMonth") ?? s("scenarioDebtFreeMonth")} under the fixed-payment scenario (baseline: ${s("namedDebtBaselineMonth") ?? s("baselineDebtFreeMonth") ?? "not reached"}). This assumes unchanged payments and APRs; it does not establish that extra payments are affordable.`;
   }

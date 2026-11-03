@@ -3,6 +3,7 @@ import type { FinancialProjectionOptions, FinancialProjectionSnapshot, ExtraPaym
 import { isValidExtraPaymentPlan } from "./debtPlanDomain";
 import { orderDebts, type SnowballProjectionResult } from "./snowball";
 import { isBillActiveForMonth } from "./schedule";
+import { isDebtPaymentPaused } from "./debtPaymentPause";
 
 const cents = (value: number) => Math.round(value * 100) / 100;
 // Revision-scoped, weakly held cache: typing an amount does not repeat the safety search.
@@ -32,18 +33,23 @@ export function previewCanonicalDebtSnowball(
     original.allocations.forEach(allocation => restored.set(allocation.billId, (restored.get(allocation.billId) ?? 0) + Math.max(0, allocation.payment)));
   }
   const bills = snapshot.bills.map(bill => restored.has(bill.id) ? { ...bill, balance: cents(Number(bill.balance) + restored.get(bill.id)!) } : bill);
-  const target = orderDebts(bills.filter(bill => bill.is_debt && bill.include_in_snowball !== false && Number(bill.balance) > 0 && isBillActiveForMonth(bill, month, year))
+  let target = orderDebts(bills.filter(bill => bill.is_debt && bill.include_in_snowball !== false && Number(bill.balance) > 0 && isBillActiveForMonth(bill, month, year))
     .map(bill => ({ id: bill.id, name: bill.name, balance: Number(bill.balance), minimum: bill.amount, apr: Number(bill.interest_rate), dueDay: bill.due_day, included: true })), snapshot.settings.paymentMethod)[0];
+  const scheduledTarget = target;
   const defaultDay = Math.max(1, Math.min(new Date(year, month + 1, 0).getDate(), target?.dueDay ?? 1));
   const defaultDate = `${prefix}-${String(defaultDay).padStart(2, "0")}`;
   const dateMatch = paymentDateOverride?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   const validDate = dateMatch && paymentDateOverride!.startsWith(`${prefix}-`) && Number(dateMatch[3]) >= 1 && Number(dateMatch[3]) <= new Date(year, month + 1, 0).getDate();
   const paymentDate = validDate ? paymentDateOverride! : defaultDate < today && today.startsWith(prefix) ? today : defaultDate;
+  target = orderDebts(bills.filter(bill => bill.is_debt && bill.include_in_snowball !== false && Number(bill.balance) > 0
+    && isBillActiveForMonth(bill, month, year) && !isDebtPaymentPaused(bill, paymentDate))
+    .map(bill => ({ id: bill.id, name: bill.name, balance: Number(bill.balance), minimum: bill.amount, apr: Number(bill.interest_rate), dueDay: bill.due_day, included: true })), snapshot.settings.paymentMethod)[0];
   const empty: SnowballProjectionResult = { safeMaximum: 0, selectedExtra: 0, paymentDate, allocations: [], months: [], payoffOrder: [], debtFreeDate: null, lowestSixMonthBalance: 0 };
   const conflict = snapshot.extraPayments.some(payment => payment.id !== original?.id && payment.month === month && payment.year === year && isValidExtraPaymentPlan(payment));
-  if (!snapshot.settings.debtPayoffEnabled || conflict || paymentDate < today || !target || selectedAbsolute >= startAbsolute + 240) return empty;
+  if (!snapshot.settings.debtPayoffEnabled || conflict || paymentDate < today || !scheduledTarget || selectedAbsolute >= startAbsolute + 240) return empty;
   const base = { ...snapshot, bills, extraPayments: snapshot.extraPayments.filter(payment => payment.id !== original?.id) };
   const build = (amount: number) => {
+    if (!target || amount <= 0) return createFinancialProjection(base, options);
     // The canonical engine validates saved allocation totals before accepting an extra.
     // This seed only admits the candidate; the dated engine recalculates its real targets.
     const candidate: ExtraPayment = { id: "preview-only", month, year, amount, payment_date: paymentDate, allocations: [{ billId: target.id, billName: target.name, payment: amount, balanceBefore: target.balance, balanceAfter: Math.max(0, target.balance - amount), paidOff: amount >= target.balance, paymentDate }], sources: [{ type: "manual", amount, pendingBalanceApply: true }] };

@@ -6,6 +6,7 @@ import * as planner from "./snowballPlanner";
 import * as snowball from "./snowball";
 import * as debtDomain from "./debtPlanDomain";
 import * as debtPayments from "./debtPaymentPlan";
+import * as debtPauses from "./debtPaymentPause";
 import * as labels from "./dateLabels";
 import * as funding from "./snowballFunding";
 import * as review from "./reviewCenter";
@@ -65,7 +66,7 @@ function harness(kind: "debt" | "reports", options: { premium?: boolean; viewer?
     previewTier: null,
   };
   const colors = new Proxy({}, { get: () => "#000000" });
-  const modules: Record<string, any> = { snowballPlanner: planner, snowball, debtPlanDomain: debtDomain, debtPaymentPlan: debtPayments, dateLabels: labels, snowballFunding: funding, reviewCenter: review, moneyFormInput: moneyInput, settingsLayout: reportLayout };
+  const modules: Record<string, any> = { snowballPlanner: planner, snowball, debtPlanDomain: debtDomain, debtPaymentPlan: debtPayments, debtPaymentPause: debtPauses, dateLabels: labels, snowballFunding: funding, reviewCenter: review, moneyFormInput: moneyInput, settingsLayout: reportLayout };
   const cache: Record<string, any> = {};
   const load = (path: string) => {
     if (cache[path]) return cache[path];
@@ -163,6 +164,21 @@ test("strategy comparisons use the selected month's canonical opening balances, 
   assert.match(text(comparison), /Highest interest/);
   assert.match(text(comparison), /450\.00/);
   assert.doesNotMatch(text(comparison), /500\.00/);
+});
+
+test("a saved pause preserves the readable debt ladder and rank while comparison targets use the real pause helper", () => {
+  const h = harness("debt", { premium: true });
+  const today = labels.localDateString();
+  h.budget.bills[0] = {
+    ...h.budget.bills[0],
+    debt_payment_pauses: [{ id: "pause-small", start_date: today, resume_date: labels.addDateOnlyMonths(today, 2), redirect_payment: true }],
+  };
+  const tree = h.render();
+  const comparison = flatten(tree).find(node => node.props?.accessibilityLabel === "Payoff strategy comparison");
+  assert.match(text(comparison), /SNOWBALL.*Highest interest.*AVALANCHE.*Highest interest/);
+  assert.doesNotMatch(text(comparison), /Small balance|Excluded debt/);
+  assert.match(text(tree), /#\s*1.*PAYMENTS PAUSED.*Small balance/);
+  assert.equal(h.state.writes.length, 0);
 });
 
 test("a downgraded household can review, correct and remove its saved extra payment", async () => {

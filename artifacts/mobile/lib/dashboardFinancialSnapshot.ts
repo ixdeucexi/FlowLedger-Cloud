@@ -1,5 +1,6 @@
 import { isActiveTransaction, isCheckingBalanceTransaction } from "./billMatching";
 import { isBillEligibleForUpcomingPlan } from "./billEligibility";
+import { isDebtPaymentPaused } from "./debtPaymentPause";
 import {
   buildDashboardFinancialModel,
   type DashboardBill,
@@ -390,6 +391,7 @@ export function buildDashboardFinancialSnapshot(
     .filter(
       (bill) => bill.is_debt
         && bill.balance > 0.005
+        && !isDebtPaymentPaused(bill, `${input.now.getFullYear()}-${String(input.now.getMonth() + 1).padStart(2, "0")}-${String(input.now.getDate()).padStart(2, "0")}`)
         && bill.include_in_snowball !== false,
     )
     .sort(

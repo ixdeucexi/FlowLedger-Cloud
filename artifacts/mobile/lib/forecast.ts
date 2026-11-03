@@ -25,6 +25,7 @@ export interface FinancialEvent {
   debtPlanSource?: "canonical" | "saved_extra";
   debtPlanAllocationKind?: "required" | "rollover" | "extra";
   debtTargetBillId?: string;
+  debtPauseRedirect?: { pauseId: string; fromBillId: string; occurrenceDate: string };
 }
 
 export interface ForecastSnapshot {

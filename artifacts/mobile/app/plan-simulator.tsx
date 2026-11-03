@@ -660,6 +660,7 @@ function PlanSimulatorWorkspace({ canPersistScenarios, canSaveDevice, canCompare
         currentMonthOpenOccurrenceCount: openOccurrenceCount,
       };
     }),
+    debtPayoffEnabled: settings.debtPayoffEnabled,
     debts: bills.filter(bill => bill.is_debt).map(bill => {
       const settlements = new Map(monthSettlements.flatMap(month => (month.settlements.get(bill.id)?.occurrences ?? []).map(occurrence => [occurrence.occurrenceDate, occurrence] as const)));
       const exactPlanMonths = new Set(monthSettlements.filter(month => month.settlements.get(bill.id)?.plannedDebtAmount !== undefined)
@@ -690,7 +691,10 @@ function PlanSimulatorWorkspace({ canPersistScenarios, canSaveDevice, canCompare
         return {
           date,
           configuredAmount: regular ? getBillOccurrenceAmount(bill, date) : 0,
+          requiredAmount: settlement?.configuredObligation ?? bill.amount,
           settledAmount: settlement?.paidAmount ?? 0,
+          committedAmount: commitment?.amount ?? 0,
+          commitmentState: commitment?.state,
           remainingAmount,
           immutable: settlement?.status === "settled" && Math.max(remainingAmount, remainingByOrigin.get(key) ?? 0) <= 0.005 || immutableOccurrences.has(key) || commitment?.state === "pending" || commitment?.state === "posted" || originCommitted,
           regular,
@@ -704,6 +708,7 @@ function PlanSimulatorWorkspace({ canPersistScenarios, canSaveDevice, canCompare
       balance: Math.max(0, bill.balance),
       minimum: Math.max(0, bill.amount),
       monthlyRolloverExtra: Math.max(0, Number(bill.snowball_minimum_boost ?? 0)),
+      debt_payment_pauses: bill.debt_payment_pauses,
       apr: Math.max(0, bill.interest_rate),
       dueDay: bill.due_day,
       included: bill.include_in_snowball !== false,

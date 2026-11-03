@@ -253,10 +253,16 @@ test("simulator debt references snapshot dated settlements and source commitment
   const build = new Function(...Object.keys(bindings), `${script};return buildReferences;`)(...Object.values(bindings));
   const references = build(baseline);
   assert.deepEqual(months, ["2026-9", "2026-10"], "each month is read once, not once per debt");
-  assert.deepEqual(references.debts[0].occurrences, [{ date: "2026-11-05", configuredAmount: 120, settledAmount: 30, remainingAmount: 60, immutable: false, regular: true }, { date: "2026-11-20", configuredAmount: 120, settledAmount: 0, remainingAmount: 100, immutable: false, regular: true }, { date: "2026-11-30", configuredAmount: 0, settledAmount: 0, remainingAmount: 200, immutable: false, regular: false }]);
-  assert.deepEqual(references.debts[1].occurrences, [{ date: "2026-11-10", configuredAmount: 120, settledAmount: 0, remainingAmount: 80, immutable: true, regular: true, exactPlan: true }], "an explicit saved override stays exact even when it equals the base regular amount");
-  assert.deepEqual(references.debts[2].occurrences, [{ date: "2026-10-05", configuredAmount: 120, settledAmount: 100, remainingAmount: 0, immutable: true, regular: true }]);
-  assert.deepEqual(references.debts[3].occurrences, [{ date: "2026-11-25", configuredAmount: 200, settledAmount: 100, remainingAmount: 100, immutable: false, regular: true }], "a still-planned retained payment stays editable after its required minimum was paid");
+  assert.deepEqual(references.debts[0].occurrences, [
+    { date: "2026-11-05", configuredAmount: 120, requiredAmount: 100, settledAmount: 30, remainingAmount: 60, committedAmount: 0, commitmentState: undefined, immutable: false, regular: true },
+    { date: "2026-11-20", configuredAmount: 120, requiredAmount: 100, settledAmount: 0, remainingAmount: 100, committedAmount: 0, commitmentState: undefined, immutable: false, regular: true },
+    { date: "2026-11-30", configuredAmount: 0, requiredAmount: 100, settledAmount: 0, remainingAmount: 200, committedAmount: 0, commitmentState: undefined, immutable: false, regular: false },
+  ]);
+  assert.deepEqual(references.debts[1].occurrences, [{ date: "2026-11-10", configuredAmount: 120, requiredAmount: 100, settledAmount: 0, remainingAmount: 80, committedAmount: 80, commitmentState: "pending", immutable: true, regular: true, exactPlan: true }], "an explicit saved override stays exact even when it equals the base regular amount");
+  assert.deepEqual(references.debts[2].occurrences, [{ date: "2026-10-05", configuredAmount: 120, requiredAmount: 100, settledAmount: 100, remainingAmount: 0, committedAmount: 0, commitmentState: undefined, immutable: true, regular: true }]);
+  assert.deepEqual(references.debts[3].occurrences, [{ date: "2026-11-25", configuredAmount: 200, requiredAmount: 100, settledAmount: 100, remainingAmount: 100, committedAmount: 0, commitmentState: undefined, immutable: false, regular: true }], "a still-planned retained payment stays editable after its required minimum was paid");
+  assert.equal(references.debts[3].occurrences[0].requiredAmount, 100, "the $200 exact plan does not become the historical lender requirement");
+  assert.equal(references.debts[1].occurrences[0].settledAmount, 0, "a pending commitment is protected cash, not an invented reviewed payment");
   assert.equal(JSON.stringify({ bills, baseline }), before, "reference collection cannot edit real records or canonical events");
 });
 
@@ -278,11 +284,19 @@ test("carried debt references retain actual origin settlements without inventing
   const build = new Function(...Object.keys(bindings), `${script};return buildReferences;`)(...Object.values(bindings));
   const refs = build(baseline);
   const anchor = (index: number) => refs.debts[index].occurrences.find((row: { date: string }) => row.date === "2026-10-31");
-  assert.deepEqual(anchor(0), { date: "2026-10-31", configuredAmount: 0, settledAmount: 0, remainingAmount: 70, immutable: false, regular: false, carried: true, carriedOccurrences: [{ date: "2026-10-15", configuredAmount: 100, settledAmount: 0 }] }, "an unpaid capped $70 source is not evidence that $30 was paid");
+  assert.deepEqual(anchor(0), { date: "2026-10-31", configuredAmount: 0, requiredAmount: 100, settledAmount: 0, remainingAmount: 70, committedAmount: 0, commitmentState: undefined, immutable: false, regular: false, carried: true, carriedOccurrences: [{ date: "2026-10-15", configuredAmount: 100, settledAmount: 0 }] }, "an unpaid capped $70 source is not evidence that $30 was paid");
+  const unpaidOrigin = refs.debts[0].occurrences.find((row: { date: string }) => row.date === "2026-10-15");
+  assert.equal(unpaidOrigin.requiredAmount, 100, "a $70 payoff cap cannot lower the original $100 lender requirement");
+  assert.equal(unpaidOrigin.settledAmount, 0);
   assert.deepEqual(anchor(1).carriedOccurrences, [{ date: "2026-10-15", configuredAmount: 100, settledAmount: 30 }], "the real $30 payment remains associated with the original occurrence");
   assert.equal(anchor(1).settledAmount, 0, "ordinary current-date settlement is separate from carried origin payments");
   assert.equal(anchor(2).immutable, true, "an origin-dated pending commitment protects the carried cash group");
   assert.deepEqual(anchor(2).carriedOccurrences, [], "pending origins cannot become an editable regular plan");
+  const protectedOrigin = refs.debts[2].occurrences.find((row: { date: string }) => row.date === "2026-10-15");
+  assert.equal(protectedOrigin.requiredAmount, 100);
+  assert.equal(protectedOrigin.committedAmount, 70);
+  assert.equal(protectedOrigin.commitmentState, "pending");
+  assert.equal(protectedOrigin.settledAmount, 0, "the protected origin must not claim the bank commitment is already reviewed");
   assert.equal(refs.debts[1].occurrences.find((row: { date: string }) => row.date === "2026-10-15").settledAmount, 30);
   assert.equal(refs.debts[3].occurrences.find((row: { date: string }) => row.date === "2026-10-15").immutable, false, "a retained regular plan stays editable when its remaining cash was moved to the anchor date");
   assert.deepEqual(anchor(3).carriedOccurrences, [{ date: "2026-10-15", configuredAmount: 200, settledAmount: 100 }]);

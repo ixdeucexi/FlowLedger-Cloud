@@ -184,7 +184,7 @@ function centsTotal(values: unknown[]) {
 export function createFloTools(runtime: FloToolRuntime) {
   return {
     getCurrentSnowballTarget: tool({
-      description: "Verify the current recorded-balance Snowball target using the canonical payoff ordering over complete active-household debt records. Use for which debt is my snowball target, not saved debt history. Uses the user's current local month. This is not the next dated allocation, a historical target, or an affordable extra-payment amount. If unavailable, explain the limitation instead of substituting saved plans.",
+      description: "Verify the current recorded-balance Snowball target using the canonical payoff ordering over complete active-household debt records. Use for which debt is my snowball target, not saved debt history. Uses the user's current local date and skips debts with a recorded payment pause active on that date, while keeping those debts open in the plan. A saved pause changes the FlowLedger plan only; it does not establish lender permission. This is not the next dated allocation, a historical target, or an affordable extra-payment amount. If unavailable, explain the limitation instead of substituting saved plans.",
       inputSchema: z.object({}),
       execute: async input => tracked(runtime, "getCurrentSnowballTarget", input, async () => {
         const month = currentFloMonth(runtime.now, runtime.timezone);
@@ -195,7 +195,7 @@ export function createFloTools(runtime: FloToolRuntime) {
           const startDate = `${month.year}-${String(month.month + 1).padStart(2, "0")}-01`;
           const endDate = new Date(Date.UTC(month.year, month.month + 1, 0)).toISOString().slice(0, 10);
           const [debts, moves, overrides] = await Promise.all([
-            runtime.client.from("bills").select("id,name,is_debt,balance,interest_rate,include_in_snowball,frequency,due_day,start_date,end_date,last_reviewed_at", { count: "exact" }).eq("household_id", runtime.householdId).eq("is_debt", true).order("id").limit(limit),
+            runtime.client.from("bills").select("id,name,is_debt,balance,interest_rate,include_in_snowball,debt_payment_pauses,frequency,due_day,start_date,end_date,last_reviewed_at", { count: "exact" }).eq("household_id", runtime.householdId).eq("is_debt", true).order("id").limit(limit),
             runtime.client.from("bill_date_moves").select("id,bill_id,from_date,to_date,custom_amount,is_skipped,created_at,updated_at", { count: "exact" }).eq("household_id", runtime.householdId).or(`and(from_date.gte.${startDate},from_date.lte.${endDate}),and(to_date.gte.${startDate},to_date.lte.${endDate})`).limit(limit),
             runtime.client.from("monthly_overrides").select("id,bill_id,custom_due_day", { count: "exact" }).eq("household_id", runtime.householdId).eq("year", month.year).eq("month", month.month).limit(limit),
           ]);
@@ -330,12 +330,12 @@ export function createFloTools(runtime: FloToolRuntime) {
     }),
 
     getBillsAndDebt: tool({
-      description: "Read canonical configured bills and debts, including manually entered credit cards and loans absent from getAccountOverview. REQUIRED for named-card/debt balances, minimum payments, APR, or interest questions: use debtOnly and a name query when appropriate. For debt rows balance is configured debt balance, amount is configured payment amount, and interest_rate is the recorded APR percentage; do not assert that a configured amount is a current lender-verified minimum. Do not substitute a checking account or conclude a card is missing without this read. Do not derive occurrences, paid/overdue status, or forecast totals from this tool alone. next_payment_date is a configured recurrence anchor, not a verified next occurrence. Use getBillPlanDetails for recorded monthly overrides and date moves; direct exact upcoming-occurrence questions to Forecast when not verifiable.",
+      description: "Read canonical configured bills and debts, including manually entered credit cards and loans absent from getAccountOverview. REQUIRED for named-card/debt balances, minimum payments, APR, or interest questions: use debtOnly and a name query when appropriate. For debt rows balance is configured debt balance, amount is configured payment amount, and interest_rate is the recorded APR percentage; do not assert that a configured amount is a current lender-verified minimum. debt_payment_pauses records temporary FlowLedger plan pauses: start_date is inclusive, payments resume on resume_date, and redirect_payment permits temporary redirection to other included debts. The debt stays open; this is not lender permission to skip a payment. Do not substitute a checking account or conclude a card is missing without this read. Do not derive occurrences, paid/overdue status, or forecast totals from this tool alone. next_payment_date is a configured recurrence anchor, not a verified next occurrence. Use getBillPlanDetails for recorded monthly overrides and date moves; direct exact upcoming-occurrence questions to Forecast when not verifiable.",
       inputSchema: z.object({ debtOnly: z.boolean().default(false), includeClosed: z.boolean().default(false), query: z.string().nullable().default(null) }),
       execute: async input => tracked(runtime, "getBillsAndDebt", input, async () => {
         const limit = FLO_V3_MAX_ROWS;
         let query = runtime.client.from("bills")
-          .select("id,name,amount,category,priority,is_debt,balance,interest_rate,due_day,day_of_week,next_payment_date,start_date,end_date,is_recurring,frequency,include_in_snowball,snowball_minimum_boost,last_reviewed_at,smart_priority,created_at", { count: "exact" })
+          .select("id,name,amount,category,priority,is_debt,balance,interest_rate,due_day,day_of_week,next_payment_date,start_date,end_date,is_recurring,frequency,include_in_snowball,snowball_minimum_boost,debt_payment_pauses,last_reviewed_at,smart_priority,created_at", { count: "exact" })
           .eq("household_id", runtime.householdId).order("is_debt", { ascending: false }).order("priority", { ascending: true }).limit(limit);
         if (input.debtOnly) query = query.eq("is_debt", true);
         if (!input.includeClosed) query = query.or("is_debt.eq.false,balance.gt.0.009,balance.is.null");

@@ -1,5 +1,6 @@
 import { orderDebts, type DatedDebtAllocation, type DatedSnowballMonthPlanResult, type DebtMethod } from "./snowball";
 import type { DebtMonthSettlement } from "./debtPlanDomain";
+import type { DebtPaymentPause } from "./debtPaymentPause";
 
 export type SnowballPlannerDebt = {
   id: string;
@@ -9,6 +10,7 @@ export type SnowballPlannerDebt = {
   apr: number;
   dueDay: number;
   included: boolean;
+  debt_payment_pauses?: DebtPaymentPause[];
 };
 
 export type SnowballPlannerRow = SnowballPlannerDebt & {
@@ -71,7 +73,8 @@ export function buildSnowballPlannerRows(
       const key = `${allocation.sourceBillId}:${allocation.date}`;
       sourcePayments.set(key, cents((sourcePayments.get(key) ?? 0) + allocation.amount));
     });
-    const rolloversSent = sourcedAllocations.filter(allocation => allocation.kind === "rollover");
+    const rolloversSent = remainingPlan?.allocations.filter(allocation => allocation.kind === "rollover"
+      && (allocation.sourceBillId === debt.id || allocation.pauseRedirect?.fromBillId === debt.id)) ?? [];
     const plannedToDebt = cents(allocations.reduce((sum, allocation) => sum + allocation.amount, 0));
     const payoffExtraRemaining = cents(allocations
       .filter(allocation => allocation.kind === "rollover" || allocation.kind === "extra")

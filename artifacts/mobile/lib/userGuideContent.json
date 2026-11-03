@@ -109,7 +109,8 @@
         "items": [
           { "title": "Review the order", "body": "See each lender’s original required minimum and the current snowball or avalanche target.", "icon": "list" },
           { "title": "Check rollover", "body": "Rollover moves to the next debt as extra payoff money. It stays in Forecast but never makes the lender minimum larger or creates a false missed-payment alert.", "icon": "corner-down-right" },
-          { "title": "Edit planned payments", "body": "Change an amount or date when it no longer fits real life.", "icon": "sliders" }
+          { "title": "Edit planned payments", "body": "Change an amount or date when it no longer fits real life.", "icon": "sliders" },
+          { "title": "Pause debt payments", "body": "Open a debt and choose Pause debt payments. Set start and resume dates; with Debt Payoff Plan on, you can redirect that payment to other debts. The debt stays open in order and resumes automatically, or choose Resume now. This changes your FlowLedger plan only; lender payments and interest may still apply.", "icon": "pause-circle" }
         ]
       }
     ],

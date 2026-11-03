@@ -1,3 +1,5 @@
+import { normalizeDebtPaymentPauses } from "./debtPaymentPause";
+
 export const BILL_EDITABLE_FIELDS = [
   "name",
   "amount",
@@ -15,6 +17,7 @@ export const BILL_EDITABLE_FIELDS = [
   "frequency",
   "smart_priority",
   "include_in_snowball",
+  "debt_payment_pauses",
 ] as const;
 
 export type BillEditableField = typeof BILL_EDITABLE_FIELDS[number];
@@ -32,14 +35,22 @@ export function changedBillEditableFields<T extends Partial<Record<BillEditableF
   baseline: T,
   submitted: T,
 ): BillEditableField[] {
-  return BILL_EDITABLE_FIELDS.filter(field => !Object.is(baseline[field], submitted[field]));
+  return BILL_EDITABLE_FIELDS.filter(field => !billEditableValuesEqual(field, baseline[field], submitted[field]));
+}
+
+/** JSONB equality does not depend on array identity or object key order. */
+export function billEditableValuesEqual(field: BillEditableField, left: unknown, right: unknown): boolean {
+  return field === "debt_payment_pauses"
+    ? JSON.stringify(normalizeDebtPaymentPauses(left)) === JSON.stringify(normalizeDebtPaymentPauses(right))
+    : Object.is(left, right);
 }
 
 export function billEditablePatch<T extends Partial<Record<BillEditableField, unknown>>>(
   submitted: T,
   fields: readonly BillEditableField[],
 ): Partial<Record<BillEditableField, unknown>> {
-  return Object.fromEntries(fields.map(field => [field, submitted[field]]));
+  return Object.fromEntries(fields.map(field => [field, field === "debt_payment_pauses"
+    ? normalizeDebtPaymentPauses(submitted[field]) : submitted[field]]));
 }
 
 export function normalizedBillEditableFields(fields: readonly BillEditableField[]): BillEditableField[] {
@@ -54,6 +65,7 @@ export function billEditableDbPatch(
 ): Record<string, unknown> {
   return Object.fromEntries(normalizedBillEditableFields(fields).map(field => {
     const value = submitted[field];
-    return [field, NULLABLE_BILL_FIELDS.has(field) ? value ?? null : value];
+    return [field, field === "debt_payment_pauses" ? normalizeDebtPaymentPauses(value)
+      : NULLABLE_BILL_FIELDS.has(field) ? value ?? null : value];
   }));
 }

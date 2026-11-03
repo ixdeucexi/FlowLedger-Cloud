@@ -1,6 +1,7 @@
 import type { FinancialEvent } from "./forecast";
 import { getBillOccurrenceDays } from "./schedule";
 import { automaticDebtRolloverForMonth } from "./debtPlanDomain";
+import { activeDebtPaymentPause, isDebtPaymentPaused } from "./debtPaymentPause";
 import { orderDebts, projectDatedSnowballMonth, type DatedSnowballAdditionalPayment } from "./snowball";
 import type { PlanSimulationBaseline, PlanSimulationChange, PlanSimulationDebtReference, PlanSimulationIssue, PlanSimulationReferences, PlanSimulationResult } from "./planSimulator";
 
@@ -87,11 +88,13 @@ export function projectControlledSimulationDebt(input: {
   });
   edits.sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate) || input.changes.indexOf(a) - input.changes.indexOf(b));
   const latestEdit = (id: string, date: string) => edits.filter(edit => edit.debtId === id && edit.effectiveDate <= date).at(-1);
-  const paused = (id: string, date: string) => pauses.some(pause => pause.debtId === id && date >= pause.effectiveDate && date < pause.resumeDate);
+  const paused = (id: string, date: string, scenarioDate = date) => isDebtPaymentPaused(byId.get(id), date)
+    || pauses.some(pause => pause.debtId === id && scenarioDate >= pause.effectiveDate && scenarioDate < pause.resumeDate);
   const active = (debt: PlanSimulationDebtReference, date: string) =>
     (!debt.startDate || date >= debt.startDate) && (!debt.endDate || date <= debt.endDate);
   const allEvents = input.baseline.days.flatMap(day => day.events);
   const sourceFor = (event: FinancialEvent) => {
+    if (event.debtPauseRedirect) return undefined;
     if (event.debtPlanSource === "saved_extra") return undefined;
     if (byId.has(event.sourceId) && (event.kind === "debt_payment" || event.kind === "bill")) return event.sourceId;
     return event.debtPlanSource === "canonical" && event.debtTargetBillId && byId.has(event.debtTargetBillId) ? event.debtTargetBillId : undefined;
@@ -124,7 +127,7 @@ export function projectControlledSimulationDebt(input: {
     }
     if (!source && !(target && byId.has(target)) && event.debtPlanSource !== "saved_extra") return;
     output.replacedEventIds.add(event.id);
-    if (!source) {
+    if (!source && !event.debtPauseRedirect) {
       const prefix = event.date.slice(0, 7), amounts = savedByMonth.get(prefix) ?? new Map<string, number>();
       amounts.set(event.date, money((amounts.get(event.date) ?? 0) + Math.abs(event.amount)));
       savedByMonth.set(prefix, amounts);
@@ -138,7 +141,8 @@ export function projectControlledSimulationDebt(input: {
   const balances = new Map(debts.map(debt => [debt.id, money(Math.max(0, debt.balance))]));
   const [startYear, startMonth] = input.baseline.startDate.split("-").map(Number);
   const firstPrefix = input.baseline.startDate.slice(0, 7);
-  let rolledPayment = money(debts.reduce((sum, debt) => sum + Math.max(0, debt.monthlyRolloverExtra ?? 0), 0));
+  let rolledPayment = input.references.debtPayoffEnabled === false ? 0
+    : money(debts.reduce((sum, debt) => sum + Math.max(0, debt.monthlyRolloverExtra ?? 0), 0));
   let sequence = 0;
   const closedOn = new Map<string, string>();
 
@@ -150,6 +154,8 @@ export function projectControlledSimulationDebt(input: {
     const monthStart = prefix + "-01", firstVisible = offset === 0 ? input.baseline.startDate : monthStart;
     const keepHistory = offset === 0 && input.historicalPrincipal !== undefined;
     const paymentDates = new Map<string, readonly string[]>();
+    const pauseRedirects: DatedSnowballAdditionalPayment[] = [];
+    const postedPrincipal: DatedSnowballAdditionalPayment[] = [];
     const monthDebts = debts.filter(debt => (!debt.startDate || debt.startDate <= monthEnd) && (!debt.endDate || debt.endDate >= monthStart))
       .map(debt => {
         const schedule = { frequency: debt.frequency ?? "monthly", due_day: debt.dueDay, day_of_week: debt.dayOfWeek,
@@ -169,17 +175,37 @@ export function projectControlledSimulationDebt(input: {
           .filter(date => date >= monthStart && active(debt, date)).sort();
         paymentDates.set(debt.id, dates);
         const required = new Map<string, number>();
+        const committedPayments = new Map<string, number>();
+        (protectedByMonth.get(prefix) ?? []).filter(item => item.target === debt.id).forEach(({ event }) => {
+          const date = originalDate(event);
+          committedPayments.set(date, money((committedPayments.get(date) ?? 0) + Math.abs(event.amount)));
+        });
         let plannedExtra = 0, paidAboveRequired = 0;
         dates.forEach(date => {
           const occurrence = metadata.get(key(debt.id, date));
           const group = sourceGroups.get(key(debt.id, date)) ?? [];
           const controlDate = date < firstVisible ? firstVisible : date;
-          if (paused(debt.id, controlDate) || occurrence?.immutable || immutableSources.has(key(debt.id, date))) { required.set(date, 0); return; }
           const edit = latestEdit(debt.id, controlDate);
           const configured = edit?.amount ?? occurrence?.configuredAmount
             ?? (group.length ? group.reduce((sum, event) => sum + Math.abs(event.amount), 0)
               + Math.max(0, ...group.map(event => event.settledOccurrenceAmount ?? 0)) : debt.minimum);
           const settled = Math.max(0, occurrence?.settledAmount ?? Math.max(0, ...group.map(event => event.settledOccurrenceAmount ?? 0)));
+          const savedPause = activeDebtPaymentPause(debt, date);
+          if (occurrence?.commitmentState === "posted" && (occurrence.committedAmount ?? 0) > 0.005) {
+            committedPayments.set(date, occurrence.committedAmount!);
+            postedPrincipal.push({ id: `posted-principal:${debt.id}:${date}`, date,
+              amount: occurrence.committedAmount, targetBillId: debt.id, cascade: false,
+              kind: "rollover", ignoreExtraEligibility: true, phase: "before_pools", committedPayment: true });
+          }
+          if (input.references.debtPayoffEnabled !== false && savedPause?.redirect_payment && (balances.get(debt.id) ?? 0) > 0.005) {
+            const amount = money(Math.max(0, configured - settled - (occurrence?.committedAmount ?? 0)));
+            if (amount > 0.005 && (!keepHistory || date >= firstVisible)) pauseRedirects.push({
+              id: `debt-pause-redirect:${savedPause.id}:${debt.id}:${date}`,
+              date, amount, kind: "rollover", cascade: true, phase: "after_pools",
+              pauseRedirect: { pauseId: savedPause.id, fromBillId: debt.id, occurrenceDate: date },
+            });
+          }
+          if (paused(debt.id, date, controlDate) || occurrence?.immutable || immutableSources.has(key(debt.id, date))) { required.set(date, 0); return; }
           const requiredConfigured = edit ? configured : Math.min(configured, debt.minimum);
           required.set(date, money(Math.max(0, requiredConfigured - settled)));
           if (!edit) {
@@ -196,13 +222,15 @@ export function projectControlledSimulationDebt(input: {
           apr: addedIds.has(debt.id) && debt.startDate?.startsWith(prefix) ? 0 : debt.apr,
           minimum: money((lifecycleEdit?.amount ?? debt.minimum) * count),
           requiredPaymentsByDate: required,
+          committedPaymentsByDate: committedPayments,
           plannedExtraPayment: keepHistory && (dates[0] ?? monthStart) < firstVisible ? 0 : money(Math.max(0, plannedExtra - paidAboveRequired)),
           suppressRequiredOverflowBefore: keepHistory ? firstVisible : undefined,
         };
       });
-    const additional: DatedSnowballAdditionalPayment[] = [];
+    const additional: DatedSnowballAdditionalPayment[] = [...postedPrincipal, ...pauseRedirects];
     const protectedIds = new Set<string>();
     const historicalIds = new Set<string>();
+    const postedPrincipalIds = new Set(postedPrincipal.map(payment => payment.id));
     if (keepHistory) input.historicalPrincipal?.forEach(({ billId, amount }, index) => {
       const id = "historical:" + index;
       historicalIds.add(id);
@@ -213,7 +241,7 @@ export function projectControlledSimulationDebt(input: {
       const id = "protected:" + event.id;
       protectedIds.add(id);
       additional.push({ id, date: originalDate(event), amount: Math.abs(event.amount), targetBillId: target,
-        sourceBillId: sourceFor(event), cascade: false, ignoreExtraEligibility: true, phase: "before_pools" });
+        sourceBillId: sourceFor(event), cascade: false, ignoreExtraEligibility: true, phase: "before_pools", committedPayment: true });
     });
     const fullSaved = input.references.payoffSavedPaymentsByMonth?.[prefix];
     const saved = fullSaved ? new Map([[fullSaved.date, Math.max(0, fullSaved.amount)]])
@@ -249,17 +277,29 @@ export function projectControlledSimulationDebt(input: {
     const exactPlanIds = new Set(debts.filter(debt => debt.occurrences?.some(occurrence =>
       occurrence.date.startsWith(prefix) && occurrence.exactPlan)
       && !latestEdit(debt.id, rollDate < firstVisible ? firstVisible : rollDate)).map(debt => debt.id));
-    const targetPaid = target ? (byId.get(target.id)?.occurrences ?? []).filter(occurrence =>
-      occurrence.date.startsWith(prefix) && occurrence.regular !== false).reduce((sum, occurrence) => sum + occurrence.settledAmount, 0) : 0;
-    const targetRequired = target ? (byId.get(target.id)?.minimum ?? 0) * (paymentDates.get(target.id)?.length ?? 0) : 0;
-    const currentRoll = automaticDebtRolloverForMonth(rolledPayment, target?.id, exactPlanIds, Math.max(0, targetPaid - targetRequired));
+    const poolTarget = orderDebts(monthDebts.filter(debt => debt.included && (balances.get(debt.id) ?? 0) > 0.005
+      && !paused(debt.id, rollDate, rollDate < firstVisible ? firstVisible : rollDate))
+      .map(debt => ({ ...debt, balance: balances.get(debt.id) ?? 0 })), input.references.debtMethod)[0];
+    const paidAboveRequiredFor = (debtId: string) => {
+      const occurrences = (byId.get(debtId)?.occurrences ?? []).filter(occurrence => occurrence.date.startsWith(prefix) && occurrence.regular !== false);
+      return Math.max(0, occurrences.reduce((sum, occurrence) => sum + occurrence.settledAmount + (occurrence.committedAmount ?? 0), 0)
+        - (occurrences.length ? occurrences.reduce((sum, occurrence) => sum + (occurrence.requiredAmount ?? byId.get(debtId)?.minimum ?? 0), 0)
+          : (byId.get(debtId)?.minimum ?? 0) * (paymentDates.get(debtId)?.length ?? 0)));
+    };
+    const targetExtraPaid = poolTarget ? paidAboveRequiredFor(poolTarget.id) : 0;
+    const currentRoll = input.references.debtPayoffEnabled === false ? 0
+      : automaticDebtRolloverForMonth(rolledPayment, poolTarget?.id, exactPlanIds, targetExtraPaid);
+    const pauseRedirectCredits = new Map(monthDebts.map(debt => [debt.id, Math.max(0,
+      paidAboveRequiredFor(debt.id) - (debt.id === poolTarget?.id && !exactPlanIds.has(debt.id)
+        ? Math.min(rolledPayment, targetExtraPaid) : 0))]));
     const availableRoll = keepHistory && rollDate < firstVisible ? 0 : currentRoll;
     const projectMonth = (monthly = monthDebts) => projectDatedSnowballMonth({
       debts: monthly, month, year, method: input.references.debtMethod,
       startingBalances: balances, paymentDatesByDebtId: paymentDates,
       rolledPayment: availableRoll, rolledPaymentDate: rollDate, additionalPayments: additional,
+      pauseRedirectCreditsByDebtId: pauseRedirectCredits,
       canReceiveExtra: (id, date) => Boolean(byId.get(id) && active(byId.get(id)!, date)
-        && !paused(id, date < firstVisible ? firstVisible : date)),
+        && !paused(id, date, date < firstVisible ? firstVisible : date)),
     });
     let plan = projectMonth();
     // A mid-month edit changes the recurring budget from its effective date.
@@ -284,10 +324,18 @@ export function projectControlledSimulationDebt(input: {
       return { ...debt, minimum: nextMinimum };
     });
     if (rebudget) plan = projectMonth(corrected);
-    (protectedByMonth.get(prefix) ?? []).forEach(({ event, target }) => {
-      const applied = plan.allocations.filter(allocation => allocation.externalPaymentId === "protected:" + event.id)
+    const protectedGroups = new Map<string, Array<{ event: FinancialEvent; target: string }>>();
+    (protectedByMonth.get(prefix) ?? []).forEach(item => {
+      const groupKey = key(item.target, originalDate(item.event));
+      protectedGroups.set(groupKey, [...(protectedGroups.get(groupKey) ?? []), item]);
+    });
+    protectedGroups.forEach(group => {
+      const { event, target } = group[0];
+      const ids = new Set(group.map(item => "protected:" + item.event.id));
+      const amount = group.reduce((sum, item) => sum + Math.abs(item.event.amount), 0);
+      const applied = plan.allocations.filter(allocation => allocation.externalPaymentId && ids.has(allocation.externalPaymentId))
         .reduce((sum, allocation) => sum + allocation.amount, 0);
-      if (applied + .005 >= Math.abs(event.amount)) return;
+      if (applied + .005 >= Math.min(amount, byId.get(target)?.balance ?? amount)) return;
       const owner = manualForMonth.find(change => change.date < event.date
         && (change.type === "debt_extra" || change.debtId === target))?.id
         ?? edits.find(change => change.debtId === target)?.id ?? "debt-model";
@@ -303,6 +351,7 @@ export function projectControlledSimulationDebt(input: {
       const external = allocation.externalPaymentId;
       if (external && protectedIds.has(external)) return;
       if (external && historicalIds.has(external)) return;
+      if (external && postedPrincipalIds.has(external)) return;
       if (offset === 0 && allocation.date < input.baseline.startDate && allocation.kind !== "required") {
         const historical = output.historicalPrincipal.find(item => item.billId === allocation.targetBillId);
         if (historical) historical.amount = money(historical.amount + allocation.amount);
@@ -329,6 +378,7 @@ export function projectControlledSimulationDebt(input: {
           : (byId.get(allocation.targetBillId)?.name ?? "Debt") + " debt payment",
         debtPlanSource: allocation.kind === "extra" ? "saved_extra" : "canonical",
         debtPlanAllocationKind: allocation.kind, debtTargetBillId: allocation.targetBillId,
+        ...(allocation.pauseRedirect ? { debtPauseRedirect: allocation.pauseRedirect } : {}),
       });
       if (addedIds.has(allocation.sourceBillId ?? allocation.targetBillId) && prefix === firstPrefix && allocation.kind === "required") {
         output.addedRequiredCurrentMonth = money(output.addedRequiredCurrentMonth + allocation.amount);

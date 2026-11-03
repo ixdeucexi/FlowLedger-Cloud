@@ -591,6 +591,7 @@ export default function FloScreen() {
           is_debt: bill.is_debt,
           is_recurring: bill.is_recurring,
           includeInSnowball: bill.include_in_snowball !== false,
+          debt_payment_pauses: bill.debt_payment_pauses,
           balance: bill.balance,
           interest_rate: bill.interest_rate,
         };

@@ -370,6 +370,7 @@ export function deterministicAnswerFromTools(
       const messages: Record<string, string> = {
         no_debts: "No debt records are on file. Add a debt in Bills to build your snowball plan.",
         all_excluded: "Your recorded debts are excluded from Snowball. Open Bills to choose which debts to include.",
+        all_paused: "All included debts with a positive recorded balance active this month have a saved payment pause today, so there is no current snowball target. The debts remain open and in your plan; payments resume on their saved resume dates. A FlowLedger pause does not change what your lender requires.",
         none_current: "No included debt is active in the current month. Review start and end dates in Bills.",
         paid_off: "The included debts active this month have no positive recorded balance. Review Bills if a balance needs updating.",
         unavailable: "I cannot verify your current snowball target from the available records. Review Debt Payoff Planner; missing balances, incomplete records, or changed occurrences can affect the choice.",

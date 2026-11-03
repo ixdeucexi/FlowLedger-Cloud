@@ -5,6 +5,7 @@ import { canonicalConnectedAccounts } from "../../../artifacts/mobile/lib/plaidA
 import { createFinancialProjection } from "../../../artifacts/mobile/lib/financialProjection.ts";
 import { isBillActiveForMonth } from "../../../artifacts/mobile/lib/schedule.ts";
 import { requiredDebtPlanTotal } from "../../../artifacts/mobile/lib/debtPaymentPlan.ts";
+import { activeDebtPaymentPause, isDebtPaymentPaused, normalizeDebtPaymentPauses } from "../../../artifacts/mobile/lib/debtPaymentPause.ts";
 import { recordedSnowballTarget } from "./snowballTarget.ts";
 import { projectionInput, buildAnalysisForecast } from "./analysisProjection.ts";
 import { analyticTransactions, aggregateSpending, historicalExpenseCoverage } from "./analysisSpending.ts";
@@ -54,6 +55,18 @@ export function wealthAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequ
       // settings. Do not add month-relative obligations or a default target.
       return {text:lines.join("\n\n"),facts,sources:["bills"],assumptions,missing:[...missing,...requireSources(snapshot,["bills"])],scenario:false};
     }
+    let hasRelevantPaymentPause=false;
+    try {
+      for(const row of raw) {
+        const pauses=normalizeDebtPaymentPauses(row.debt_payment_pauses);
+        if(pauses.some(pause=>pause.resume_date>monthStart(snapshot.today)))hasRelevantPaymentPause=true;
+        const pause=activeDebtPaymentPause(pauses,snapshot.today);
+        if(pause)lines.push(`${label(row.name)} has a saved FlowLedger payment pause and resumes on ${pause.resume_date}${pause.redirect_payment?"; paused scheduled payments may temporarily redirect to other included debts":""}. The debt remains open; interest and lender requirements may continue.`);
+      }
+    } catch {
+      missing.push("A saved debt payment pause is invalid; the current target and payoff projection are unavailable");
+      return {text:lines.join("\n\n"),facts,sources,assumptions,missing:[...missing,...requireSources(snapshot,sources)],scenario:Boolean(request.scenario)};
+    }
     if(raw.some(r=>numeric(r.amount)===null || numeric(r.interest_rate)===null || !["monthly",null,undefined].includes(r.frequency))) missing.push("A complete monthly payoff projection needs every debt's APR and monthly payment; nonmonthly debt schedules must be reviewed in the dated planner");
     else if(raw.length) {
       const normalized=projectionInput(snapshot);
@@ -61,13 +74,56 @@ export function wealthAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRequ
       const month=Number(snapshot.today.slice(5,7))-1, year=Number(snapshot.today.slice(0,4));
       const eligible=normalized.input.bills.filter(b=>b.is_debt&&b.balance>0&&(isBillActiveForMonth(b,month,year)||engine.getBillOccurrencesInMonth(b,month,year).length>0));
       const debts=eligible.map(r=>({id:r.id,name:label(r.name),balance:r.balance,minimum:requiredDebtPlanTotal(r,engine.getBillOccurrencesInMonth(r,month,year).length),apr:r.interest_rate,dueDay:r.due_day,included:r.include_in_snowball!==false}));
-      const recorded=recordedSnowballTarget(rows("bills"),{month,year},!requireSources(snapshot,sources).length,[...rows("monthly_overrides"),...rows("bill_date_moves")] as any);
-      const target=request.debtMethod==="snowball"?debts.find(d=>d.id===recorded.targetId):orderDebts(debts.filter(d=>d.included),request.debtMethod)[0];
+      const recorded=recordedSnowballTarget(rows("bills"),{month,year,date:snapshot.today},!requireSources(snapshot,sources).length,[...rows("monthly_overrides"),...rows("bill_date_moves")] as any);
+      const target=request.debtMethod==="snowball"?debts.find(d=>d.id===recorded.targetId):orderDebts(debts.filter(d=>d.included&&!isDebtPaymentPaused(normalized.input.bills.find(b=>b.id===d.id),snapshot.today)),request.debtMethod)[0];
       const settlements=engine.getDebtMonthSettlements(month,year);
       facts.nextDebt=target?.name??null; facts.minimumPayments=sum(debts.map(d=>settlements.get(d.id)?.configuredObligation??d.minimum)); facts.minimumRemaining=sum(debts.map(d=>settlements.get(d.id)?.remainingRequired??d.minimum));facts.configuredOngoingPayments=sum(debts.map(d=>d.minimum));facts.monthlyInterestEstimate=round(sum(debts.map(d=>d.balance*d.apr/1200)));
-      lines.push(target?`${request.debtMethod === "avalanche" ? "Highest-APR" : "Smallest-balance"} eligible target: ${target.name}. This month's recorded required obligations total ${dollars(Number(facts.minimumPayments))}, with ${dollars(Number(facts.minimumRemaining))} remaining. Preserve that required remainder before adding extra.`:"No included, currently eligible snowball target could be verified.");
+      lines.push(target?`${request.debtMethod === "avalanche" ? "Highest-APR" : "Smallest-balance"} eligible target: ${target.name}. This month's recorded required obligations total ${dollars(Number(facts.minimumPayments))}, with ${dollars(Number(facts.minimumRemaining))} remaining. Preserve that required remainder before adding extra.`:recorded.state==="all_paused"?"All included debts with a positive current balance have a saved payment pause today. There is no current snowball target; the debts remain open and resume on their recorded dates.":"No included, currently eligible snowball target could be verified.");
       lines.push(`At today's balances and recorded APRs, one month's simple interest estimate is ${dollars(Number(facts.monthlyInterestEstimate))}. Actual statements may use daily balances and additional fees.`);
-      if(["plan","scenario","compare"].includes(request.operation) && target && !normalized.missing.length) {
+      const payoffRequested=["plan","scenario","compare"].includes(request.operation)||request.purpose==="debt_timeline";
+      if(payoffRequested && hasRelevantPaymentPause) {
+        missing.push(...normalized.missing);
+        if(!normalized.missing.length) {
+          // Aggregate the dated engine's balances; payment, pause, interest and
+          // rollover calculations stay in the shared canonical planner.
+          const outstanding=new Map(normalized.input.bills.filter(b=>b.is_debt&&b.include_in_snowball!==false&&b.balance>0&&(!b.end_date||b.end_date>=snapshot.today)).map(b=>[b.id,b.balance]));
+          const namedId=request.entity&&named.length===1&&outstanding.has(named[0].id)?String(named[0].id):null;
+          let payoffMonth:string|null=null,namedPayoffMonth:string|null=null;
+          for(let offset=0;offset<240&&outstanding.size;offset++) {
+            const absolute=year*12+month+offset,y=Math.floor(absolute/12),m=absolute%12;
+            const plan=engine.getDebtPlanForMonth(m,y);
+            if(!plan)break;
+            plan.balances.forEach((balance,id)=>{if(outstanding.has(id))outstanding.set(id,balance);});
+            const date=`${y}-${String(m+1).padStart(2,"0")}`;
+            if(namedId&&namedPayoffMonth===null&&(outstanding.get(namedId)??Infinity)<=.009)namedPayoffMonth=date;
+            if([...outstanding.values()].every(balance=>balance<=.009)){payoffMonth=date;break;}
+          }
+          facts.baselineDebtFreeMonth=payoffMonth;
+          if(request.entity){facts.namedDebt=label(named[0].name);facts.namedDebtBaselineMonth=namedPayoffMonth;}
+          const extra=request.scenario?.kind==="extra_debt"?Math.max(0,request.scenario.amount):Math.max(0,request.amount??0);
+          if(request.debtMethod!==normalized.input.settings.paymentMethod) {
+            facts.debtProjectionModel="paused_method_hypothetical_unavailable";
+            facts.debtBaselineMethod=normalized.input.settings.paymentMethod;
+            facts.requestedDebtMethod=request.debtMethod;
+            missing.push("A different payoff method cannot be verified with saved debt payment pauses; use Debt Payoff Planner for a dated comparison");
+            lines.push(`The recorded ${normalized.input.settings.paymentMethod} dated plan${payoffMonth?` projects baseline included-plan payoff in ${payoffMonth}`:" does not establish a baseline included-plan payoff month within 240 months"}. This baseline does not verify the requested ${request.debtMethod} scenario with saved payment pauses. Open Debt Payoff Planner for a dated comparison.`);
+          } else if(extra>0) {
+            facts.debtProjectionModel="paused_hypothetical_unavailable";
+            facts.scenarioDebtFreeMonth=null;
+            if(request.entity)facts.namedDebtPayoffMonth=null;
+            missing.push("The monthly extra-payment hypothetical cannot model saved debt payment pauses; use Debt Payoff Planner for a dated preview");
+            lines.push(`The recorded dated plan${payoffMonth?` projects included-plan payoff in ${payoffMonth}`:" does not establish an included-plan payoff month within 240 months"}. I cannot verify this extra-payment hypothetical with saved payment pauses. Open Debt Payoff Planner for a dated preview that respects pause and resume dates.`);
+          } else {
+            facts.debtProjectionModel="recorded_dated_plan";
+            facts.scenarioDebtFreeMonth=payoffMonth;
+            if(request.entity)facts.namedDebtPayoffMonth=namedPayoffMonth;
+            const date=request.entity?namedPayoffMonth:payoffMonth;
+            lines.unshift(date?`${request.entity?label(named[0].name):"The included debt plan"} is projected to be paid off in ${date} under the recorded dated plan, including saved payment pauses, temporary redirects and resume dates.`:"The recorded dated plan does not establish a payoff month for this request within the 240-month projection horizon.");
+            if(!date)missing.push("A payoff month was not reached within the canonical 240-month projection horizon");
+          }
+          assumptions.push("This projection follows the saved dated debt plan, including pause and resume dates, unchanged APRs, and recorded payments. Paused debts remain outstanding and accrue modeled interest. It assumes no new borrowing or fees and does not verify lender permission or extra-payment affordability.");
+        }
+      } else if(["plan","scenario","compare"].includes(request.operation) && target && !normalized.missing.length) {
         const extra=request.scenario?.kind==="extra_debt" ? Math.max(0,request.scenario.amount) : Math.max(0,request.amount??0);
         const cadence=request.scenario?.repeat??"once";
         const extraDate=request.scenario?.date??snapshot.today;

@@ -37,6 +37,8 @@
     "lib/safetyStop.test.ts",
     "lib/updateCenter.test.ts",
     "lib/financialProjection.test.ts",
+    "lib/debtPaymentPause.test.ts",
+    "lib/debtPaymentPauseUi.test.ts",
     "lib/forecastBillNotifications.test.ts",
     "lib/billPaymentHistory.test.ts",
     "lib/settingsNavigation.test.ts",

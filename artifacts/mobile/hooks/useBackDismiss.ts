@@ -3,7 +3,7 @@ import { Platform } from "react-native";
 import { useOverlayActivity } from "./useOverlayActivity";
 import { createNestedOverlayHistory } from "../lib/nestedOverlayHistory";
 
-export function useBackDismiss(active: boolean, onDismiss: (event?: { state?: unknown }) => void, blocksDailyTip = true, nestedActive?: boolean) {
+export function useBackDismiss(active: boolean, onDismiss: (event?: { state?: unknown }) => void, blocksDailyTip = true, nestedActive?: boolean | number) {
   useOverlayActivity(active && blocksDailyTip);
   const onDismissRef = useRef(onDismiss);
   const nestedController = useRef<ReturnType<typeof createNestedOverlayHistory> | null>(null);

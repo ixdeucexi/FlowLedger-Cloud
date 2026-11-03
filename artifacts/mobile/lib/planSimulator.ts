@@ -2,6 +2,7 @@ import type { FinancialEvent } from "./forecast";
 import { calculateFlowScore } from "./flowScorePolicy";
 import { allocateSnowballExtra, projectSnowballMonth, type DebtMethod, type SnowballDebtInput } from "./snowball";
 import { hasSimulationDebtControls, projectControlledSimulationDebt } from "./planSimulationDebtControls";
+import type { DebtPaymentPause } from "./debtPaymentPause";
 export { hasSimulationDebtControls, simulationDebtReference } from "./planSimulationDebtControls";
 import { getBillOccurrenceDays, isBillActiveForMonth } from "./schedule";
 import { buildStabilityProgress } from "./stability";
@@ -92,12 +93,16 @@ export interface PlanSimulationBillReference {
 }
 
 export interface PlanSimulationDebtReference extends SnowballDebtInput {
+  debt_payment_pauses?: readonly DebtPaymentPause[];
   /** Exact source-commitment snapshots, never month-wide paid totals. */
   occurrences?: readonly {
     date: string;
     configuredAmount: number;
+    requiredAmount?: number;
     settledAmount: number;
     remainingAmount: number;
+    committedAmount?: number;
+    commitmentState?: "pending" | "posted";
     /** An existing exact Forecast override replaces the automatic pool for its target month. */
     exactPlan?: boolean;
     immutable?: boolean;
@@ -122,6 +127,7 @@ export interface PlanSimulationDebtReference extends SnowballDebtInput {
 }
 
 export interface PlanSimulationReferences {
+  debtPayoffEnabled?: boolean;
   incomes: PlanSimulationIncomeReference[];
   bills: PlanSimulationBillReference[];
   debts: PlanSimulationDebtReference[];
@@ -572,7 +578,8 @@ export function projectPlanSimulation(input: {
   useDebtControlTimeline?: boolean;
 }): PlanSimulationResult {
   const baselineDays = input.baseline.days.map(day => ({ ...day, events: day.events.map(event => ({ ...event })) }));
-  const useDebtControlTimeline = input.useDebtControlTimeline || hasSimulationDebtControls(input.changes);
+  const useDebtControlTimeline = input.useDebtControlTimeline || hasSimulationDebtControls(input.changes)
+    || input.references.debts.some(debt => (debt.debt_payment_pauses?.length ?? 0) > 0);
   const baselineControlled = useDebtControlTimeline
     ? projectControlledSimulationDebt({ baseline: input.baseline, references: input.references, changes: [] })
     : undefined;

@@ -2055,7 +2055,7 @@ export default function MoreScreen({
         .join("\n");
 
       const billHeader =
-        "Name,Amount,Category,Priority,IsDebt,Balance,InterestRate,DueDay,IsRecurring,Frequency,DayOfWeek,NextPaymentDate,StartDate,EndDate";
+        "Name,Amount,Category,Priority,IsDebt,Balance,InterestRate,DueDay,IsRecurring,Frequency,DayOfWeek,NextPaymentDate,StartDate,EndDate,DebtPaymentPauses";
       const billRows = bills
         .map((b) =>
           [
@@ -2073,6 +2073,7 @@ export default function MoreScreen({
             b.next_payment_date ?? "",
             b.start_date ?? "",
             b.end_date ?? "",
+            JSON.stringify(b.debt_payment_pauses ?? []),
           ]
             .map(csvCell)
             .join(","),

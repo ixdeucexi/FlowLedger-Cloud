@@ -1,5 +1,6 @@
 import type { Bill } from "./financialProjectionTypes";
 import { parseDecimalInput, parseMoneyInput } from "./moneyFormInput";
+import { normalizeDebtPaymentPauses, type DebtPaymentPause } from "./debtPaymentPause";
 
 type ImportedBill = Omit<Bill, "id" | "created_at">;
 
@@ -90,12 +91,23 @@ export function parseBillCsv(csv: string): ImportedBill[] {
     const dayOfWeek = get("dayofweek") ? integer("dayofweek", 0, 0, 6)
       : frequency === "weekly" && anchor ? new Date(`${anchor}T00:00:00Z`).getUTCDay() : undefined;
     const dueDay = integer("dueday", anchor ? Number(anchor.slice(8, 10)) : 1, 1, 31);
+    let debtPaymentPauses: DebtPaymentPause[] = [];
+    if (get("debtpaymentpauses")) {
+      try {
+        const parsed: unknown = JSON.parse(get("debtpaymentpauses"));
+        if (!Array.isArray(parsed)) invalid("debt payment pauses (must be a JSON array)");
+        debtPaymentPauses = normalizeDebtPaymentPauses(parsed);
+      } catch {
+        invalid("debt payment pauses (valid non-overlapping JSON intervals required)");
+      }
+    }
     return {
       name, amount, category: get("category") || "Other",
       priority: integer("priority", index + 1, 0, Number.MAX_SAFE_INTEGER),
       is_debt: bool("isdebt", false), balance: money("balance", 0), interest_rate: interestRate!,
       due_day: dueDay, is_recurring: bool("isrecurring", true),
       frequency: frequency as ImportedBill["frequency"],
+      debt_payment_pauses: debtPaymentPauses,
       ...(dayOfWeek !== undefined ? { day_of_week: dayOfWeek } : {}),
       ...(nextPaymentDate ? { next_payment_date: nextPaymentDate } : {}),
       ...(startDate ? { start_date: startDate } : {}), ...(endDate ? { end_date: endDate } : {}),

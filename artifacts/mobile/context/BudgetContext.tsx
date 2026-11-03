@@ -87,6 +87,7 @@ import { diagnosticErrorCode } from "@/lib/diagnosticPolicy";
 import {
   billEditableDbPatch,
   billEditablePatch,
+  billEditableValuesEqual,
   normalizedBillEditableFields,
   type BillEditableBaseline,
   type BillEditableField,
@@ -138,6 +139,7 @@ import { isActiveTransaction, isConfirmedBillMatch, manualActivityMatchCandidate
 import { countReviewQueue } from "@/lib/reviewCenter";
 import { normalizePlanningTools } from "@/lib/planningMode";
 import { canonicalDebtPaymentMethod } from "@/lib/debtOrder";
+import { addDebtPaymentPause, isDebtPaymentPauseDate, normalizeDebtPaymentPauses, resumeDebtPaymentPause } from "@/lib/debtPaymentPause";
 import { localDateString } from "@/lib/dateLabels";
 import { spendingBucketSummary, validateCreateSpendingBucketMatch } from "@/lib/spendingBuckets";
 import { hasBucketRemainderFunding, latestBucketRemainderAvailableDate, removeBucketRemainderFundingSource, resizeSnowballFundingSources } from "@/lib/snowballFunding";
@@ -334,6 +336,8 @@ interface BudgetContextType {
     editableFields: readonly BillEditableField[],
     baseline?: BillEditableBaseline,
   ) => Promise<void>;
+  pauseDebtPayments: (billId: string, input: { startDate: string; resumeDate: string; redirectPayment: boolean }) => Promise<void>;
+  resumeDebtPayments: (billId: string, pauseId: string) => Promise<void>;
   stopFutureBill: (id: string) => Promise<void>;
   deleteBill: (id: string) => Promise<void>;
   deleteBillMistake: (id: string) => Promise<void>;
@@ -855,6 +859,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const billOverrideRetryIdsRef = useRef(new Map<string, Map<string, string>>());
   const billEditFieldTokensRef = useRef(new Map<string, Map<BillEditableField, string>>());
   const billWriteQueuesRef = useRef(new Map<string, Promise<unknown>>());
+  const debtPaymentPauseInFlightRef = useRef(new Set<string>());
   const monthlyOverrideStableIdsRef = useRef(new Map<string, string>());
   const monthlyOverrideFieldTokensRef = useRef(new Map<string, Map<string, string>>());
   const monthlyOverrideAppliedFieldTokensRef = useRef(new Map<string, Map<string, string>>());
@@ -2921,6 +2926,21 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   ) => {
     if (!user) return;
     assertCanEditHousehold("update a bill");
+    const invokingScope = {
+      userId: user.id,
+      householdId: activeHousehold?.householdId ?? null,
+      budgetId: activeHousehold?.budgetId ?? null,
+      generation: financialScopeGenerationRef.current,
+    };
+    const scopeIsCurrent = () => invokingScope.userId === userScopeIdRef.current
+      && invokingScope.userId === financialDataUserIdRef.current
+      && invokingScope.householdId === (householdScopeRef.current?.householdId ?? null)
+      && invokingScope.budgetId === (householdScopeRef.current?.budgetId ?? null)
+      && invokingScope.generation === financialScopeGenerationRef.current;
+    const assertBillEditScope = () => {
+      if (!scopeIsCurrent()) throw new Error("This household changed. Reopen the debt or bill and try again.");
+    };
+    assertBillEditScope();
     const existing = bills.find(b => b.id === bill.id);
     if (!existing) return;
     const editableFields = normalizedBillEditableFields(requestedEditableFields);
@@ -3004,8 +3024,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         const activeEditableFields = editableFields.filter(field =>
           currentBillFieldTokens.get(field) === editToken
         );
-        if (activeEditableFields.length === 0) return;
         try {
+          assertBillEditScope();
+          assertCanEditHousehold("update a bill");
+          if (activeEditableFields.length === 0) return;
           const expectedBillPatch = billEditableDbPatch(
             { ...existing, ...(baseline ?? {}) },
             activeEditableFields,
@@ -3044,6 +3066,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           if (savedResult.error || !savedResult.data) {
             throw new Error(`Update bill: ${savedResult.error?.message ?? "no row was saved"}`);
           }
+          assertBillEditScope();
           const response = savedResult.data as {
             bill?: unknown;
             overrides?: unknown[];
@@ -3127,12 +3150,13 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
             billOverrideRetryIdsRef.current.delete(bill.id);
           }
         } catch (error) {
+          if (!scopeIsCurrent()) throw error;
           setBills(prev => reorderDebtPriorities(prev.map(item => {
             if (item.id !== existing.id) return item;
             const rollbackPatch: Partial<Bill> = {};
             activeEditableFields.forEach(field => {
               if (currentBillFieldTokens.get(field) === editToken
-                  && Object.is(item[field], reviewedBill[field])) {
+                  && billEditableValuesEqual(field, item[field], reviewedBill[field])) {
                 (rollbackPatch as Record<string, unknown>)[field] = existing[field];
               }
             });
@@ -3157,7 +3181,79 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     createMonthlyOverrideWriteIntent,
     persistMonthlyOverrideWriteIntent,
     runTrackedFinancialMutation,
+    activeHousehold?.householdId,
+    activeHousehold?.budgetId,
   ]);
+
+  const debtPaymentPauseBill = useCallback((billId: string): Bill => {
+    if (!user) throw new Error("Sign in to change debt payments.");
+    assertCanEditHousehold("change debt payments");
+    if (user.id !== userScopeIdRef.current || user.id !== financialDataUserIdRef.current
+      || (activeHousehold?.householdId ?? null) !== (householdScopeRef.current?.householdId ?? null)
+      || (activeHousehold?.budgetId ?? null) !== (householdScopeRef.current?.budgetId ?? null)) {
+      throw new Error("This household changed. Reopen the debt and try again.");
+    }
+    if (!demoMode && activeHousehold?.householdId
+      && startupCoreReadyScopeKeyRef.current !== `${user.id}:${activeHousehold.householdId}`) {
+      throw new Error("Wait for this household's plan to finish loading, then try again.");
+    }
+    const bill = bills.find(item => item.id === billId);
+    if (!bill?.is_debt) throw new Error("This debt could not be found in the current household. Refresh and try again.");
+    const rowScope = bill as Bill & { household_id?: string | null; budget_id?: string | null };
+    if (rowScope.household_id != null && rowScope.household_id !== activeHousehold?.householdId
+      || rowScope.budget_id != null && rowScope.budget_id !== activeHousehold?.budgetId) {
+      throw new Error("This debt belongs to another household or budget. Reopen the debt and try again.");
+    }
+    return bill;
+  }, [user, bills, demoMode, assertCanEditHousehold, activeHousehold?.householdId, activeHousehold?.budgetId]);
+
+  const pauseDebtPayments = useCallback(async (
+    billId: string,
+    input: { startDate: string; resumeDate: string; redirectPayment: boolean },
+  ) => {
+    const bill = debtPaymentPauseBill(billId);
+    const key = `${user?.id}:${activeHousehold?.householdId ?? "personal"}:${activeHousehold?.budgetId ?? ""}:${billId}`;
+    if (debtPaymentPauseInFlightRef.current.has(key)) throw new Error("This debt payment change is already saving.");
+    if (bill.balance <= 0) throw new Error("This debt is already paid off.");
+    const today = safeLocalDateInTimeZone(new Date(), householdTimeZone);
+    if (!isDebtPaymentPauseDate(input.startDate) || input.startDate < today) {
+      throw new Error("Choose a pause start date today or later.");
+    }
+    if (input.redirectPayment && !settingsRef.current.debtPayoffEnabled) {
+      throw new Error("Turn on Debt Payoff Plan before redirecting a paused payment.");
+    }
+    const previous = normalizeDebtPaymentPauses(bill.debt_payment_pauses);
+    const next = addDebtPaymentPause(previous, {
+      id: genId(), start_date: input.startDate, resume_date: input.resumeDate,
+      redirect_payment: input.redirectPayment,
+    });
+    debtPaymentPauseInFlightRef.current.add(key);
+    try {
+      await updateBill({ ...bill, debt_payment_pauses: next }, ["debt_payment_pauses"], { debt_payment_pauses: previous });
+    } finally {
+      debtPaymentPauseInFlightRef.current.delete(key);
+    }
+  }, [debtPaymentPauseBill, householdTimeZone, user?.id, activeHousehold?.householdId, activeHousehold?.budgetId, updateBill]);
+
+  const resumeDebtPayments = useCallback(async (billId: string, pauseId: string) => {
+    const bill = debtPaymentPauseBill(billId);
+    const key = `${user?.id}:${activeHousehold?.householdId ?? "personal"}:${activeHousehold?.budgetId ?? ""}:${billId}`;
+    if (debtPaymentPauseInFlightRef.current.has(key)) throw new Error("This debt payment change is already saving.");
+    const previous = normalizeDebtPaymentPauses(bill.debt_payment_pauses);
+    const pause = previous.find(item => item.id === pauseId);
+    if (!pause) throw new Error("This debt payment pause could not be found. Refresh and try again.");
+    const today = safeLocalDateInTimeZone(new Date(), householdTimeZone);
+    if (pause.resume_date <= today) return;
+    const next = today <= pause.start_date
+      ? previous.filter(item => item.id !== pauseId)
+      : resumeDebtPaymentPause(previous, pauseId, today);
+    debtPaymentPauseInFlightRef.current.add(key);
+    try {
+      await updateBill({ ...bill, debt_payment_pauses: next }, ["debt_payment_pauses"], { debt_payment_pauses: previous });
+    } finally {
+      debtPaymentPauseInFlightRef.current.delete(key);
+    }
+  }, [debtPaymentPauseBill, householdTimeZone, user?.id, activeHousehold?.householdId, activeHousehold?.budgetId, updateBill]);
 
   const stopFutureBill = useCallback(async (id: string) => {
     if (!user) return;
@@ -6303,7 +6399,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       forecastConfidence, loading, startupCoreReady, loadError, dataUpdatedAt, retryBudgetLoad, refreshBankData, demoMode,
       saveStatus, saveError, retryLastSave, clearSaveError,
       dashboardFilter, setDashboardFilter,
-      addBill, updateBill, stopFutureBill, deleteBill, deleteBillMistake, getBillById,
+      addBill, updateBill, pauseDebtPayments, resumeDebtPayments, stopFutureBill, deleteBill, deleteBillMistake, getBillById,
       getOverride, getAmount, getPaidAmount, setPaidAmount, setCustomAmount, setPlannedDebtAmount, getCustomDueDay, setCustomDueDay,
       setBillOccurrenceAmount, skipBillOccurrence, endBillSeriesBeforeOccurrence,
       moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence, getBillDateMovesForMonth,

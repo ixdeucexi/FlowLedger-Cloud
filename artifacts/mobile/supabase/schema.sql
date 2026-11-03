@@ -1,6 +1,59 @@
 -- Enable UUID extension
 create extension if not exists "pgcrypto";
 
+-- This is a pure JSON predicate. It reads no rows, uses no extensions and
+-- evaluates with the caller's privileges, including when used by the CHECK.
+create or replace function public.is_valid_debt_payment_pauses(p_pauses jsonb)
+returns boolean
+language plpgsql immutable security invoker set search_path = '' as $$
+declare
+  v_pause jsonb;
+  v_id text;
+  v_start_text text;
+  v_resume_text text;
+  v_start date;
+  v_resume date;
+  v_previous_resume date;
+  v_seen_ids text[] := '{}'::text[];
+begin
+  if p_pauses is null or jsonb_typeof(p_pauses) <> 'array' then return false; end if;
+  if jsonb_array_length(p_pauses) > 120 then return false; end if;
+  for v_pause in select value from jsonb_array_elements(p_pauses) loop
+    if jsonb_typeof(v_pause) <> 'object' then return false; end if;
+    if not (v_pause ?& array['id','start_date','resume_date','redirect_payment'])
+       or (v_pause - array['id','start_date','resume_date','redirect_payment']) <> '{}'::jsonb
+       or jsonb_typeof(v_pause->'id') is distinct from 'string'
+       or jsonb_typeof(v_pause->'start_date') is distinct from 'string'
+       or jsonb_typeof(v_pause->'resume_date') is distinct from 'string'
+       or jsonb_typeof(v_pause->'redirect_payment') is distinct from 'boolean' then
+      return false;
+    end if;
+    v_id := v_pause->>'id';
+    if length(v_id) not between 1 and 128 or v_id !~ '^[A-Za-z0-9_-]+$'
+       or v_id = any(v_seen_ids) then return false; end if;
+    v_start_text := v_pause->>'start_date';
+    v_resume_text := v_pause->>'resume_date';
+    if length(v_start_text) <> 10 or length(v_resume_text) <> 10
+       or v_start_text !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+       or v_resume_text !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then return false; end if;
+    begin
+      -- make_date rejects impossible dates and year zero without DateStyle or
+      -- timezone-dependent parsing, so the immutable contract is genuine.
+      v_start := make_date(substr(v_start_text,1,4)::integer,substr(v_start_text,6,2)::integer,substr(v_start_text,9,2)::integer);
+      v_resume := make_date(substr(v_resume_text,1,4)::integer,substr(v_resume_text,6,2)::integer,substr(v_resume_text,9,2)::integer);
+    exception when datetime_field_overflow then return false;
+    end;
+    -- [start, resume): chronological, nonoverlapping intervals; adjacency is OK.
+    if v_start >= v_resume or (v_previous_resume is not null and v_start < v_previous_resume) then return false; end if;
+    v_previous_resume := v_resume;
+    v_seen_ids := array_append(v_seen_ids,v_id);
+  end loop;
+  return true;
+end;
+$$;
+revoke all on function public.is_valid_debt_payment_pauses(jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.is_valid_debt_payment_pauses(jsonb) to authenticated,service_role;
+
 -- ── bills ──────────────────────────────────────────────────────────────────────
 create table if not exists bills (
   id              text primary key,
@@ -20,6 +73,8 @@ create table if not exists bills (
   is_recurring    boolean not null default true,
   frequency       text not null default 'monthly',
   include_in_snowball boolean not null default true,
+  debt_payment_pauses jsonb not null default '[]'::jsonb
+    constraint bills_debt_payment_pauses_valid check (public.is_valid_debt_payment_pauses(debt_payment_pauses)),
   created_at      text not null
 );
 alter table bills enable row level security;

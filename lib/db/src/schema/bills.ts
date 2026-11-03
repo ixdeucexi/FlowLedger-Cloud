@@ -1,6 +1,13 @@
-import { boolean, integer, numeric, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, integer, jsonb, numeric, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+
+export type DebtPaymentPauseRow = {
+  id: string;
+  start_date: string;
+  resume_date: string;
+  redirect_payment: boolean;
+};
 
 export const billsTable = pgTable("bills", {
   id: text("id").primaryKey(),
@@ -19,6 +26,7 @@ export const billsTable = pgTable("bills", {
   isRecurring: boolean("is_recurring").notNull().default(true),
   frequency: text("frequency").notNull().default("monthly"),
   includeInSnowball: boolean("include_in_snowball").notNull().default(true),
+  debtPaymentPauses: jsonb("debt_payment_pauses").$type<DebtPaymentPauseRow[]>().notNull().default([]),
   createdAt: text("created_at").notNull(),
 });
 

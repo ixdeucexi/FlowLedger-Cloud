@@ -18,7 +18,7 @@ test("invalid pasted amounts cannot invoke transaction, income, bucket, or bill 
     ["IncomeModal", "amount", {}],
     ["GoalModal", "target", { savingRef: { current: false }, pendingGoal: null, current: "0", goalMode: "savings" }],
     ["GoalModal", "current", { savingRef: { current: false }, pendingGoal: null, target: "100", goalMode: "savings" }],
-    ["AddBillModal", "amount", { balance: "0", interestRate: "0", isDebt: true }],
+    ["AddBillModal", "amount", { balance: "0", interestRate: "0", isDebt: true, pausePendingRef: { current: false } }],
   ] as const) {
     for (const raw of ["25oops", "1,20.50", "Infinity", "5.123"]) {
       let saves = 0, alerts = 0;

@@ -1,4 +1,7 @@
 import { dashboardMonthlyPlan } from "@/lib/dashboardMonthlyPlan";
+import { activeDebtPaymentPause } from "@/lib/debtPaymentPause";
+import { localDateInTimeZone } from "@/lib/dailyCheckingClose";
+import { useLocalDay } from "@/hooks/useLocalDay";
 import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import { BucketThumbnail } from "@/components/BucketVisual";
 import { useBucketPersonalization } from "@/context/BucketPersonalizationContext";
@@ -529,6 +532,7 @@ function DesktopDashboardContent({
     addIncome,
     bills,
     forecastConfidence,
+    householdTimeZone,
     incomes,
     setDashboardFilter,
     settings,
@@ -588,7 +592,9 @@ function DesktopDashboardContent({
   const saveIncome = useCallback((income: Omit<IncomeItem, "id"> | IncomeItem) =>
     addIncome(income as Omit<IncomeItem, "id">), [addIncome]);
 
+  useLocalDay();
   const now = new Date();
+  const pauseToday = localDateInTimeZone(now, householdTimeZone);
   const {
     model: dashboardModel,
     reviewCenterCount: reviewCount,
@@ -627,10 +633,10 @@ function DesktopDashboardContent({
   );
   const payoffBalance = payoffDebts.reduce((sum, bill) => sum + bill.balance, 0);
   const payoffTarget = useMemo(
-    () => payoffDebts.slice().sort((left, right) => (
+    () => payoffDebts.filter(bill => !activeDebtPaymentPause(bill, pauseToday)).sort((left, right) => (
       left.balance - right.balance || left.priority - right.priority
     ))[0] ?? null,
-    [payoffDebts],
+    [payoffDebts, pauseToday],
   );
   const {
     planned: dashboardPlanned,

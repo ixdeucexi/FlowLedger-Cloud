@@ -31,16 +31,24 @@ interface DatePickerFieldProps {
   minDate?: string;        // YYYY-MM-DD — days before this are greyed out
   maxDate?: string;        // YYYY-MM-DD — days after this are greyed out
   label?: string;
+  disabled?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function DatePickerField({ value, onChange, placeholder = "Pick a date…", optional, minDate, maxDate, label }: DatePickerFieldProps) {
+export function DatePickerField({ value, onChange, placeholder = "Pick a date…", optional, minDate, maxDate, label, disabled = false, open: controlledOpen, onOpenChange }: DatePickerFieldProps) {
   const c = useColors();
 
   const today = new Date();
   const initDate = value || "";
   const initParsed = parseYMD(initDate);
 
-  const [open, setOpen] = useState(false);
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = controlledOpen ?? localOpen;
+  const setOpen = (next: boolean) => {
+    if (controlledOpen === undefined) setLocalOpen(next);
+    onOpenChange?.(next);
+  };
   const [pickerYear,  setPickerYear]  = useState(initParsed?.y ?? today.getFullYear());
   const [pickerMonth, setPickerMonth] = useState(initParsed?.m ? initParsed.m - 1 : today.getMonth());
 
@@ -73,7 +81,7 @@ export function DatePickerField({ value, onChange, placeholder = "Pick a date…
   };
 
   const selectDay = (day: number) => {
-    if (isDisabled(day)) return;
+    if (disabled || isDisabled(day)) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const ymd = `${pickerYear}-${pad(pickerMonth + 1)}-${pad(day)}`;
     onChange(ymd);
@@ -95,20 +103,24 @@ export function DatePickerField({ value, onChange, placeholder = "Pick a date…
       )}
 
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${label ?? "Date"}: ${value ? formatDisplay(value) : placeholder}`}
+        accessibilityState={{ expanded: open, disabled }}
+        disabled={disabled}
         onPress={() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           if (!open && value) {
             const p = parseYMD(value);
             if (p) { setPickerYear(p.y); setPickerMonth(p.m - 1); }
           }
-          setOpen(o => !o);
+          setOpen(!open);
         }}
         style={({ pressed }) => [
           styles.btn,
           {
             backgroundColor: c.muted,
             borderColor: open ? c.primary : "transparent",
-            opacity: pressed ? 0.8 : 1,
+            opacity: disabled ? 0.55 : pressed ? 0.8 : 1,
           },
         ]}
       >
@@ -126,6 +138,7 @@ export function DatePickerField({ value, onChange, placeholder = "Pick a date…
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Previous month"
+              disabled={disabled}
               onPress={() => shiftMonth(-1)}
               hitSlop={10}
               style={styles.navBtn}
@@ -138,6 +151,7 @@ export function DatePickerField({ value, onChange, placeholder = "Pick a date…
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Next month"
+              disabled={disabled}
               onPress={() => shiftMonth(1)}
               hitSlop={10}
               style={styles.navBtn}
@@ -165,8 +179,11 @@ export function DatePickerField({ value, onChange, placeholder = "Pick a date…
               return (
                 <Pressable
                   key={day}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${MONTH_NAMES[pickerMonth]} ${day}, ${pickerYear}`}
+                  accessibilityState={{ selected: sel, disabled: disabled || dis }}
                   onPress={() => selectDay(day)}
-                  disabled={dis}
+                  disabled={disabled || dis}
                   style={({ pressed }) => [
                     styles.cell,
                     {
@@ -187,6 +204,9 @@ export function DatePickerField({ value, onChange, placeholder = "Pick a date…
           {/* Clear button (optional fields) */}
           {Boolean(optional && value) && (
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Clear ${label ?? "date"}`}
+              disabled={disabled}
               onPress={() => { onChange(""); setOpen(false); }}
               style={[styles.clearBtn, { borderTopColor: c.border }]}
             >

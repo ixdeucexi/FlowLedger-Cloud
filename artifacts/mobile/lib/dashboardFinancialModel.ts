@@ -13,6 +13,7 @@ import {
 import { canonicalConnectedAccounts, summarizePendingCheckingActivity } from "./plaidActivity";
 import { transactionCategoryParts, type ReviewTransactionLike } from "./reviewCenter";
 import { requiredDebtPlanTotal } from "./debtPaymentPlan";
+import type { DebtPaymentPause } from "./debtPaymentPause";
 
 export interface DashboardAccount {
   id: string;
@@ -82,6 +83,7 @@ export interface DashboardBill {
   include_in_snowball?: boolean;
   snowball_minimum_boost?: number;
   last_reviewed_at?: string;
+  debt_payment_pauses?: DebtPaymentPause[];
 }
 
 export interface DashboardTransaction extends ReviewTransactionLike {
@@ -446,6 +448,7 @@ export function buildDashboardFinancialModel(input: DashboardFinancialModelInput
       is_debt: bill.is_debt,
       is_recurring: bill.is_recurring,
       includeInSnowball: bill.include_in_snowball !== false,
+      debt_payment_pauses: bill.debt_payment_pauses,
       balance: bill.balance,
       interest_rate: bill.interest_rate,
       };

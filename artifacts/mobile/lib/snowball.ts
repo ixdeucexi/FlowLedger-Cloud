@@ -21,8 +21,16 @@ export interface DatedSnowballDebtInput extends SnowballDebtInput {
   requiredPaymentsByDate?: ReadonlyMap<string, number>;
   /** Exact Forecast money above the requirement, targeted to this debt. */
   plannedExtraPayment?: number;
+  /** Exact dated optional cash, including partial-month saved pause schedules. */
+  plannedExtraPaymentsByDate?: ReadonlyMap<string, number>;
   /** Earlier overflow is already absorbed by the scenario's observed cash anchor. */
   suppressRequiredOverflowBefore?: string;
+  /** A paused open creditor still has an explicit zero planned-payment row. */
+  retainPaymentRow?: boolean;
+  /** Authoritative pending principal must be reserved before optional pools. */
+  committedPaymentsByDate?: ReadonlyMap<string, number>;
+  /** The caller has already removed reviewed cash from source/date amounts. */
+  sourceSettlementsApplied?: boolean;
 }
 
 /** Optional dated scenario payments. Existing canonical callers need no changes. */
@@ -38,7 +46,12 @@ export interface DatedSnowballAdditionalPayment {
   payoff?: boolean;
   ignoreExtraEligibility?: boolean;
   phase?: "before_required" | "before_pools" | "after_pools";
+  pauseRedirect?: DebtPauseRedirect;
+  /** Protected bank principal, already reserved by its dated debt input. */
+  committedPayment?: boolean;
 }
+
+export type DebtPauseRedirect = { pauseId: string; fromBillId: string; occurrenceDate: string };
 
 export interface SnowballAllocationResult {
   billId: string;
@@ -104,6 +117,8 @@ export interface DatedDebtAllocation {
   balanceAfter: number;
   paidOff: boolean;
   externalPaymentId?: string;
+  pauseRedirect?: DebtPauseRedirect;
+  sourceSettlementsApplied?: boolean;
 }
 
 export interface DatedSnowballMonthPlanResult extends SnowballMonthPlanResult {
@@ -145,6 +160,9 @@ export function remainingDatedDebtAllocations(
     .sort((left, right) => Number(left.allocation.kind !== "rollover") - Number(right.allocation.kind !== "rollover"));
 
   settlementOrder.forEach(({ allocation, index }) => {
+    // Redirect funding has already excluded the donor's settled cash. It is
+    // independent of both the donor's and recipient's ordinary source groups.
+    if (allocation.pauseRedirect || allocation.sourceSettlementsApplied) return;
     const key = allocation.kind === "extra"
       ? datedSettlementKey("extra", allocation.targetBillId, allocation.date)
       : allocation.sourceBillId
@@ -451,6 +469,8 @@ export function projectDatedSnowballMonth(options: {
   /** Keeps temporarily paused debts in balances/interest while excluding extra allocations. */
   canReceiveExtra?: (debtId: string, date: string) => boolean;
   additionalPayments?: readonly DatedSnowballAdditionalPayment[];
+  /** Recipient extra cash already paid, after automatic rollover/exact-plan credit. */
+  pauseRedirectCreditsByDebtId?: ReadonlyMap<string, number>;
   rolledPaymentDate?: string;
 }): DatedSnowballMonthPlanResult {
   const balances = new Map(
@@ -470,6 +490,9 @@ export function projectDatedSnowballMonth(options: {
   let minimumPayments = 0;
   let unusedAmount = 0;
   let sequence = 0;
+  const pauseRedirectCredits = new Map(options.pauseRedirectCreditsByDebtId);
+  const pendingPrincipal = new Map(options.debts.map(debt => [debt.id,
+    cents([...(debt.committedPaymentsByDate?.values() ?? [])].reduce((sum, amount) => sum + Math.max(0, amount), 0))]));
 
   for (const debt of options.debts) {
     const before = balances.get(debt.id) ?? 0;
@@ -492,6 +515,9 @@ export function projectDatedSnowballMonth(options: {
     payoff?: boolean;
     ignoreExtraEligibility?: boolean;
     phase?: "before_required" | "before_pools" | "after_pools";
+    pauseRedirect?: DebtPauseRedirect;
+    committedPayment?: boolean;
+    sourceSettlementsApplied?: boolean;
   };
   const requiredEvents: RequiredEvent[] = [];
   const poolEvents: PoolEvent[] = [];
@@ -511,16 +537,20 @@ export function projectDatedSnowballMonth(options: {
     dates.forEach((date, index) => {
       if ((amounts[index] ?? 0) > 0.009) requiredEvents.push({ date, debt, amount: amounts[index] ?? 0 });
     });
-    const plannedExtra = cents(Math.max(0, debt.plannedExtraPayment ?? 0));
-    if (plannedExtra > 0.009) {
+    const plannedExtras = debt.plannedExtraPaymentsByDate
+      ? [...debt.plannedExtraPaymentsByDate]
+      : [[dates[0] ?? isoMonthDate(options.year, options.month, debt.dueDay), debt.plannedExtraPayment ?? 0] as const];
+    plannedExtras.forEach(([date, amount]) => {
+      const plannedExtra = cents(Math.max(0, amount));
+      if (plannedExtra <= 0.009) return;
       poolEvents.push({
-        date: dates[0] ?? isoMonthDate(options.year, options.month, debt.dueDay),
+        date,
         amount: plannedExtra,
         kind: "rollover",
         targetBillId: debt.id,
         cascade: debt.included,
       });
-    }
+    });
   }
 
   const firstTarget = orderDebts(
@@ -560,6 +590,8 @@ export function projectDatedSnowballMonth(options: {
       payoff: payment.payoff,
       ignoreExtraEligibility: payment.ignoreExtraEligibility,
       phase: payment.phase,
+      pauseRedirect: payment.pauseRedirect,
+      committedPayment: payment.committedPayment,
     });
   });
 
@@ -571,6 +603,8 @@ export function projectDatedSnowballMonth(options: {
     sourceAmount: number,
     source?: SnowballDebtInput,
     externalPaymentId?: string,
+    pauseRedirect?: DebtPauseRedirect,
+    sourceSettlementsApplied?: boolean,
   ) => {
     const payment = cents(amount);
     if (payment <= 0.009) return;
@@ -594,35 +628,54 @@ export function projectDatedSnowballMonth(options: {
       balanceAfter: after,
       paidOff: after <= 0.009,
       ...(externalPaymentId ? { externalPaymentId } : {}),
+      ...(pauseRedirect ? { pauseRedirect } : {}),
+      ...(sourceSettlementsApplied ? { sourceSettlementsApplied } : {}),
     });
   };
 
   const applyPool = (event: PoolEvent) => {
+    if (event.committedPayment && event.targetBillId) pendingPrincipal.set(event.targetBillId,
+      cents(Math.max(0, (pendingPrincipal.get(event.targetBillId) ?? 0) - event.amount)));
     let remaining = event.payoff && event.targetBillId
       ? cents(Math.max(0, balances.get(event.targetBillId) ?? 0))
       : cents(event.amount);
     const sourceAmount = remaining;
+    if (event.pauseRedirect) {
+      // A recipient's already committed extra consumes temporary funding even
+      // when that commitment has cleared its remaining principal. Credits are
+      // shared across redirects and exclude automatic rollover already used.
+      const creditedDebts = orderDebts(options.debts.filter(debt => debt.included
+        && options.canReceiveExtra?.(debt.id, event.date) !== false), options.method);
+      for (const debt of creditedDebts) {
+        const credit = Math.max(0, pauseRedirectCredits.get(debt.id) ?? 0);
+        const absorbed = cents(Math.min(remaining, credit));
+        pauseRedirectCredits.set(debt.id, cents(credit - absorbed));
+        remaining = cents(remaining - absorbed);
+        if (remaining <= 0.009) break;
+      }
+    }
+    const availablePrincipal = (id: string) => Math.max(0,
+      (balances.get(id) ?? 0) - (event.ignoreExtraEligibility ? 0 : pendingPrincipal.get(id) ?? 0));
     let preferredTargetId = event.targetBillId;
     while (remaining > 0.009) {
       const preferred = preferredTargetId
-        ? options.debts.find(debt => debt.id === preferredTargetId && (balances.get(debt.id) ?? 0) > 0.009
+        ? options.debts.find(debt => debt.id === preferredTargetId && availablePrincipal(debt.id) > 0.009
           && (event.ignoreExtraEligibility || options.canReceiveExtra?.(debt.id, event.date) !== false))
         : undefined;
       if (preferredTargetId && event.externalPaymentId && event.cascade === false && !preferred) break;
       const target = preferred ?? orderDebts(
         options.debts
-          .filter(debt => debt.included && (balances.get(debt.id) ?? 0) > 0.009
+          .filter(debt => debt.included && availablePrincipal(debt.id) > 0.009
             && options.canReceiveExtra?.(debt.id, event.date) !== false)
           .map(debt => ({ ...debt, balance: balances.get(debt.id) ?? 0 })),
         options.method,
       )[0];
       if (!target) break;
       const original = options.debts.find(debt => debt.id === target.id) ?? target;
-      const before = balances.get(target.id) ?? 0;
-      const applied = cents(Math.min(before, remaining));
+      const applied = cents(Math.min(availablePrincipal(target.id), remaining));
       addAllocation(original, applied, event.date, event.kind, sourceAmount,
         event.sourceBillId ? options.debts.find(debt => debt.id === event.sourceBillId) : undefined,
-        event.externalPaymentId);
+        event.externalPaymentId, event.pauseRedirect, event.sourceSettlementsApplied);
       remaining = cents(remaining - applied);
       if (preferredTargetId) {
         preferredTargetId = undefined;
@@ -644,14 +697,17 @@ export function projectDatedSnowballMonth(options: {
       .filter(event => event.date === date)
       .sort((left, right) => left.debt.id.localeCompare(right.debt.id))
       .forEach(event => {
+        const committed = Math.max(0, event.debt.committedPaymentsByDate?.get(date) ?? 0);
+        if (committed > 0.005) pendingPrincipal.set(event.debt.id, cents(Math.max(0,
+          (pendingPrincipal.get(event.debt.id) ?? 0) - committed)));
         const before = cents(balances.get(event.debt.id) ?? 0);
-        const ownPayment = cents(Math.min(before, event.amount));
+        const ownPayment = cents(Math.min(Math.max(0, before - (pendingPrincipal.get(event.debt.id) ?? 0)), event.amount));
         if (ownPayment > 0.009) {
-          addAllocation(event.debt, ownPayment, date, "required", event.amount, event.debt);
+          addAllocation(event.debt, ownPayment, date, "required", event.amount, event.debt, undefined, undefined, event.debt.sourceSettlementsApplied);
           minimumPayments = cents(minimumPayments + ownPayment);
         }
         const overflow = cents(event.amount - ownPayment);
-        if (overflow <= 0.009 || event.debt.suppressRequiredOverflowBefore && date < event.debt.suppressRequiredOverflowBefore) return;
+        if (overflow <= 0.009 || committed > 0.005 || event.debt.suppressRequiredOverflowBefore && date < event.debt.suppressRequiredOverflowBefore) return;
         if (event.debt.included) {
           overflowPools.push({
             date,
@@ -659,6 +715,7 @@ export function projectDatedSnowballMonth(options: {
             kind: "rollover",
             sourceBillId: event.debt.id,
             sourceBillName: event.debt.name,
+            sourceSettlementsApplied: event.debt.sourceSettlementsApplied,
           });
         } else {
           unusedAmount = cents(unusedAmount + overflow);
@@ -666,7 +723,8 @@ export function projectDatedSnowballMonth(options: {
       });
     poolEvents.filter(event => event.date === date && event.phase === "before_pools").forEach(applyPool);
     overflowPools.forEach(applyPool);
-    poolEvents.filter(event => event.date === date && event.phase !== "before_pools" && event.phase !== "before_required").forEach(applyPool);
+    poolEvents.filter(event => event.date === date && !event.phase).forEach(applyPool);
+    poolEvents.filter(event => event.date === date && event.phase === "after_pools").forEach(applyPool);
   }
 
   const paidOffNames = options.debts
@@ -682,6 +740,12 @@ export function projectDatedSnowballMonth(options: {
   const endingDebt = cents(options.debts
     .filter(debt => debt.included)
     .reduce((sum, debt) => sum + (balances.get(debt.id) ?? 0), 0));
+  for (const debt of options.debts) {
+    if (!debt.retainPaymentRow || payments.has(debt.id) || (balances.get(debt.id) ?? 0) <= 0.009) continue;
+    const balance = cents(balances.get(debt.id) ?? 0);
+    payments.set(debt.id, { billId: debt.id, billName: debt.name, dueDay: debt.dueDay,
+      scheduledPayment: 0, extraPayment: 0, totalPayment: 0, balanceBefore: balance, balanceAfter: balance, paidOff: false });
+  }
   const paymentList = Array.from(payments.values()).map(payment => ({
     ...payment,
     scheduledPayment: cents(payment.scheduledPayment),

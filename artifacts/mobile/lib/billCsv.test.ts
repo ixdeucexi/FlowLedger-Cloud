@@ -11,7 +11,7 @@ const bill = '"Card, everyday",50,Debt,0,true,"1,200.50",5.875,22,true,monthly';
 
 test("a full FlowLedger backup imports only BILLS, never income, activity, overrides or goals", () => {
   const backup = ["=== ACCOUNTS ===", "Id,Name,CurrentBalance", "checking,Checking,3000", "=== INCOME ===", "Name,Amount,Frequency", "Salary,2400,biweekly", "=== BILLS ===", header, bill, "=== TRANSACTIONS ===", "Date,Amount,Category,Note", "2026-10-22,50,Debt,Payment", "=== MONTHLY OVERRIDES ===", "BillId,Month,Year,CustomAmount,PaidAmount", "card,9,2026,50,50", "=== GOALS ===", "Name,TargetAmount,CurrentAmount", "Vacation,1000,500"].join("\n");
-  assert.deepEqual(parseBillCsv(backup), [{ name: "Card, everyday", amount: 50, category: "Debt", priority: 0, is_debt: true, balance: 1200.5, interest_rate: 5.875, due_day: 22, is_recurring: true, frequency: "monthly" }]);
+  assert.deepEqual(parseBillCsv(backup), [{ name: "Card, everyday", amount: 50, category: "Debt", priority: 0, is_debt: true, balance: 1200.5, interest_rate: 5.875, due_day: 22, is_recurring: true, frequency: "monthly", debt_payment_pauses: [] }]);
   assert.throws(() => parseBillCsv("=== INCOME ===\nName,Amount\nSalary,2400"), /no BILLS section/);
   assert.deepEqual(parseBillCsv(`=== BILLS ===\n${header}\n=== GOALS ===\nName,Amount\nTrip,1000`), []);
   assert.throws(() => parseBillCsv(`=== BILLS ===\n${header}\n${bill}\n=== BILLS ===\n${header}\n${bill}`), /more than one BILLS/);
@@ -39,11 +39,26 @@ test("the actual backup bill export preserves all four frequencies and optional 
   const source = readFileSync("app/(tabs)/more.tsx", "utf8");
   const start = source.indexOf("      const billHeader =");
   const body = source.slice(start, source.indexOf("      const txHeader =", start));
-  const bills = ["monthly", "quarterly", "biweekly", "weekly"].map((frequency, index) => ({ name: `Bill ${frequency}`, amount: 50, category: "Other", priority: index, is_debt: false, balance: 0, interest_rate: 0, due_day: 23, is_recurring: true, frequency, day_of_week: 5, next_payment_date: "2026-10-23", start_date: "2026-01-01", end_date: "2027-01-01" }));
+  const bills = ["monthly", "quarterly", "biweekly", "weekly"].map((frequency, index) => ({ name: `Bill ${frequency}`, amount: 50, category: "Debt", priority: index, is_debt: true, balance: 1000, interest_rate: 0, due_day: 23, is_recurring: true, frequency, day_of_week: 5, next_payment_date: "2026-10-23", start_date: "2026-01-01", end_date: "2027-01-01", debt_payment_pauses: [
+    { id: "history", start_date: "2026-01-01", resume_date: "2026-02-01", redirect_payment: false },
+    { id: "scheduled", start_date: "2026-11-03", resume_date: "2027-01-03", redirect_payment: true },
+  ] }));
   const csvCell = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
   const js = transpileModule(body, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
   const exported = new Function("bills", "csvCell", `${js}; return billHeader + '\\n' + billRows;`)(bills, csvCell);
   assert.deepEqual(parseBillCsv(exported), bills);
+});
+
+test("CSV restores pause history and rejects malformed intervals without silently dropping any row", () => {
+  const history = { id: "pause-1", start_date: "2026-11-03", resume_date: "2027-01-03", redirect_payment: true };
+  const quoted = (raw: string) => `"${raw.replace(/"/g, '""')}"`;
+  const withPause = (raw: string) => `Name,Amount,DebtPaymentPauses\nValid,50,[]\nCard,50,${quoted(raw)}`;
+  assert.deepEqual(parseBillCsv(withPause(JSON.stringify([history])))[1].debt_payment_pauses, [history]);
+  for (const raw of ["broken", "{}", "null", JSON.stringify([{ ...history, id: "bad,id" }]), JSON.stringify([{ ...history, start_date: "2026-11-31" }]), JSON.stringify([{ ...history, resume_date: history.start_date }]), JSON.stringify([{ ...history, redirect_payment: "true" }]), JSON.stringify([history, history]), JSON.stringify([history, { ...history, id: "overlap" }]), JSON.stringify(Array.from({ length: 121 }, (_, index) => ({ ...history, id: `pause-${index}` })))]) {
+    assert.throws(() => parseBillCsv(withPause(raw)), /Bill row 2: check debt payment pauses/);
+  }
+  assert.deepEqual(parseBillCsv("Name,Amount\nLegacy,50")[0].debt_payment_pauses, []);
+  assert.deepEqual(parseBillCsv("Name,Amount,DebtPaymentPauses\nLegacy,50,")[0].debt_payment_pauses, []);
 });
 
 test("recurring imports require the schedule facts needed by the canonical occurrence engine", () => {

@@ -63,6 +63,17 @@ test("formatted before and after preserve money signs, zero and absent fields", 
   assert.equal(formatRecentChangeValue({ ...amount, key: "interest_rate", kind: "number" }, 12.5), "12.5%");
   assert.equal(formatRecentChangeValue({ ...amount, kind: "text" }, "Previously linked"), "Previously linked");
 });
+test("payment pause changes expose safe summaries and always require the dedicated debt controls", () => {
+  const field: RecentChangeField = { key: "debt_payment_pauses", label: "Stored intervals", kind: "text", before: "No payment pauses", after: "Nov 3, 2026 – Jan 3, 2027; redirect payments" };
+  const row = parseRecentChangesPage(page(item({ entityType: "debt", route: RECENT_CHANGE_ROUTES.debt, changes: [field] })), scope).items[0];
+  assert.equal(row.canUndo, false);
+  assert.match(row.undoReason!, /from the debt/);
+  assert.equal(row.changes[0].label, "Payment pauses");
+  assert.equal(formatRecentChangeValue(row.changes[0], row.changes[0].after), field.after);
+  for (const invalid of [{ ...field, after: [] }, { ...field, after: {} }, { ...field, kind: "boolean", after: true, before: false }, { ...field, after: "x".repeat(3001) }]) {
+    assert.throws(() => parseRecentChangesPage(page(item({ changes: [invalid as RecentChangeField] })), scope), /verified/);
+  }
+});
 test("page append deduplicates without replacing newer rows or mutating inputs", () => {
   const current = Object.freeze([Object.freeze(item())]);
   const next = Object.freeze([Object.freeze(item({ label: "Stale duplicate" })), Object.freeze(item({ id: scope.budgetId, sequence: 11 }))]);

@@ -8,6 +8,8 @@ import {
 } from "./decisions";
 import { type BillImportance } from "./billImportance";
 import { type PendingPlanMatch } from "./pendingPlanMatches";
+import { type DebtPaymentPause } from "./debtPaymentPause";
+export type { DebtPaymentPause } from "./debtPaymentPause";
 
 export interface Bill {
   id: string;
@@ -30,6 +32,7 @@ export interface Bill {
   include_in_snowball?: boolean;
   snowball_minimum_boost?: number;
   last_reviewed_at?: string;
+  debt_payment_pauses?: DebtPaymentPause[];
 }
 
 export interface MonthlyOverride {

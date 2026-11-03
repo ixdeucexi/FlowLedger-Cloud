@@ -5,6 +5,7 @@ import {
   remainingDatedDebtAllocations,
   type DatedDebtSettlement,
   type DatedSnowballDebtInput,
+  type DatedSnowballAdditionalPayment,
   type DatedSnowballMonthPlanResult,
 } from "./snowball";
 import {
@@ -54,6 +55,7 @@ import { occurrenceKey } from "./reviewCenter";
 import { resolveBillOccurrencePayment } from "./billOccurrencePayment";
 import { spendingBucketSummary } from "./spendingBuckets";
 import { isBillEligibleForUpcomingPlan } from "./billEligibility";
+import { activeDebtPaymentPause, isDebtPaymentPaused } from "./debtPaymentPause";
 import { buildTransactionLedger, remainingPlannedAmount } from "./ledgerEngine";
 import { debtSourceCommitmentsForDebts } from "./pendingPlanMatches";
 import { pendingManualReplacementIds } from "./pendingManualReplacement";
@@ -232,6 +234,11 @@ export function createFinancialProjection(
 
   const getDebtSourceCommitment = (billId: string, occurrenceDate: string) =>
     debtSourceCommitmentsByOccurrence.get(`${billId}:${occurrenceDate}`);
+  const monthHasSavedDebtPause = (month: number, year: number) => {
+    const prefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+    const end = `${prefix}-${String(new Date(year, month + 1, 0).getDate()).padStart(2, "0")}`;
+    return bills.some(bill => bill.is_debt && bill.debt_payment_pauses?.some(pause => pause.start_date <= end && pause.resume_date > `${prefix}-01`));
+  };
 
   const getAmount = (bill: Bill, month: number, year: number): number => {
     const o = overridesByBillMonth.get(`${bill.id}:${year}-${month}`);
@@ -577,6 +584,8 @@ export function createFinancialProjection(
         ]),
       );
       const exactPlanDebtIds = new Set<string>();
+      const pauseRedirects: DatedSnowballAdditionalPayment[] = [];
+      const targetedExtraPaidByDebtId = new Map<string, number>();
       const debtsForMonth: DatedSnowballDebtInput[] = debtBills
         .filter((bill) => isBillActiveForMonth(bill, cursorMonth, cursorYear))
         .map((bill) => {
@@ -609,6 +618,7 @@ export function createFinancialProjection(
             0,
             (authoritativePaidByDebtId.get(bill.id) ?? 0) - requiredObligation,
           );
+          targetedExtraPaidByDebtId.set(bill.id, Math.min(payment.plannedExtraPayment, paidTowardExtra));
           let requiredCashRemaining =
             settlement?.status === "settled" ? 0 : payment.requiredPayment;
           const requiredPaymentsByDate = settlement?.occurrences?.length
@@ -626,6 +636,40 @@ export function createFinancialProjection(
                 }),
               )
             : undefined;
+          const pausedOccurrences = (settlement?.occurrences ?? []).filter(occurrence =>
+            isDebtPaymentPaused(bill, occurrence.occurrenceDate));
+          let plannedExtraPaymentsByDate: Map<string, number> | undefined;
+          if (pausedOccurrences.length) {
+            plannedExtraPaymentsByDate = new Map();
+            for (const occurrence of settlement?.occurrences ?? []) {
+              const date = occurrence.occurrenceDate;
+              const pause = activeDebtPaymentPause(bill, date);
+              const scheduled = getBillOccurrenceAmount(bill, date);
+              const occurrencePayment = debtPlanPaymentBreakdown(occurrence.configuredObligation, scheduled);
+              const commitment = getDebtSourceCommitment(bill.id, date);
+              const protectedAmount = occurrence.paidAmount + (commitment?.amount ?? 0);
+              if (!pause) {
+                requiredPaymentsByDate?.set(date, occurrencePayment.requiredPayment);
+                plannedExtraPaymentsByDate.set(date, Math.max(0, occurrencePayment.plannedExtraPayment
+                  - Math.max(0, protectedAmount - occurrence.configuredObligation)));
+                continue;
+              }
+              requiredPaymentsByDate?.set(date, 0);
+              // Finalized/reviewed cash is historical. A pending source payment
+              // stays with its creditor, and only the still-mutable remainder
+              // can fund a temporary redirect on the actual moved cash date.
+              const finalized = override?.actual_amount !== undefined
+                && !reviewedBillOccurrences.has(occurrenceKey(bill.id, date));
+              const mutableCash = finalized
+                || (balances.get(bill.id) ?? 0) <= 0.005
+                ? 0 : Math.round(Math.max(0, scheduled - protectedAmount) * 100) / 100;
+              if (pause.redirect_payment && mutableCash > 0.005) pauseRedirects.push({
+                id: `debt-pause-redirect:${pause.id}:${bill.id}:${date}`,
+                date, amount: mutableCash, kind: "rollover", cascade: true, phase: "after_pools",
+                pauseRedirect: { pauseId: pause.id, fromBillId: bill.id, occurrenceDate: date },
+              });
+            }
+          }
           return {
             id: bill.id,
             name: bill.name,
@@ -637,6 +681,8 @@ export function createFinancialProjection(
             requiredPayment:
               settlement?.status === "settled" ? 0 : payment.requiredPayment,
             requiredPaymentsByDate,
+            plannedExtraPaymentsByDate,
+            retainPaymentRow: pausedOccurrences.length > 0,
             plannedExtraPayment: Math.max(
               0,
               payment.plannedExtraPayment - paidTowardExtra,
@@ -658,13 +704,33 @@ export function createFinancialProjection(
           return [debt.id, dates] as const;
         }),
       );
+      const monthHasPause = monthHasSavedDebtPause(cursorMonth, cursorYear);
+      if (monthHasPause) {
+        debtsForMonth.forEach(debt => {
+          const required = new Map(debt.requiredPaymentsByDate);
+          for (const occurrence of monthSettlements.get(debt.id)?.occurrences ?? []) {
+            required.set(occurrence.occurrenceDate, Math.max(0,
+              (required.get(occurrence.occurrenceDate) ?? 0) - occurrence.paidAmount));
+          }
+          const committed = (debtSourceCommitmentsByMonth.get(cursorPrefix) ?? []).filter(commitment =>
+            commitment.sourceBillId === debt.id);
+          committed.forEach(commitment => required.set(commitment.date, commitment.amount));
+          debt.requiredPaymentsByDate = required;
+          debt.committedPaymentsByDate = new Map(committed.map(commitment => [commitment.date, commitment.amount]));
+          debt.sourceSettlementsApplied = true;
+        });
+      }
       const savedExtra = extraPaymentsByMonth.get(
         `${cursorYear}-${cursorMonth}`,
       );
-      const automaticTarget = orderDebts(
+      const orderedAutomaticDebts = orderDebts(
         debtsForMonth.filter((debt) => debt.included && debt.balance > 0.009),
         settings.paymentMethod,
-      )[0];
+      );
+      const firstAutomaticDebt = orderedAutomaticDebts[0];
+      const automaticDate = (firstAutomaticDebt ? paymentDatesByDebtId.get(firstAutomaticDebt.id)?.[0] : undefined)
+        ?? `${cursorPrefix}-${String(Math.max(1, Math.min(new Date(cursorYear, cursorMonth + 1, 0).getDate(), firstAutomaticDebt?.dueDay ?? 1))).padStart(2, "0")}`;
+      const automaticTarget = orderedAutomaticDebts.find(debt => !isDebtPaymentPaused(debtBillsById.get(debt.id), automaticDate));
       // A reviewed, pending, or posted-review payment above the lender minimum
       // has already consumed that much of this month's automatic rollover.
       const rolloverAlreadyPaid = automaticTarget
@@ -681,6 +747,13 @@ export function createFinancialProjection(
         exactPlanDebtIds,
         rolloverAlreadyPaid,
       );
+      const pauseRedirectCreditsByDebtId = new Map(debtsForMonth.map(debt => [debt.id, Math.max(0,
+        (authoritativePaidByDebtId.get(debt.id) ?? 0)
+          - (monthSettlements.get(debt.id)?.configuredObligation ?? debt.minimum)
+          - (targetedExtraPaidByDebtId.get(debt.id) ?? 0)
+          - (debt.id === automaticTarget?.id && !exactPlanDebtIds.has(debt.id)
+            ? Math.min(rolledPayment, rolloverAlreadyPaid) : 0),
+      )]));
       result = projectDatedSnowballMonth({
         debts: debtsForMonth,
         method: settings.paymentMethod,
@@ -689,6 +762,9 @@ export function createFinancialProjection(
         paymentDatesByDebtId,
         startingBalances: balances,
         rolledPayment: rolledPaymentForMonth,
+        canReceiveExtra: (debtId, date) => !isDebtPaymentPaused(debtBillsById.get(debtId), date),
+        additionalPayments: pauseRedirects,
+        pauseRedirectCreditsByDebtId,
         extraPayment: savedExtra
           ? {
               amount: savedExtra.amount,
@@ -781,6 +857,7 @@ export function createFinancialProjection(
     const settlements: DatedDebtSettlement[] = [];
     const seen = new Set<string>();
     plan.allocations.forEach((allocation) => {
+      if (allocation.pauseRedirect || allocation.sourceSettlementsApplied) return;
       const sourceType = allocation.kind === "extra" ? "extra" : "bill";
       const billId =
         allocation.kind === "extra"
@@ -945,7 +1022,12 @@ export function createFinancialProjection(
             monthlyPaidDate: override?.paid_date,
           });
           if (!match) manualPaid += payment.paidAmount;
-          return occurrenceSum + payment.remainingAmount;
+          const pausedCommitment = bill.is_debt && isDebtPaymentPaused(bill, date)
+            ? getDebtSourceCommitment(bill.id, date) : undefined;
+          const remaining = bill.is_debt && isDebtPaymentPaused(bill, date)
+            ? pausedCommitment?.state === "pending" ? pausedCommitment.amount : 0
+            : payment.remainingAmount;
+          return occurrenceSum + remaining;
         }, 0)
       );
     }, debtPlan?.plannedPayment ?? 0);
@@ -964,12 +1046,13 @@ export function createFinancialProjection(
       : (snowballPayment?.allocations.reduce(
           (sum, allocation) =>
             sum +
-            remainingSnowballAllocationAmount(
+            ((hasPendingSnowballBalanceApply(snowballPayment) || snowballPaymentDate > safeLocalDateInTimeZone(now, householdTimeZone))
+              && isDebtPaymentPaused(bills.find(bill => bill.id === allocation.billId), snowballPaymentDate) ? 0 : remainingSnowballAllocationAmount(
               allocation.payment,
               snowballMatches.get(
                 occurrenceKey(allocation.billId, snowballPaymentDate),
               ),
-            ),
+            )),
           0,
         ) ?? 0);
     const monthEnd = `${monthPrefix}-${String(new Date(year, month + 1, 0).getDate()).padStart(2, "0")}`;
@@ -1087,7 +1170,15 @@ export function createFinancialProjection(
               .get(monthPrefix)
               ?.has(b.id) ?? false;
           const override = overridesByBillMonth.get(`${b.id}:${y}-${m}`);
-          if (b.is_debt && debtPlan) return s;
+          if (b.is_debt && debtPlan) {
+            const historicalPaid = !hasReviewedOccurrence
+              ? (getDebtMonthSettlements(m, y).get(b.id)?.occurrences ?? [])
+                .filter(occurrence => (monthHasSavedDebtPause(m, y) || isDebtPaymentPaused(b, occurrence.occurrenceDate))
+                  && includeDate(override?.paid_date?.slice(0, 10) ?? occurrence.occurrenceDate))
+                .reduce((sum, occurrence) => sum + occurrence.paidAmount, 0)
+              : 0;
+            return s + historicalPaid;
+          }
           const total = hasReviewedOccurrence
             ? getBillMonthlyTotal(b, m, y)
             : getBillEffectiveMonthlyTotal(b, m, y);
@@ -1099,18 +1190,18 @@ export function createFinancialProjection(
             s +
             dates.filter(includeDate).reduce((occurrenceSum, date) => {
               const match = billMatches.get(occurrenceKey(b.id, date));
+              const paused = b.is_debt && isDebtPaymentPaused(b, date);
+              const commitment = paused ? getDebtSourceCommitment(b.id, date) : undefined;
+              const occurrencePayment = resolveBillOccurrencePayment({
+                occurrenceDate: date, scheduledAmount: getBillOccurrenceAmount(b, date), frequency: b.frequency,
+                match, monthlyPaidAmount: override?.paid_amount, monthlyPaidDate: override?.paid_date,
+              });
               return (
                 occurrenceSum +
                 (override?.actual_amount !== undefined && !hasReviewedOccurrence
                   ? remainingPlannedAmount(total / dates.length, match)
-                  : resolveBillOccurrencePayment({
-                    occurrenceDate: date,
-                    scheduledAmount: getBillOccurrenceAmount(b, date),
-                    frequency: b.frequency,
-                    match,
-                    monthlyPaidAmount: override?.paid_amount,
-                    monthlyPaidDate: override?.paid_date,
-                  }).remainingAmount)
+                  : paused ? (commitment?.state === "pending" ? commitment.amount : 0)
+                    + (!match ? occurrencePayment.paidAmount : 0) : occurrencePayment.remainingAmount)
               );
             }, 0)
           );
@@ -1147,12 +1238,13 @@ export function createFinancialProjection(
               ? monthlyExtra.allocations.reduce(
                   (sum, allocation) =>
                     sum +
-                    remainingSnowballAllocationAmount(
+                    ((hasPendingSnowballBalanceApply(monthlyExtra) || monthlyExtraDate > projectionAsOfDate)
+                      && isDebtPaymentPaused(bills.find(bill => bill.id === allocation.billId), monthlyExtraDate) ? 0 : remainingSnowballAllocationAmount(
                       allocation.payment,
                       snowballMatches.get(
                         occurrenceKey(allocation.billId, monthlyExtraDate),
                       ),
-                    ),
+                    )),
                   0,
                 )
               : 0;
@@ -1362,7 +1454,25 @@ export function createFinancialProjection(
           matchedAllocationIndexes.reviewedBillIdsByMonth
             .get(`${year}-${String(month + 1).padStart(2, "0")}`)
             ?.has(b.id) ?? false;
-        if (b.is_debt && debtPlan) return;
+        if (b.is_debt && debtPlan) {
+          if (!hasReviewedOccurrence) {
+            (getDebtMonthSettlements(month, year).get(b.id)?.occurrences ?? []).forEach(occurrence => {
+              if (!(monthHasSavedDebtPause(month, year) || isDebtPaymentPaused(b, occurrence.occurrenceDate)) || occurrence.paidAmount <= 0.005) return;
+              const date = o?.paid_date?.slice(0, 10) ?? occurrence.occurrenceDate;
+              const day = Number(date.slice(8, 10));
+              if (!date.startsWith(`${year}-${String(month + 1).padStart(2, "0")}`)) return;
+              billsByDay[day] = (billsByDay[day] ?? 0) + occurrence.paidAmount;
+              financialEvents.push({
+                id: `debt-pause-paid:${b.id}:${occurrence.occurrenceDate}`,
+                sourceType: "extra_payment", sourceId: b.id, date,
+                kind: "debt_payment", amount: -occurrence.paidAmount,
+                status: "finalized", name: `${b.name} debt payment`,
+                debtTargetBillId: b.id, debtPlanSource: "canonical", debtPlanAllocationKind: "required",
+              });
+            });
+          }
+          return;
+        }
         const total = hasReviewedOccurrence
           ? getBillMonthlyTotal(b, month, year)
           : getBillEffectiveMonthlyTotal(b, month, year);
@@ -1411,21 +1521,35 @@ export function createFinancialProjection(
             monthlyPaidAmount: o?.paid_amount,
             monthlyPaidDate: o?.paid_date,
           });
-          const remaining = payment.remainingAmount;
+          const paused = b.is_debt && isDebtPaymentPaused(b, date);
+          const pausedCommitment = paused ? getDebtSourceCommitment(b.id, date) : undefined;
+          if (paused && !match && payment.paidAmount > 0.005) {
+            billsByDay[d] = (billsByDay[d] ?? 0) + payment.paidAmount;
+            financialEvents.push({
+              id: `debt-pause-paid:${b.id}:${date}`,
+              sourceType: "extra_payment", sourceId: b.id, date, kind: "debt_payment",
+              amount: -payment.paidAmount, status: "finalized", name: `${b.name} debt payment`,
+              debtTargetBillId: b.id, debtPlanSource: "canonical", debtPlanAllocationKind: "required",
+            });
+          }
+          const remaining = paused
+            ? pausedCommitment?.state === "pending" ? pausedCommitment.amount : 0
+            : payment.remainingAmount;
           if (remaining <= 0.005) return;
           billsByDay[d] = (billsByDay[d] ?? 0) + remaining;
           financialEvents.push({
             id: `bill:${b.id}:${year}-${month + 1}-${d}`,
-            sourceType: "bill",
+            sourceType: paused ? "extra_payment" : "bill",
             sourceId: b.id,
             date,
-            kind: "bill",
+            kind: paused ? "debt_payment" : "bill",
             amount: -remaining,
-            status: "planned",
+            status: pausedCommitment?.state === "pending" ? "pending" : "planned",
             name: b.name,
             configuredOccurrenceAmount: getBillOccurrenceAmount(b, date),
             settledOccurrenceAmount: payment.paidAmount,
             ...(b.is_debt ? { debtTargetBillId: b.id } : {}),
+            ...(paused ? { debtPlanSource: "canonical" as const, debtPlanAllocationKind: "required" as const } : {}),
           });
         });
       });
@@ -1443,9 +1567,10 @@ export function createFinancialProjection(
           return;
         debtExtrasByDay[day] = (debtExtrasByDay[day] ?? 0) + allocation.amount;
         const canonicalSourceId =
-          allocation.sourceBillId ?? allocation.targetBillId;
+          allocation.pauseRedirect ? (allocation.externalPaymentId ?? allocation.id)
+            : allocation.sourceBillId ?? allocation.targetBillId;
         const sourceCommitment =
-          allocation.kind === "extra"
+          allocation.pauseRedirect || allocation.kind === "extra"
             ? undefined
             : getDebtSourceCommitment(canonicalSourceId, allocation.date);
         financialEvents.push({
@@ -1469,6 +1594,7 @@ export function createFinancialProjection(
             allocation.kind === "extra" ? "saved_extra" : "canonical",
           debtPlanAllocationKind: allocation.kind,
           debtTargetBillId: allocation.targetBillId,
+          ...(allocation.pauseRedirect ? { debtPauseRedirect: allocation.pauseRedirect } : {}),
         });
       });
     } else
@@ -1493,7 +1619,8 @@ export function createFinancialProjection(
                 ),
               ),
             }))
-            .filter((allocation) => allocation.remaining > 0.005);
+            .filter((allocation) => allocation.remaining > 0.005
+              && !(pending && isDebtPaymentPaused(bills.find(bill => bill.id === allocation.billId), paymentDate)));
           const remainingAmount = remainingAllocations.reduce(
             (sum, allocation) => sum + allocation.remaining,
             0,

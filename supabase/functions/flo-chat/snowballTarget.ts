@@ -1,4 +1,5 @@
 import { orderDebts } from "../../../artifacts/mobile/lib/snowball.ts";
+import { isDebtPaymentPaused, normalizeDebtPaymentPauses } from "../../../artifacts/mobile/lib/debtPaymentPause.ts";
 import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, isBillActiveForMonth, type ScheduledBill, type ScheduledBillDateMove } from "../../../artifacts/mobile/lib/schedule.ts";
 import { isDateOnly, money } from "./contract.ts";
 
@@ -12,11 +13,11 @@ export function currentFloMonth(now: string, timezone: unknown): { year: number;
   } catch { return null; }
 }
 
-export type RecordedSnowballResult = { state: "target" | "no_debts" | "all_excluded" | "none_current" | "paid_off" | "unavailable"; targetId?: string; reason?: string };
+export type RecordedSnowballResult = { state: "target" | "no_debts" | "all_excluded" | "none_current" | "all_paused" | "paid_off" | "unavailable"; targetId?: string; reason?: string };
 
 // This is the canonical ordering of currently recorded balances, NOT a new
 // dated payoff projection. Month selection comes from the caller's timezone.
-export function recordedSnowballTarget(records: Array<Record<string, unknown>>, month: { year: number; month: number } | null, complete: boolean, occurrenceChanges: Array<{ bill_id: string; [key: string]: unknown }>): RecordedSnowballResult {
+export function recordedSnowballTarget(records: Array<Record<string, unknown>>, month: { year: number; month: number; date?: string } | null, complete: boolean, occurrenceChanges: Array<{ bill_id: string; [key: string]: unknown }>): RecordedSnowballResult {
   if (!month) return { state: "unavailable", reason: "month_unknown" };
   if (!complete) return { state: "unavailable", reason: "incomplete_records" };
   const debts = records.filter(row => row.is_debt === true);
@@ -36,8 +37,14 @@ export function recordedSnowballTarget(records: Array<Record<string, unknown>>, 
   const positive = active.filter(row => money(row.balance)! > 0.009);
   if (!positive.length) return { state: "paid_off" };
   if (positive.some(row => typeof row.id !== "string" || !row.id || typeof row.name !== "string" || !row.name.trim())) return { state: "unavailable", reason: "missing_ordering_fields" };
-  const target = orderDebts(positive.map(row => ({ id: String(row.id), name: String(row.name), balance: money(row.balance)!, apr: money(row.interest_rate) === null ? 0 : Number(row.interest_rate), minimum: 0, dueDay: 1, included: true })), "snowball")[0];
-  const tied = positive.filter(row => money(row.balance) === target.balance);
+  let candidates: Array<{ row: Record<string, unknown>; pauses: ReturnType<typeof normalizeDebtPaymentPauses> }>;
+  try { candidates = positive.map(row => ({ row, pauses: normalizeDebtPaymentPauses(row.debt_payment_pauses) })); }
+  catch { return { state: "unavailable", reason: "invalid_payment_pause" }; }
+  if (candidates.some(({ pauses }) => pauses.length) && (!isDateOnly(month.date) || Number(month.date.slice(0, 4)) !== month.year || Number(month.date.slice(5, 7)) - 1 !== month.month)) return { state: "unavailable", reason: "pause_date_unknown" };
+  const eligible = candidates.filter(({ pauses }) => !month.date || !isDebtPaymentPaused(pauses, month.date)).map(({ row }) => row);
+  if (!eligible.length) return { state: "all_paused" };
+  const target = orderDebts(eligible.map(row => ({ id: String(row.id), name: String(row.name), balance: money(row.balance)!, apr: money(row.interest_rate) === null ? 0 : Number(row.interest_rate), minimum: 0, dueDay: 1, included: true })), "snowball")[0];
+  const tied = eligible.filter(row => money(row.balance) === target.balance);
   if (tied.length > 1 && tied.some(row => money(row.interest_rate) === null)) return { state: "unavailable", reason: "missing_tiebreak_apr" };
   return { state: "target", targetId: target.id };
 }

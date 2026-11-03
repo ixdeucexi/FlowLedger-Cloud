@@ -23,6 +23,9 @@ import { useAppDiscovery } from "@/context/AppDiscoveryContext";
 import { useColors } from "@/hooks/useColors";
 import { useLocalDay } from "@/hooks/useLocalDay";
 import { matchesBillSearch } from "@/lib/billSearch";
+import { activeDebtPaymentPause } from "@/lib/debtPaymentPause";
+import { localDateInTimeZone } from "@/lib/dailyCheckingClose";
+import { dateOnlyToLocalDate } from "@/lib/dateLabels";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { confirmAction } from "@/lib/confirmAction";
 import type {
@@ -31,9 +34,7 @@ import type {
 } from "@/lib/billEditPersistence";
 import { effectiveDebtMinimum } from "@/lib/snowball";
 import {
-  buildDebtPaymentPlanSummary,
   requiredDebtPlanTotal,
-  snowballRolloverPlanTotal,
 } from "@/lib/debtPaymentPlan";
 import { lenderMinimumRequiredAmount } from "@/lib/debtPlanDomain";
 import {
@@ -132,8 +133,10 @@ export default function BillsScreen() {
     getBillEffectiveMonthlyTotal,
     getDebtMonthSettlements,
     getDebtPlanForMonth,
+    getRemainingDebtPlanForMonth,
     getPaidAmount,
     activeHousehold,
+    householdTimeZone,
     pendingBankTransactions,
     pendingPlanMatches,
   } = useBudget();
@@ -191,6 +194,7 @@ export default function BillsScreen() {
 
   // ── Bills data ──────────────────────────────────────────────────
   const localDay = useLocalDay();
+  const pauseToday = localDateInTimeZone(new Date(), householdTimeZone);
   const now = new Date(`${localDay}T12:00:00`);
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
@@ -521,6 +525,9 @@ export default function BillsScreen() {
   const datedDebtPlan = debtWorkEnabled
     ? getDebtPlanForMonth(debtPlanMonth, debtPlanYear)
     : null;
+  const remainingDatedDebtPlan = debtWorkEnabled
+    ? getRemainingDebtPlanForMonth(debtPlanMonth, debtPlanYear)
+    : null;
   const cashFlowSafeSnowballAmount = baseSnowballPreview?.safeMaximum ?? 0;
 
   const debtPlanIds = new Set(
@@ -568,20 +575,23 @@ export default function BillsScreen() {
     (sum, debt) => sum + debtRequiredMinimum(debt),
     0,
   );
-  const rolledSnowballPayments = snowballRolloverPlanTotal(planDebts);
-  const debtPaymentPlan = buildDebtPaymentPlanSummary(
-    totalMinPayments,
-    rolledSnowballPayments + (existingSnowball?.amount ?? 0),
-  );
+  const debtPaymentPlan = {
+    requiredMinimum: totalMinPayments,
+    extraPayment: (remainingDatedDebtPlan?.allocations ?? [])
+      .filter(allocation => allocation.kind !== "required")
+      .reduce((sum, allocation) => sum + allocation.amount, 0),
+    totalPlanned: remainingDatedDebtPlan?.plannedPayment ?? 0,
+  };
   const assignedDebtExtra = settings.zeroBasedBudgetEnabled
     ? Math.max(
         0,
         Number(categoryBudgets.Debt ?? totalMinPayments) - totalMinPayments,
       )
     : cashFlowSafeSnowballAmount;
-  const snowballTarget = snowballOrder[0] ?? null;
+  const eligibleDebtTargets = snowballOrder.filter(debt => !activeDebtPaymentPause(debt, pauseToday));
+  const snowballTarget = eligibleDebtTargets[0] ?? null;
   const activeDebtTarget = snowballTarget;
-  const nextStrategyTarget = strategyOrder[1] ?? null;
+  const nextStrategyTarget = eligibleDebtTargets[1] ?? null;
   const activeDebtRollover =
     activeDebtTarget && datedDebtPlan
       ? datedDebtPlan.allocations.filter(
@@ -826,6 +836,10 @@ export default function BillsScreen() {
 
   const renderDebt = ({ item }: { item: Bill }) => {
     const isPaidOff = item.balance <= 0.009;
+    const activePause = !isPaidOff ? activeDebtPaymentPause(item, pauseToday) : undefined;
+    const nextPause = !isPaidOff ? item.debt_payment_pauses?.filter(pause => pause.start_date > pauseToday).sort((left, right) => left.start_date.localeCompare(right.start_date))[0] : undefined;
+    const paymentPause = activePause ?? nextPause;
+    const pauseDate = paymentPause ? dateOnlyToLocalDate(activePause ? paymentPause.resume_date : paymentPause.start_date)?.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : undefined;
     const strategyRank = strategyRankById.get(item.id);
     const isExcluded = !isPaidOff && item.include_in_snowball === false;
     const isUnranked = !isPaidOff && strategyRank === undefined;
@@ -896,6 +910,10 @@ export default function BillsScreen() {
               >
                 {item.name}
               </Text>
+              {paymentPause ? <View style={[styles.debtPauseBadge, { backgroundColor: c.warning + "16", borderColor: c.warning + "40" }]}>
+                <Text style={[styles.debtPauseText, { color: c.warning }]}>{activePause ? "Payments paused" : "Pause scheduled"}</Text>
+                <Text style={[styles.debtPauseDate, { color: c.mutedForeground }]}>{activePause ? "Resumes" : "Starts"} {pauseDate}</Text>
+              </View> : null}
               <View style={styles.metaRow}>
                 {item.interest_rate > 0 && (
                   <View
@@ -1868,7 +1886,7 @@ export default function BillsScreen() {
                                     { color: c.mutedForeground },
                                   ]}
                                 >
-                                  EXTRA
+                                  PAYOFF EXTRA
                                 </Text>
                                 <Text
                                   style={[
@@ -1895,7 +1913,7 @@ export default function BillsScreen() {
                                     { color: c.mutedForeground },
                                   ]}
                                 >
-                                  TOTAL
+                                  REMAINING PLAN
                                 </Text>
                                 <Text
                                   style={[
@@ -2805,6 +2823,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   debtName: { fontSize: 16, fontFamily: "Inter_700Bold", marginBottom: 6 },
+  debtPauseBadge: { alignSelf: "flex-start", maxWidth: "100%", borderWidth: 1, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 5, marginBottom: 7, gap: 2 },
+  debtPauseText: { fontSize: 10, fontFamily: "Inter_700Bold" },
+  debtPauseDate: { fontSize: 10, lineHeight: 14, fontFamily: "Inter_400Regular" },
   aprBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
   aprText: { fontSize: 11, fontFamily: "Inter_700Bold" },
   balance: { fontSize: 20, fontFamily: "Inter_700Bold" },

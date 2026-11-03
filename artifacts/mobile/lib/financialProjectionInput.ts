@@ -5,6 +5,7 @@ import {
 } from "./billMatching";
 import { canonicalDebtPaymentMethod } from "./debtOrder";
 import { normalizeBillImportance } from "./billImportance";
+import { normalizeDebtPaymentPauses } from "./debtPaymentPause";
 import { selectFlowLedgerTransactions } from "./ledgerEngine";
 import { type PendingPlanMatch } from "./pendingPlanMatches";
 import type {
@@ -86,6 +87,7 @@ export function normalizeBillRow(bill: any): Bill {
     ),
     include_in_snowball: bill.include_in_snowball !== false,
     snowball_minimum_boost: finiteNumber(bill.snowball_minimum_boost),
+    debt_payment_pauses: normalizeDebtPaymentPauses(bill.debt_payment_pauses),
   };
 }
 

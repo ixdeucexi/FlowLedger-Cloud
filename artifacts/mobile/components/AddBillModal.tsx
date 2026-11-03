@@ -2,22 +2,26 @@ import { usePrivacyAlerts } from "@/hooks/usePrivacyAlerts";
 import { parseMoneyInput, parseDecimalInput } from "@/lib/moneyFormInput";
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Switch } from "react-native";
 import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 
 import colors from "@/constants/colors";
 import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
 import { BillPaymentHistoryPanel } from "@/components/BillPaymentHistoryPanel";
+import { DebtPaymentPauseModal, type DebtPaymentPauseDateField, type DebtPaymentPauseInput } from "@/components/DebtPaymentPauseModal";
 import type { Bill } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
+import { useLocalDay } from "@/hooks/useLocalDay";
+import { localDateInTimeZone } from "@/lib/dailyCheckingClose";
+import { activeDebtPaymentPause } from "@/lib/debtPaymentPause";
 import { DESKTOP_MODAL_HANDLE, DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_WIDE } from "@/lib/desktopModal";
 import type { ConfirmActionOptions } from "@/lib/confirmAction";
-import { MONTH_NAMES } from "@/lib/dateLabels";
+import { MONTH_NAMES, dateOnlyToLocalDate } from "@/lib/dateLabels";
 import { BILL_IMPORTANCE_OPTIONS, normalizeBillImportance, type BillImportance } from "@/lib/billImportance";
 import {
   billEditablePatch,
@@ -63,7 +67,18 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   const privacyAlerts = usePrivacyAlerts();
   const c = useColors();
   const isDesktop = useDesktopExperience();
-  const { categories, settings } = useBudget();
+  const { bills, categories, settings, activeHousehold, canEditHousehold, householdTimeZone, pauseDebtPayments, resumeDebtPayments } = useBudget();
+  useLocalDay();
+  const today = localDateInTimeZone(new Date(), householdTimeZone);
+  const currentDebt = editBill?.is_debt ? bills.find(bill => bill.id === editBill.id && bill.is_debt) : undefined;
+  const activePause = activeDebtPaymentPause(currentDebt, today);
+  const upcomingPause = currentDebt?.debt_payment_pauses?.filter(pause => pause.start_date > today).sort((left, right) => left.start_date.localeCompare(right.start_date))[0];
+  const paymentPause = activePause ?? upcomingPause;
+  const pauseUnavailable = !canEditHousehold ? "Only household editors can pause debt payments."
+    : !currentDebt || currentDebt.balance <= 0.009 || Boolean(currentDebt.end_date) ? "Payment pauses are available for open debts with a balance." : "";
+  const pauseScopeKey = `${activeHousehold?.householdId ?? "local"}:${activeHousehold?.budgetId ?? "local"}`;
+  const pauseAccessRef = useRef({ scopeKey: pauseScopeKey, canEdit: canEditHousehold, visible, billId: editBill?.id });
+  pauseAccessRef.current = { scopeKey: pauseScopeKey, canEdit: canEditHousehold, visible, billId: editBill?.id };
 
   const [name,          setName]          = useState("");
   const [amount,        setAmount]        = useState("");
@@ -87,8 +102,68 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   const [confirmation, setConfirmation] = useState<ConfirmActionOptions | null>(null);
   const [actionMenuVisible, setActionMenuVisible] = useState(false);
   const [historyVisible, setHistoryVisible] = useState(false);
-  const dismissLayer = () => confirmation ? setConfirmation(null) : historyVisible ? setHistoryVisible(false) : onClose();
-  useBackDismiss(visible, dismissLayer, true, historyVisible);
+  const [pauseVisible, setPauseVisible] = useState(false);
+  const [pauseDateField, setPauseDateField] = useState<DebtPaymentPauseDateField>(null);
+  const [pauseActionSaving, setPauseActionSaving] = useState(false);
+  const [pauseActionError, setPauseActionError] = useState("");
+  const [pauseBackRevision, setPauseBackRevision] = useState(0);
+  const pausePendingRef = useRef(false);
+  const dismissLayer = () => {
+    if (confirmation) { setConfirmation(null); return; }
+    if (pauseVisible) {
+      if (pausePendingRef.current) { setPauseBackRevision(revision => revision + 1); return; }
+      if (pauseDateField) setPauseDateField(null);
+      else setPauseVisible(false);
+      return;
+    }
+    if (historyVisible) setHistoryVisible(false);
+    else onClose();
+  };
+  // A refused browser Back has consumed its nested entry; a new revision
+  // asks the existing controller to restore that owned entry while saving.
+  useBackDismiss(visible, dismissLayer, true, pauseVisible ? (pauseDateField ? 2 : 1) + pauseBackRevision * 3 : historyVisible ? 1 : 0);
+
+  useEffect(() => {
+    setPauseVisible(false);
+    setPauseDateField(null);
+    setPauseActionError("");
+  }, [editBill?.id, currentDebt?.id, visible, pauseScopeKey]);
+
+  const openPaymentPause = () => {
+    if (pausePendingRef.current || saving || pauseUnavailable) return;
+    Keyboard.dismiss();
+    setActionMenuVisible(false);
+    setPauseDateField(null);
+    setPauseVisible(true);
+  };
+  const assertPauseAccess = () => {
+    const latest = pauseAccessRef.current;
+    if (!latest.canEdit || !latest.visible || latest.scopeKey !== pauseScopeKey || latest.billId !== editBill?.id) {
+      throw new Error("Your household or editing access changed. Reopen this debt to try again.");
+    }
+  };
+  const savePaymentPause = async (input: DebtPaymentPauseInput) => {
+    assertPauseAccess();
+    if (!currentDebt || pauseUnavailable) throw new Error(pauseUnavailable || "Reopen this debt to try again.");
+    await pauseDebtPayments(currentDebt.id, input);
+  };
+  const resumePaymentPause = async () => {
+    if (saving || pausePendingRef.current || !currentDebt || !paymentPause) return;
+    try {
+      assertPauseAccess();
+      if (pauseUnavailable) throw new Error(pauseUnavailable);
+      pausePendingRef.current = true;
+      setPauseActionSaving(true);
+      setPauseActionError("");
+      await resumeDebtPayments(currentDebt.id, paymentPause.id);
+    } catch (error) {
+      setPauseActionError(error instanceof Error ? error.message : "Couldn’t update this pause. Please try again.");
+    } finally {
+      pausePendingRef.current = false;
+      setPauseActionSaving(false);
+    }
+  };
+  const pauseDateLabel = (date: string) => dateOnlyToLocalDate(date)?.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) ?? date;
 
   const firstDOWInDayPickerMonth = useMemo(
     () => new Date(pickerYear, pickerMonth, 1).getDay(),
@@ -164,7 +239,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   const noun = forceDebt || isDebt ? "Debt" : "Bill";
 
   const handleSave = async () => {
-    if (saving) return;
+    if (saving || pausePendingRef.current) return;
     const parsedAmount = parseMoneyInput(amount);
     const parsedBalance = balance.trim() ? parseMoneyInput(balance) : 0;
     const parsedRate = interestRate.trim() ? parseDecimalInput(interestRate, 4) : 0;
@@ -192,11 +267,12 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       frequency,
       smart_priority: normalizeBillImportance(smartPriority, isDebt),
       include_in_snowball: isDebt ? includeInSnowball : false,
+      ...(editBill ? { debt_payment_pauses: currentDebt?.debt_payment_pauses ?? editBill.debt_payment_pauses } : {}),
     };
     setSaving(true);
     try {
       if (editBill) {
-        const dirtyFields = changedBillEditableFields(editBill, data);
+        const dirtyFields = changedBillEditableFields(editBill, data).filter(field => field !== "debt_payment_pauses");
         const baseline = billEditablePatch(editBill, dirtyFields);
         await onSave({ ...data, id: editBill.id, created_at: editBill.created_at }, dirtyFields, baseline);
       }
@@ -293,7 +369,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       transparent
       onRequestClose={dismissLayer}
     >
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.overlay, isDesktop && DESKTOP_MODAL_OVERLAY]}>
+      <KeyboardAvoidingView pointerEvents={pauseVisible ? "none" : "auto"} accessibilityElementsHidden={pauseVisible} importantForAccessibility={pauseVisible ? "no-hide-descendants" : "auto"} behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.overlay, isDesktop && DESKTOP_MODAL_OVERLAY, pauseVisible && { display: "none" }]}>
         <Pressable accessibilityLabel="Close bill editor" onPress={onClose} style={StyleSheet.absoluteFillObject} />
         <View style={[styles.container, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_WIDE]}>
           <View style={[styles.handle, isDesktop && DESKTOP_MODAL_HANDLE]} />
@@ -309,7 +385,8 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="More bill actions"
-                  accessibilityState={{ expanded: actionMenuVisible }}
+                  accessibilityState={{ expanded: actionMenuVisible, disabled: saving || pauseActionSaving }}
+                  disabled={saving || pauseActionSaving}
                   onPress={() => setActionMenuVisible((visible) => !visible)}
                   hitSlop={8}
                   style={({ pressed }) => [styles.headerActionButton, { backgroundColor: actionMenuVisible ? c.primary + "18" : "transparent", opacity: pressed ? 0.7 : 1 }]}
@@ -339,7 +416,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
                   </View>
                 </Pressable>
               ) : null}
-              {!editBill.end_date && (onStopFuture || onDeleteMistake) && (editBill.is_recurring || editBill.is_debt) ? (
+              {!editBill.is_debt && !editBill.end_date && (onStopFuture || onDeleteMistake) && editBill.is_recurring ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`Pause ${editBill.name}`}
@@ -350,6 +427,22 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
                   <View style={styles.actionMenuCopy}>
                     <Text style={[styles.actionMenuLabel, { color: c.foreground }]}>Pause bill</Text>
                     <Text style={[styles.actionMenuHelp, { color: c.mutedForeground }]}>Pause after this month’s payments</Text>
+                  </View>
+                </Pressable>
+              ) : null}
+              {editBill.is_debt && !paymentPause ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Pause debt payments"
+                  accessibilityState={{ disabled: Boolean(pauseUnavailable) || saving || pauseActionSaving }}
+                  disabled={Boolean(pauseUnavailable) || saving || pauseActionSaving}
+                  onPress={openPaymentPause}
+                  style={({ pressed }) => [styles.actionMenuItem, { backgroundColor: pressed ? c.warning + "12" : "transparent", opacity: pauseUnavailable || saving || pauseActionSaving ? 0.55 : 1 }]}
+                >
+                  <Feather name="pause-circle" size={17} color={c.warning} />
+                  <View style={styles.actionMenuCopy}>
+                    <Text style={[styles.actionMenuLabel, { color: c.foreground }]}>Pause debt payments</Text>
+                    <Text style={[styles.actionMenuHelp, { color: c.mutedForeground }]}>{pauseUnavailable || "Choose dates and keep this debt in its payoff order"}</Text>
                   </View>
                 </Pressable>
               ) : null}
@@ -371,6 +464,22 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
           ) : null}
 
           {historyVisible && editBill ? <BillPaymentHistoryPanel billId={editBill.id} billName={editBill.name} /> : <ScrollView showsVerticalScrollIndicator={isDesktop} keyboardShouldPersistTaps="handled">
+
+            {editBill?.is_debt ? <View style={[styles.pauseStatus, { backgroundColor: c.warning + "10", borderColor: c.warning + "45" }]}>
+              <View style={styles.actionMenuCopy}>
+                <Text style={[styles.actionMenuLabel, { color: c.foreground }]}>{activePause ? "Payments paused" : upcomingPause ? "Pause scheduled" : "Need a payment break?"}</Text>
+                <Text style={[styles.actionMenuHelp, { color: c.mutedForeground }]}>{paymentPause
+                  ? `${activePause ? "Payments resume" : `Starts ${pauseDateLabel(paymentPause.start_date)} · resumes`} ${pauseDateLabel(paymentPause.resume_date)}. Your debt stays open and keeps its payoff order.`
+                  : pauseUnavailable || "Choose a temporary pause without closing this debt."}</Text>
+                {paymentPause && Boolean(pauseUnavailable) ? <Text style={[styles.actionMenuHelp, { color: c.mutedForeground }]}>{pauseUnavailable}</Text> : null}
+                {Boolean(pauseActionError) && <Text accessibilityRole="alert" style={[styles.actionMenuHelp, { color: c.destructive }]}>{pauseActionError}</Text>}
+              </View>
+              {paymentPause ? <Pressable accessibilityRole="button" accessibilityLabel={activePause ? "Resume now" : "Cancel scheduled pause"} accessibilityState={{ disabled: saving || pauseActionSaving || Boolean(pauseUnavailable), busy: pauseActionSaving }} disabled={saving || pauseActionSaving || Boolean(pauseUnavailable)} onPress={resumePaymentPause} style={[styles.pauseStatusAction, { borderColor: c.warning + "55", opacity: saving || pauseActionSaving || pauseUnavailable ? 0.55 : 1 }]}>
+                <Text style={[styles.pauseStatusActionText, { color: c.foreground }]}>{pauseActionSaving ? "Saving…" : activePause ? "Resume now" : "Cancel scheduled pause"}</Text>
+              </Pressable> : <Pressable accessibilityRole="button" accessibilityLabel="Pause debt payments" accessibilityState={{ disabled: Boolean(pauseUnavailable) || saving || pauseActionSaving }} disabled={Boolean(pauseUnavailable) || saving || pauseActionSaving} onPress={openPaymentPause} style={[styles.pauseStatusAction, { borderColor: c.warning + "55", opacity: pauseUnavailable || saving || pauseActionSaving ? 0.55 : 1 }]}>
+                <Text style={[styles.pauseStatusActionText, { color: c.foreground }]}>Pause payments</Text>
+              </Pressable>}
+            </View> : null}
 
             {editBill ? <Pressable accessibilityRole="button" accessibilityLabel={`Payment history for ${editBill.name}`}
               onPress={() => { Keyboard.dismiss(); setActionMenuVisible(false); setHistoryVisible(true); }}
@@ -680,8 +789,8 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
             )}
 
             {/* Save */}
-            <Pressable disabled={saving} onPress={handleSave}
-              style={({ pressed }) => [styles.saveBtn, { backgroundColor: c.primary, borderRadius: colors.radius, opacity: saving ? 0.55 : pressed ? 0.85 : 1 }]}
+            <Pressable disabled={saving || pauseActionSaving} onPress={handleSave}
+              style={({ pressed }) => [styles.saveBtn, { backgroundColor: c.primary, borderRadius: colors.radius, opacity: saving || pauseActionSaving ? 0.55 : pressed ? 0.85 : 1 }]}
             >
               <Text style={[styles.saveBtnText, { color: c.primaryForeground }]}>
                 {saving ? "Saving…" : saveLabel ?? (editBill ? `Update ${noun}` : `Add ${noun}`)}
@@ -692,6 +801,18 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
         </View>
       </KeyboardAvoidingView>
       <ConfirmActionOverlay request={confirmation} onClose={() => setConfirmation(null)} />
+      {currentDebt && <DebtPaymentPauseModal
+        visible={visible && pauseVisible}
+        bill={currentDebt}
+        today={today}
+        canEdit={canEditHousehold}
+        redirectEnabled={settings.debtPayoffEnabled}
+        openDateField={pauseDateField}
+        onOpenDateFieldChange={setPauseDateField}
+        onSavingChange={pending => { pausePendingRef.current = pending; }}
+        onClose={() => { setPauseVisible(false); setPauseDateField(null); }}
+        onSave={savePaymentPause}
+      />}
     </Modal>
   );
 }
@@ -708,6 +829,9 @@ const styles = StyleSheet.create({
   actionMenu: { borderWidth: 1, borderRadius: 14, paddingVertical: 4, marginBottom: 10 },
   actionMenuItem: { minHeight: 54, flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, borderRadius: 10 },
   actionMenuCopy: { flex: 1, minWidth: 0 },
+  pauseStatus: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 12, borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 12 },
+  pauseStatusAction: { minHeight: 42, justifyContent: "center", alignItems: "center", borderWidth: 1, borderRadius: 10, paddingHorizontal: 12 },
+  pauseStatusActionText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   actionMenuLabel: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   actionMenuHelp: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
   title: { fontSize: 20, fontFamily: "Inter_700Bold" },

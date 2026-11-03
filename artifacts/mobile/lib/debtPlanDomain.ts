@@ -346,14 +346,14 @@ export function applyDebtSourceCommitments(
   };
 
   const result = allocations.flatMap(allocation => {
-    if (allocation.kind === "extra" || !allocation.sourceBillId) return [{ ...allocation }];
+    if (allocation.pauseRedirect || allocation.kind === "extra" || !allocation.sourceBillId) return [{ ...allocation }];
     const key = `${allocation.sourceBillId}:${allocation.date}`;
     const commitment = commitmentByKey.get(key);
     if (!commitment) return [{ ...allocation }];
     if (emittedKeys.has(key)) return [];
     emittedKeys.add(key);
     if (commitment.state === "posted" || commitment.amount <= 0.005) return [];
-    const group = allocations.filter(candidate => candidate.kind !== "extra"
+    const group = allocations.filter(candidate => !candidate.pauseRedirect && candidate.kind !== "extra"
       && candidate.sourceBillId === commitment.sourceBillId
       && candidate.date === commitment.date);
     const sourceTemplate = group.find(candidate => candidate.targetBillId === commitment.sourceBillId) ?? allocation;
@@ -411,7 +411,7 @@ export function remainingDebtAllocationsAfterReviewedPayments(
     // the first duplicated portion. This matches dated remaining-plan math.
     .sort((left, right) => Number(left.allocation.kind !== "rollover") - Number(right.allocation.kind !== "rollover"))
     .forEach(({ allocation, index }) => {
-      if (allocation.kind === "extra" || !allocation.sourceBillId) return;
+      if (allocation.pauseRedirect || allocation.sourceSettlementsApplied || allocation.kind === "extra" || !allocation.sourceBillId) return;
       const occurrenceKey = `${allocation.sourceBillId}:${allocation.date}`;
       const hasOccurrencePayment = remainingPaidByOccurrence.has(occurrenceKey);
       const remainingPaid = hasOccurrencePayment
@@ -450,12 +450,28 @@ export function advanceDebtProjectionWithCommitments(
   const activeAtStart = new Set(debts
     .filter(debt => debt.included && (balances.get(debt.id) ?? 0) > 0.005)
     .map(debt => debt.id));
+  // Saved-pause plans already model unreconciled bank principal before pools.
+  // Posted cash belongs to the original transaction; retain its principal
+  // during advancement even though source reconciliation removes its cash row.
+  const postedPrincipal = commitments.filter(commitment => commitment.state === "posted"
+    && plan.allocations.some(allocation => allocation.sourceSettlementsApplied
+      && allocation.sourceBillId === commitment.sourceBillId && allocation.date === commitment.date))
+    .sort((left, right) => left.date.localeCompare(right.date));
+  let postedCursor = 0;
+  const advancePostedThrough = (date: string) => {
+    while (postedCursor < postedPrincipal.length && postedPrincipal[postedCursor].date <= date) {
+      const commitment = postedPrincipal[postedCursor++];
+      balances.set(commitment.sourceBillId, cents((balances.get(commitment.sourceBillId) ?? 0) - commitment.amount));
+    }
+  };
   const projectedAllocations = allocations.map(allocation => {
+    advancePostedThrough(allocation.date);
     const balanceBefore = cents(balances.get(allocation.targetBillId) ?? 0);
     const balanceAfter = cents(balanceBefore - allocation.amount);
     balances.set(allocation.targetBillId, balanceAfter);
     return { ...allocation, balanceBefore, balanceAfter, paidOff: balanceAfter <= 0.005 };
   });
+  advancePostedThrough("9999-12-31");
   const rolledPayment = cents(openingRolledPayment + debts.reduce((sum, debt) => (
     debt.included && activeAtStart.has(debt.id) && (balances.get(debt.id) ?? 0) <= 0.005
       ? sum + Math.max(0, debt.minimum)
@@ -544,6 +560,7 @@ export function datedDebtPlanCacheSignature(plan: DatedSnowballMonthPlanResult |
       allocation.targetBillId,
       allocation.kind,
       cents(allocation.amount).toFixed(2),
+      ...(allocation.pauseRedirect ? [allocation.externalPaymentId ?? "", allocation.pauseRedirect.pauseId, allocation.pauseRedirect.fromBillId] : []),
     ].join(":"))
     .join("|");
 }
