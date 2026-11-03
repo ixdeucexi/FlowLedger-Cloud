@@ -279,7 +279,7 @@ test("does not combine debt payments for different dates or debts", () => {
 
 test("Forecast closes the selected-day modal before opening a planned debt editor", () => {
   const monthly = readFileSync(path.resolve(process.cwd(), "app/(tabs)/monthly.tsx"), "utf8");
-  assert.match(monthly, /const openPlannedDebtPaymentEditor[\s\S]*setSelectedDate\(null\)[\s\S]*pathname: "\/planned-debt-payment"/);
+  assert.match(monthly, /const openPlannedDebtPaymentEditor[\s\S]*selectCalendarDate\(null\)[\s\S]*pathname: "\/planned-debt-payment"/);
   assert.equal(monthly.match(/pathname: "\/planned-debt-payment"/g)?.length, 1);
   assert.match(monthly, /PAYMENT STILL PLANNED/);
   assert.match(monthly, /configuredDebtAmountForRemainingPayment\(remainingAmount, settledForOccurrence\)/);

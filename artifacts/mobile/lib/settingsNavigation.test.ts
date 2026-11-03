@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
+import { ModuleKind, transpileModule } from "typescript";
 import { createSettingsRestoreGuard, requestedSettingsSection, restoreSavedSettingsSection, settingsSectionOwnsPathname } from "./settingsNavigation";
 
 type Section = "overview" | "household" | "money";
@@ -88,4 +89,48 @@ test("section Back listeners own only their More or dedicated wrapper route", ()
     for (const other of ["/flo", "/monthly", "/bills", ...["/more", "/accounts", "/review", "/reports"].filter(path => path !== owner)])
       assert.equal(settingsSectionOwnsPathname(other, initial), false);
   }
+});
+
+
+test("actual Appearance section Back callback leaves a custom color draft's parent section open", () => {
+  const source = readFileSync("app/(tabs)/more.tsx", "utf8");
+  const start = source.indexOf("  const customColorOverlayActiveRef =");
+  const end = source.indexOf("  useEffect(() => {", start);
+  assert.ok(start >= 0 && end > start, "The actual custom color and section Back callbacks are present");
+  const script = transpileModule(source.slice(start, end), {
+    compilerOptions: { module: ModuleKind.CommonJS },
+  }).outputText;
+  let dismiss!: () => void;
+  const opened: string[] = [];
+  const browser = { location: { pathname: "/more" }, history: { state: null } };
+  const bindings = {
+    useRef: (initial: unknown) => ({ current: initial }),
+    useCallback: (callback: unknown) => callback,
+    useBackDismiss: (active: boolean, callback: () => void) => {
+      assert.equal(active, true, "Appearance registers the section Back layer");
+      dismiss = callback;
+    },
+    activeSettingsSection: "appearance",
+    settingsRouteActive: true,
+    Platform: { OS: "web" },
+    window: browser,
+    settingsSectionOwnsPathname,
+    initialSection: undefined,
+    bucketOverlayHistoryRef: { current: { active: false, layers: new Set<string>() } },
+    openSettingsSection: (section: string) => opened.push(section),
+  };
+  const onCustomColorOverlayChange: (active: boolean) => void = new Function(
+    ...Object.keys(bindings), `${script}; return onCustomColorOverlayChange;`,
+  )(...Object.values(bindings));
+  for (let cycle = 0; cycle < 2; cycle++) {
+    onCustomColorOverlayChange(true);
+    dismiss();
+    assert.equal(opened.length, cycle, "Back dismissing the draft does not also leave Appearance");
+    onCustomColorOverlayChange(false);
+    dismiss();
+    assert.deepEqual(opened, Array(cycle + 1).fill("overview"), "After editor cleanup, the next Back returns to Settings");
+  }
+  browser.location.pathname = "/monthly";
+  dismiss();
+  assert.equal(opened.length, 2, "The old section callback never edits a different route");
 });

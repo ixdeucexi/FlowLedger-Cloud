@@ -414,7 +414,7 @@ test("both settings paths share controls; background and desktop tokens consume 
     "app/(tabs)/more.tsx",
     "components/desktop/DesktopSettingsPage.tsx",
   ])
-    assert.match(readFileSync(path, "utf8"), /<AppearanceSettings \/>/);
+    assert.match(readFileSync(path, "utf8"), /<AppearanceSettings(?:\s+[^>]*)?\s*\/>/);
   const ui = readFileSync("components/AppearanceSettings.tsx", "utf8");
   assert.match(ui, /aria-pressed/);
   assert.match(ui, /Reset appearance/);

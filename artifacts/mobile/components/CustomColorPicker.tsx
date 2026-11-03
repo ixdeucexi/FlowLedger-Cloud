@@ -1,10 +1,10 @@
 import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KeyboardAvoidingView, Modal, PanResponder, Platform, ScrollView, StyleSheet, TextInput, type ViewStyle } from "react-native";
 import { useColors } from "@/hooks/useColors";
-import { useOverlayActivity } from "@/hooks/useOverlayActivity";
+import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { hexToHsv, hsvToHex, normalizeHexColor, type HexColor, type HsvColor } from "@/lib/customColors";
 import { calendarHighlightText } from "@/lib/calendarAppearance";
 
@@ -13,7 +13,7 @@ const webGestureStyle = Platform.OS === "web" ? { touchAction: "none" } as ViewS
 const clamp = (value: number) => Math.min(1, Math.max(0, value));
 
 /** A local draft: only the parent's explicit onApply callback persists a color. */
-export function CustomColorPicker({ title, initialColor, onApply, onCancel }: { title: string; initialColor: string; onApply: (color: HexColor) => void; onCancel: () => void }) {
+export function CustomColorPicker({ title, initialColor, onApply, onCancel, onOverlayChange }: { title: string; initialColor: string; onApply: (color: HexColor) => void; onCancel: () => void; onOverlayChange?: (active: boolean) => void }) {
   const c = useColors();
   const initial = normalizeHexColor(initialColor) ?? normalizeHexColor(c.primary) ?? "#9f5cff";
   const [hex, setHex] = useState<string>(initial);
@@ -25,7 +25,11 @@ export function CustomColorPicker({ title, initialColor, onApply, onCancel }: { 
   const normalized = normalizeHexColor(hex);
   const preview = normalized ?? hsvToHex(hsv) ?? initial;
   const hueColor = hsvToHex({ h: hsv.h, s: 1, v: 1 })!;
-  useOverlayActivity(true);
+  useBackDismiss(true, onCancel);
+  useEffect(() => {
+    onOverlayChange?.(true);
+    return () => onOverlayChange?.(false);
+  }, [onOverlayChange]);
   const changeHsv = useCallback((next: HsvColor) => {
     const color = hsvToHex(next);
     if (!color) return;

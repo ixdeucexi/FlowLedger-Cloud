@@ -50,6 +50,76 @@ function debtPreviewFixture(): FinancialProjectionSnapshot {
 }
 const previewClock = { now: new Date("2026-10-01T12:00:00Z"), timeZone: "America/Chicago" };
 
+test("cash flow counts finalized manual actuals once and releases the settled bill", () => {
+  for (const actual of [0, 80, 100, 120]) {
+    const snapshot = bankObligationFixture();
+    snapshot.connectedBankAccounts = [];
+    snapshot.settings.starting_balance_date = "2026-10-01";
+    snapshot.bills[0].due_day = 5;
+    snapshot.overrides = [{ id: "finalized", bill_id: "bill", month: 9, year: 2026, paid_amount: actual, actual_amount: actual, paid_date: "2026-10-05" }];
+    const projection = createFinancialProjection(snapshot, { now: new Date("2026-10-06T12:00:00Z"), timeZone: "UTC" });
+    const cash = projection.getCashFlow(9, 2026);
+    assert.equal(cash.totalBillsDue, 0, `actual ${actual}: the occurrence is finalized`);
+    assert.equal(cash.totalPaid, actual);
+    assert.equal(cash.remaining, 0 - actual);
+    assert.equal(projection.getDailyBalances(9, 2026).at(-1)?.balance, 1000 - actual);
+  }
+});
+
+test("cash flow preserves manual partial and weekly sibling obligations", () => {
+  for (const frequency of ["monthly", "weekly"] as const) {
+    for (const paid of [40, 100, 500]) {
+      const snapshot = bankObligationFixture();
+      snapshot.bills[0] = { ...snapshot.bills[0], frequency, due_day: 2, day_of_week: 5, start_date: "2026-10-02", next_payment_date: "2026-10-02" };
+      snapshot.overrides = [{ id: "paid", bill_id: "bill", month: 9, year: 2026, paid_amount: paid, paid_date: "2026-10-02" }];
+      const projection = createFinancialProjection(snapshot, { now: new Date("2026-10-09T12:00:00Z"), timeZone: "UTC" });
+      const cash = projection.getCashFlow(9, 2026);
+      const applied = frequency === "weekly" ? Math.min(100, paid) : paid;
+      const expectedDue = (frequency === "weekly" ? 400 : 0) + Math.max(0, 100 - paid);
+      assert.equal(cash.totalBillsDue, expectedDue);
+      assert.equal(cash.totalPaid, applied);
+      assert.equal(cash.remaining, -expectedDue - applied);
+    }
+  }
+});
+
+test("cash flow lets reviewed settlements supersede manual snapshots without double counting cash", () => {
+  for (const settlement of ["partial", "full", "exact"] as const) {
+    const snapshot = bankObligationFixture();
+    snapshot.overrides = [{ id: "paid", bill_id: "bill", month: 9, year: 2026, paid_amount: 100, actual_amount: 100, paid_date: "2026-10-02" }];
+    snapshot.transactions = [{ id: "matched", date: "2026-10-02", amount: -80, category: "Bills", note: "Bill", source: "statement", review_status: "matched", review_resolution: "bill", review_allocations: [{ type: "bill", targetId: "bill", occurrenceDate: "2026-10-02", amount: 80, plannedAmount: 100, settlement }] }];
+    const cash = createFinancialProjection(snapshot, previewClock).getCashFlow(9, 2026);
+    assert.equal(cash.totalBillsDue, settlement === "partial" ? 20 : 0);
+    assert.equal(cash.totalPaid, 80);
+    assert.equal(cash.netTransactions, -80);
+    assert.equal(cash.remaining, settlement === "partial" ? -100 : -80);
+  }
+});
+
+test("cash flow retains canonical debt remainders and settled manual cash", () => {
+  for (const paid of [40, 100, 120]) {
+    const snapshot = bankObligationFixture();
+    snapshot.settings.debtPayoffEnabled = true;
+    snapshot.bills[0] = { ...snapshot.bills[0], is_debt: true, balance: 500, interest_rate: 0 };
+    snapshot.overrides = [{ id: "paid", bill_id: "bill", month: 9, year: 2026, paid_amount: paid, actual_amount: paid, required_debt_amount: 100, paid_date: "2026-10-02" }];
+    const cash = createFinancialProjection(snapshot, previewClock).getCashFlow(9, 2026);
+    assert.equal(cash.totalBillsDue, Math.max(0, 100 - paid));
+    assert.equal(cash.totalPaid, paid);
+    assert.equal(cash.remaining, -Math.max(100, paid));
+  }
+});
+
+test("manual bill cash stays separate from neutral account transfers", () => {
+  const snapshot = bankObligationFixture();
+  snapshot.overrides = [{ id: "paid", bill_id: "bill", month: 9, year: 2026, paid_amount: 80, actual_amount: 80, paid_date: "2026-10-02" }];
+  snapshot.transactions = [-250, 250].map((amount, index) => ({ id: `transfer-${index}`, date: "2026-10-02", amount, category: "Transfer", note: "Move money", source: "manual", review_status: "transfer" as const }));
+  const cash = createFinancialProjection(snapshot, previewClock).getCashFlow(9, 2026);
+  assert.equal(cash.totalBillsDue, 0);
+  assert.equal(cash.totalPaid, 80);
+  assert.equal(cash.netTransactions, 0);
+  assert.equal(cash.remaining, -80);
+});
+
 test("open bucket reserves survive observed balances and roll forward exactly once", () => {
   for (const manual of [false, true]) {
     for (const targetDate of ["2026-10-01", "2026-09-01", "2025-12-31"]) {
@@ -542,6 +612,7 @@ const obligationReserveCorrections: Record<string, { hash: string; endings: numb
   "connected-anchor-deleted-posted-reviewed-income": { hash: "178e8b438a8efca4a50326c2354ab546d82a1490cadc6927a8dfeb62848a49ee", endings: [1140, 3355, 5570] },
   "pending-matched-debt-no-double-charge": { hash: "a1a02d96a745b888f2ff189bf0247355fe480bd01a463ff3a273b5dd964fcb02", endings: [1140, 3355, 5570] },
   "manual-anchor-transfer-preservation": { hash: "0dd6daa375ecf9b924ffd72b76cb49218c023aa375f06e64f1ffe88adc3f9414", endings: [1348, 3563, 5778] },
+  "reviewed-partial-required-snapshot-overrides": { hash: "73094e2f888c8a171c4db3331f0b53e5ab0782c941c3f9d87aa78527d3d724af", endings: [2835, 5050, 7265] },
 };
 
 for (const fixture of golden.cases) {
@@ -571,6 +642,14 @@ for (const fixture of golden.cases) {
     );
     const correction = obligationReserveCorrections[fixture.name];
     if (correction) assert.deepEqual(result.map(month => month.daily.at(-1)?.balance), correction.endings);
+    if (fixture.name === "reviewed-partial-required-snapshot-overrides") {
+      // $400 finalized rent + $35 reviewed debt are paid; $75 debt remains.
+      // $3,000 income - $400 - $35 - $75 - $75 bucket - $80 trip = $2,335.
+      assert.deepEqual(result[0].cashFlow, {
+        monthlyIncome: 3000, totalBillsDue: 75, totalPaid: 435,
+        netTransactions: -35, goalAllocations: 75, remaining: 2335,
+      });
+    }
     assert.equal(
       JSON.stringify(snapshot),
       before,

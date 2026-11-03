@@ -20,7 +20,7 @@ import {
   type AppearanceContrast,
 } from "@/lib/appearance";
 
-export function AppearanceSettings() {
+export function AppearanceSettings({ onCustomColorOverlayChange }: { onCustomColorOverlayChange?: (active: boolean) => void }) {
   const c = useColors();
   const {
     appearance,
@@ -385,7 +385,7 @@ export function AppearanceSettings() {
           );
         })}
       </View>
-      <CalendarAppearanceSettings />
+      <CalendarAppearanceSettings onCustomColorOverlayChange={onCustomColorOverlayChange} />
       <View style={[styles.saveStatus, { borderColor: c.border }]}>
         <Text
           accessibilityLiveRegion="polite"
@@ -439,7 +439,7 @@ export function AppearanceSettings() {
           Reset to original look
         </Text>
       </Pressable>
-      {customAccentOpen ? <CustomColorPicker title="Custom accent color" initialColor={customAccent ?? c.primary} onCancel={() => setCustomAccentOpen(false)} onApply={accent => { updateAppearance({ accent });setCustomAccentOpen(false); }} /> : null}
+      {customAccentOpen ? <CustomColorPicker onOverlayChange={onCustomColorOverlayChange} title="Custom accent color" initialColor={customAccent ?? c.primary} onCancel={() => setCustomAccentOpen(false)} onApply={accent => { updateAppearance({ accent });setCustomAccentOpen(false); }} /> : null}
     </View>
   );
 }

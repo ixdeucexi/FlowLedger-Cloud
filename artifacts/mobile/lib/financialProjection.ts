@@ -911,23 +911,46 @@ export function createFinancialProjection(
     const activeBills = getMonthlyBills(month, year).filter(
       isBillEligibleForUpcomingPlan,
     );
+    const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+    const reviewedBillIds = matchedAllocationIndexes.reviewedBillIdsByMonth.get(monthPrefix);
     const debtPlan = getRemainingDebtPlanForMonth(month, year);
+    let manualPaid = 0;
     const totalBillsDue = activeBills.reduce((sum, bill) => {
-      if (bill.is_debt && debtPlan) return sum;
+      const override = getOverride(bill.id, month, year);
+      if (bill.is_debt && debtPlan) {
+        // The canonical debt plan already removes settlements from its future
+        // allocations; an override has no transaction row to carry its cash.
+        if (!reviewedBillIds?.has(bill.id))
+          manualPaid += getDebtMonthSettlements(month, year).get(bill.id)?.paidAmount ?? 0;
+        return sum;
+      }
       const occurrences = getBillOccurrencesInMonth(bill, month, year);
+      if (occurrences.length > 0 && override?.actual_amount !== undefined && !reviewedBillIds?.has(bill.id)) {
+        // Monthly finalization replaces the bill's obligation with its actual
+        // cash expense, including under/overpayments and a finalized zero.
+        manualPaid += Math.max(0, override.actual_amount);
+        return sum;
+      }
       return (
         sum +
         occurrences.reduce((occurrenceSum, day) => {
           const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
           const match = billMatches.get(occurrenceKey(bill.id, date));
-          const remaining = remainingPlannedAmount(getBillOccurrenceAmount(bill, date), match);
-          return occurrenceSum + remaining;
+          const payment = resolveBillOccurrencePayment({
+            occurrenceDate: date,
+            scheduledAmount: getBillOccurrenceAmount(bill, date),
+            frequency: bill.frequency,
+            match,
+            monthlyPaidAmount: override?.paid_amount,
+            monthlyPaidDate: override?.paid_date,
+          });
+          if (!match) manualPaid += payment.paidAmount;
+          return occurrenceSum + payment.remainingAmount;
         }, 0)
       );
     }, debtPlan?.plannedPayment ?? 0);
-    const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
     const totalPaid =
-      matchedAllocationIndexes.paidBillAmountByMonth.get(monthPrefix) ?? 0;
+      (matchedAllocationIndexes.paidBillAmountByMonth.get(monthPrefix) ?? 0) + manualPaid;
     const monthTxs = forecastTransactionsByMonth.get(monthPrefix) ?? [];
     const netTransactions = monthTxs.reduce((s, t) => s + t.amount, 0);
     const snowballPayment = extraPayments.find(
@@ -978,6 +1001,7 @@ export function createFinancialProjection(
       remaining:
         monthlyIncome -
         totalBillsDue -
+        manualPaid -
         goalAllocations -
         snowballExtra +
         netTransactions +

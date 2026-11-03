@@ -14,7 +14,7 @@ import {
   type CalendarColorChoice,
 } from "@/lib/calendarColors";
 
-export function CalendarAppearanceSettings() {
+export function CalendarAppearanceSettings({ onCustomColorOverlayChange }: { onCustomColorOverlayChange?: (active: boolean) => void }) {
   const c = useColors();
   const tones = useCalendarAppearance();
   const { appearance, updateAppearance, ready } = useThemeMode();
@@ -174,7 +174,7 @@ export function CalendarAppearanceSettings() {
           Use theme colors for calendar
         </Text>
       </Pressable>
-      {pickerCategory ? <CustomColorPicker key={pickerCategory} title={`Custom ${CALENDAR_CATEGORIES.find(category => category.id === pickerCategory)!.label} color`} initialColor={normalizeHexColor(appearance.calendarColors?.[pickerCategory]) ?? tones[pickerCategory].color} onCancel={() => setPickerCategory(null)} onApply={color => { choose(pickerCategory, color);setPickerCategory(null); }} /> : null}
+      {pickerCategory ? <CustomColorPicker onOverlayChange={onCustomColorOverlayChange} key={pickerCategory} title={`Custom ${CALENDAR_CATEGORIES.find(category => category.id === pickerCategory)!.label} color`} initialColor={normalizeHexColor(appearance.calendarColors?.[pickerCategory]) ?? tones[pickerCategory].color} onCancel={() => setPickerCategory(null)} onApply={color => { choose(pickerCategory, color);setPickerCategory(null); }} /> : null}
     </View>
   );
 }

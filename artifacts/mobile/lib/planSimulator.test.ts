@@ -106,7 +106,10 @@ test("all hypothetical cash changes overlay cloned Forecast days without mutatin
     { id: "save", type: "savings_once", name: "Emergency", amount: 50, date: "2026-08-14" },
     { id: "debt", type: "debt_extra", amount: 500, date: "2026-08-14" },
   ];
-  const result = projectPlanSimulation({ baseline: { startDate: "2026-08-12", endDate: "2026-08-16", openingBalance: 1000, days }, changes, references, metrics, safetyFloor: 200 });
+  // These baseline days have no required debt rows: isolate hypothetical extra
+  // cash from the required-payment lifecycle exercised by the debt tests.
+  const extraOnlyReferences = { ...references, debts: references.debts.map(debt => ({ ...debt, minimum: 0 })) };
+  const result = projectPlanSimulation({ baseline: { startDate: "2026-08-12", endDate: "2026-08-16", openingBalance: 1000, days }, changes, references: extraOnlyReferences, metrics, safetyFloor: 200 });
   assert.deepEqual(days, original);
   assert.equal(result.savingsAdded, 50);
   assert.equal(result.debtExtraApplied, 103);
@@ -170,7 +173,7 @@ test("targeted payoff closes only the selected open debt at its remaining balanc
   const result = projectPlanSimulation({
     baseline: { startDate: "2026-08-12", endDate: "2026-08-16", openingBalance: 1000, days: baselineDays() },
     changes: [{ id: "payoff", type: "debt_payoff", debtId: "concert", date: "2026-08-14" }],
-    references,
+    references: { ...references, debts: references.debts.map(debt => ({ ...debt, minimum: 0 })) },
     metrics,
     safetyFloor: 200,
   });
@@ -266,8 +269,8 @@ test("debt extras honor active dates while inactive balances remain available fo
     bills: [],
     debts: [
       { id: "ended", name: "Ended", balance: 10, minimum: 10, apr: 0, dueDay: 1, included: true, frequency: "monthly", endDate: "2026-07-31" },
-      { id: "future", name: "Future", balance: 20, minimum: 20, apr: 0, dueDay: 12, included: true, frequency: "monthly", startDate: "2026-09-01" },
-      { id: "active", name: "Active", balance: 100, minimum: 25, apr: 0, dueDay: 12, included: true, frequency: "monthly", startDate: "2026-01-01" },
+      { id: "future", name: "Future", balance: 20, minimum: 0, apr: 0, dueDay: 12, included: true, frequency: "monthly", startDate: "2026-09-01" },
+      { id: "active", name: "Active", balance: 100, minimum: 0, apr: 0, dueDay: 12, included: true, frequency: "monthly", startDate: "2026-01-01" },
     ],
     debtMethod: "snowball",
   };

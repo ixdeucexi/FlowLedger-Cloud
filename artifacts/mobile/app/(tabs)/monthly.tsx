@@ -451,7 +451,7 @@ export default function MonthlyScreen() {
   const [safetyYearOpenScope, setSafetyYearOpenScope] = useState<string | null>(null);
   useEffect(() => { setSafetyYearOpenScope(null); }, [safetyYearScope]);
   const openSafetyYear = () => {
-    setSelectedDate(null);
+    selectCalendarDate(null);
     setSafetyYearOpenScope(safetyYearScope);
   };
 
@@ -465,7 +465,21 @@ export default function MonthlyScreen() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [dayConfirmation, setDayConfirmation] = useState<ConfirmActionOptions | null>(null);
   const handledOpenDateRef = useRef<string | null>(null);
-  const calendarPreferenceReadyRef = useRef(false);
+  const calendarPreferenceRequestKey = JSON.stringify([user?.id, activeHousehold?.householdId, routeParams.openDate, routeParams.openDateAt, householdCurrentMonth, householdCurrentYear]);
+  const calendarPreferenceRequestRef = useRef({ key: calendarPreferenceRequestKey, revision: 0 });
+  if (calendarPreferenceRequestRef.current.key !== calendarPreferenceRequestKey) {
+    // Invalidate in render: an old read can finish before effect cleanup when
+    // the user, household, or explicit date request has just changed.
+    calendarPreferenceRequestRef.current = { key: calendarPreferenceRequestKey, revision: 0 };
+  }
+  const [calendarPreferenceReadyRequest, setCalendarPreferenceReadyRequest] = useState<typeof calendarPreferenceRequestRef.current | null>(null);
+  const markCalendarInteraction = useCallback(() => {
+    calendarPreferenceRequestRef.current.revision += 1;
+  }, []);
+  const selectCalendarDate = useCallback((date: string | null) => {
+    markCalendarInteraction();
+    setSelectedDate(date);
+  }, [markCalendarInteraction]);
   const [editingAmounts, setEditingAmounts] = useState<Record<string, string>>({});
   const [editingPaid, setEditingPaid] = useState<Record<string, string>>({});
   const editingPaidRef = useRef<Record<string, string>>({});
@@ -474,7 +488,7 @@ export default function MonthlyScreen() {
   useEffect(() => {
     const openDate = Array.isArray(routeParams.openDate) ? routeParams.openDate[0] : routeParams.openDate;
     const openDateAt = Array.isArray(routeParams.openDateAt) ? routeParams.openDateAt[0] : routeParams.openDateAt;
-    const token = `${openDate ?? ""}:${openDateAt ?? ""}`;
+    const token = JSON.stringify([user?.id, activeHousehold?.householdId, openDate, openDateAt]);
     if (!openDate || handledOpenDateRef.current === token || !/^\d{4}-\d{2}-\d{2}$/.test(openDate)) return;
     const [year, monthNumber, day] = openDate.split("-").map(Number);
     const parsed = new Date(year, monthNumber - 1, day, 12);
@@ -483,37 +497,41 @@ export default function MonthlyScreen() {
     setSelectedYear(year);
     setMonth(monthNumber - 1);
     setSelectedDate(openDate);
-  }, [routeParams.openDate, routeParams.openDateAt, setSelectedYear]);
+  }, [calendarPreferenceRequestKey, routeParams.openDate, routeParams.openDateAt, setSelectedYear]);
 
   useEffect(() => {
     if (!user || !activeHousehold) return;
-    calendarPreferenceReadyRef.current = false;
+    const request = calendarPreferenceRequestRef.current;
     let active = true;
     const requestedDate = Array.isArray(routeParams.openDate) ? routeParams.openDate[0] : routeParams.openDate;
     const scopeKey = `${user.id}:${activeHousehold.householdId}`;
     const isColdCalendarStart = !calendarRuntimeScopes.has(scopeKey);
     calendarRuntimeScopes.add(scopeKey);
     void readInterfacePreferences(user.id, activeHousehold.householdId).then(preferences => {
-      if (!active) return;
+      if (!active || calendarPreferenceRequestRef.current !== request) return;
       const saved = preferences.calendar;
-      if (!requestedDate && isColdCalendarStart) {
+      const canRestore = !requestedDate && request.revision === 0;
+      const savedIsValid = saved && saved.month >= 0 && saved.month <= 11 && saved.year >= 2000 && saved.year <= 2200;
+      if (canRestore && (isColdCalendarStart || !savedIsValid)) {
         setMonth(householdCurrentMonth);
         setSelectedYear(householdCurrentYear);
         // Start on the current month without opening a day overlay. Details
         // appear only after the user taps a calendar date.
         setSelectedDate(null);
-      } else if (!requestedDate && saved && saved.month >= 0 && saved.month <= 11 && saved.year >= 2000 && saved.year <= 2200) {
+      } else if (canRestore && savedIsValid) {
         setMonth(saved.month);
         setSelectedYear(saved.year);
         setSelectedDate(saved.selectedDate && /^\d{4}-\d{2}-\d{2}$/.test(saved.selectedDate) ? saved.selectedDate : null);
       }
-      calendarPreferenceReadyRef.current = true;
+      // Readiness must render even when hydration was skipped, so the latest
+      // user navigation is persisted after the pending read completes.
+      setCalendarPreferenceReadyRequest(request);
     });
     return () => { active = false; };
-  }, [activeHousehold?.householdId, householdCurrentMonth, householdCurrentYear, routeParams.openDate, setSelectedYear, user?.id]);
+  }, [activeHousehold?.householdId, calendarPreferenceRequestKey, householdCurrentMonth, householdCurrentYear, routeParams.openDate, setSelectedYear, user?.id]);
 
   useEffect(() => {
-    if (!user || !activeHousehold || !calendarPreferenceReadyRef.current) return;
+    if (!user || !activeHousehold || calendarPreferenceReadyRequest !== calendarPreferenceRequestRef.current) return;
     void updateInterfacePreferences(user.id, activeHousehold.householdId, {
       calendar: {
         month,
@@ -521,7 +539,7 @@ export default function MonthlyScreen() {
         ...(selectedDate ? { selectedDate } : {}),
       },
     });
-  }, [activeHousehold?.householdId, month, selectedDate, selectedYear, user?.id]);
+  }, [activeHousehold?.householdId, calendarPreferenceReadyRequest, month, selectedDate, selectedYear, user?.id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -572,6 +590,7 @@ export default function MonthlyScreen() {
   const [savingPaidKey, setSavingPaidKey] = useState<string | null>(null);
   const [monthSearchVisible, setMonthSearchVisible] = useState(false);
   const [monthSearchQuery, setMonthSearchQuery] = useState("");
+  const [monthSearchYear, setMonthSearchYear] = useState(selectedYear);
 
   useBackDismiss(txModalVisible, () => {
     setTxModalVisible(false);
@@ -683,7 +702,7 @@ export default function MonthlyScreen() {
         return true;
       }
       if (selectedDate) {
-        setSelectedDate(null);
+        selectCalendarDate(null);
         return true;
       }
       return false;
@@ -697,7 +716,7 @@ export default function MonthlyScreen() {
     if (!selectedDate) return;
     if (typeof window === "undefined") return;
     window.history.pushState({ ...(window.history.state ?? {}), flowledgerMonthlyOverlay: selectedDate }, "", window.location.href);
-    const onPopState = () => setSelectedDate(null);
+    const onPopState = () => selectCalendarDate(null);
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, [debtPaymentNotice, dueDayPickerBill, editPlan, fullPaymentPrompt, incomeDatePicker, selectedDate, showSnowballResults, snowballModalVisible, snowballPreview, surplusPrompt, txModalVisible]);
@@ -1107,7 +1126,7 @@ export default function MonthlyScreen() {
   }, [fullPaymentPrompt]);
 
   const openDebtPaymentActivity = useCallback(() => {
-    setSelectedDate(null);
+    selectCalendarDate(null);
     router.push("/(tabs)/transactions" as never);
   }, [router]);
 
@@ -1173,7 +1192,7 @@ export default function MonthlyScreen() {
         );
       }
       setSurplusPrompt(null);
-      setSelectedDate(null);
+      selectCalendarDate(null);
       paidSaveSnapshotRef.current = { ...paidSaveSnapshotRef.current, [paidKey]: { value: editValue, at: Date.now() } };
       clearPaidEditForKey(paidKey);
       paidPromptPendingRef.current.delete(paidKey);
@@ -1482,14 +1501,14 @@ export default function MonthlyScreen() {
   const openAddTransaction = useCallback((date?: string | null) => {
     setEditTx(null);
     setTransactionDefaultDate(date ?? undefined);
-    setSelectedDate(null);
+    selectCalendarDate(null);
     setTimeout(() => setTxModalVisible(true), 0);
   }, []);
 
   const openEditTransaction = useCallback((tx: Transaction) => {
     setEditTx(tx);
     setTransactionDefaultDate(tx.date);
-    setSelectedDate(null);
+    selectCalendarDate(null);
     setTimeout(() => setTxModalVisible(true), 0);
   }, []);
 
@@ -1509,7 +1528,7 @@ export default function MonthlyScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       if (scope === "one") await skipBillOccurrence(bill.id, occurrenceDate);
       else await endBillSeriesBeforeOccurrence(bill.id, occurrenceDate);
-      setSelectedDate(null);
+      selectCalendarDate(null);
     };
     setDayConfirmation({
       title: `Remove ${bill.name}?`,
@@ -1570,7 +1589,7 @@ export default function MonthlyScreen() {
       privacyAlert("Bucket not found", "Refresh Forecast and try again.");
       return;
     }
-    setSelectedDate(null);
+    selectCalendarDate(null);
     setTimeout(() => setEditingBucket(bucket), 0);
   }, [goals]);
 
@@ -1601,7 +1620,7 @@ export default function MonthlyScreen() {
       const result = evaluateDecision(baseline.length ? baseline : [{ date: scenario.date, balance: 0 }], scenario, settings.safety_floor);
       await updateDecision({ ...editPlan, name, scenario, result, calendar_date: editPlanDate, next_due_date: editPlanDate });
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setSelectedDate(editPlanDate);
+      selectCalendarDate(editPlanDate);
       setEditPlan(null);
     } catch (error) {
       privacyAlert("Couldn’t save plan", error instanceof Error ? error.message : "Please try again.");
@@ -1681,7 +1700,7 @@ export default function MonthlyScreen() {
 
   const changeMonth = useCallback((delta: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSelectedDate(null);
+    selectCalendarDate(null);
     setMonth(currentMonth => {
       let nextMonth = currentMonth + delta;
       let nextYear = selectedYear;
@@ -1696,7 +1715,7 @@ export default function MonthlyScreen() {
       if (nextYear !== selectedYear) setSelectedYear(nextYear);
       return nextMonth;
     });
-  }, [selectedYear, setSelectedYear]);
+  }, [selectCalendarDate, selectedYear, setSelectedYear]);
 
   const calendarSwipeResponder = useMemo(() => PanResponder.create({
     onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dx) > 28 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.35,
@@ -1714,10 +1733,10 @@ export default function MonthlyScreen() {
 
   const jumpToToday = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSelectedDate(todayIso);
+    selectCalendarDate(todayIso);
     setMonth(todayMonth);
     if (selectedYear !== todayYear) setSelectedYear(todayYear);
-  }, [selectedYear, setSelectedYear, todayIso, todayMonth, todayYear]);
+  }, [selectCalendarDate, selectedYear, setSelectedYear, todayIso, todayMonth, todayYear]);
 
   const desktopSelectionMonthRef = useRef<string | null>(null);
   useEffect(() => {
@@ -1747,9 +1766,11 @@ export default function MonthlyScreen() {
 
   const openMonthSearch = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    markCalendarInteraction();
+    setMonthSearchYear(selectedYear);
     setMonthSearchQuery("");
     setMonthSearchVisible(true);
-  }, []);
+  }, [markCalendarInteraction, selectedYear]);
 
   const closeMonthSearch = useCallback(() => {
     Keyboard.dismiss();
@@ -1758,22 +1779,21 @@ export default function MonthlyScreen() {
 
   const chooseMonthFromSearch = useCallback((nextMonth: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    selectCalendarDate(null);
     setMonth(nextMonth);
-    setSelectedDate(null);
+    setSelectedYear(monthSearchYear);
     closeMonthSearch();
-  }, [closeMonthSearch]);
+  }, [closeMonthSearch, monthSearchYear, selectCalendarDate, setSelectedYear]);
 
   const changeSearchYear = useCallback((delta: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const nextYear = selectedYear + delta;
-    setSelectedYear(nextYear);
-    setSelectedDate(isoDateForMonthDay(nextYear, month, 1));
-  }, [month, selectedYear, setSelectedYear]);
+    setMonthSearchYear(current => current + delta);
+  }, []);
 
   const openPlannedDebtPaymentEditor = useCallback((event: FinancialEvent) => {
     const editorParams = plannedDebtEditorParams(event);
     if (!editorParams) return false;
-    setSelectedDate(null);
+    selectCalendarDate(null);
     router.push({
       pathname: "/planned-debt-payment",
       params: editorParams,
@@ -1791,14 +1811,14 @@ export default function MonthlyScreen() {
     if (event.sourceType === "bill") {
       const bill = bills.find(item => item.id === event.sourceId);
       if (!bill) return;
-      setSelectedDate(null);
+      selectCalendarDate(null);
       setDueDayPicker({ bill, fromDate: event.date });
       return;
     }
     if (event.sourceType === "income") {
       const occurrence = incomeOccurrences.find(item => item.incomeId === event.sourceId && item.day === dayFromIsoDate(event.date));
       if (!occurrence) return;
-      setSelectedDate(null);
+      selectCalendarDate(null);
       setIncomeDatePicker({ income: occurrence.income, date: event.date, amount: occurrence.amount });
       return;
     }
@@ -1809,14 +1829,14 @@ export default function MonthlyScreen() {
     if (event.sourceType === "decision") {
       const plan = decisions.find(item => item.id === event.sourceId);
       if (plan) {
-        setSelectedDate(null);
+        selectCalendarDate(null);
         openEditPlan(plan);
       }
       return;
     }
     if (event.sourceType === "extra_payment") {
       if (openPlannedDebtPaymentEditor(event)) return;
-      setSelectedDate(null);
+      selectCalendarDate(null);
       setSnowballModalVisible(true);
     }
   };
@@ -1838,7 +1858,7 @@ export default function MonthlyScreen() {
           setSafetyYearOpenScope(null);
           setSelectedYear(year);
           setMonth(monthNumber - 1);
-          setSelectedDate(date);
+          selectCalendarDate(date);
         }}
       /> : null}
       {isDesktop ? (
@@ -1861,8 +1881,8 @@ export default function MonthlyScreen() {
           simulatorLocked={isFeatureLocked("plan_simulator")}
           onOpenPlanSimulator={() => router.push("/plan-simulator")}
           onAddTransaction={openAddTransaction}
-          onSelectDate={setSelectedDate}
-          onCloseSelectedDay={() => setSelectedDate(null)}
+          onSelectDate={selectCalendarDate}
+          onCloseSelectedDay={() => selectCalendarDate(null)}
           onOpenEvent={openDesktopCalendarEvent}
         />
       ) : (
@@ -2311,7 +2331,7 @@ export default function MonthlyScreen() {
                 year={selectedYear}
                 transactions={calendarTransactions}
                 selectedDate={selectedDate}
-                onDayPress={(date) => setSelectedDate(date)}
+                onDayPress={(date) => selectCalendarDate(date)}
                 dailyBalances={dailyBalances}
                 goals={goals}
                 decisions={decisions}
@@ -2325,9 +2345,9 @@ export default function MonthlyScreen() {
               visible={selectedDate !== null}
               animationType="fade"
               transparent
-              onRequestClose={() => dayConfirmation ? setDayConfirmation(null) : setSelectedDate(null)}
+              onRequestClose={() => dayConfirmation ? setDayConfirmation(null) : selectCalendarDate(null)}
             >
-              <Pressable style={[styles.dayOverlayBackdrop, isDesktop && DESKTOP_MODAL_OVERLAY]} onPress={() => setSelectedDate(null)}>
+              <Pressable style={[styles.dayOverlayBackdrop, isDesktop && DESKTOP_MODAL_OVERLAY]} onPress={() => selectCalendarDate(null)}>
                 <Pressable
                   style={[
                     styles.dayOverlayCard,
@@ -2362,7 +2382,7 @@ export default function MonthlyScreen() {
                         </Text>
                       </View>
                     </View>
-                    <Pressable accessibilityRole="button" accessibilityLabel="Close forecast day details" onPress={() => setSelectedDate(null)} hitSlop={8}>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Close forecast day details" onPress={() => selectCalendarDate(null)} hitSlop={8}>
                       <Feather name="x" size={22} color={c.mutedForeground} />
                     </Pressable>
                   </View>
@@ -2418,7 +2438,7 @@ export default function MonthlyScreen() {
                                 accessibilityLabel={`Change date for ${item.name}`}
                                 onPress={() => {
                                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                  setSelectedDate(null);
+                                  selectCalendarDate(null);
                                   setIncomeDatePicker({ income: item.income, date: selectedDate ?? isoDateForMonthDay(selectedYear, month, item.day), amount: item.amount });
                                 }}
                                 style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.primary + "16", borderColor: c.primary + "35", opacity: pressed ? 0.74 : 1 }]}
@@ -2623,7 +2643,7 @@ export default function MonthlyScreen() {
                                     onPress={() => {
                                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                                       const fromDate = movedInByBillId.get(bill.id)?.from_date ?? selectedDate;
-                                      setSelectedDate(null);
+                                      selectCalendarDate(null);
                                       if (fromDate) setDueDayPicker({ bill, fromDate });
                                     }}
                                     style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.primary + "16", borderColor: c.primary + "35", opacity: pressed ? 0.74 : 1 }]}
@@ -2717,7 +2737,7 @@ export default function MonthlyScreen() {
                               requiredMinimum={requiredMinimum}
                               snowballMonthToDate={snowballMonthToDate}
                               onEdit={savedPayment ? () => {
-                                setSelectedDate(null);
+                                selectCalendarDate(null);
                                 router.push({
                                   pathname: "/snowball-plan",
                                   params: { paymentId: savedPayment.id },
@@ -2728,7 +2748,7 @@ export default function MonthlyScreen() {
                               onChangeDate={editorParams && sourceDebt && canEditHousehold
                                 && (sourceDebt.frequency === "monthly" || sourceDebt.frequency === "quarterly")
                                 ? () => {
-                                  setSelectedDate(null);
+                                  selectCalendarDate(null);
                                   setDueDayPicker({ bill: sourceDebt, fromDate: editorParams.date });
                                 }
                                 : undefined}
@@ -2748,7 +2768,7 @@ export default function MonthlyScreen() {
                               retainedPayment={retainedPayment}
                               onRemove={savedPayment && !hasBucketRemainderFunding(savedPayment.sources) ? async () => {
                                 await removeDebtSnowballPayment(savedPayment.month, savedPayment.year);
-                                setSelectedDate(null);
+                                selectCalendarDate(null);
                               } : undefined}
                             />
                           );
@@ -2788,7 +2808,7 @@ export default function MonthlyScreen() {
                               requiredMinimum={requiredMinimum}
                               snowballMonthToDate={snowballMonthToDate}
                               onEdit={reviewedSnowball ? undefined : () => {
-                                setSelectedDate(null);
+                                selectCalendarDate(null);
                                 router.push({
                                   pathname: "/snowball-plan",
                                   params: { transactionId: transaction.id },
@@ -2796,7 +2816,7 @@ export default function MonthlyScreen() {
                               }}
                               onRemove={reviewedSnowball ? undefined : async () => {
                                 await deleteTransaction(transaction.id);
-                                setSelectedDate(null);
+                                selectCalendarDate(null);
                               }}
                             />
                           );
@@ -3024,7 +3044,7 @@ export default function MonthlyScreen() {
                         if (!selectedDate) return;
                         const date = selectedDate;
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setSelectedDate(null);
+                        selectCalendarDate(null);
                         const dayLabel = formatLongDate(date);
                         router.push({
                           pathname: "/(tabs)/flo",
@@ -3083,6 +3103,8 @@ export default function MonthlyScreen() {
               </View>
               <Pressable
                 onPress={closeMonthSearch}
+                accessibilityRole="button"
+                accessibilityLabel="Close month search"
                 hitSlop={10}
                 style={({ pressed }) => [styles.monthSearchClose, { opacity: pressed ? 0.6 : 1 }]}
               >
@@ -3111,13 +3133,17 @@ export default function MonthlyScreen() {
             <View style={styles.monthSearchYearRow}>
               <Pressable
                 onPress={() => changeSearchYear(-1)}
+                accessibilityRole="button"
+                accessibilityLabel="Previous search year"
                 style={({ pressed }) => [styles.monthSearchYearButton, { backgroundColor: c.muted, opacity: pressed ? 0.7 : 1 }]}
               >
                 <Feather name="chevron-left" size={18} color={c.foreground} />
               </Pressable>
-              <Text style={[styles.monthSearchYearText, { color: c.foreground }]}>{selectedYear}</Text>
+              <Text style={[styles.monthSearchYearText, { color: c.foreground }]}>{monthSearchYear}</Text>
               <Pressable
                 onPress={() => changeSearchYear(1)}
+                accessibilityRole="button"
+                accessibilityLabel="Next search year"
                 style={({ pressed }) => [styles.monthSearchYearButton, { backgroundColor: c.muted, opacity: pressed ? 0.7 : 1 }]}
               >
                 <Feather name="chevron-right" size={18} color={c.foreground} />
@@ -3126,7 +3152,7 @@ export default function MonthlyScreen() {
 
             <View style={styles.monthSearchGrid}>
               {monthSearchOptions.map(option => {
-                const selected = option.index === month;
+                const selected = option.index === month && monthSearchYear === selectedYear;
                 return (
                   <Pressable
                     key={option.name}

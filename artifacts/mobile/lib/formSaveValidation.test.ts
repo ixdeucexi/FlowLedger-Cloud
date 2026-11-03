@@ -112,8 +112,13 @@ test("desktop Calendar preserves explicit requested dates and month navigation d
   assert.equal(select("2026-12-20", "2026-10-", "2026-12-20", true, "2026-10-21", 2026, 9, () => "2026-10-01"), "2026-12-20");
   assert.equal(select(null, "2026-12-", "2026-10-20", false, "2026-10-21", 2026, 11, () => "2026-12-01"), "2026-12-01");
   assert.equal(select(null, "2026-10-", undefined, true, "2026-10-21", 2026, 9, () => "2026-10-01"), "2026-10-21");
-  const cold = source.slice(source.indexOf("if (!requestedDate && isColdCalendarStart)"), source.indexOf("} else if (!requestedDate && saved"));
+  const restoreGuard = source.indexOf("const canRestore = !requestedDate && request.revision === 0;");
+  const coldStart = source.indexOf("if (canRestore && (isColdCalendarStart || !savedIsValid))", restoreGuard);
+  const coldEnd = source.indexOf("} else if (canRestore && savedIsValid)", coldStart);
+  assert.ok(restoreGuard >= 0 && coldStart > restoreGuard && coldEnd > coldStart);
+  const cold = source.slice(coldStart, coldEnd);
   assert.match(cold, /setMonth\(householdCurrentMonth\)/);
   assert.match(cold, /setSelectedYear\(householdCurrentYear\)/);
+  assert.match(cold, /setSelectedDate\(null\)/);
   assert.doesNotMatch(cold, /new Date/);
 });

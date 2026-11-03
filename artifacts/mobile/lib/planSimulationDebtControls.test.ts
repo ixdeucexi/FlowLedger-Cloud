@@ -46,6 +46,37 @@ function fixture(apr = 0) {
 }
 const run = (changes: PlanSimulationChange[], data = fixture()) => projectPlanSimulation({ ...data, changes, useDebtControlTimeline: true });
 const total = (result: ReturnType<typeof run>) => result.months.reduce((sum, month) => sum + month.outflows, 0);
+
+test("default payoff and extra scenarios replace future required cash and cap the final payment", () => {
+  const data = fixture();
+  data.references.debts[0].balance = 300;
+  const unchanged = projectPlanSimulation({ ...data, changes: [] });
+  assert.deepEqual(unchanged.days, data.baseline.days);
+  for (const changes of [
+    [{ id: "payoff", type: "debt_payoff", debtId: "loan", date: "2026-01-02" }],
+    [{ id: "extra", type: "debt_extra", amount: 999, date: "2026-01-02" }],
+    [{ id: "extra", type: "debt_extra", amount: 150, date: "2026-01-02" }],
+    [{ id: "edit", type: "debt_edit", debtId: "loan", amount: 50, effectiveDate: "2026-01-01" },
+      { id: "extra", type: "debt_extra", amount: 250, date: "2026-01-02" }],
+  ] satisfies PlanSimulationChange[][]) {
+    const result = projectPlanSimulation({ ...data, changes });
+    assert.equal(result.complete, true);
+    assert.equal(total(result), 300);
+    assert.equal(result.endingBalance, 9700);
+    assert.equal(result.days.flatMap(day => day.events).some(event => event.date >= "2026-03-01"), false);
+    if (changes.length === 1 && changes[0].type === "debt_extra" && changes[0].amount === 150) {
+      assert.deepEqual(datedAllocations(result), [
+        ["2026-01-02|loan|extra", -150],
+        ["2026-01-15|loan|required", -100],
+        ["2026-02-15|loan|required", -50],
+      ]);
+      assert.equal(result.potentialDebtFreeDate, "2026-02");
+    } else {
+      assert.equal(result.potentialDebtFreeDate, "2026-01");
+      assert.equal(result.debtExtraApplied, changes.at(-1)?.type === "debt_extra" && changes.length > 1 ? 250 : 300);
+    }
+  }
+});
 const add: Extract<PlanSimulationChange, { type: "debt_add" }> = {
   id: "new", type: "debt_add", name: "New loan", balance: 500, apr: 0, amount: 100, frequency: "monthly", startDate: "2026-01-15",
 };

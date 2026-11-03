@@ -558,11 +558,17 @@ export default function MoreScreen({
     owned.layers.add(layer);
     if (layer.endsWith("-history")) owned.layers.add(layer.slice(0, -"-history".length));
   }, []);
+  const customColorOverlayActiveRef = useRef(false);
+  const onCustomColorOverlayChange = useCallback((active: boolean) => {
+    customColorOverlayActiveRef.current = active;
+  }, []);
   useBackDismiss(activeSettingsSection !== "overview" && settingsRouteActive, (event) => {
     // popstate may precede React's route update/effect cleanup. Check the
     // browser destination synchronously before writing any section params.
     if (Platform.OS === "web" && typeof window !== "undefined"
       && !settingsSectionOwnsPathname(window.location.pathname, initialSection)) return;
+    // A color draft owns the top Back entry while Appearance stays open.
+    if (activeSettingsSection === "appearance" && customColorOverlayActiveRef.current) return;
     if (activeSettingsSection === "buckets" || activeSettingsSection === "review") {
       const owned = bucketOverlayHistoryRef.current;
       const destination = event ? event.state : Platform.OS === "web" && typeof window !== "undefined" ? window.history.state : undefined;
@@ -2712,7 +2718,7 @@ export default function MoreScreen({
         {activeSettingsSection === "appearance" && (
           <>
             <FloLauncherSetting />
-            <AppearanceSettings />
+            <AppearanceSettings onCustomColorOverlayChange={onCustomColorOverlayChange} />
             <SLabel c={c} text="Touch feedback" />
             <PlanningToolToggle
               c={c}

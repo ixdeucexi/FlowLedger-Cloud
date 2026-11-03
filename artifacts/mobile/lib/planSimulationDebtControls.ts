@@ -22,7 +22,8 @@ export function simulationDebtReference(change: DebtAdd): PlanSimulationDebtRefe
   };
 }
 export function hasSimulationDebtControls(changes: readonly PlanSimulationChange[]): boolean {
-  return changes.some(change => change.type === "debt_add" || change.type === "debt_edit" || change.type === "debt_pause");
+  return changes.some(change => change.type === "debt_add" || change.type === "debt_edit" || change.type === "debt_pause"
+    || change.type === "debt_extra" || change.type === "debt_payoff");
 }
 export interface ControlledDebtProjection {
   events: FinancialEvent[];
@@ -323,7 +324,9 @@ export function projectControlledSimulationDebt(input: {
         id: "simulation-debt:" + cashDate + ":" + sequence++,
         sourceType: change ? "decision" : "extra_payment", sourceId: change?.id ?? allocation.sourceBillId ?? allocation.targetBillId,
         date: cashDate, amount: -allocation.amount, kind: "debt_payment", status: "planned",
-        name: (byId.get(allocation.targetBillId)?.name ?? "Debt") + " debt payment",
+        name: change?.type === "debt_payoff"
+          ? "Pay off " + (byId.get(allocation.targetBillId)?.name ?? "Debt")
+          : (byId.get(allocation.targetBillId)?.name ?? "Debt") + " debt payment",
         debtPlanSource: allocation.kind === "extra" ? "saved_extra" : "canonical",
         debtPlanAllocationKind: allocation.kind, debtTargetBillId: allocation.targetBillId,
       });

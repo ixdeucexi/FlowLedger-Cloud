@@ -62,7 +62,7 @@ test("annual UI is scoped, lazy, readiness gated and opens existing calendar det
   assert.match(monthly, /key=\{safetyYearScope\}/);
   assert.match(monthly, /ready=\{startupCoreReady\}/);
   assert.match(monthly, /getDays=\{getCalendarDailyBalances\}/);
-  assert.match(monthly, /setSelectedYear\(year\);\s*setMonth\(monthNumber - 1\);\s*setSelectedDate\(date\)/);
+  assert.match(monthly, /setSelectedYear\(year\);\s*setMonth\(monthNumber - 1\);\s*selectCalendarDate\(date\)/);
   assert.match(monthly, /setSafetyYearOpenScope\(null\); \}, \[safetyYearScope\]/);
   assert.match(modal, /ready \? summarizeSafetyFloorYear/);
   assert.match(modal, /\[ready, year, today, safetyFloor, startingBalanceDate, getDays\]/);
