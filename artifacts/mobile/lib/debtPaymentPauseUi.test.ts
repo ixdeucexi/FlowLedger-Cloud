@@ -363,18 +363,30 @@ test("desktop debt list keeps a saved paused debt visible in the same rank and o
 });
 
 test("mobile debt hero renders canonical remaining cash for pause-only and no-recipient plans while keeping lender minimums and rank", () => {
-  for (const [remaining, extra] of [[0, 0], [150, 75]]) {
+  for (const [remaining, extra, enabled] of [[0, 0, false], [0, 0, true], [150, 75, true]] as const) {
     const bills = [{ ...debt, debt_payment_pauses: [savedPause] }, { ...debt, id: "second", name: "Second card", balance: 2400 }];
     const plan = { plannedPayment: remaining, payments: [{ billId: "first", totalPayment: 0 }, { billId: "second", totalPayment: remaining }], allocations: extra ? [{ kind: "required", amount: 75, targetBillId: "second" }, { kind: "rollover", amount: extra, targetBillId: "second" }] : [] };
-    const h = harness("BillsScreen", {}, { budget: { bills, getExtraPayment: () => ({ id: "saved-extra", amount: 25 }), getDebtPlanForMonth: () => plan, getRemainingDebtPlanForMonth: () => plan } });
+    const h = harness("BillsScreen", {}, { budget: { bills, settings: { debtPayoffEnabled: enabled }, getExtraPayment: () => ({ id: "saved-extra", amount: 25 }), getDebtPlanForMonth: () => plan, getRemainingDebtPlanForMonth: () => plan } });
     const list = h.child("FlatList"), header = list.props.ListHeaderComponent;
-    const remainingPanel = flatten(header).find(node => node.type === "View" && node.props.children.length === 2 && copy(node.props.children[0]).includes("PAYOFF EXTRA") && copy(node.props.children[1]).includes("REMAINING PLAN"));
-    assert.ok(remainingPanel); assert.match(copy(remainingPanel.props.children[0]), new RegExp(`PAYOFF EXTRA.*\\+\\$\\s*${extra}`));
-    assert.match(copy(remainingPanel.props.children[1]), new RegExp(`REMAINING PLAN.*\\$\\s*${remaining}`));
-    assert.match(copy(header), /\$\s*200\s+Required \/ month/); assert.match(copy(header), /Current target\s+Second card/);
+    if (enabled) {
+      const remainingPanel = flatten(header).find(node => node.type === "View" && node.props.children.length === 2 && copy(node.props.children[0]).includes("PAYOFF EXTRA") && copy(node.props.children[1]).includes("REMAINING PLAN"));
+      assert.ok(remainingPanel); assert.match(copy(remainingPanel.props.children[0]), new RegExp(`PAYOFF EXTRA.*\\+\\$\\s*${extra}`));
+      assert.match(copy(remainingPanel.props.children[1]), new RegExp(`REMAINING PLAN.*\\$\\s*${remaining}`));
+      assert.match(copy(header), /\$\s*200\s+Required \/ month/); assert.match(copy(header), /Current target\s+Second card/);
+    }
     assert.deepEqual(list.props.data.map((bill: any) => bill.id), ["first", "second"]);
-    assert.match(copy(list.props.renderItem({ item: bills[0] })), /#1.*First card.*Payments paused/);
+    const pausedCard = copy(list.props.renderItem({ item: bills[0] }));
+    assert.match(pausedCard, /#1.*First card.*\$800\.00.*Payments paused/);
+    assert.match(pausedCard, /Required \/ month.*\$100\.00/);
+    assert.match(pausedCard, /Payments paused — keeps its payoff position/);
+    assert.doesNotMatch(pausedCard, /Target first — put all extra here/);
   }
+  const upcoming = { ...debt, debt_payment_pauses: [{ ...savedPause, start_date: "2026-02-01" }] };
+  const scheduled = harness("BillsScreen", {}, { budget: { bills: [upcoming] } });
+  const scheduledCard = copy(scheduled.child("FlatList").props.renderItem({ item: upcoming }));
+  assert.match(scheduledCard, /#1.*First card.*Pause scheduled/);
+  assert.match(scheduledCard, /Target first — put all extra here/);
+  assert.doesNotMatch(scheduledCard, /Payments paused — keeps its payoff position/);
 });
 
 test("desktop dashboard selects the currently eligible debt while preserving open debt totals through automatic resume", () => {

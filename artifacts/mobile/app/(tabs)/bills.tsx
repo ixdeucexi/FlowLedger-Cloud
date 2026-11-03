@@ -987,13 +987,15 @@ export default function BillsScreen() {
             <Text style={[styles.strategyText, { color: c.mutedForeground }]}>
               {isPaidOff
                 ? "Paid off — no longer in the active order"
-                : isExcluded
-                  ? "Not included in your payoff plan"
-                  : isUnranked
-                    ? `Not active in the ${MONTH_FULL[debtPlanMonth]} payoff order`
-                    : strategyRank === 1
-                      ? "Target first — put all extra here"
-                      : `Pay off #${(strategyRank ?? 1) - 1} first, then cascade here`}
+                : activePause
+                  ? "Payments paused — keeps its payoff position"
+                  : isExcluded
+                    ? "Not included in your payoff plan"
+                    : isUnranked
+                      ? `Not active in the ${MONTH_FULL[debtPlanMonth]} payoff order`
+                      : strategyRank === 1
+                        ? "Target first — put all extra here"
+                        : `Pay off #${(strategyRank ?? 1) - 1} first, then cascade here`}
             </Text>
           </View>
         </View>
