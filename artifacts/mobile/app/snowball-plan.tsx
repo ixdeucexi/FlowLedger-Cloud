@@ -616,7 +616,7 @@ function SnowballPlanScreen() {
             <View style={[styles.sideColumn, twoColumn && styles.sideColumnDesktop]}>
               {strategyTargets ? <View accessibilityLabel="Payoff strategy comparison" style={[styles.sectionCard, { backgroundColor: c.card, borderColor: c.border }]}>
                 <Text style={[styles.sectionEyebrow, { color: c.primary }]}>COMPARE STRATEGIES</Text>
-                <Text style={[styles.sectionTitle, { color: c.foreground }]}>Choose your focus</Text>
+                <Text style={[styles.sectionTitle, { color: c.foreground }]}>Compare payoff strategies</Text>
                 <Text style={[styles.smallCopy, { color: c.mutedForeground }]}>Compare this month’s opening debt balances: Snowball starts with the smallest balance; Avalanche starts with the highest APR. Your saved Forecast keeps its current Snowball schedule.</Text>
                 {(["snowball", "avalanche"] as const).map(method => <View key={method} style={{ marginTop: 14 }}>
                   <Text style={[styles.cardLabel, { color: c.primary }]}>{method === "snowball" ? "SNOWBALL" : "AVALANCHE"}</Text>
