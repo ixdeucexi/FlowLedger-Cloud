@@ -9,7 +9,7 @@ import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as
 import colors from "@/constants/colors";
 import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
 import { BillPaymentHistoryPanel } from "@/components/BillPaymentHistoryPanel";
-import { DebtPaymentPauseModal, type DebtPaymentPauseDateField, type DebtPaymentPauseInput } from "@/components/DebtPaymentPauseModal";
+import { DebtPaymentPauseModal, type DebtPaymentPauseDateField, type DebtPaymentPauseInput, type DebtPaymentPauseStep } from "@/components/DebtPaymentPauseModal";
 import type { Bill } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { DatePickerField } from "@/components/DatePickerField";
@@ -104,6 +104,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   const [historyVisible, setHistoryVisible] = useState(false);
   const [pauseVisible, setPauseVisible] = useState(false);
   const [pauseDateField, setPauseDateField] = useState<DebtPaymentPauseDateField>(null);
+  const [pauseStep, setPauseStep] = useState<DebtPaymentPauseStep>("dates");
   const [pauseActionSaving, setPauseActionSaving] = useState(false);
   const [pauseActionError, setPauseActionError] = useState("");
   const [pauseBackRevision, setPauseBackRevision] = useState(0);
@@ -113,6 +114,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
     if (pauseVisible) {
       if (pausePendingRef.current) { setPauseBackRevision(revision => revision + 1); return; }
       if (pauseDateField) setPauseDateField(null);
+      else if (pauseStep === "transfer") setPauseStep("dates");
       else setPauseVisible(false);
       return;
     }
@@ -121,11 +123,12 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   };
   // A refused browser Back has consumed its nested entry; a new revision
   // asks the existing controller to restore that owned entry while saving.
-  useBackDismiss(visible, dismissLayer, true, pauseVisible ? (pauseDateField ? 2 : 1) + pauseBackRevision * 3 : historyVisible ? 1 : 0);
+  useBackDismiss(visible, dismissLayer, true, pauseVisible ? (pauseDateField || pauseStep === "transfer" ? 2 : 1) + pauseBackRevision * 3 : historyVisible ? 1 : 0);
 
   useEffect(() => {
     setPauseVisible(false);
     setPauseDateField(null);
+    setPauseStep("dates");
     setPauseActionError("");
   }, [editBill?.id, currentDebt?.id, visible, pauseScopeKey]);
 
@@ -134,6 +137,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
     Keyboard.dismiss();
     setActionMenuVisible(false);
     setPauseDateField(null);
+    setPauseStep("dates");
     setPauseVisible(true);
   };
   const assertPauseAccess = () => {
@@ -808,9 +812,11 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
         canEdit={canEditHousehold}
         redirectEnabled={settings.debtPayoffEnabled}
         openDateField={pauseDateField}
+        step={pauseStep}
+        onStepChange={setPauseStep}
         onOpenDateFieldChange={setPauseDateField}
         onSavingChange={pending => { pausePendingRef.current = pending; }}
-        onClose={() => { setPauseVisible(false); setPauseDateField(null); }}
+        onClose={() => { setPauseVisible(false); setPauseDateField(null); setPauseStep("dates"); }}
         onSave={savePaymentPause}
       />}
     </Modal>

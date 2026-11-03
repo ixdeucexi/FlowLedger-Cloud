@@ -132,7 +132,7 @@ endobj
 endobj
 16 0 obj
 <<
-/Author (FlowLedger) /CreationDate (D:20261103134244+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:f23b972fce1187031930cc2b8e7313ae8c7d8b0fedbda296fafcd7e3a29114a7) /ModDate (D:20261103134244+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+/Author (FlowLedger) /CreationDate (D:20261103144015+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:787f115f1efbcff00538caee40bf09c2b87b342dd7abc2e8c73342c5ef7d883f) /ModDate (D:20261103144015+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
   /Subject (Current Dashboard, Activity, Bills, Forecast, payoff, Flo, and Settings guidance) /Title (FlowLedger User Guide) /Trapped /False
 >>
 endobj
@@ -954,7 +954,7 @@ endstream
 endobj
 22 0 obj
 <<
-/Length 7290
+/Length 7465
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -1182,15 +1182,15 @@ BT 1 0 0 1 327 442 Tm (Change an amount or date when it no longer fits real life
 .160784 .207843 .321569 RG
 .8 w
 n
-329 317 m
-554 317 l
-562.8448 317 570 324.1552 570 333 c
+329 295 m
+554 295 l
+562.8448 295 570 302.1552 570 311 c
 570 400 l
 570 408.8448 562.8448 416 554 416 c
 329 416 l
 320.1552 416 313 408.8448 313 400 c
-313 333 l
-313 324.1552 320.1552 317 329 317 c
+313 311 l
+313 302.1552 320.1552 295 329 295 c
 h
 B*
 .960784 .721569 .180392 rg
@@ -1207,11 +1207,13 @@ BT 1 0 0 1 338 401 Tm (Pause debt payments) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
 BT 1 0 0 1 327 386 Tm (Open a debt and choose Pause debt payments. Set start) Tj T* ET
-BT 1 0 0 1 327 375 Tm (and resume dates; with Debt Payoff Plan on, you can) Tj T* ET
-BT 1 0 0 1 327 364 Tm (redirect that payment to other debts. The debt stays open in) Tj T* ET
-BT 1 0 0 1 327 353 Tm (order and resumes automatically, or choose Resume now.) Tj T* ET
-BT 1 0 0 1 327 342 Tm (This changes your FlowLedger plan only; lender payments) Tj T* ET
-BT 1 0 0 1 327 331 Tm (and interest may still apply.) Tj T* ET
+BT 1 0 0 1 327 375 Tm (and resume dates, then choose Continue. At the final) Tj T* ET
+BT 1 0 0 1 327 364 Tm (question, choose whether to move the payment to other) Tj T* ET
+BT 1 0 0 1 327 353 Tm (debts in payoff order or keep it available. Redirecting) Tj T* ET
+BT 1 0 0 1 327 342 Tm (requires Debt Payoff Plan to be on. The debt stays open in) Tj T* ET
+BT 1 0 0 1 327 331 Tm (order and resumes automatically, or choose Resume now.) Tj T* ET
+BT 1 0 0 1 327 320 Tm (This changes your FlowLedger plan only; lender payments) Tj T* ET
+BT 1 0 0 1 327 309 Tm (and interest may still apply.) Tj T* ET
 .062745 .094118 .168627 rg
 .960784 .721569 .180392 RG
 .8 w
@@ -3056,16 +3058,16 @@ xref
 0000013134 00000 n 
 0000017693 00000 n 
 0000022678 00000 n 
-0000030020 00000 n 
-0000037118 00000 n 
-0000044220 00000 n 
-0000050852 00000 n 
-0000058968 00000 n 
-0000065329 00000 n 
+0000030195 00000 n 
+0000037293 00000 n 
+0000044395 00000 n 
+0000051027 00000 n 
+0000059143 00000 n 
+0000065504 00000 n 
 trailer
 <<
 /ID 
-[<77811696f9de07e13478d58d9c43096f><77811696f9de07e13478d58d9c43096f>]
+[<5ede9bb6db5f385c7f2fd76cf2026c79><5ede9bb6db5f385c7f2fd76cf2026c79>]
 % ReportLab generated PDF document -- digest (opensource)
 
 /Info 16 0 R
@@ -3073,5 +3075,5 @@ trailer
 /Size 29
 >>
 startxref
-74781
+74956
 %%EOF

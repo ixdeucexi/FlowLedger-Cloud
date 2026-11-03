@@ -694,118 +694,79 @@ export default function BillsScreen() {
         }}
         style={({ pressed }) => [
           styles.card,
-          {
-            backgroundColor: c.card,
-            borderRadius: colors.radius,
-            opacity: pressed ? 0.88 : 1,
-          },
+          { backgroundColor: c.card, borderRadius: colors.radius, opacity: pressed ? 0.88 : 1 },
         ]}
       >
         <View
           style={[
             styles.categoryIcon,
-            {
-              backgroundColor: catColor + "16",
-              borderColor: catColor + "30",
-            },
+            { backgroundColor: catColor + "16", borderColor: catColor + "30" },
           ]}
         >
-          <Feather name="file-text" size={18} color={catColor} />
+          <Feather name="file-text" size={17} color={catColor} />
         </View>
         <View style={styles.cardBody}>
           <View style={styles.cardTop}>
             <View style={styles.cardLeft}>
-              <Text
-                style={[styles.billName, { color: c.foreground }]}
-                numberOfLines={1}
-              >
+              <Text style={[styles.billName, { color: c.foreground }]} numberOfLines={2}>
                 {item.name}
               </Text>
-              <View style={styles.metaRow}>
-                <View
-                  style={[styles.tag, { backgroundColor: catColor + "18" }]}
-                >
-                  <Text style={[styles.tagText, { color: catColor }]}>
-                    {item.category}
-                  </Text>
-                </View>
-                <Text
-                  style={[styles.metaText, { color: c.mutedForeground }]}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  {stopped ? formatStoppedText(item) : formatBillDueText(item)}
-                </Text>
-              </View>
-              {stopped || overdue || pending || !item.is_recurring ? (
-                <View style={styles.cardStatusRow}>
-                  {stopped ? (
-                    <View style={[styles.tag, { backgroundColor: c.muted }]}>
-                      <Text
-                        style={[styles.tagText, { color: c.mutedForeground }]}
-                      >
-                        Stopped
-                      </Text>
-                    </View>
-                  ) : null}
-                  {overdue ? (
-                    <View
-                      style={[
-                        styles.tag,
-                        {
-                          backgroundColor: c.destructive + "18",
-                        },
-                      ]}
-                    >
-                      <Text style={[styles.tagText, { color: c.destructive }]}>
-                        Past due · ${overdue.remainingAmount.toFixed(2)}
-                      </Text>
-                    </View>
-                  ) : null}
-                  {pending ? (
-                    <View
-                      style={[
-                        styles.tag,
-                        {
-                          backgroundColor: colors.brand.blue + "18",
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[styles.tagText, { color: colors.brand.blue }]}
-                      >
-                        {pending.status === "ready_review"
-                          ? "Ready to review"
-                          : "Payment pending"}
-                      </Text>
-                    </View>
-                  ) : null}
-                  {!item.is_recurring && (
-                    <View style={[styles.tag, { backgroundColor: c.muted }]}>
-                      <Text
-                        style={[styles.tagText, { color: c.mutedForeground }]}
-                      >
-                        One-time
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              ) : null}
             </View>
             <View style={styles.cardRight}>
               <Text
+                sensitive
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
                 style={[styles.amount, { color: c.foreground }]}
-
-
-
               >
-                ${item.amount.toFixed(2)}
+                {item.amount.toLocaleString(undefined, {
+                  style: "currency",
+                  currency: "USD",
+                  minimumFractionDigits: 2,
+                })}
               </Text>
               <Text style={[styles.amountSub, { color: c.mutedForeground }]}>
                 {frequencyText(item)}
               </Text>
             </View>
           </View>
+          <View style={styles.metaRow}>
+            <View style={[styles.tag, { backgroundColor: catColor + "18" }]}>
+              <Text style={[styles.tagText, { color: catColor }]}>{item.category}</Text>
+            </View>
+            <Text style={[styles.metaText, { color: c.mutedForeground }]}>
+              {stopped ? formatStoppedText(item) : formatBillDueText(item)}
+            </Text>
+          </View>
+          {stopped || overdue || pending || !item.is_recurring ? (
+            <View style={styles.cardStatusRow}>
+              {stopped ? (
+                <View style={[styles.tag, { backgroundColor: c.muted }]}>
+                  <Text style={[styles.tagText, { color: c.mutedForeground }]}>Stopped</Text>
+                </View>
+              ) : null}
+              {overdue ? (
+                <View style={[styles.tag, { backgroundColor: c.destructive + "18" }]}>
+                  <Text sensitive style={[styles.tagText, { color: c.destructive }]}>
+                    Past due · ${overdue.remainingAmount.toFixed(2)}
+                  </Text>
+                </View>
+              ) : null}
+              {pending ? (
+                <View style={[styles.tag, { backgroundColor: colors.brand.blue + "18" }]}>
+                  <Text style={[styles.tagText, { color: colors.brand.blue }]}>
+                    {pending.status === "ready_review" ? "Ready to review" : "Payment pending"}
+                  </Text>
+                </View>
+              ) : null}
+              {!item.is_recurring ? (
+                <View style={[styles.tag, { backgroundColor: c.muted }]}>
+                  <Text style={[styles.tagText, { color: c.mutedForeground }]}>One-time</Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
         </View>
         {stopped ? (
           <Pressable
@@ -817,10 +778,7 @@ export default function BillsScreen() {
             }}
             style={({ pressed }) => [
               styles.restartHint,
-              {
-                backgroundColor: c.primary + "18",
-                opacity: pressed ? 0.78 : 1,
-              },
+              { backgroundColor: c.primary + "18", opacity: pressed ? 0.78 : 1 },
             ]}
           >
             <Feather name="refresh-cw" size={17} color={c.primary} />
@@ -837,9 +795,17 @@ export default function BillsScreen() {
   const renderDebt = ({ item }: { item: Bill }) => {
     const isPaidOff = item.balance <= 0.009;
     const activePause = !isPaidOff ? activeDebtPaymentPause(item, pauseToday) : undefined;
-    const nextPause = !isPaidOff ? item.debt_payment_pauses?.filter(pause => pause.start_date > pauseToday).sort((left, right) => left.start_date.localeCompare(right.start_date))[0] : undefined;
+    const nextPause = !isPaidOff
+      ? item.debt_payment_pauses
+          ?.filter((pause) => pause.start_date > pauseToday)
+          .sort((left, right) => left.start_date.localeCompare(right.start_date))[0]
+      : undefined;
     const paymentPause = activePause ?? nextPause;
-    const pauseDate = paymentPause ? dateOnlyToLocalDate(activePause ? paymentPause.resume_date : paymentPause.start_date)?.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : undefined;
+    const pauseDate = paymentPause
+      ? dateOnlyToLocalDate(
+          activePause ? paymentPause.resume_date : paymentPause.start_date,
+        )?.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+      : undefined;
     const strategyRank = strategyRankById.get(item.id);
     const isExcluded = !isPaidOff && item.include_in_snowball === false;
     const isUnranked = !isPaidOff && strategyRank === undefined;
@@ -847,17 +813,13 @@ export default function BillsScreen() {
       ? c.success
       : isUnranked
         ? c.mutedForeground
-        : (priorityColors[
-            Math.min((strategyRank ?? 1) - 1, priorityColors.length - 1)
-          ] ?? c.primary);
+        : (priorityColors[Math.min((strategyRank ?? 1) - 1, priorityColors.length - 1)] ?? c.primary);
     const effectiveMinimum = debtMonthlyMinimum(item);
     const requiredMinimum = debtRequiredMinimum(item);
     const forecastPayment = forecastPaymentByDebtId.get(item.id);
     const forecastRollover = forecastRolloverByDebtId.get(item.id) ?? 0;
     const monthsToPayoff =
-      item.balance > 0 && effectiveMinimum > 0
-        ? Math.ceil(item.balance / effectiveMinimum)
-        : 0;
+      item.balance > 0 && effectiveMinimum > 0 ? Math.ceil(item.balance / effectiveMinimum) : 0;
 
     return (
       <Pressable
@@ -881,145 +843,146 @@ export default function BillsScreen() {
         <View
           style={[
             styles.priorityBadge,
-            {
-              backgroundColor: priorityColor + "16",
-              borderColor: priorityColor + "32",
-            },
+            { backgroundColor: priorityColor + "16", borderColor: priorityColor + "32" },
           ]}
         >
-          {isPaidOff ? (
-            <Feather name="check" size={17} color={priorityColor} />
-          ) : null}
+          {isPaidOff ? <Feather name="check" size={14} color={priorityColor} /> : null}
           <Text style={[styles.priorityNum, { color: priorityColor }]}>
-            {isPaidOff
-              ? "PAID"
-              : isExcluded
-                ? "OFF"
-                : isUnranked
-                  ? "WAIT"
-                  : `#${strategyRank}`}
+            {isPaidOff ? "PAID" : isExcluded ? "OFF" : isUnranked ? "WAIT" : `#${strategyRank}`}
           </Text>
         </View>
-
         <View style={styles.cardBody}>
           <View style={styles.cardTop}>
             <View style={styles.cardLeft}>
-              <Text
-                style={[styles.debtName, { color: c.foreground }]}
-                numberOfLines={2}
-              >
+              <Text style={[styles.debtName, { color: c.foreground }]} numberOfLines={2}>
                 {item.name}
               </Text>
-              {paymentPause ? <View style={[styles.debtPauseBadge, { backgroundColor: c.warning + "16", borderColor: c.warning + "40" }]}>
-                <Text style={[styles.debtPauseText, { color: c.warning }]}>{activePause ? "Payments paused" : "Pause scheduled"}</Text>
-                <Text style={[styles.debtPauseDate, { color: c.mutedForeground }]}>{activePause ? "Resumes" : "Starts"} {pauseDate}</Text>
-              </View> : null}
-              <View style={styles.metaRow}>
-                {item.interest_rate > 0 && (
-                  <View
-                    style={[
-                      styles.aprBadge,
-                      { backgroundColor: c.destructive + "20" },
-                    ]}
-                  >
-                    <Text style={[styles.aprText, { color: c.destructive }]}>
-                      {item.interest_rate}% APR
-                    </Text>
-                  </View>
-                )}
-                <Text
-                  style={[
-                    styles.metaText,
-                    {
-                      color: isPaidOff ? c.success : c.mutedForeground,
-                    },
-                  ]}
-                >
-                  {isPaidOff ? "Paid off" : formatBillDueText(item)}
-                </Text>
-                {monthsToPayoff > 0 && (
-                  <Text style={[styles.metaText, { color: c.mutedForeground }]}>
-                    ~{monthsToPayoff} mo left
-                  </Text>
-                )}
-              </View>
             </View>
             <View style={styles.cardRight}>
               <Text
-                style={[
-                  styles.balance,
-                  {
-                    color: isPaidOff ? c.success : c.destructive,
-                  },
-                ]}
-
-
-
                 sensitive={!isPaidOff}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
+                style={[styles.balance, { color: isPaidOff ? c.success : c.destructive }]}
               >
                 {isPaidOff
                   ? "Paid"
-                  : `${item.balance.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+                  : item.balance.toLocaleString(undefined, {
+                      style: "currency",
+                      currency: "USD",
+                      minimumFractionDigits: 2,
+                    })}
               </Text>
-              {!isPaidOff && (
-                <Text
-                  style={[styles.minPay, { color: c.mutedForeground }]}
-                  numberOfLines={2}
-                >
-                  ${requiredMinimum.toFixed(2)}/mo required
-                </Text>
-              )}
-              {!isPaidOff && forecastPayment !== undefined ? (
-                <Text
-                  style={[styles.metaText, { color: c.primary }]}
-                  numberOfLines={2}
-                >
-                  ${forecastPayment.toFixed(2)} total forecast
-                </Text>
-              ) : null}
-              {!isPaidOff && forecastRollover > 0.005 && (
-                <Text
-                  style={[styles.metaText, { color: c.success }]}
-                  numberOfLines={2}
-                >
-                  +${forecastRollover.toFixed(2)} snowball rollover · extra
-                </Text>
-              )}
             </View>
           </View>
-
+          {paymentPause ? (
+            <View
+              style={[
+                styles.debtPauseBadge,
+                { backgroundColor: c.warning + "16", borderColor: c.warning + "40" },
+              ]}
+            >
+              <Text style={[styles.debtPauseText, { color: c.warning }]}>
+                {activePause ? "Payments paused" : "Pause scheduled"}
+              </Text>
+              <Text style={[styles.debtPauseDate, { color: c.mutedForeground }]}>
+                {activePause ? "Resumes" : "Starts"} {pauseDate}
+              </Text>
+            </View>
+          ) : null}
+          <View style={styles.metaRow}>
+            {item.interest_rate > 0 ? (
+              <View style={[styles.aprBadge, { backgroundColor: c.destructive + "20" }]}>
+                <Text style={[styles.aprText, { color: c.destructive }]}>
+                  {item.interest_rate}% APR
+                </Text>
+              </View>
+            ) : null}
+            <Text style={[styles.metaText, { color: isPaidOff ? c.success : c.mutedForeground }]}>
+              {isPaidOff ? "Paid off" : formatBillDueText(item)}
+            </Text>
+            {monthsToPayoff > 0 ? (
+              <Text style={[styles.metaText, { color: c.mutedForeground }]}>
+                ~{monthsToPayoff} mo left
+              </Text>
+            ) : null}
+          </View>
+          {!isPaidOff ? (
+            <View style={styles.paymentDetails}>
+              <View style={styles.paymentRow}>
+                <Text style={[styles.paymentLabel, { color: c.mutedForeground }]}>
+                  Required / month
+                </Text>
+                <Text
+                  sensitive
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.85}
+                  style={[styles.paymentAmount, { color: c.mutedForeground }]}
+                >
+                  {requiredMinimum.toLocaleString(undefined, {
+                    style: "currency",
+                    currency: "USD",
+                    minimumFractionDigits: 2,
+                  })}
+                </Text>
+              </View>
+              {forecastPayment !== undefined ? (
+                <View style={styles.paymentRow}>
+                  <Text style={[styles.paymentLabel, { color: c.primary }]}>Total forecast</Text>
+                  <Text
+                    sensitive
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.85}
+                    style={[styles.paymentAmount, { color: c.primary }]}
+                  >
+                    {forecastPayment.toLocaleString(undefined, {
+                      style: "currency",
+                      currency: "USD",
+                      minimumFractionDigits: 2,
+                    })}
+                  </Text>
+                </View>
+              ) : null}
+              {forecastRollover > 0.005 ? (
+                <View style={styles.paymentRow}>
+                  <Text style={[styles.paymentLabel, { color: c.success }]}>Rollover · extra</Text>
+                  <Text
+                    sensitive
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.85}
+                    style={[styles.paymentAmount, { color: c.success }]}
+                  >
+                    +
+                    {forecastRollover.toLocaleString(undefined, {
+                      style: "currency",
+                      currency: "USD",
+                      minimumFractionDigits: 2,
+                    })}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
           {isPaidOff ? (
             <View style={styles.progressSection}>
               <View style={styles.progressHeader}>
-                <Text
-                  style={[styles.progressLabel, { color: c.mutedForeground }]}
-                >
+                <Text style={[styles.progressLabel, { color: c.mutedForeground }]}>
                   Payoff status
                 </Text>
-                <Text style={[styles.progressPct, { color: c.success }]}>
-                  Complete
-                </Text>
+                <Text style={[styles.progressPct, { color: c.success }]}>Complete</Text>
               </View>
               <View style={[styles.progressBg, { backgroundColor: c.muted }]}>
                 <View
-                  style={[
-                    styles.progressFill,
-                    {
-                      width: "100%" as any,
-                      backgroundColor: c.success,
-                    },
-                  ]}
+                  style={[styles.progressFill, { width: "100%" as any, backgroundColor: c.success }]}
                 />
               </View>
             </View>
           ) : null}
-
-          <View
-            style={[
-              styles.strategyNote,
-              { backgroundColor: priorityColor + "12" },
-            ]}
-          >
+          <View style={[styles.strategyNote, { backgroundColor: priorityColor + "12" }]}>
             <Feather name="zap" size={11} color={priorityColor} />
             <Text style={[styles.strategyText, { color: c.mutedForeground }]}>
               {isPaidOff
@@ -1034,7 +997,6 @@ export default function BillsScreen() {
             </Text>
           </View>
         </View>
-
         <View style={styles.editHint}>
           <Feather name="chevron-right" size={17} color={c.mutedForeground} />
         </View>
@@ -2509,25 +2471,25 @@ const styles = StyleSheet.create({
     elevation: 3,
     overflow: "hidden",
   },
-  cardBody: { flex: 1, paddingHorizontal: 12, paddingVertical: 11 },
+  cardBody: { flex: 1, minWidth: 0, paddingHorizontal: 10, paddingVertical: 12 },
   cardTop: { flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "flex-start" },
-  cardLeft: { flex: 1, minWidth: 140 },
+  cardLeft: { flex: 1, flexBasis: "50%", minWidth: 0 },
   cardRight: {
     maxWidth: "100%",
-    minWidth: 150,
-    flexShrink: 0,
+    minWidth: 0,
+    flexShrink: 1,
+    marginLeft: "auto",
     alignItems: "flex-end",
-    marginLeft: 8,
   },
   metaRow: {
     flexDirection: "row",
-    gap: 8,
+    marginTop: 4,
+    gap: 6,
     alignItems: "center",
     flexWrap: "wrap",
   },
   metaText: {
-    flex: 1,
-    minWidth: 64,
+    flexShrink: 1,
     fontSize: 10,
     lineHeight: 15,
     fontFamily: "Inter_400Regular",
@@ -2540,15 +2502,17 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   editHint: {
-    width: 42,
+    width: 24,
+    marginRight: 6,
     minHeight: 48,
     alignItems: "center",
     justifyContent: "center",
   },
   restartHint: {
-    width: 46,
+    width: 36,
+    minHeight: 40,
     marginVertical: 12,
-    marginRight: 10,
+    marginRight: 8,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
@@ -2556,9 +2520,9 @@ const styles = StyleSheet.create({
 
   // Bills-specific
   categoryIcon: {
-    width: 44,
-    height: 44,
-    marginLeft: 13,
+    width: 32,
+    height: 36,
+    marginLeft: 12,
     borderWidth: 1,
     borderRadius: 14,
     alignItems: "center",
@@ -2570,7 +2534,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     letterSpacing: -0.2,
   },
-  tag: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
+  tag: { maxWidth: "100%", paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
   tagText: { fontSize: 9, fontFamily: "Inter_600SemiBold" },
   amount: { fontSize: 15, fontFamily: "Inter_800ExtraBold" },
   amountSub: { fontSize: 10, fontFamily: "Inter_400Regular" },
@@ -2808,9 +2772,9 @@ const styles = StyleSheet.create({
   sortBtnText: { fontSize: 11, fontFamily: "Inter_700Bold" },
   debtCard: { minHeight: 104 },
   priorityBadge: {
-    width: 46,
-    minHeight: 50,
-    marginLeft: 13,
+    width: 32,
+    minHeight: 36,
+    marginLeft: 12,
     borderWidth: 1,
     borderRadius: 15,
     alignItems: "center",
@@ -2822,13 +2786,17 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: 0.3,
   },
-  debtName: { fontSize: 16, fontFamily: "Inter_700Bold", marginBottom: 6 },
+  debtName: { fontSize: 15, lineHeight: 20, fontFamily: "Inter_700Bold" },
   debtPauseBadge: { alignSelf: "flex-start", maxWidth: "100%", borderWidth: 1, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 5, marginBottom: 7, gap: 2 },
   debtPauseText: { fontSize: 10, fontFamily: "Inter_700Bold" },
   debtPauseDate: { fontSize: 10, lineHeight: 14, fontFamily: "Inter_400Regular" },
   aprBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
   aprText: { fontSize: 11, fontFamily: "Inter_700Bold" },
-  balance: { fontSize: 20, fontFamily: "Inter_700Bold" },
+  balance: { fontSize: 18, lineHeight: 22, textAlign: "right", fontFamily: "Inter_700Bold" },
+  paymentDetails: { marginTop: 8, gap: 4 },
+  paymentRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  paymentLabel: { flex: 1, minWidth: 0, fontSize: 10, lineHeight: 15, fontFamily: "Inter_400Regular" },
+  paymentAmount: { flexShrink: 1, maxWidth: "60%", fontSize: 11, lineHeight: 15, textAlign: "right", fontFamily: "Inter_600SemiBold" },
   minPay: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
   progressSection: { marginBottom: 8 },
   progressHeader: {
@@ -2847,7 +2815,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 8,
     borderRadius: 11,
-    marginTop: 10,
+    marginTop: 8,
   },
   strategyText: {
     flex: 1,

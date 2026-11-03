@@ -7,6 +7,7 @@ import * as dateLabels from "./dateLabels";
 import * as editPersistence from "./billEditPersistence";
 import * as moneyInput from "./moneyFormInput";
 import * as billImportance from "./billImportance";
+import { matchesBillSearch } from "./billSearch";
 import { orderActiveDebtsForStrategy } from "./debtOrder";
 import { createNestedOverlayHistory } from "./nestedOverlayHistory";
 import { revealedPrivacyModule } from "./privacyTestHarness";
@@ -40,7 +41,7 @@ function browserHistory() {
 }
 
 const compiled = new Map<string, string>();
-function harness(component: string, props: Record<string, any> = {}, options: { budget?: Record<string, any>; browser?: ReturnType<typeof browserHistory>; native?: boolean; today?: string } = {}) {
+function harness(component: string, props: Record<string, any> = {}, options: { budget?: Record<string, any>; browser?: ReturnType<typeof browserHistory>; native?: boolean; today?: string; view?: string } = {}) {
   const states: any[] = [], effects: (() => void)[] = [], cleanups = new Map<number, () => void>();
   const budget: any = { bills: [{ ...debt }], categories: ["Other", "Debt"], settings: { debtPayoffEnabled: true }, householdTimeZone: "Pacific/Kiritimati", activeHousehold: { householdId: "home", budgetId: "budget", role: "owner" }, canEditHousehold: true, pauseDebtPayments: async () => {}, resumeDebtPayments: async () => {}, getDebtMonthSettlements: () => new Map(), pendingPlanMatches: [], pendingBankTransactions: [], getMonthlyBills: () => budget.bills, getBillOccurrencesInMonth: () => [15], getBillMonthlyTotal: (bill: any) => bill.amount, getBillEffectiveMonthlyTotal: (bill: any) => bill.amount, getPaidAmount: () => 0, getExtraPayment: () => undefined, getDebtPlanForMonth: () => null, getRemainingDebtPlanForMonth: () => null, previewDebtSnowball: () => ({ safeMaximum: 0 }), ...options.budget };
   let cursor = 0, dirty = false, lastBack: (() => void) | undefined, lastDepth: boolean | number | undefined;
@@ -67,7 +68,7 @@ function harness(component: string, props: Record<string, any> = {}, options: { 
     const privacy = revealedPrivacyModule(name); if (privacy) return privacy;
     if (name === "react") return hooks;
     if (name === "react-native") return native;
-    if (name === "expo-router") return { useLocalSearchParams: () => ({ view: "debt" }), useRouter: () => ({ setParams() {}, push() {} }) };
+    if (name === "expo-router") return { useLocalSearchParams: () => ({ view: options.view ?? "debt" }), useRouter: () => ({ setParams() {}, push() {} }) };
     if (name === "react-native-safe-area-context") return { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) };
     const leaf = name.split("/").at(-1)!;
     if (leaf === "BudgetContext") return { useBudget: () => budget };
@@ -82,6 +83,7 @@ function harness(component: string, props: Record<string, any> = {}, options: { 
     if (leaf === "billEditPersistence") return editPersistence;
     if (leaf === "moneyFormInput") return moneyInput;
     if (leaf === "billImportance") return billImportance;
+    if (leaf === "billSearch") return { matchesBillSearch };
     if (leaf === "dailyCheckingClose") return { localDateInTimeZone(_date: Date, zone: string) { zones.push(zone); return options.today ?? "2026-01-31"; } };
     if (leaf === "debtOrder") return { orderActiveDebtsForStrategy };
     if (leaf === "snowball") return { effectiveDebtMinimum: (amount: number, boost: number) => amount + boost };
@@ -101,11 +103,12 @@ function harness(component: string, props: Record<string, any> = {}, options: { 
   return { props, budget, render, button, child, zones, back: () => lastBack!(), depth: () => lastDepth, unmount: () => cleanups.forEach(cleanup => cleanup()) };
 }
 
-function pauseHarness(extra: Record<string, any> = {}) {
+function pauseHarness(extra: Record<string, any> = {}, options: Parameters<typeof harness>[2] = {}) {
   const writes: any[] = [], pending: boolean[] = []; let closes = 0;
-  const props: any = { visible: true, bill: { ...debt }, today: "2026-01-31", canEdit: true, redirectEnabled: true, openDateField: null,
+  const props: any = { visible: true, bill: { ...debt }, today: "2026-01-31", canEdit: true, redirectEnabled: true, openDateField: null, step: "dates",
     onOpenDateFieldChange(field: string | null) { props.openDateField = field; }, onSavingChange(value: boolean) { pending.push(value); }, onClose() { closes++; }, onSave: async (input: any) => { writes.push(input); }, ...extra };
-  return { ...harness("DebtPaymentPauseModal", props), writes, pending, closes: () => closes };
+  props.onStepChange = (step: string) => { props.step = step; extra.onStepChange?.(step); };
+  return { ...harness("DebtPaymentPauseModal", props, options), writes, pending, closes: () => closes };
 }
 
 test("opening and cancelling a debt pause never saves; default resume clamps calendar month boundaries", () => {
@@ -117,43 +120,103 @@ test("opening and cancelling a debt pause never saves; default resume clamps cal
   }
 });
 
-test("pause save waits for persistence, blocks rapid duplicate submits and retains dates after a retryable failure", async () => {
+test("pause choice is final, explicit and reversible without writing or losing dates", async () => {
+  const h = pauseHarness();
+  assert.equal(h.button("Pause payments"), undefined);
+  assert.equal(h.button("Yes, use payoff order"), undefined);
+  h.button("Continue").props.onPress();
+  assert.equal(h.props.step, "transfer");
+  assert.equal(h.button("Pause payments").props.disabled, true);
+  assert.equal(h.button("Yes, use payoff order").props.accessibilityState.checked, false);
+  assert.equal(h.button("No, keep it available").props.accessibilityState.checked, false);
+  assert.equal(h.button("Yes, use payoff order").props["aria-checked"], false);
+  assert.equal(h.button("No, keep it available").props["aria-checked"], false);
+  await h.button("Pause payments").props.onPress();
+  assert.equal(h.writes.length, 0);
+  let prevented = 0;
+  h.button("Yes, use payoff order").props.onKeyDown({ key: " ", preventDefault() { prevented++; }, stopPropagation() {} });
+  assert.equal(h.button("Yes, use payoff order").props["aria-checked"], true);
+  assert.equal(h.writes.length, 0);
+  h.button("No, keep it available").props.onKeyDown({ key: " ", preventDefault() { prevented++; }, stopPropagation() {} });
+  assert.equal(prevented, 2);
+  assert.equal(h.button("No, keep it available").props["aria-checked"], true);
+  h.button("Back").props.onPress();
+  assert.equal(h.props.step, "dates");
+  assert.deepEqual(flatten(h.render()).filter(node => node.type === "DatePickerField").map(node => node.props.value), ["2026-01-31", "2026-03-31"]);
+  h.button("Continue").props.onPress();
+  assert.equal(h.button("No, keep it available").props.accessibilityState.checked, true);
+  assert.equal(h.button("Yes, use payoff order").props["aria-checked"], false);
+  assert.equal(h.button("No, keep it available").props["aria-checked"], true);
+  h.button("Close debt payment pause").props.onPress();
+  assert.equal(h.closes(), 1);
+  assert.equal(h.writes.length, 0);
+  const native = pauseHarness({}, { native: true });
+  native.button("Continue").props.onPress();
+  assert.equal(native.button("Yes, use payoff order").props.onKeyDown, undefined);
+  assert.equal(native.button("No, keep it available").props.onKeyDown, undefined);
+});
+
+test("pause save waits for persistence, blocks rapid duplicate submits and retains choice and dates after a retryable failure", async () => {
   let fail!: (error: Error) => void, finish!: () => void;
   let promise = new Promise<void>((resolve, reject) => { finish = resolve; fail = reject; });
   const writes: any[] = [];
   const h = pauseHarness({ onSave: (input: any) => { writes.push(input); return promise; } });
   flatten(h.render()).find(node => node.type === "DatePickerField" && node.props.label === "Pause starts").props.onChange("2026-02-05");
   flatten(h.render()).find(node => node.type === "DatePickerField" && node.props.label === "Payments resume").props.onChange("2026-04-05");
+  h.button("Continue").props.onPress(); h.button("Yes, use payoff order").props.onPress();
   const submit = h.button("Pause payments"); const first = submit.props.onPress(); await submit.props.onPress();
   assert.deepEqual(writes, [{ startDate: "2026-02-05", resumeDate: "2026-04-05", redirectPayment: true }]);
-  assert.equal(h.closes(), 0); assert.equal(h.button("Cancel").props.disabled, true);
-  assert.ok(flatten(h.render()).filter(node => node.type === "DatePickerField").every(node => node.props.disabled));
-  h.button("Cancel").props.onPress(); assert.equal(h.closes(), 0);
+  assert.equal(h.closes(), 0); assert.equal(h.button("Back").props.disabled, true);
+  assert.ok(["Yes, use payoff order", "No, keep it available"].every(label => h.button(label).props.disabled));
+  h.button("No, keep it available").props.onPress();
+  h.button("No, keep it available").props.onKeyDown({ key: " ", preventDefault() {}, stopPropagation() {} });
+  assert.equal(h.button("Yes, use payoff order").props["aria-checked"], true);
+  assert.equal(h.button("No, keep it available").props["aria-checked"], false);
+  h.button("Back").props.onPress(); assert.equal(h.props.step, "transfer");
+  h.button("Close debt payment pause").props.onPress(); assert.equal(h.closes(), 0);
   fail(new Error("Fictional connection failed")); await first;
   assert.match(copy(h.render()), /Fictional connection failed/); assert.equal(h.closes(), 0);
+  assert.equal(h.button("Yes, use payoff order").props.accessibilityState.checked, true);
+  h.button("Back").props.onPress();
   const values = flatten(h.render()).filter(node => node.type === "DatePickerField").map(node => node.props.value);
   assert.deepEqual(values, ["2026-02-05", "2026-04-05"]);
+  h.button("Continue").props.onPress();
   promise = new Promise<void>(resolve => { finish = resolve; });
   const retry = h.button("Pause payments").props.onPress(); finish(); await retry;
   assert.equal(h.closes(), 1); assert.equal(writes.length, 2); assert.deepEqual(writes[1], writes[0]); assert.deepEqual(h.pending, [true, false, true, false]);
 });
 
-test("plan-off pause keeps redirection disabled and saves pause-only without changing the global plan", async () => {
+test("plan-off pause offers an explicit pause-only choice and rejects stale disabled yes callbacks", async () => {
   const h = pauseHarness({ redirectEnabled: false });
-  const toggle = h.child("Switch"); assert.equal(toggle.props.value, false); assert.equal(toggle.props.disabled, true);
+  h.button("Continue").props.onPress();
+  const yes = h.button("Yes, use payoff order");
+  assert.equal(yes.props.accessibilityState.checked, false); assert.equal(yes.props.disabled, true);
   assert.match(copy(h.render()), /You can still pause this debt/);
-  toggle.props.onValueChange(true); await h.button("Pause payments").props.onPress();
+  yes.props.onPress();
+  yes.props.onKeyDown({ key: " ", preventDefault() {}, stopPropagation() {} });
+  assert.equal(h.button("Pause payments").props.disabled, true);
+  h.button("No, keep it available").props.onPress(); await h.button("Pause payments").props.onPress();
   assert.deepEqual(h.writes, [{ startDate: "2026-01-31", resumeDate: "2026-03-31", redirectPayment: false }]);
+});
+
+test("losing the global payoff plan invalidates a prior yes and requires a fresh explicit choice", async () => {
+  const h = pauseHarness(); h.button("Continue").props.onPress(); h.button("Yes, use payoff order").props.onPress();
+  h.props.redirectEnabled = false;
+  assert.equal(h.button("Yes, use payoff order").props.accessibilityState.checked, false);
+  assert.equal(h.button("Pause payments").props.disabled, true);
+  await h.button("Pause payments").props.onPress(); assert.equal(h.writes.length, 0);
+  h.button("No, keep it available").props.onPress(); await h.button("Pause payments").props.onPress();
+  assert.equal(h.writes[0].redirectPayment, false);
 });
 
 test("invalid or overlapping dates and unavailable debts cannot invoke the saved pause callback", async () => {
   const invalid = pauseHarness();
   flatten(invalid.render()).find(node => node.type === "DatePickerField" && node.props.label === "Payments resume").props.onChange("2026-01-31");
-  await invalid.button("Pause payments").props.onPress(); assert.equal(invalid.writes.length, 0); assert.match(copy(invalid.render()), /resume after/);
+  await invalid.button("Continue").props.onPress(); assert.equal(invalid.writes.length, 0); assert.match(copy(invalid.render()), /resume after/);
   const overlap = pauseHarness({ bill: { ...debt, debt_payment_pauses: [savedPause] } });
-  await overlap.button("Pause payments").props.onPress(); assert.equal(overlap.writes.length, 0); assert.match(copy(overlap.render()), /cannot overlap/);
+  await overlap.button("Continue").props.onPress(); assert.equal(overlap.writes.length, 0); assert.match(copy(overlap.render()), /cannot overlap/);
   for (const overrides of [{ canEdit: false }, { bill: { ...debt, balance: 0 } }, { bill: { ...debt, end_date: "2026-01-31" } }, { bill: { ...debt, is_debt: false } }]) {
-    const h = pauseHarness(overrides); await h.button("Pause payments").props.onPress(); assert.equal(h.writes.length, 0); assert.equal(h.button("Pause payments").props.disabled, true);
+    const h = pauseHarness(overrides); await h.button("Continue").props.onPress(); assert.equal(h.writes.length, 0); assert.equal(h.button("Continue").props.disabled, true);
   }
 });
 
@@ -217,38 +280,59 @@ test("closing a calendar through UI keeps the next browser Back available for th
   h.unmount();
 });
 
-test("browser Back refused during a pending save restores its entry and failure preserves the pause and next Back order", async () => {
-  for (const calendar of [null, "start"]) {
-    let fail!: (error: Error) => void, calls = 0;
-    const browser = browserHistory();
-    const h = editorHarness({ browser, budget: { pauseDebtPayments: () => { calls++; return new Promise<void>((_resolve, reject) => { fail = reject; }); } } });
-    h.button("Pause debt payments").props.onPress();
-    if (calendar) h.child("DebtPaymentPauseModal").props.onOpenDateFieldChange(calendar);
-    const overlay = h.child("DebtPaymentPauseModal");
-    const child = pauseHarness(overlay.props);
-    const request = child.button("Pause payments").props.onPress(); h.render();
-    for (let attempt = 0; attempt < 2; attempt++) {
-      browser.host.history.back(); browser.flush(); h.render();
-      assert.equal(h.child("DebtPaymentPauseModal").props.visible, true);
-      assert.equal(h.child("DebtPaymentPauseModal").props.openDateField, calendar);
-      assert.equal(browser.position(), 3); assert.equal(h.closes(), 0);
-    }
-    fail(new Error("Fictional rejected pause")); await request; h.render();
-    assert.match(copy(child.render()), /Fictional rejected pause/); assert.equal(calls, 1);
-    if (calendar) {
-      browser.host.history.back(); browser.flush(); h.render();
-      assert.equal(h.child("DebtPaymentPauseModal").props.openDateField, null);
-      assert.equal(h.child("DebtPaymentPauseModal").props.visible, true);
-    }
+test("browser Back respects confirmation depth and pending-save rearm, then failure preserves the next Back order", async () => {
+  let fail!: (error: Error) => void, calls = 0;
+  const browser = browserHistory();
+  const h = editorHarness({ browser, budget: { pauseDebtPayments: () => { calls++; return new Promise<void>((_resolve, reject) => { fail = reject; }); } } });
+  h.button("Pause debt payments").props.onPress();
+  const child = pauseHarness(h.child("DebtPaymentPauseModal").props);
+  child.button("Continue").props.onPress(); h.render();
+  assert.equal(h.depth(), 2);
+  assert.equal(h.child("DebtPaymentPauseModal").props.step, "transfer");
+  child.button("Yes, use payoff order").props.onPress();
+  const request = child.button("Pause payments").props.onPress(); h.render();
+  for (let attempt = 0; attempt < 2; attempt++) {
     browser.host.history.back(); browser.flush(); h.render();
-    assert.equal(h.child("DebtPaymentPauseModal").props.visible, false); assert.equal(browser.position(), 2); assert.equal(h.closes(), 0);
-    browser.host.history.back(); browser.flush(); h.render(); assert.equal(h.closes(), 1); assert.equal(browser.position(), 1);
+    assert.equal(h.child("DebtPaymentPauseModal").props.visible, true);
+    assert.equal(h.child("DebtPaymentPauseModal").props.step, "transfer");
+    assert.equal(browser.position(), 3); assert.equal(h.closes(), 0);
   }
+  fail(new Error("Fictional rejected pause")); await request; h.render();
+  assert.match(copy(child.render()), /Fictional rejected pause/); assert.equal(calls, 1);
+  browser.host.history.back(); browser.flush(); h.render();
+  assert.equal(h.child("DebtPaymentPauseModal").props.step, "dates");
+  assert.equal(h.child("DebtPaymentPauseModal").props.visible, true);
+  assert.equal(h.closes(), 0);
+  browser.host.history.back(); browser.flush(); h.render();
+  assert.equal(h.child("DebtPaymentPauseModal").props.visible, false); assert.equal(browser.position(), 2);
+  browser.host.history.back(); browser.flush(); h.render(); assert.equal(h.closes(), 1); assert.equal(browser.position(), 1);
+});
+
+test("confirmation UI Back preserves the calendar and editor history ownership", () => {
+  const browser = browserHistory(), h = editorHarness({ browser });
+  h.button("Pause debt payments").props.onPress();
+  h.child("DebtPaymentPauseModal").props.onStepChange("transfer"); h.render();
+  assert.equal(h.depth(), 2);
+  h.child("DebtPaymentPauseModal").props.onStepChange("dates"); h.render(); browser.flush(); h.render();
+  assert.equal(h.depth(), 1);
+  h.child("DebtPaymentPauseModal").props.onOpenDateFieldChange("resume"); h.render();
+  browser.host.history.back(); browser.flush(); h.render();
+  assert.equal(h.child("DebtPaymentPauseModal").props.openDateField, null);
+  assert.equal(h.child("DebtPaymentPauseModal").props.step, "dates");
+  browser.host.history.back(); browser.flush(); h.render();
+  assert.equal(h.child("DebtPaymentPauseModal").props.visible, false); assert.equal(h.closes(), 0);
+  h.unmount();
 });
 
 test("native requestClose honors pending-save, calendar, pause and existing payment-history priorities without saving", () => {
   let writes = 0; const h = editorHarness({ native: true, budget: { pauseDebtPayments: async () => { writes++; } } });
-  h.button("Pause debt payments").props.onPress(); h.child("DebtPaymentPauseModal").props.onOpenDateFieldChange("start"); h.render();
+  h.button("Pause debt payments").props.onPress();
+  h.child("DebtPaymentPauseModal").props.onStepChange("transfer"); h.render();
+  h.child("DebtPaymentPauseModal").props.onSavingChange(true); h.child("Modal").props.onRequestClose(); h.render();
+  assert.equal(h.child("DebtPaymentPauseModal").props.step, "transfer");
+  h.child("DebtPaymentPauseModal").props.onSavingChange(false); h.child("Modal").props.onRequestClose(); h.render();
+  assert.equal(h.child("DebtPaymentPauseModal").props.step, "dates");
+  h.child("DebtPaymentPauseModal").props.onOpenDateFieldChange("start"); h.render();
   h.child("DebtPaymentPauseModal").props.onSavingChange(true); h.child("Modal").props.onRequestClose(); h.render(); assert.equal(h.child("DebtPaymentPauseModal").props.openDateField, "start");
   h.child("DebtPaymentPauseModal").props.onSavingChange(false); h.child("Modal").props.onRequestClose(); h.render(); assert.equal(h.child("DebtPaymentPauseModal").props.openDateField, null);
   h.child("Modal").props.onRequestClose(); h.render(); assert.equal(h.child("DebtPaymentPauseModal").props.visible, false); assert.equal(h.closes(), 0);
@@ -303,4 +387,23 @@ test("desktop dashboard selects the currently eligible debt while preserving ope
   assert.equal(paused.payoffTarget.id, "second"); assert.equal(paused.payoffBalance, 3200); assert.deepEqual(paused.payoffDebts.map((bill: any) => bill.id), ["first", "second"]);
   const resumed = select(bills, "2026-03-31", (fn: () => unknown) => fn(), pauseDomain.activeDebtPaymentPause);
   assert.equal(resumed.payoffTarget.id, "first"); assert.equal(resumed.payoffBalance, 3200);
+});
+
+
+test("mobile bills and debt cards retain exact full currency and cents beside their saved names", () => {
+  const largeDebt = { ...debt, name: "Long saved debt name with a full balance", balance: 12345678.91, amount: 123456.78 };
+  const debtHarness = harness("BillsScreen", {}, { budget: { bills: [largeDebt] } });
+  const debtCard = debtHarness.child("FlatList").props.renderItem({ item: largeDebt });
+  assert.match(copy(debtCard), /Long saved debt name with a full balance/);
+  assert.match(copy(debtCard), /\$12,345,678\.91/);
+  assert.match(copy(debtCard), /Required \/ month.*\$123,456\.78/);
+  const balance = flatten(debtCard).find(node => node.type === "Text" && copy(node).includes("$12,345,678.91"));
+  assert.equal(balance.props.sensitive, true);
+  const ordinaryBill = { ...debt, is_debt: false, name: "Long saved household bill name", amount: 1234567.89, category: "Other" };
+  const billHarness = harness("BillsScreen", {}, { view: "bills", budget: { bills: [ordinaryBill] } });
+  const billCard = billHarness.child("FlatList").props.renderItem({ item: ordinaryBill });
+  assert.match(copy(billCard), /Long saved household bill name/);
+  assert.match(copy(billCard), /\$1,234,567\.89/);
+  const amount = flatten(billCard).find(node => node.type === "Text" && copy(node).includes("$1,234,567.89"));
+  assert.equal(amount.props.sensitive, true);
 });
