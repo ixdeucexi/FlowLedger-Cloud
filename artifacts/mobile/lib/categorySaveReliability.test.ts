@@ -1,10 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { transpileModule, ModuleKind } from "typescript";
+import { transpileModule, ModuleKind, ScriptTarget } from "typescript";
+import { remapCategoryBudgetMap } from "./categoryCatalog";
 import { createExactCategoryBudgetMemoryCache, parseCategoryBudgetCache, resolveGuardedRemoteValue } from "./categoryBudgetLoadPolicy";
 
-function storeHarness(failAt: string | null) {
+function storeHarness(failAt: string | null, delayedSelects: Array<Promise<unknown>> = []) {
   const source = readFileSync("lib/categoryBudgetStore.ts", "utf8");
   const exported: any = {};
   const operations: string[] = [];
@@ -13,6 +14,7 @@ function storeHarness(failAt: string | null) {
       eq: () => result, in: () => result,
       then: (resolve: (value: unknown) => void) => {
         operations.push(kind);
+        if (kind === "select" && delayedSelects.length) return delayedSelects.shift()!.then(resolve);
         resolve({ error: failAt === kind ? { message: "test rejection" } : null, data: kind === "select" ? [{ category: "Removed" }] : null });
       },
     };
@@ -22,10 +24,11 @@ function storeHarness(failAt: string | null) {
     if (id === "react-native") return { Platform: { OS: "android" } };
     if (id.endsWith("/supabase")) return { supabase: { from: () => ({ upsert: () => query("upsert"), select: () => query("select"), delete: () => query("delete") }) } };
     if (id.endsWith("/networkStatus")) return { assertFinancialMutationOnline: () => {} };
+    if (id.endsWith("/categoryCatalog")) return { remapCategoryBudgetMap };
     if (id.endsWith("/categoryBudgetLoadPolicy")) return { createExactCategoryBudgetMemoryCache, parseCategoryBudgetCache, resolveGuardedRemoteValue };
     throw new Error(id);
   };
-  new Function("exports", "require", transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText)(exported, mockRequire);
+  new Function("exports", "require", transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2020 } }).outputText)(exported, mockRequire);
   return { store: exported, operations };
 }
 
@@ -55,6 +58,51 @@ test("failed clear retains the last confirmed category map", async () => {
   store.writeCategoryBudgetCache(8, 2026, { Food: 25 }, scope);
   await assert.rejects(store.saveCategoryBudgets(scope, 8, 2026, {}));
   assert.deepEqual(store.readCategoryBudgetCache(8, 2026, scope), { Food: 25 });
+});
+
+test("a confirmed category rename remaps every cached month only in its own budget and publishes one catalog event", () => {
+  const { store } = storeHarness(null);
+  const scope = { userId: "owner", householdId: "house", budgetId: "category-rename-budget" };
+  const other = { userId: "other", householdId: "other-house", budgetId: "other-budget" };
+  store.writeCategoryBudgetCache(10, 2026, { Food: 25, Groceries: 10, Rent: 100 }, scope);
+  store.writeCategoryBudgetCache(11, 2026, { Food: 40 }, scope);
+  store.writeCategoryBudgetCache(10, 2026, { Food: 99 }, other);
+  const events: unknown[] = [];
+  const unsubscribe = store.subscribeCategoryCatalog((event: unknown) => events.push(event));
+  store.remapCategoryBudgetCaches(scope, "Food", "Groceries");
+  assert.deepEqual(store.readCategoryBudgetCache(10, 2026, scope), { Groceries: 35, Rent: 100 });
+  assert.deepEqual(store.readCategoryBudgetCache(11, 2026, scope), { Groceries: 40 });
+  assert.deepEqual(store.readCategoryBudgetCache(10, 2026, other), { Food: 99 });
+  assert.deepEqual(events, [{ scope, oldName: "Food", newName: "Groceries" }]);
+  unsubscribe();
+});
+
+test("a pre-rename empty-cache fetch cannot publish old labels or defeat the fresh confirmed fetch", async () => {
+  let finishOld!: (value: unknown) => void, finishFresh!: (value: unknown) => void;
+  const oldResponse = new Promise(resolve => { finishOld = resolve; });
+  const freshResponse = new Promise(resolve => { finishFresh = resolve; });
+  const { store } = storeHarness(null, [oldResponse, freshResponse]);
+  const scope = { userId: "owner", householdId: "race-house", budgetId: "empty-cache-race" };
+  const oldLoad = store.loadCategoryBudgetsExact(scope, 10, 2026);
+  await new Promise(resolve => setImmediate(resolve));
+  store.remapCategoryBudgetCaches(scope, "Food", "Groceries");
+  const freshLoad = store.loadCategoryBudgetsExact(scope, 10, 2026);
+  await new Promise(resolve => setImmediate(resolve));
+  finishOld({ error: null, data: [{ category: "Food", amount: 40 }] });
+  await oldLoad;
+  assert.deepEqual(store.readCategoryBudgetCache(10, 2026, scope), {});
+  finishFresh({ error: null, data: [{ category: "Groceries", amount: 40 }] });
+  assert.deepEqual((await freshLoad).value, { Groceries: 40 });
+  assert.deepEqual(store.readCategoryBudgetCache(10, 2026, scope), { Groceries: 40 });
+});
+
+test("real store write and remote load preserve valid prototype-shaped category names", async () => {
+  const { store } = storeHarness(null, [Promise.resolve({ error: null, data: [{ category: "__proto__", amount: 25 }, { category: "constructor", amount: 10 }] })]);
+  const scope = { userId: "owner", budgetId: "prototype-category-budget" };
+  const map = Object.fromEntries([["__proto__", 15], ["constructor", 10]]);
+  store.writeCategoryBudgetCache(10, 2026, map, scope);
+  assert.deepEqual(store.readCategoryBudgetCache(10, 2026, scope), map);
+  assert.deepEqual((await store.loadCategoryBudgetsExact(scope, 10, 2026)).value, Object.fromEntries([["__proto__", 25], ["constructor", 10]]));
 });
 
 function screenSaveHarness() {

@@ -905,6 +905,8 @@ function milestoneSaveLifecycle() {
     saveStatusTimerRef: { current: null },
     failedSaveOperationRef: { current: null },
     failedSaveOperationsRef: { current: new Map() },
+    saveIntentByOperationRef: { current: new Map() },
+    saveIntentTokensRef: { current: new Map() },
     retrySaveRef: { current: null },
     retrySavePromiseRef: { current: null },
     setSaveError: (value: string | null) => {

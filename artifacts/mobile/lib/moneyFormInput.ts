@@ -7,14 +7,14 @@ export function parseAccountBalance(raw: string): number | null {
 
 /** Blank assignments inherit the planned bills; explicit zero overrides them. */
 export function parseCategoryAssignments(drafts: Record<string, string>): Record<string, number> {
-  const next: Record<string, number> = {};
+  const next: Array<[string, number]> = [];
   for (const [category, raw] of Object.entries(drafts)) {
     if (!raw.trim()) continue;
     const amount = Number(raw);
     if (!Number.isFinite(amount) || amount < 0) throw new Error(`Enter a valid nonnegative assignment for ${category}, or leave it blank to use planned bills.`);
-    next[category] = amount;
+    next.push([category, amount]);
   }
-  return next;
+  return Object.fromEntries(next);
 }
 
 export function reportIncomeUsage(income: number, spending: number) {

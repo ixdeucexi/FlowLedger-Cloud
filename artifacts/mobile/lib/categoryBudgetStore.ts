@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { assertFinancialMutationOnline } from "@/lib/networkStatus";
+import { remapCategoryBudgetMap } from "@/lib/categoryCatalog";
 import {
   createExactCategoryBudgetMemoryCache,
   parseCategoryBudgetCache,
@@ -11,11 +12,54 @@ export const CATEGORY_BUDGETS_EVENT = "flowledger-category-budgets-updated";
 const categoryBudgetListeners = new Set<() => void>();
 const categoryBudgetCacheRevisions = new Map<string, number>();
 const categoryBudgetMemoryCache = createExactCategoryBudgetMemoryCache();
+const categoryCatalogListeners = new Set<(change: CategoryCatalogChange) => void>();
 
 export interface CategoryBudgetScope {
   userId?: string | null;
   householdId?: string | null;
   budgetId?: string | null;
+}
+
+export interface CategoryCatalogChange {
+  scope: CategoryBudgetScope;
+  oldName: string;
+  newName: string;
+}
+
+export function subscribeCategoryCatalog(listener: (change: CategoryCatalogChange) => void) {
+  categoryCatalogListeners.add(listener);
+  return () => { categoryCatalogListeners.delete(listener); };
+}
+
+/** Publish an already-committed rename/merge to every cached month in this scope. */
+export function remapCategoryBudgetCaches(scope: CategoryBudgetScope, oldName: string, newName: string): void {
+  const prefix = `flowledger-category-budgets-${scopeKey(scope)}-`;
+  const keys = new Set([...categoryBudgetMemoryCache.keys(), ...categoryBudgetCacheRevisions.keys()]);
+  if (Platform.OS === "web") {
+    try {
+      for (let index = 0; index < (globalThis.localStorage?.length ?? 0); index++) {
+        const key = globalThis.localStorage.key(index);
+        if (key) keys.add(key);
+      }
+    } catch { /* Memory and fresh remote loads remain authoritative. */ }
+  }
+  for (const key of keys) {
+    if (!key.startsWith(prefix)) continue;
+    categoryBudgetCacheRevisions.set(key, (categoryBudgetCacheRevisions.get(key) ?? 0) + 1);
+    let values = categoryBudgetMemoryCache.read(key);
+    if (!values && Platform.OS === "web") {
+      try { values = parseCategoryBudgetCache(globalThis.localStorage?.getItem(key)); } catch { /* No confirmed cache. */ }
+    }
+    if (!values) continue;
+    const next = remapCategoryBudgetMap(values, oldName, newName);
+    categoryBudgetMemoryCache.write(key, next);
+    if (Platform.OS === "web") {
+      try { globalThis.localStorage?.setItem(key, JSON.stringify(next)); } catch { /* Keep confirmed memory value. */ }
+    }
+  }
+  categoryCatalogListeners.forEach(listener => listener({ scope, oldName, newName }));
+  categoryBudgetListeners.forEach(listener => listener());
+  if (Platform.OS === "web") globalThis.dispatchEvent?.(new Event(CATEGORY_BUDGETS_EVENT));
 }
 
 function scopeKey(scope?: CategoryBudgetScope) {
@@ -90,6 +134,7 @@ export async function loadCategoryBudgetsExact(scope: CategoryBudgetScope, month
   };
   const storageKey = categoryBudgetStorageKey(month, year, scope);
   const revisionAtStart = categoryBudgetCacheRevisions.get(storageKey) ?? 0;
+  categoryBudgetCacheRevisions.set(storageKey, revisionAtStart);
   try {
     const value = await resolveGuardedRemoteValue({
       revisionAtStart,
@@ -102,13 +147,13 @@ export async function loadCategoryBudgetsExact(scope: CategoryBudgetScope, month
         ).eq("month", month).eq("year", year);
         const { data, error } = await query;
         if (error) throw error;
-        const remote: Record<string, number> = {};
+        const remote: Array<[string, number]> = [];
         (data ?? []).forEach((row: any) => {
           const category = String(row.category ?? "").trim();
           const amount = Number(row.amount);
-          if (category && Number.isFinite(amount) && amount >= 0) remote[category] = amount;
+          if (category && Number.isFinite(amount) && amount >= 0) remote.push([category, amount]);
         });
-        return remote;
+        return Object.fromEntries(remote);
       },
       commitRemote: value => {
         writeCategoryBudgetCache(month, year, value, scope, false);
@@ -190,13 +235,13 @@ function applyScope(query: any, scope: CategoryBudgetScope) {
 }
 
 function normalizeBudgetMap(value: Record<string, unknown>): Record<string, number> {
-  const next: Record<string, number> = {};
+  const next: Array<[string, number]> = [];
   Object.entries(value).forEach(([category, amount]) => {
     const cleanCategory = String(category ?? "").trim();
     const cleanAmount = Number(amount);
     if (cleanCategory && Number.isFinite(cleanAmount) && cleanAmount >= 0) {
-      next[cleanCategory] = Math.round(cleanAmount * 100) / 100;
+      next.push([cleanCategory, Math.round(cleanAmount * 100) / 100]);
     }
   });
-  return next;
+  return Object.fromEntries(next);
 }

@@ -179,11 +179,13 @@ import {
   type PlanSimulationBaseline,
   type PlanSimulationHorizon,
 } from "@/lib/planSimulator";
+import { DEFAULT_CATEGORIES, normalizeCategoryInput, categoryMatches, fallbackCategoryList, assertCategoryName, assertCategoryEditable, remapTransactionCategory, categorySaveIntent, categoryFailureIsResolved, type CategorySaveIntent } from "@/lib/categoryCatalog";
 import {
   hasCategoryBudgetCache,
   loadCategoryBudgetsExact,
   readCategoryBudgetCache,
   subscribeCategoryBudgets,
+  remapCategoryBudgetCaches,
   type CategoryBudgetScope,
 } from "@/lib/categoryBudgetStore";
 import {
@@ -443,38 +445,6 @@ interface BudgetContextType {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-const DEFAULT_CATEGORIES = [
-  "Housing", "Utilities", "Insurance", "Transportation", "Food",
-  "Entertainment", "Health", "Education", "Savings", "Debt",
-  "Shopping", "Rent", "Other",
-];
-
-function normalizeCategoryInput(name: string): string {
-  return String(name ?? "").trim().replace(/\s+/g, " ");
-}
-
-function categoryMatches(left: string, right: string): boolean {
-  return normalizeCategoryInput(left).toLowerCase() === normalizeCategoryInput(right).toLowerCase();
-}
-
-function dedupeCategories(values: string[]): string[] {
-  const next: string[] = [];
-  const seen = new Set<string>();
-  values.forEach(value => {
-    const clean = normalizeCategoryInput(value);
-    if (!clean) return;
-    const key = clean.toLowerCase();
-    if (seen.has(key)) return;
-    seen.add(key);
-    next.push(clean);
-  });
-  return next;
-}
-
-function fallbackCategoryList(values: string[]): string[] {
-  return dedupeCategories([...DEFAULT_CATEGORIES, ...values]);
-}
-
 function parseCategoryMutationResult(
   value: unknown,
   fallbackName: string,
@@ -487,9 +457,10 @@ function parseCategoryMutationResult(
     typeof record.categoryName === "string" ? record.categoryName : fallbackName,
   );
   if (!categoryName) throw new Error("The saved category name is invalid.");
-  const persisted = Array.isArray(record.categories)
-    ? record.categories.filter((item): item is string => typeof item === "string")
-    : [];
+  if (!Array.isArray(record.categories) || record.categories.some(item => typeof item !== "string")) {
+    throw new Error("The saved category list could not be verified.");
+  }
+  const persisted = record.categories as string[];
   return { categoryName, categories: fallbackCategoryList(persisted) };
 }
 
@@ -854,7 +825,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const saveGenerationByOperationRef = useRef(new Map<number, number>());
   const activeSaveOperationsRef = useRef(new Set<number>());
   const failedSaveOperationRef = useRef<number | null>(null);
-  const failedSaveOperationsRef = useRef(new Map<number, { message: string; retry: () => Promise<void> }>());
+  const failedSaveOperationsRef = useRef(new Map<number, { message: string; retry: () => Promise<void>; intent?: CategorySaveIntent }>());
+  const saveIntentByOperationRef = useRef(new Map<number, CategorySaveIntent>());
+  const saveIntentTokensRef = useRef(new Map<string, CategorySaveIntent>());
   const retryingSaveFailureRef = useRef<number | null>(null);
   const retryParentByOperationRef = useRef(new Map<number, number>());
   const billOverrideRetryIdsRef = useRef(new Map<string, Map<string, string>>());
@@ -990,6 +963,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     saveGenerationByOperationRef.current.clear();
     activeSaveOperationsRef.current.clear();
     retryParentByOperationRef.current.clear();
+    saveIntentByOperationRef.current.clear();
+    saveIntentTokensRef.current.clear();
     billOverrideRetryIdsRef.current.clear();
     billEditFieldTokensRef.current.clear();
     billWriteQueuesRef.current.clear();
@@ -1577,14 +1552,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     return next;
   }, [clearScopedFinancialData, refreshHouseholdDetails, replaceActiveHouseholdScope]);
 
-  const markSaveStarted = useCallback(() => {
+  const markSaveStarted = useCallback((intent?: CategorySaveIntent) => {
     const operationId = ++saveOperationSequenceRef.current;
     activeSaveOperationsRef.current.add(operationId);
     saveGenerationByOperationRef.current.set(operationId, saveLifecycleGenerationRef.current);
-    const retryParent = retryingSaveFailureRef.current;
+    if (intent) saveIntentByOperationRef.current.set(operationId, intent);
+    const matchingFailure = intent ? [...failedSaveOperationsRef.current.entries()].find(([, failure]) => failure.intent?.key === intent.key)?.[0] : undefined;
+    const retryParent = intent ? matchingFailure ?? null : retryingSaveFailureRef.current;
     if (retryParent !== null) {
       retryParentByOperationRef.current.set(operationId, retryParent);
-      retryingSaveFailureRef.current = null;
+      if (retryingSaveFailureRef.current === retryParent) retryingSaveFailureRef.current = null;
     }
     if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
     if (failedSaveOperationRef.current === null) {
@@ -1595,10 +1572,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const markSaveCompleted = useCallback((operationId?: number) => {
+    const intent = operationId === undefined ? undefined : saveIntentByOperationRef.current.get(operationId);
+    const staleIntent = !!intent && saveIntentTokensRef.current.get(intent.key) !== intent;
     const operationGeneration = operationId === undefined
       ? saveLifecycleGenerationRef.current
       : saveGenerationByOperationRef.current.get(operationId);
-    if (operationId !== undefined) saveGenerationByOperationRef.current.delete(operationId);
+    if (operationId !== undefined) {
+      saveGenerationByOperationRef.current.delete(operationId);
+      saveIntentByOperationRef.current.delete(operationId);
+    }
     if (operationGeneration !== saveLifecycleGenerationRef.current) {
       clearScopedFinancialData();
       return;
@@ -1608,8 +1590,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       ? undefined
       : retryParentByOperationRef.current.get(operationId);
     if (operationId !== undefined) retryParentByOperationRef.current.delete(operationId);
-    if (retryParent !== undefined && failedSaveOperationRef.current === retryParent) {
-      failedSaveOperationsRef.current.delete(retryParent);
+    if (intent && !staleIntent) saveIntentTokensRef.current.delete(intent.key);
+    if (!staleIntent && retryParent !== undefined) failedSaveOperationsRef.current.delete(retryParent);
+    if (!staleIntent && retryParent !== undefined && failedSaveOperationRef.current === retryParent) {
       const nextFailure = failedSaveOperationsRef.current.entries().next().value as
         | [number, { message: string; retry: () => Promise<void> }]
         | undefined;
@@ -1642,6 +1625,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   }, [clearScopedFinancialData]);
 
   const markSaveFailed = useCallback((error: unknown, retry: () => Promise<void>, operationId?: number) => {
+    const intent = operationId === undefined ? undefined : saveIntentByOperationRef.current.get(operationId);
+    if (intent && saveIntentTokensRef.current.get(intent.key) !== intent) {
+      markSaveCompleted(operationId);
+      return;
+    }
+    if (operationId !== undefined) saveIntentByOperationRef.current.delete(operationId);
     const operationGeneration = operationId === undefined
       ? saveLifecycleGenerationRef.current
       : saveGenerationByOperationRef.current.get(operationId);
@@ -1658,7 +1647,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (operationId !== undefined) retryParentByOperationRef.current.delete(operationId);
     const failureId = retryParent ?? operationId ?? ++saveOperationSequenceRef.current;
     const message = error instanceof Error ? error.message : "Your change could not be saved.";
-    failedSaveOperationsRef.current.set(failureId, { message, retry });
+    failedSaveOperationsRef.current.set(failureId, { message, retry, ...(intent ? { intent } : {}) });
     if (failedSaveOperationRef.current === null || failedSaveOperationRef.current === failureId) {
       failedSaveOperationRef.current = failureId;
       retrySaveRef.current = retry;
@@ -1669,12 +1658,30 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       eventType: "save_failure", operation: "amount_save", platform: diagnosticPlatform(),
       errorCode: diagnosticErrorCode(error),
     }).catch(() => undefined);
-  }, [clearScopedFinancialData, user]);
+  }, [clearScopedFinancialData, markSaveCompleted, user]);
+
+  const reconcileCategorySaveFailures = useCallback((completed: CategorySaveIntent, savedCategories: readonly string[]) => {
+    let removed = false;
+    for (const [failureId, failure] of failedSaveOperationsRef.current) {
+      if (!failure.intent || !categoryFailureIsResolved(failure.intent, completed, savedCategories)) continue;
+      failedSaveOperationsRef.current.delete(failureId);
+      if (failure.intent.key !== completed.key && saveIntentTokensRef.current.get(failure.intent.key) === failure.intent) saveIntentTokensRef.current.delete(failure.intent.key);
+      removed = true;
+    }
+    if (!removed) return;
+    const next = failedSaveOperationsRef.current.entries().next().value;
+    failedSaveOperationRef.current = next?.[0] ?? null;
+    retrySaveRef.current = next?.[1].retry ?? null;
+    setSaveError(next?.[1].message ?? null);
+    if (next) setSaveStatus("failed");
+  }, []);
 
   const runTrackedFinancialMutation = useCallback(<T,>(
     operation: () => Promise<T>,
     retry: () => Promise<unknown>,
+    intent?: CategorySaveIntent,
   ) => {
+    if (intent) saveIntentTokensRef.current.set(intent.key, intent);
     let operationId: number | undefined;
     const operationScope: FinancialMutationScope = {
       userId: userScopeIdRef.current,
@@ -1703,10 +1710,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     };
     const guardedRetry = async () => {
       assertFinancialMutationScope(operationScope, currentScope());
+      if (intent && saveIntentTokensRef.current.get(intent.key) !== intent) return;
       await retry();
     };
     return runRecoverableFinancialMutation(guardedOperation, guardedRetry, {
-      onStarted: () => { operationId = markSaveStarted(); },
+      onStarted: () => { operationId = markSaveStarted(intent); },
       onCompleted: () => markSaveCompleted(operationId),
       onFailed: (error, nextRetry) => markSaveFailed(error, nextRetry, operationId),
     });
@@ -2281,7 +2289,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
             }
             const cats = (categoryResult.data ?? []).map((category: any) => category.name as string);
             const commitCategories = () => {
-              setCategories(cats.length > 0 ? fallbackCategoryList(cats) : DEFAULT_CATEGORIES);
+              setCategories(fallbackCategoryList(cats));
               setCategoriesReadyScopeKey(scope?.householdId ? `${uid}:${scope.householdId}` : null);
             };
             if (Platform.OS === "web") React.startTransition(commitCategories);
@@ -5758,7 +5766,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     assertCanEditHousehold("add a category");
     const trimmed = normalizeCategoryInput(name);
-    if (!trimmed) return;
+    assertCategoryName(trimmed);
     if (categories.some(category => categoryMatches(category, trimmed))) return;
     if (demoMode) {
       setCategories(prev => fallbackCategoryList([...prev, trimmed]));
@@ -5766,6 +5774,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     const scope = householdScopeRef.current;
     if (!scope) throw new Error("Choose a household before adding a category.");
+    const intent = categorySaveIntent(user.id, scope.householdId, scope.budgetId, trimmed, "add");
     const persist: () => Promise<void> = () => runTrackedFinancialMutation(async () => {
       const result = await supabase.rpc("add_household_category", {
         p_household_id: scope.householdId,
@@ -5774,26 +5783,33 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       });
       if (result.error) throw new Error(`Add category: ${result.error.message}`);
       const saved = parseCategoryMutationResult(result.data, trimmed);
+      if (userScopeIdRef.current !== user.id || householdScopeRef.current?.householdId !== scope.householdId || householdScopeRef.current?.budgetId !== scope.budgetId || saveIntentTokensRef.current.get(intent.key) !== intent) return;
+      reconcileCategorySaveFailures(intent, saved.categories);
       setCategories(saved.categories);
-    }, persist);
+    }, persist, intent);
     await persist();
-  }, [user, categories, demoMode, assertCanEditHousehold, runTrackedFinancialMutation]);
+  }, [user, categories, demoMode, assertCanEditHousehold, runTrackedFinancialMutation, reconcileCategorySaveFailures]);
 
   const updateCategory = useCallback(async (oldName: string, newName: string) => {
     if (!user) return;
     assertCanEditHousehold("update a category");
+    assertCategoryEditable(oldName);
     const trimmed = normalizeCategoryInput(newName);
-    if (!trimmed || categoryMatches(trimmed, oldName)) return;
+    assertCategoryName(trimmed);
+    if (categoryMatches(trimmed, oldName)) return;
     const canonicalExisting = categories.find(category => !categoryMatches(category, oldName) && categoryMatches(category, trimmed));
     const targetName = canonicalExisting ?? trimmed;
     if (demoMode) {
       setCategories(prev => fallbackCategoryList(prev.map(c => categoryMatches(c, oldName) ? targetName : c)));
       setBills(prev => prev.map(b => categoryMatches(b.category, oldName) ? { ...b, category: targetName } : b));
-      setTransactions(prev => prev.map(t => categoryMatches(t.category, oldName) ? { ...t, category: targetName } : t));
+      setTransactions(prev => prev.map(t => remapTransactionCategory(t, oldName, targetName)));
+      setDeletedTransactions(prev => prev.map(t => remapTransactionCategory(t, oldName, targetName)));
+      remapCategoryBudgetCaches({ userId: user.id, householdId: householdScopeRef.current?.householdId, budgetId: householdScopeRef.current?.budgetId }, oldName, targetName);
       return;
     }
     const scope = householdScopeRef.current;
     if (!scope) throw new Error("Choose a household before renaming a category.");
+    const intent = categorySaveIntent(user.id, scope.householdId, scope.budgetId, oldName, "rename");
     const persist: () => Promise<void> = () => runTrackedFinancialMutation(async () => {
       const result = await supabase.rpc("rename_household_category", {
         p_household_id: scope.householdId,
@@ -5803,26 +5819,34 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       });
       if (result.error) throw new Error(`Rename category: ${result.error.message}`);
       const saved = parseCategoryMutationResult(result.data, targetName);
+      if (userScopeIdRef.current !== user.id || householdScopeRef.current?.householdId !== scope.householdId || householdScopeRef.current?.budgetId !== scope.budgetId || saveIntentTokensRef.current.get(intent.key) !== intent) return;
+      reconcileCategorySaveFailures(intent, saved.categories);
       setCategories(saved.categories);
       setBills(prev => prev.map(b => categoryMatches(b.category, oldName) ? { ...b, category: saved.categoryName } : b));
-      setTransactions(prev => prev.map(t => categoryMatches(t.category, oldName) ? { ...t, category: saved.categoryName } : t));
-    }, persist);
+      setTransactions(prev => prev.map(t => remapTransactionCategory(t, oldName, saved.categoryName)));
+      setDeletedTransactions(prev => prev.map(t => remapTransactionCategory(t, oldName, saved.categoryName)));
+      remapCategoryBudgetCaches({ userId: user.id, householdId: scope.householdId, budgetId: scope.budgetId }, oldName, saved.categoryName);
+    }, persist, intent);
     await persist();
-  }, [user, categories, demoMode, assertCanEditHousehold, runTrackedFinancialMutation]);
+  }, [user, categories, demoMode, assertCanEditHousehold, runTrackedFinancialMutation, reconcileCategorySaveFailures]);
 
   const deleteCategory = useCallback(async (name: string) => {
     if (!user) return;
     assertCanEditHousehold("delete a category");
     const cleanName = normalizeCategoryInput(name);
-    if (!cleanName || categoryMatches(cleanName, "Other")) return;
+    assertCategoryEditable(cleanName);
+    if (!cleanName) return;
     if (demoMode) {
       setCategories(prev => fallbackCategoryList(prev.filter(c => !categoryMatches(c, cleanName))));
       setBills(prev => prev.map(b => categoryMatches(b.category, cleanName) ? { ...b, category: "Other" } : b));
-      setTransactions(prev => prev.map(t => categoryMatches(t.category, cleanName) ? { ...t, category: "Other" } : t));
+      setTransactions(prev => prev.map(t => remapTransactionCategory(t, cleanName, "Other")));
+      setDeletedTransactions(prev => prev.map(t => remapTransactionCategory(t, cleanName, "Other")));
+      remapCategoryBudgetCaches({ userId: user.id, householdId: householdScopeRef.current?.householdId, budgetId: householdScopeRef.current?.budgetId }, cleanName, "Other");
       return;
     }
     const scope = householdScopeRef.current;
     if (!scope) throw new Error("Choose a household before deleting a category.");
+    const intent = categorySaveIntent(user.id, scope.householdId, scope.budgetId, cleanName, "delete");
     const persist: () => Promise<void> = () => runTrackedFinancialMutation(async () => {
       const result = await supabase.rpc("delete_household_category", {
         p_household_id: scope.householdId,
@@ -5831,12 +5855,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       });
       if (result.error) throw new Error(`Delete category: ${result.error.message}`);
       const saved = parseCategoryMutationResult(result.data, "Other");
+      if (userScopeIdRef.current !== user.id || householdScopeRef.current?.householdId !== scope.householdId || householdScopeRef.current?.budgetId !== scope.budgetId || saveIntentTokensRef.current.get(intent.key) !== intent) return;
+      reconcileCategorySaveFailures(intent, saved.categories);
       setCategories(saved.categories);
       setBills(prev => prev.map(b => categoryMatches(b.category, cleanName) ? { ...b, category: saved.categoryName } : b));
-      setTransactions(prev => prev.map(t => categoryMatches(t.category, cleanName) ? { ...t, category: saved.categoryName } : t));
-    }, persist);
+      setTransactions(prev => prev.map(t => remapTransactionCategory(t, cleanName, saved.categoryName)));
+      setDeletedTransactions(prev => prev.map(t => remapTransactionCategory(t, cleanName, saved.categoryName)));
+      remapCategoryBudgetCaches({ userId: user.id, householdId: scope.householdId, budgetId: scope.budgetId }, cleanName, saved.categoryName);
+    }, persist, intent);
     await persist();
-  }, [user, demoMode, assertCanEditHousehold, runTrackedFinancialMutation]);
+  }, [user, demoMode, assertCanEditHousehold, runTrackedFinancialMutation, reconcileCategorySaveFailures]);
 
   // ─── Settings ─────────────────────────────────────────────────────────────────
 

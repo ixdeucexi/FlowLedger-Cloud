@@ -47,6 +47,8 @@
     "lib/stability.test.ts",
     "lib/moneyFormInput.test.ts",
     "lib/categorySaveReliability.test.ts",
+    "lib/categoryCatalog.test.ts",
+    "lib/categorySaveRecovery.test.ts",
     "lib/goalFundingReview.test.ts",
     "lib/competitivePolish.test.ts",
     "lib/forecast.ts",

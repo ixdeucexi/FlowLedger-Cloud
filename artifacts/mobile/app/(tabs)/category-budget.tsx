@@ -16,7 +16,8 @@ import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { isCashFlowTransaction } from "@/lib/billMatching";
 import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
 import { applyCategoryBudgetMove, buildCategoryPlan, buildZeroBudgetSummary, type CategoryPlanRow } from "@/lib/categoryPlanning";
-import { loadCategoryBudgetsExact, readCategoryBudgetCache, saveCategoryBudgets } from "@/lib/categoryBudgetStore";
+import { loadCategoryBudgetsExact, readCategoryBudgetCache, saveCategoryBudgets, subscribeCategoryCatalog } from "@/lib/categoryBudgetStore";
+import { categoryMatches, remapCategoryBudgetMap, remapCategoryDrafts } from "@/lib/categoryCatalog";
 import { buildReviewQueue } from "@/lib/reviewCenter";
 import { unmatchedPendingTransactions } from "@/lib/pendingPlanMatches";
 import { assertFinancialMutationOnline } from "@/lib/networkStatus";
@@ -89,6 +90,7 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
   useEffect(() => {
     let cancelled = false;
     scopeVersion.current += 1;
+    const version = scopeVersion.current;
     dirtyRef.current.clear();
     setDrafts({});
     setSaveMessage("");
@@ -97,13 +99,33 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
     setLoadError("");
     setCategoryBudgets(readCategoryBudgetCache(month, year, budgetScope));
     void loadCategoryBudgetsExact(budgetScope, month, year).then(result => {
-      if (cancelled) return;
+      if (cancelled || version !== scopeVersion.current) return;
       setCategoryBudgets(result.value);
       setLoadReady(!result.error);
       setLoadError(result.error ?? "");
     });
     return () => { cancelled = true; scopeVersion.current += 1; };
   }, [budgetScope, month, year, loadAttempt]);
+
+  useEffect(() => subscribeCategoryCatalog(change => {
+    if ((change.scope.budgetId ?? null) !== (budgetScope.budgetId ?? null)
+      || (change.scope.householdId ?? null) !== (budgetScope.householdId ?? null)
+      || (change.scope.userId ?? null) !== (budgetScope.userId ?? null)) return;
+    scopeVersion.current += 1;
+    const version = scopeVersion.current;
+    const wasDirty = [...dirtyRef.current].some(name => categoryMatches(name, change.oldName));
+    dirtyRef.current = new Set([...dirtyRef.current].map(name => categoryMatches(name, change.oldName) ? change.newName : name));
+    setDrafts(previous => remapCategoryDrafts(previous, change.oldName, change.newName));
+    setCategoryBudgets(previous => remapCategoryBudgetMap(previous, change.oldName, change.newName));
+    setMoveTarget(null);
+    if (wasDirty) setSaveMessage("Category updated. Your unsaved assignment moved with it; review it before saving.");
+    void loadCategoryBudgetsExact(budgetScope, month, year).then(result => {
+      if (version !== scopeVersion.current) return;
+      setCategoryBudgets(result.value);
+      setLoadReady(!result.error);
+      setLoadError(result.error ?? "");
+    });
+  }), [budgetScope, month, year]);
 
   useEffect(() => {
     setDrafts(previous => Object.fromEntries(editableCategories.map(category => [category, dirtyRef.current.has(category) ? previous[category] ?? "" : categoryBudgets[category] === undefined ? "" : String(categoryBudgets[category])])));

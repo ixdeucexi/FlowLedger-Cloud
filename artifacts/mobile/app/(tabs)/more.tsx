@@ -114,6 +114,7 @@ import {
   type SettingsSectionId,
   type SettingsStatus,
 } from "@/lib/settingsHub";
+import { categoryMatches, protectedCategoryReason } from "@/lib/categoryCatalog";
 import { supabase } from "@/lib/supabase";
 import { assertFinancialMutationOnline } from "@/lib/networkStatus";
 import {
@@ -165,17 +166,6 @@ const FREQ_LABELS: Record<string, string> = {
   biweekly: "Biweekly",
   weekly: "Weekly",
 };
-
-const BUILT_IN_CATEGORY_NAMES = new Set([
-  "housing", "utilities", "insurance", "transportation", "food",
-  "entertainment", "health", "education", "savings", "debt",
-  "shopping", "rent", "other",
-]);
-
-const isBuiltInCategory = (name: string) =>
-  BUILT_IN_CATEGORY_NAMES.has(name.trim().replace(/\s+/g, " ").toLowerCase());
-
-
 
 const BACKUP_COMPLETE_KEY = "flowledger_backup_exported";
 type SubscriptionDecision =
@@ -484,6 +474,14 @@ export default function MoreScreen({
   const categoryMutationInFlightRef = useRef(false);
   const categoryDraftRef = useRef({ renamingCategory, renameValue });
   categoryDraftRef.current = { renamingCategory, renameValue };
+  const categoryScopeKey = `${user?.id ?? ""}:${activeHousehold?.householdId ?? ""}:${activeHousehold?.budgetId ?? ""}`;
+  const categoryScopeKeyRef = useRef(categoryScopeKey);
+  categoryScopeKeyRef.current = categoryScopeKey;
+  useEffect(() => {
+    setNewCategory("");
+    setRenamingCategory(null);
+    setRenameValue("");
+  }, [categoryScopeKey]);
   const [safetyFloorText, setSafetyFloorText] = useState(
     settings.safety_floor.toString(),
   );
@@ -1949,15 +1947,17 @@ export default function MoreScreen({
 
   const handleAddCategory = async () => {
     const trimmed = newCategory.trim();
-    if (!trimmed || categoryMutationInFlightRef.current) return;
+    const scopeAtIntent = categoryScopeKey;
+    if (!trimmed || categoryMutationInFlightRef.current || categoryScopeKeyRef.current !== scopeAtIntent) return;
     categoryMutationInFlightRef.current = true;
     setCategorySaveBusy(true);
     try {
       await addCategory(trimmed);
+      if (categoryScopeKeyRef.current !== scopeAtIntent) return;
       setNewCategory(current => current === newCategory ? "" : current);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (error) {
-      privacyFormError("Couldn’t add category", error instanceof Error ? error.message : "Please try again.");
+      if (categoryScopeKeyRef.current === scopeAtIntent) privacyFormError("Couldn’t add category", error instanceof Error ? error.message : "Please try again.");
     } finally {
       categoryMutationInFlightRef.current = false;
       setCategorySaveBusy(false);
@@ -1965,7 +1965,8 @@ export default function MoreScreen({
   };
 
   const handleRenameCategory = async (oldName: string) => {
-    if (categoryMutationInFlightRef.current) return;
+    const scopeAtIntent = categoryScopeKey;
+    if (categoryMutationInFlightRef.current || categoryScopeKeyRef.current !== scopeAtIntent) return;
     const trimmed = renameValue.trim();
     if (!trimmed || trimmed === oldName) {
       setRenamingCategory(null);
@@ -1975,10 +1976,11 @@ export default function MoreScreen({
     setCategorySaveBusy(true);
     try {
       await updateCategory(oldName, trimmed);
+      if (categoryScopeKeyRef.current !== scopeAtIntent) return;
       if (categoryDraftRef.current.renamingCategory === oldName && categoryDraftRef.current.renameValue === renameValue) setRenamingCategory(null);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (error) {
-      privacyFormError("Couldn’t rename category", error instanceof Error ? error.message : "Please try again.");
+      if (categoryScopeKeyRef.current === scopeAtIntent) privacyFormError("Couldn’t rename category", error instanceof Error ? error.message : "Please try again.");
     } finally {
       categoryMutationInFlightRef.current = false;
       setCategorySaveBusy(false);
@@ -1986,17 +1988,31 @@ export default function MoreScreen({
   };
 
   const handleDeleteCategory = (name: string) => {
+    const scopeAtIntent = categoryScopeKey;
+    if (categoryScopeKeyRef.current !== scopeAtIntent) return;
     const inUse =
-      bills.filter((b) => b.category === name).length +
-      transactions.filter((t) => t.category === name).length;
+      bills.filter((b) => categoryMatches(b.category, name)).length +
+      transactions.filter((t) => categoryMatches(t.category, name)).length;
+    if (categoryMutationInFlightRef.current) return;
     const doDelete = async () => {
-      await deleteCategory(name);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      if (categoryMutationInFlightRef.current || categoryScopeKeyRef.current !== scopeAtIntent) return;
+      categoryMutationInFlightRef.current = true;
+      setCategorySaveBusy(true);
+      try {
+        await deleteCategory(name);
+        if (categoryScopeKeyRef.current !== scopeAtIntent) return;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      } catch (error) {
+        if (categoryScopeKeyRef.current === scopeAtIntent) privacyFormError("Couldn’t delete category", error instanceof Error ? error.message : "Please try again.");
+      } finally {
+        categoryMutationInFlightRef.current = false;
+        setCategorySaveBusy(false);
+      }
     };
     const msg =
       inUse > 0
-        ? `"${name}" is used by ${inUse} item(s). They will be reassigned to "Other".`
-        : `Delete category "${name}"?`;
+        ? `"${name}" is used by ${inUse} item(s). They and any saved category assignments will move to "Other". Your bills and transactions will be kept.`
+        : `Delete category "${name}"? Any saved category assignments will move to "Other". Your bills and transactions will be kept.`;
     confirmAction({
       title: "Delete Category",
       message: msg,
@@ -3773,6 +3789,9 @@ export default function MoreScreen({
                   <Feather name="chevron-right" size={18} color={c.primary} />
                 </Pressable>
               )}
+              <Text style={[styles.categoryHelp, { color: c.mutedForeground }]}>
+                Rename a category or delete it to move its items to Other. Renaming to an existing name combines their items and assignments. Debt, Savings, and Other support your plan and stay available.
+              </Text>
               {categories.map((cat, i) => (
                 <View
                   key={cat}
@@ -3789,16 +3808,17 @@ export default function MoreScreen({
                           { backgroundColor: c.muted, color: c.foreground },
                         ]}
                         value={renameValue}
+                        accessibilityLabel="Category name"
+                        maxLength={80}
                         editable={!categorySaveBusy}
                         onChangeText={setRenameValue}
                         autoFocus
                         returnKeyType="done"
                         onSubmitEditing={() => handleRenameCategory(cat)}
-                        onBlur={() => handleRenameCategory(cat)}
                       />
                       <Pressable
                         onPress={() => handleRenameCategory(cat)}
-                        disabled={categorySaveBusy}
+                        disabled={categorySaveBusy || !canEditHousehold}
                         accessibilityRole="button"
                         accessibilityLabel="Save category name"
                         style={[
@@ -3814,6 +3834,9 @@ export default function MoreScreen({
                       </Pressable>
                       <Pressable
                         onPress={() => setRenamingCategory(null)}
+                        disabled={categorySaveBusy}
+                        accessibilityRole="button"
+                        accessibilityLabel="Cancel category rename"
                         hitSlop={8}
                       >
                         <Feather name="x" size={16} color={c.mutedForeground} />
@@ -3830,14 +3853,14 @@ export default function MoreScreen({
                       <Text style={[styles.catName, { color: c.foreground }]}>
                         {cat}
                       </Text>
-                      {isBuiltInCategory(cat) ? (
-                        <Text style={[styles.builtInCategoryLabel, { color: c.mutedForeground }]}>Built-in</Text>
+                      {protectedCategoryReason(cat) ? (
+                        <Text style={[styles.builtInCategoryLabel, { color: c.mutedForeground }]}>{protectedCategoryReason(cat)}</Text>
                       ) : (
                         <View style={styles.catActions}>
                           <Pressable
                             accessibilityLabel={`Rename ${cat}`}
                             accessibilityRole="button"
-                            disabled={categorySaveBusy}
+                            disabled={categorySaveBusy || !canEditHousehold}
                             onPress={() => {
                               setRenamingCategory(cat);
                               setRenameValue(cat);
@@ -3854,7 +3877,7 @@ export default function MoreScreen({
                           <Pressable
                             accessibilityLabel={`Delete ${cat}`}
                             accessibilityRole="button"
-                            disabled={categorySaveBusy}
+                            disabled={categorySaveBusy || !canEditHousehold}
                             onPress={() => handleDeleteCategory(cat)}
                             hitSlop={8}
                             style={styles.catActionBtn}
@@ -3887,6 +3910,9 @@ export default function MoreScreen({
                     { backgroundColor: c.muted, color: c.foreground },
                   ]}
                   value={newCategory}
+                  accessibilityLabel="New category name"
+                  maxLength={80}
+                  editable={!categorySaveBusy && canEditHousehold}
                   onChangeText={setNewCategory}
                   placeholder="New category name..."
                   placeholderTextColor={c.mutedForeground}
@@ -3895,7 +3921,7 @@ export default function MoreScreen({
                 />
                 <Pressable
                   onPress={handleAddCategory}
-                  disabled={categorySaveBusy}
+                  disabled={categorySaveBusy || !canEditHousehold}
                   accessibilityRole="button"
                   accessibilityLabel="Add category"
                   style={({ pressed }) => [
@@ -6520,7 +6546,8 @@ const styles = StyleSheet.create({
   },
   catDot: { width: 8, height: 8, borderRadius: 4, marginRight: 10 },
   catName: { flex: 1, fontSize: 14, fontFamily: "Inter_500Medium" },
-  builtInCategoryLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  builtInCategoryLabel: { maxWidth: "42%", textAlign: "right", fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  categoryHelp: { fontSize: 12, lineHeight: 18, paddingHorizontal: 16, paddingVertical: 12, fontFamily: "Inter_400Regular" },
   catActions: { flexDirection: "row", gap: 14 },
   catActionBtn: { padding: 2 },
   renameRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },

@@ -26,7 +26,7 @@ export function parseCategoryBudgetCache(
       || Array.isArray(parsed)
       || Object.getPrototypeOf(parsed) !== Object.prototype
     ) return null;
-    const next: Record<string, number> = {};
+    const next: Array<[string, number]> = [];
     for (const [category, amount] of Object.entries(parsed)) {
       const cleanCategory = category.trim();
       if (
@@ -35,9 +35,9 @@ export function parseCategoryBudgetCache(
         || !Number.isFinite(amount)
         || amount < 0
       ) return null;
-      next[cleanCategory] = Math.round(amount * 100) / 100;
+      next.push([cleanCategory, Math.round(amount * 100) / 100]);
     }
-    return next;
+    return Object.fromEntries(next);
   } catch {
     return null;
   }
@@ -46,6 +46,9 @@ export function parseCategoryBudgetCache(
 export function createExactCategoryBudgetMemoryCache() {
   const values = new Map<string, Record<string, number>>();
   return {
+    keys(): string[] {
+      return [...values.keys()];
+    },
     has(key: string): boolean {
       return values.has(key);
     },

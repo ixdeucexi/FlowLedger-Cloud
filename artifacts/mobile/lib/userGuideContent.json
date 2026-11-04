@@ -220,6 +220,7 @@
         "title": "Keep the workspace current",
         "items": [
           { "title": "Household & accounts", "body": "Choose the active household, confirm member access, and keep each manual account balance current.", "icon": "users" },
+          { "title": "Manage categories", "body": "Open Settings > Plan to rename or delete spending categories. Renaming updates linked items; deleting moves them to Other. Other, Debt and Savings stay available for system tracking.", "icon": "tag" },
           { "title": "Setup & walkthrough", "body": "Run setup again after a major change or replay the Guided Tour from its first step.", "icon": "compass" },
           { "title": "Notifications and security", "body": "Choose useful reminders and turn on the available device sign-in protections.", "icon": "shield" },
           { "title": "Help & user guide", "body": "Open this guide again or use Support when an account or plan needs help.", "icon": "book-open" }
