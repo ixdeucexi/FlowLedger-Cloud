@@ -40,7 +40,8 @@ export function isolateAppLockWebPortals(gate: HTMLElement): () => void {
     // active stack. The locked host remains the single accessible dialog.
     if (dialog && dialog.getAttribute("role") !== "dialog") dialog.setAttribute("role", "dialog");
     for (const portal of Array.from(body.children)) {
-      if (portal === gatePortal || portal.id === "root" || /^(SCRIPT|STYLE|LINK|NOSCRIPT)$/.test(portal.tagName)) continue;
+      if (portal === gatePortal || portal.id === "root" || portal.id === "flowledger-web-startup-cover"
+        || /^(SCRIPT|STYLE|LINK|NOSCRIPT)$/.test(portal.tagName)) continue;
       if (!isolated.has(portal)) {
         isolated.set(portal, {
           inert: portal.getAttribute("inert"),
