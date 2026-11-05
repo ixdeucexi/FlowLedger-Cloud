@@ -79,6 +79,7 @@ export function FeedbackManageModal({ feedback, busy, onClose, onAction }: Feedb
               placeholderTextColor={c.mutedForeground}
               style={[styles.noteInput, { color: c.foreground, backgroundColor: c.muted, borderColor: c.border }]}
             />
+            <Text style={[styles.contactNote, { color: c.mutedForeground }]}>Say what changed in 1–2 short sentences.</Text>
             <Text style={[styles.contactNote, { color: c.mutedForeground }]}>
               {feedback?.can_contact
                 ? "They allowed contact. Outcome alerts open My Feedback, where this reply is visible."

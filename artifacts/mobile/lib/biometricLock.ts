@@ -1,4 +1,11 @@
 export const BIOMETRIC_LOCK_TIMEOUT_MS = 2 * 60 * 1000;
+export const BIOMETRIC_LOCK_DELAY_OPTIONS = [
+  { value: 0, label: "Immediately" },
+  { value: 30_000, label: "30 seconds" },
+  { value: 60_000, label: "1 minute" },
+  { value: BIOMETRIC_LOCK_TIMEOUT_MS, label: "2 minutes" },
+  { value: 300_000, label: "5 minutes" },
+] as const;
 export const BIOMETRIC_UNLOCK_REUSE_MS = 15_000;
 export const FLOWLEDGER_BIOMETRIC_RP_ID = "flowledger-algo.com";
 
@@ -18,6 +25,20 @@ export interface StoredBiometricLock {
   enabled: boolean;
   userId: string;
   credentialId: string;
+  timeoutMs?: number;
+}
+
+export function isBiometricLockTimeout(value: unknown): value is number {
+  return typeof value === "number"
+    && BIOMETRIC_LOCK_DELAY_OPTIONS.some(option => option.value === value);
+}
+
+export function biometricLockTimeout(value: unknown): number {
+  return isBiometricLockTimeout(value) ? value : BIOMETRIC_LOCK_TIMEOUT_MS;
+}
+
+export function biometricLockDelayLabel(value: unknown): string {
+  return BIOMETRIC_LOCK_DELAY_OPTIONS.find(option => option.value === biometricLockTimeout(value))!.label;
 }
 
 export interface RecentBiometricUnlock {
@@ -75,7 +96,13 @@ export function parseStoredBiometricLock(value: string | null, userId: string): 
     ) {
       return null;
     }
-    return parsed as StoredBiometricLock;
+    return {
+      version: 2,
+      enabled: parsed.enabled,
+      userId,
+      credentialId: parsed.credentialId,
+      ...(parsed.timeoutMs === undefined ? {} : { timeoutMs: biometricLockTimeout(parsed.timeoutMs) }),
+    };
   } catch {
     return null;
   }
@@ -87,7 +114,7 @@ export function shouldLockAfterBackground(
   timeoutMs = BIOMETRIC_LOCK_TIMEOUT_MS,
 ): boolean {
   if (backgroundedAt === null || !Number.isFinite(backgroundedAt) || !Number.isFinite(now)) return false;
-  return now - backgroundedAt >= Math.max(0, timeoutMs);
+  return now - backgroundedAt >= biometricLockTimeout(timeoutMs);
 }
 
 export function credentialIdToBase64Url(value: ArrayBuffer): string {

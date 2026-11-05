@@ -65,8 +65,33 @@ export function feedbackStatusLabel(status: FeedbackStatus) {
 }
 
 export function feedbackStatusMessage(status: FeedbackStatus) {
-  if (status === "reviewing") return "The FlowLedger team is reviewing this.";
-  if (status === "fixed") return "An update based on this feedback is now live.";
-  if (status === "wont_fix") return "This change is not planned right now.";
-  return "Your feedback was received.";
+  if (status === "reviewing") return "Under review.";
+  if (status === "fixed") return "This update is now live.";
+  if (status === "wont_fix") return "Not planned.";
+  return "Received.";
+}
+
+/** Public update copy; the saved admin note remains available in the admin inbox. */
+export function customerFeedbackReply(note: string | null | undefined, status: FeedbackStatus): string | null {
+  if (!note?.trim()) return null;
+  const releaseStyleNote = /^LIVE\s*:/i.test(note.trim());
+  let reply = note.trim().replace(/\s+/g, " ").replace(/^LIVE\s*:\s*/i, "");
+  const engineeringTail = /\b(?:release commit\b|(?:full\s+)?release checks\b|rollback\s*:\s*(?:rollback\/|dpl_|[a-f0-9]{7,40}\b)|prior artifact\s+dpl_|deployment\s+dpl_|production bundle matches\b|no real financial records were (?:modified|changed)\b|dpl_[a-z0-9]+\b|[a-f0-9]{40}\b)/i.exec(reply);
+  if (engineeringTail) reply = reply.slice(0, engineeringTail.index);
+  reply = reply.replace(/\s+/g, " ").replace(/[\s;:,(-]+$/, "").trim();
+  if (!reply) return null;
+
+  if (status === "fixed" && (releaseStyleNote || engineeringTail)) {
+    reply = reply
+      .replace(/^Close bucket is available in the bucket editor(?: and opens the existing Review Center closing choices)?\./i, "You can now close a bucket from its editor.")
+      .replace(/\bPlanned\/spent history and posted transactions are preserved\./gi, "Your past activity stays saved.");
+    const sentences = reply.match(/\S[\s\S]*?(?:[.!?](?=\s|$)|$)/g) ?? [reply];
+    reply = sentences.slice(0, 2).map(sentence => sentence.trim()).join(" ");
+  }
+
+  if ((releaseStyleNote || engineeringTail) && reply.length > 320) {
+    const end = reply.lastIndexOf(" ", 317);
+    reply = `${reply.slice(0, end > 240 ? end : 317).trimEnd()}…`;
+  }
+  return reply || null;
 }

@@ -141,6 +141,7 @@ import {
   canSubmitFeedback,
   feedbackStatusLabel,
   feedbackStatusMessage,
+  customerFeedbackReply,
   sanitizeFeedbackMessage,
 } from "@/lib/feedback";
 import { manageFeedback, submitFeedback } from "@/lib/feedbackApi";
@@ -620,6 +621,10 @@ export default function MoreScreen({
     useState<FeedbackAdminFilter>("active");
   const [myFeedback, setMyFeedback] = useState<AppFeedbackRow[]>([]);
   const [myFeedbackLoading, setMyFeedbackLoading] = useState(false);
+  const myFeedbackReplies = useMemo(() => myFeedback.map(item => ({
+    item,
+    reply: customerFeedbackReply(item.admin_note, item.status),
+  })), [myFeedback]);
   const [managedFeedback, setManagedFeedback] = useState<AppFeedbackRow | null>(
     null,
   );
@@ -1020,6 +1025,7 @@ export default function MoreScreen({
       item.message,
       "",
       "Please help me turn this into a clear update plan for FlowLedger. Include likely cause, recommended fix, test steps, and rollout/rollback notes.",
+      "For the customer reply, say what changed in one or two plain sentences. Keep release IDs, test results, and rollback details in engineering notes.",
     ]
       .filter(Boolean)
       .join("\n");
@@ -5228,7 +5234,7 @@ export default function MoreScreen({
                       Loading your feedback...
                     </Text>
                   ) : myFeedback.length ? (
-                    myFeedback.map((item) => (
+                    myFeedbackReplies.map(({ item, reply }) => (
                       <View
                         key={item.id}
                         style={[
@@ -5281,15 +5287,17 @@ export default function MoreScreen({
                         >
                           {item.message}
                         </Text>
-                        <Text
-                          style={[
-                            styles.feedbackHistoryStatus,
-                            { color: c.mutedForeground },
-                          ]}
-                        >
-                          {feedbackStatusMessage(item.status)}
-                        </Text>
-                        {item.admin_note ? (
+                        {item.status !== "fixed" || !reply ? (
+                          <Text
+                            style={[
+                              styles.feedbackHistoryStatus,
+                              { color: c.mutedForeground },
+                            ]}
+                          >
+                            {feedbackStatusMessage(item.status)}
+                          </Text>
+                        ) : null}
+                        {reply ? (
                           <View
                             style={[
                               styles.feedbackReply,
@@ -5305,7 +5313,7 @@ export default function MoreScreen({
                                 { color: c.primary },
                               ]}
                             >
-                              FLOWLEDGER REPLY
+                              {item.status === "fixed" ? "WHAT’S NEW" : "REPLY"}
                             </Text>
                             <Text
                               style={[
@@ -5313,7 +5321,7 @@ export default function MoreScreen({
                                 { color: c.foreground },
                               ]}
                             >
-                              {item.admin_note}
+                              {reply}
                             </Text>
                           </View>
                         ) : null}

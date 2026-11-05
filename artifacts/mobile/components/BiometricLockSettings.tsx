@@ -5,6 +5,7 @@ import { ActivityIndicator, StyleSheet } from "react-native";
 
 import { useBiometricLock } from "@/context/BiometricLockContext";
 import { useColors } from "@/hooks/useColors";
+import { BIOMETRIC_LOCK_DELAY_OPTIONS, biometricLockDelayLabel } from "@/lib/biometricLock";
 
 export function BiometricLockSettings({
   appearance: _appearance = "theme",
@@ -21,6 +22,8 @@ export function BiometricLockSettings({
     disable,
     lockNow,
     clearError,
+    timeoutMs,
+    setAutoLockDelay,
   } = useBiometricLock();
 
   const toggle = async () => {
@@ -42,15 +45,15 @@ export function BiometricLockSettings({
         </View>
         <View style={styles.copy}>
           <Text style={[styles.title, { color: colors.foreground }]}>
-            Biometric App Lock
+            App Lock
           </Text>
           <Text style={[styles.description, { color: colors.mutedForeground }]}>
-            Fingerprint, face, or your phone’s screen lock.
+            Use fingerprint or face unlock, with your device PIN or passcode as backup.
           </Text>
         </View>
         <Pressable
           accessibilityRole="switch"
-          accessibilityLabel="Biometric App Lock"
+          accessibilityLabel="App Lock"
           accessibilityState={{
             checked: enabled,
             disabled: busy || !supported,
@@ -97,10 +100,36 @@ export function BiometricLockSettings({
         <Text style={[styles.noteText, { color: colors.mutedForeground }]}>
           {supported
             ? enabled
-              ? "On for this device. FlowLedger locks after 2 minutes away."
-              : "This setting applies only to this device."
-            : "Device unlock is not supported in this browser."}
+              ? `On for this device. ${timeoutMs === 0 ? "Locks as soon as you leave the app." : `Locks after ${biometricLockDelayLabel(timeoutMs).toLowerCase()} away.`}`
+              : "Off. App Lock stays off until you turn it on. This setting applies only to this device."
+            : enabled
+              ? "App Lock is on, but device unlock is unavailable here."
+              : "Off. Device unlock is unavailable on this device or browser."}
         </Text>
+      </View>
+
+      <View style={styles.delaySection}>
+        <Text style={[styles.delayTitle, { color: colors.foreground }]}>Lock after leaving the app</Text>
+        <View accessibilityRole="radiogroup" accessibilityLabel="App Lock delay" style={styles.delayOptions}>
+          {BIOMETRIC_LOCK_DELAY_OPTIONS.map(option => (
+            <Pressable
+              key={option.value}
+              accessibilityRole="radio"
+              accessibilityLabel={`Lock after leaving: ${option.label}`}
+              accessibilityState={{ checked: timeoutMs === option.value, disabled: !enabled || busy }}
+              disabled={!enabled || busy}
+              onPress={() => { void setAutoLockDelay(option.value); }}
+              style={({ pressed }) => [styles.delayButton, {
+                borderColor: timeoutMs === option.value ? colors.primary : colors.border,
+                backgroundColor: timeoutMs === option.value ? colors.primary + "18" : colors.card,
+                opacity: !enabled || busy ? 0.55 : pressed ? 0.75 : 1,
+              }]}
+            >
+              <Text style={[styles.delayText, { color: timeoutMs === option.value ? colors.primary : colors.foreground }]}>{option.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+        {!enabled ? <Text style={[styles.description, { color: colors.mutedForeground }]}>Turn on App Lock to change the delay.</Text> : null}
       </View>
 
       {error ? (
@@ -115,6 +144,7 @@ export function BiometricLockSettings({
       {enabled ? (
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Lock now"
           disabled={busy}
           onPress={lockNow}
           style={({ pressed }) => [
@@ -127,7 +157,7 @@ export function BiometricLockSettings({
         >
           <Feather name="lock" size={16} color={colors.primary} />
           <Text style={[styles.testText, { color: colors.primary }]}>
-            Lock now to test
+            Lock now
           </Text>
         </Pressable>
       ) : null}
@@ -202,6 +232,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
   },
+  delaySection: { marginTop: 16 },
+  delayTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold", marginBottom: 8 },
+  delayOptions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  delayButton: { minHeight: 44, justifyContent: "center", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1 },
+  delayText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   testButton: {
     minHeight: 44,
     borderWidth: 1,

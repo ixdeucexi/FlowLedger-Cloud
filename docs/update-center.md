@@ -21,6 +21,8 @@ order by f.created_at asc;
 5. Follow AGENTS.md's investigation, implementation, independent review, test, and release safeguards. Update status via the existing authenticated `/api/feedback` management flow where available: `reviewing` when actually underway, `updated` only after the requested work is implemented/verified (and live if promised), `not_planned` only for an explicit decision. Save a concise factual admin note. Do not mark work complete merely because it was read.
 6. Report which requests were completed and any remaining blockers to the human owner. No recurring polling or scheduled work is configured.
 
+Customer replies should say what changed in one or two plain sentences. For example: "You can now close a bucket from its editor. Your past activity stays saved." Keep commit IDs, deployments, test results, and rollback references in engineering release records, not the customer reply. Do not describe a change as live until it has been verified and published.
+
 No database schema changes are required. Existing feedback remains available and unchanged.
 
 Owners can edit or delete their own pending (`new` / `reviewing`) requests. Delete archives the request, removing it from the pending queue; Restore makes it pending again without changing its status or review note. Completed (`fixed` / `wont_fix`) requests remain read-only history. The dedicated `edit_request`, `delete_request`, and `restore_request` API actions verify current admin membership, persisted authorship, and the Update Center marker. They do not physically delete records, notify anyone, or start work.

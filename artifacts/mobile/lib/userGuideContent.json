@@ -222,7 +222,7 @@
           { "title": "Household & accounts", "body": "Choose the active household, confirm member access, and keep each manual account balance current.", "icon": "users" },
           { "title": "Manage categories", "body": "Open Settings > Plan to rename or delete spending categories. Renaming updates linked items; deleting moves them to Other. Other, Debt and Savings stay available for system tracking.", "icon": "tag" },
           { "title": "Setup & walkthrough", "body": "Run setup again after a major change or replay the Guided Tour from its first step.", "icon": "compass" },
-          { "title": "Notifications and security", "body": "Choose useful reminders and turn on the available device sign-in protections.", "icon": "shield" },
+          { "title": "Notifications and App Lock", "body": "Choose reminders in Settings. App Lock starts Off. In Security, you can enable fingerprint or face unlock with device PIN/passcode backup, choose a delay, and use Lock now.", "icon": "shield" },
           { "title": "Help & user guide", "body": "Open this guide again or use Support when an account or plan needs help.", "icon": "book-open" }
         ]
       },
@@ -237,8 +237,8 @@
       }
     ],
     "callout": {
-      "title": "Settings apply to the active household",
-      "body": "Check the household name before changing account, member, or plan information."
+      "title": "Household and device settings",
+      "body": "Accounts and plan settings follow the active household. App Lock applies to your sign-in on this device."
     }
   },
   {

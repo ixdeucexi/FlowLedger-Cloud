@@ -8,6 +8,8 @@ import {
   assertionHasUserVerification,
   biometricRpIdForHostname,
   biometricLockStorageKey,
+  biometricLockTimeout,
+  isBiometricLockTimeout,
   BIOMETRIC_UNLOCK_REUSE_MS,
   credentialIdFromBase64Url,
   credentialIdToBase64Url,
@@ -31,12 +33,15 @@ interface BiometricLockContextValue {
   unlock: () => Promise<boolean>;
   lockNow: () => void;
   clearError: () => void;
+  timeoutMs: number;
+  setAutoLockDelay: (timeoutMs: number) => Promise<boolean>;
 }
 
 const BiometricLockContext = createContext<BiometricLockContextValue | null>(null);
 
-let sharedUnlockAttempt: { credentialId: string; promise: Promise<boolean> } | null = null;
-let recentSuccessfulUnlock: { credentialId: string; completedAt: number } | null = null;
+interface BiometricLockScope { userId: string | null; generation: number; }
+let sharedUnlockAttempt: { scope: BiometricLockScope; userId: string; credentialId: string; promise: Promise<boolean> } | null = null;
+let recentSuccessfulUnlock: { userId: string; credentialId: string; completedAt: number } | null = null;
 const NATIVE_DEVICE_CREDENTIAL_ID = "native-device-authentication";
 
 function readRecentBrowserUnlock(userId: string, credentialId: string): boolean {
@@ -71,11 +76,11 @@ function clearRecentBrowserUnlock(userId: string): void {
   } catch {}
 }
 
-async function withCrossDocumentBiometricLock<T>(credentialId: string, task: () => Promise<T>): Promise<T> {
+async function withCrossDocumentBiometricLock<T>(userId: string, credentialId: string, task: () => Promise<T>): Promise<T> {
   if (Platform.OS !== "web" || typeof navigator === "undefined" || !navigator.locks) {
     return task();
   }
-  return navigator.locks.request(`flowledger-biometric:${credentialId}`, task);
+  return navigator.locks.request(`flowledger-biometric:${userId}:${credentialId}`, task);
 }
 
 async function canUsePlatformPasskeys(): Promise<boolean> {
@@ -172,22 +177,44 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const backgroundedAt = useRef<number | null>(null);
+  const currentLockRef = useRef<StoredBiometricLock | null>(null);
+  const mountedRef = useRef(true);
   const userId = demoMode ? null : user?.id ?? null;
   const userLabel = user?.email ?? "FlowLedger user";
+  const scopeRef = useRef<BiometricLockScope>({ userId, generation: 0 });
+  const busyScopeRef = useRef<BiometricLockScope | null>(null);
+  const authenticationScopeRef = useRef<BiometricLockScope | null>(null);
+  if (scopeRef.current.userId !== userId) {
+    scopeRef.current = { userId, generation: scopeRef.current.generation + 1 };
+    currentLockRef.current = null;
+    backgroundedAt.current = null;
+  }
   const ready = userId === null || loadedUserId === userId;
   const enabled = ready && storedLock?.userId === userId && storedLock.enabled;
+  const timeoutMs = biometricLockTimeout(storedLock?.userId === userId ? storedLock.timeoutMs : undefined);
+  const isCurrentScope = useCallback((scope: BiometricLockScope) => (
+    mountedRef.current && scopeRef.current === scope
+  ), []);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
+    const scope = scopeRef.current;
+    currentLockRef.current = null;
+    backgroundedAt.current = null;
+    busyScopeRef.current = null;
+    setBusy(false);
+    if (recentSuccessfulUnlock?.userId !== userId) recentSuccessfulUnlock = null;
     if (!userId) {
       setLoadedUserId(null);
       setStoredLock(null);
       setSupported(false);
       setLocked(false);
       setError(null);
-      return () => {
-        active = false;
-      };
+      return () => { active = false; };
     }
 
     setLoadedUserId(null);
@@ -197,56 +224,73 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
       AsyncStorage.getItem(biometricLockStorageKey(userId)),
       canUsePlatformPasskeys(),
     ]).then(([saved, deviceSupported]) => {
-      if (!active) return;
+      if (!active || !isCurrentScope(scope)) return;
       const parsed = parseStoredBiometricLock(saved, userId);
+      currentLockRef.current = parsed;
       setStoredLock(parsed);
       setSupported(deviceSupported);
       const recentlyUnlocked = Boolean(parsed?.enabled && readRecentBrowserUnlock(userId, parsed.credentialId));
       setLocked(Boolean(parsed?.enabled && !recentlyUnlocked));
       setLoadedUserId(userId);
     }).catch(() => {
-      if (!active) return;
+      if (!active || !isCurrentScope(scope)) return;
+      currentLockRef.current = null;
       setStoredLock(null);
       setSupported(false);
       setLocked(false);
       setLoadedUserId(userId);
     });
 
-    return () => {
-      active = false;
-    };
-  }, [userId]);
+    return () => { active = false; };
+  }, [isCurrentScope, userId]);
 
-  const saveLock = useCallback(async (next: StoredBiometricLock) => {
+  const beginOperation = useCallback((scope: BiometricLockScope) => {
+    if (!isCurrentScope(scope) || busyScopeRef.current === scope) return false;
+    busyScopeRef.current = scope;
+    setBusy(true);
+    setError(null);
+    return true;
+  }, [isCurrentScope]);
+  const finishOperation = useCallback((scope: BiometricLockScope) => {
+    if (busyScopeRef.current !== scope) return;
+    busyScopeRef.current = null;
+    if (isCurrentScope(scope)) setBusy(false);
+  }, [isCurrentScope]);
+
+  const saveLock = useCallback(async (next: StoredBiometricLock, scope: BiometricLockScope) => {
+    if (!isCurrentScope(scope) || next.userId !== scope.userId) return false;
     await AsyncStorage.setItem(biometricLockStorageKey(next.userId), JSON.stringify(next));
+    if (!isCurrentScope(scope)) return false;
+    currentLockRef.current = next;
     setStoredLock(next);
-  }, []);
+    return true;
+  }, [isCurrentScope]);
 
   const noteBackgrounded = useCallback(() => {
-    if (sharedUnlockAttempt) return;
+    // Native/WebAuthn prompts may themselves background the app.
+    if (sharedUnlockAttempt?.scope === scopeRef.current || authenticationScopeRef.current === scopeRef.current) return;
     backgroundedAt.current = Date.now();
   }, []);
 
   const lockIfNeeded = useCallback(() => {
-    if (sharedUnlockAttempt) {
+    if (sharedUnlockAttempt?.scope === scopeRef.current || authenticationScopeRef.current === scopeRef.current) {
       backgroundedAt.current = null;
       return;
     }
-    if (enabled && shouldLockAfterBackground(backgroundedAt.current, Date.now())) {
+    if (enabled && shouldLockAfterBackground(backgroundedAt.current, Date.now(), timeoutMs)) {
       if (userId) clearRecentBrowserUnlock(userId);
       recentSuccessfulUnlock = null;
       setLocked(true);
       setError(null);
     }
     backgroundedAt.current = null;
-  }, [enabled, userId]);
+  }, [enabled, timeoutMs, userId]);
 
   useEffect(() => {
     const appStateSubscription = AppState.addEventListener("change", state => {
       if (state === "active") lockIfNeeded();
       else noteBackgrounded();
     });
-
     if (Platform.OS === "web" && typeof document !== "undefined" && typeof window !== "undefined") {
       const onVisibilityChange = () => {
         if (document.visibilityState === "hidden") noteBackgrounded();
@@ -262,120 +306,151 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
         window.removeEventListener("pageshow", lockIfNeeded);
       };
     }
-
     return () => appStateSubscription.remove();
   }, [lockIfNeeded, noteBackgrounded]);
 
   const enable = useCallback(async () => {
-    if (!userId || !supported || busy) return false;
-    setBusy(true);
-    setError(null);
+    const scope = scopeRef.current;
+    if (!userId || !ready || !supported || scope.userId !== userId) return false;
+    if (currentLockRef.current?.enabled) return true;
+    if (!beginOperation(scope)) return false;
+    authenticationScopeRef.current = scope;
     try {
+      const previous = currentLockRef.current;
       let credentialId: string;
       if (Platform.OS === "web") {
-        credentialId = storedLock?.credentialId ?? await registerDeviceCredential(userId, userLabel);
-        if (storedLock?.credentialId) await verifyDeviceCredential(credentialId);
+        credentialId = previous?.credentialId ?? await registerDeviceCredential(userId, userLabel);
+        if (!isCurrentScope(scope)) return false;
+        if (previous?.credentialId) await verifyDeviceCredential(credentialId);
       } else {
-        await verifyNativeDeviceCredential("Turn on device lock");
+        await verifyNativeDeviceCredential("Turn on App Lock");
         credentialId = NATIVE_DEVICE_CREDENTIAL_ID;
       }
-      await saveLock({ version: 2, enabled: true, userId, credentialId });
+      if (!isCurrentScope(scope)) return false;
+      if (!await saveLock({ version: 2, enabled: true, userId, credentialId, timeoutMs: biometricLockTimeout(previous?.timeoutMs) }, scope)) return false;
       const completedAt = Date.now();
-      recentSuccessfulUnlock = { credentialId, completedAt };
+      recentSuccessfulUnlock = { userId, credentialId, completedAt };
       rememberRecentBrowserUnlock(userId, credentialId, completedAt);
       setLocked(false);
+      backgroundedAt.current = null;
       return true;
     } catch (caught) {
-      setError(friendlyBiometricError(caught));
+      if (isCurrentScope(scope)) setError(friendlyBiometricError(caught));
       return false;
     } finally {
-      setBusy(false);
+      if (authenticationScopeRef.current === scope) authenticationScopeRef.current = null;
+      finishOperation(scope);
     }
-  }, [busy, saveLock, storedLock?.credentialId, supported, userId, userLabel]);
+  }, [beginOperation, finishOperation, isCurrentScope, ready, saveLock, supported, userId, userLabel]);
 
   const disable = useCallback(async () => {
-    if (!userId || !storedLock || busy) return false;
-    setBusy(true);
-    setError(null);
+    const scope = scopeRef.current;
+    const current = currentLockRef.current;
+    if (!userId || !ready || !current || current.userId !== userId || scope.userId !== userId) return false;
+    if (!current.enabled) return true;
+    if (!beginOperation(scope)) return false;
     try {
-      await saveLock({ ...storedLock, enabled: false });
+      if (!await saveLock({ ...current, enabled: false }, scope)) return false;
       clearRecentBrowserUnlock(userId);
       recentSuccessfulUnlock = null;
       setLocked(false);
       return true;
     } catch (caught) {
-      setError(friendlyBiometricError(caught));
+      if (isCurrentScope(scope)) setError(friendlyBiometricError(caught));
       return false;
     } finally {
-      setBusy(false);
+      finishOperation(scope);
     }
-  }, [busy, saveLock, storedLock, userId]);
+  }, [beginOperation, finishOperation, isCurrentScope, ready, saveLock, userId]);
+
+  const setAutoLockDelay = useCallback(async (nextTimeoutMs: number) => {
+    const scope = scopeRef.current;
+    const current = currentLockRef.current;
+    // A delay edit can never create enrollment or turn an Off lock back on.
+    if (!userId || !ready || !current?.enabled || current.userId !== userId || scope.userId !== userId) return false;
+    if (!isBiometricLockTimeout(nextTimeoutMs)) {
+      setError("Choose one of the available lock delays.");
+      return false;
+    }
+    if (!beginOperation(scope)) return false;
+    try {
+      return await saveLock({ ...current, timeoutMs: nextTimeoutMs }, scope);
+    } catch {
+      if (isCurrentScope(scope)) setError("The lock delay could not be saved. Please try again.");
+      return false;
+    } finally {
+      finishOperation(scope);
+    }
+  }, [beginOperation, finishOperation, isCurrentScope, ready, saveLock, userId]);
 
   const unlock = useCallback((): Promise<boolean> => {
-    if (!enabled || !storedLock) return Promise.resolve(false);
-    const credentialId = storedLock.credentialId;
+    const scope = scopeRef.current;
+    const current = currentLockRef.current;
+    if (!userId || !ready || scope.userId !== userId || !current?.enabled || current.userId !== userId || !isCurrentScope(scope)) return Promise.resolve(false);
+    const credentialId = current.credentialId;
+    const canPublish = () => isCurrentScope(scope)
+      && currentLockRef.current?.userId === userId
+      && currentLockRef.current.enabled
+      && currentLockRef.current.credentialId === credentialId;
     if (
-      recentSuccessfulUnlock?.credentialId === credentialId
+      recentSuccessfulUnlock?.userId === userId
+      && recentSuccessfulUnlock.credentialId === credentialId
       && Date.now() - recentSuccessfulUnlock.completedAt < BIOMETRIC_UNLOCK_REUSE_MS
     ) {
       setLocked(false);
       backgroundedAt.current = null;
       return Promise.resolve(true);
     }
-    if (userId && readRecentBrowserUnlock(userId, credentialId)) {
-      recentSuccessfulUnlock = { credentialId, completedAt: Date.now() };
+    if (readRecentBrowserUnlock(userId, credentialId)) {
+      recentSuccessfulUnlock = { userId, credentialId, completedAt: Date.now() };
       setLocked(false);
       backgroundedAt.current = null;
       return Promise.resolve(true);
     }
-    if (sharedUnlockAttempt?.credentialId === credentialId) {
-      setBusy(true);
-      return sharedUnlockAttempt.promise.then(unlocked => {
-        if (unlocked) {
-          setLocked(false);
-          backgroundedAt.current = null;
-        }
-        return unlocked;
-      }).finally(() => setBusy(false));
+    if (sharedUnlockAttempt?.scope === scope && sharedUnlockAttempt.userId === userId && sharedUnlockAttempt.credentialId === credentialId) {
+      return sharedUnlockAttempt.promise.then(unlocked => unlocked && canPublish());
     }
-
+    if (!beginOperation(scope)) return Promise.resolve(false);
     const attempt = (async () => {
-      setBusy(true);
-      setError(null);
       try {
-        await withCrossDocumentBiometricLock(credentialId, async () => {
-          if (userId && readRecentBrowserUnlock(userId, credentialId)) return;
-          if (Platform.OS === "web") await verifyDeviceCredential(credentialId);
-          else await verifyNativeDeviceCredential("Unlock FlowLedger");
-          const completedAt = Date.now();
-          recentSuccessfulUnlock = { credentialId, completedAt };
-          if (userId) rememberRecentBrowserUnlock(userId, credentialId, completedAt);
+        const unlocked = await withCrossDocumentBiometricLock(userId, credentialId, async () => {
+          if (!canPublish()) return false;
+          if (!readRecentBrowserUnlock(userId, credentialId)) {
+            if (Platform.OS === "web") await verifyDeviceCredential(credentialId);
+            else await verifyNativeDeviceCredential("Unlock FlowLedger");
+            if (!canPublish()) return false;
+            const completedAt = Date.now();
+            recentSuccessfulUnlock = { userId, credentialId, completedAt };
+            rememberRecentBrowserUnlock(userId, credentialId, completedAt);
+          }
+          return true;
         });
+        if (!unlocked || !canPublish()) return false;
         setLocked(false);
         backgroundedAt.current = null;
         return true;
       } catch (caught) {
-        setError(friendlyBiometricError(caught));
+        if (isCurrentScope(scope)) setError(friendlyBiometricError(caught));
         return false;
       } finally {
-        setBusy(false);
+        finishOperation(scope);
       }
     })();
-
-    sharedUnlockAttempt = { credentialId, promise: attempt };
+    sharedUnlockAttempt = { scope, userId, credentialId, promise: attempt };
     void attempt.then(() => {
       if (sharedUnlockAttempt?.promise === attempt) sharedUnlockAttempt = null;
     });
     return attempt;
-  }, [enabled, storedLock, userId]);
+  }, [beginOperation, finishOperation, isCurrentScope, ready, userId]);
 
   const lockNow = useCallback(() => {
-    if (!enabled) return;
-    if (userId) clearRecentBrowserUnlock(userId);
+    const current = currentLockRef.current;
+    if (!userId || !ready || scopeRef.current.userId !== userId || !current?.enabled || current.userId !== userId || busyScopeRef.current === scopeRef.current) return;
+    clearRecentBrowserUnlock(userId);
     recentSuccessfulUnlock = null;
     setError(null);
     setLocked(true);
-  }, [enabled, userId]);
+  }, [ready, userId]);
 
   const clearError = useCallback(() => setError(null), []);
   const value = useMemo<BiometricLockContextValue>(() => ({
@@ -390,7 +465,9 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
     unlock,
     lockNow,
     clearError,
-  }), [busy, clearError, disable, enable, enabled, error, lockNow, locked, ready, supported, unlock]);
+    timeoutMs,
+    setAutoLockDelay,
+  }), [busy, clearError, disable, enable, enabled, error, lockNow, locked, ready, setAutoLockDelay, supported, timeoutMs, unlock]);
 
   return <BiometricLockContext.Provider value={value}>{children}</BiometricLockContext.Provider>;
 }

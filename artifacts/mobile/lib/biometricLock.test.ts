@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { readFileSync } from "node:fs";
+import { transpileModule, ModuleKind, JsxEmit, ScriptTarget } from "typescript";
+import * as lockHelpers from "./biometricLock";
 
 import {
   BIOMETRIC_LOCK_TIMEOUT_MS,
+  BIOMETRIC_LOCK_DELAY_OPTIONS,
   BIOMETRIC_UNLOCK_REUSE_MS,
   assertionHasUserVerification,
   biometricRpIdForHostname,
   biometricLockStorageKey,
+  biometricLockTimeout,
   credentialIdFromBase64Url,
   credentialIdToBase64Url,
   friendlyBiometricError,
@@ -82,8 +87,199 @@ describe("biometric app lock", () => {
     assert.equal(shouldLockAfterBackground(1_000, 1_000 + BIOMETRIC_LOCK_TIMEOUT_MS), true);
   });
 
+  it("supports every configured background delay at its exact boundary", () => {
+    assert.deepEqual(BIOMETRIC_LOCK_DELAY_OPTIONS.map(option => option.value), [0, 30_000, 60_000, 120_000, 300_000]);
+    for (const { value } of BIOMETRIC_LOCK_DELAY_OPTIONS) {
+      if (value > 0) assert.equal(shouldLockAfterBackground(1_000, 1_000 + value - 1, value), false);
+      assert.equal(shouldLockAfterBackground(1_000, 1_000 + value, value), true);
+    }
+    assert.equal(shouldLockAfterBackground(null, 300_000, 0), false);
+  });
+
+  it("keeps legacy enrollment and invalid delays on the two-minute default", () => {
+    for (const value of [undefined, null, -1, 10, NaN, Infinity, "30000"]) assert.equal(biometricLockTimeout(value), 120_000);
+    const saved = JSON.stringify({ version: 2, enabled: true, userId: "user-a", credentialId: "native-device-authentication", timeoutMs: "bad" });
+    const parsed = parseStoredBiometricLock(saved, "user-a");
+    assert.equal(parsed?.enabled, true);
+    assert.equal(parsed?.timeoutMs, 120_000);
+  });
+
   it("keeps biometric errors friendly", () => {
     assert.match(friendlyBiometricError(new Error("NotAllowedError: cancelled")), /cancelled/i);
     assert.doesNotMatch(friendlyBiometricError(new Error("secret internal stack")), /secret|stack/i);
   });
+});
+
+type NativeResult = { success: boolean; error?: string };
+const enrollment = (userId: string, extra = {}) => ({ version: 2, enabled: true, userId, credentialId: "native-device-authentication", ...extra });
+function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
+
+/** Execute the real provider with isolated hooks, storage, clock and native API. */
+function providerHarness(seed: Record<string, unknown> = {}) {
+  const storage = new Map(Object.entries(seed).map(([id, value]) => [biometricLockStorageKey(id), JSON.stringify(value)]));
+  const writes: Array<{ key: string; value: string }> = [], prompts: Record<string, unknown>[] = [];
+  const listeners = new Set<(value: string) => void>(), slots: any[] = [];
+  let index = 0, dirty = false, now = 10_000, mounted = true;
+  let auth = { user: { id: "user-a", email: "device-fixture@example.test" }, demoMode: false };
+  let effects: Array<() => void> = [], result: any;
+  let authenticate: () => Promise<NativeResult> = async () => ({ success: true });
+  let writeGate: Promise<void> | null = null, failWrites = false;
+  const unchanged = (a: unknown[] | undefined, b: unknown[] | undefined) => a && b && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
+  const react: any = {
+    createContext: () => ({ Provider: "Provider" }),
+    useState(initial: unknown) {
+      const slot = index++; if (!(slot in slots)) slots[slot] = typeof initial === "function" ? initial() : initial;
+      return [slots[slot], (next: unknown) => { assert(mounted, "Old operation published after unmount"); const v = typeof next === "function" ? next(slots[slot]) : next; if (!Object.is(slots[slot], v)) { slots[slot] = v; dirty = true; } }];
+    },
+    useRef(initial: unknown) { const slot = index++; return slots[slot] ??= { current: initial }; },
+    useCallback(fn: unknown, deps: unknown[]) { const slot = index++; if (!unchanged(slots[slot]?.deps, deps)) slots[slot] = { deps, value: fn }; return slots[slot].value; },
+    useMemo(fn: () => unknown, deps: unknown[]) { const slot = index++; if (!unchanged(slots[slot]?.deps, deps)) slots[slot] = { deps, value: fn() }; return slots[slot].value; },
+    useEffect(fn: () => unknown, deps: unknown[]) { const slot = index++; if (unchanged(slots[slot]?.deps, deps)) return; const previous = slots[slot]; slots[slot] = { deps, cleanup: previous?.cleanup }; effects.push(() => { slots[slot].cleanup?.(); slots[slot].cleanup = fn(); }); },
+  };
+  const code = transpileModule(readFileSync("context/BiometricLockContext.tsx", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, jsx: JsxEmit.ReactJSX, target: ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
+  const exported: any = {};
+  const requireMock = (name: string): any => {
+    if (name === "react") return { __esModule: true, default: react, ...react };
+    if (name === "react/jsx-runtime") return { jsx: (type: unknown, props: unknown) => ({ type, props }) };
+    if (name === "react-native") return { Platform: { OS: "android" }, AppState: { addEventListener: (_event: string, fn: (value: string) => void) => { listeners.add(fn); return { remove: () => listeners.delete(fn) }; } } };
+    if (name === "@/context/AuthContext") return { useAuth: () => auth };
+    if (name === "@/lib/biometricLock") return lockHelpers;
+    if (name === "expo-local-authentication") return { hasHardwareAsync: async () => true, isEnrolledAsync: async () => true, authenticateAsync: async (options: Record<string, unknown>) => { prompts.push(options); return authenticate(); } };
+    if (name === "@react-native-async-storage/async-storage") return { __esModule: true, default: { getItem: async (key: string) => storage.get(key) ?? null, setItem: async (key: string, value: string) => { await writeGate; if (failWrites) throw new Error("Fictional storage rejection"); storage.set(key, value); writes.push({ key, value }); } } };
+    throw new Error(`Unexpected provider dependency ${name}`);
+  };
+  class FixtureDate extends Date { static now() { return now; } }
+  new Function("exports", "require", "Date", code)(exported, requireMock, FixtureDate);
+  const render = () => { index = 0; dirty = false; result = exported.BiometricLockProvider({ children: null }).props.value; const pending = effects; effects = []; pending.forEach(run => run()); };
+  const flush = async () => { for (let i = 0; i < 30; i++) { await Promise.resolve(); if (dirty) render(); } };
+  render();
+  return {
+    get value() { return result; }, storage, writes, prompts, flush,
+    authenticateWith(fn: () => Promise<NativeResult>) { authenticate = fn; }, holdWrites(p: Promise<void> | null) { writeGate = p; }, failWrites(v: boolean) { failWrites = v; },
+    user(id: string) { auth = { user: { id, email: "device-fixture@example.test" }, demoMode: false }; render(); }, state(v: string) { for (const fn of [...listeners]) fn(v); }, advance(ms: number) { now += ms; },
+    close() { slots.forEach(slot => slot?.cleanup?.()); mounted = false; assert.equal(listeners.size, 0); },
+  };
+}
+
+describe("App Lock provider with fictional native authentication", () => {
+  it("stays Off without writes or prompts through mount, delay edits and background events", async () => {
+    const h = providerHarness(); try {
+      await h.flush(); assert.equal(h.value.ready, true); assert.equal(h.value.enabled, false); assert.equal(h.value.locked, false);
+      assert.equal(await h.value.setAutoLockDelay(0), false); h.value.lockNow(); assert.equal(await h.value.unlock(), false);
+      h.state("background"); h.advance(500_000); h.state("active"); await h.flush();
+      assert.equal(h.value.enabled, false); assert.equal(h.value.locked, false); assert.equal(h.value.timeoutMs, 120_000); assert.deepEqual(h.writes, []); assert.deepEqual(h.prompts, []);
+    } finally { h.close(); }
+  });
+  it("preserves explicit Off enrollment and delay without activating it", async () => {
+    const h = providerHarness({ "user-a": enrollment("user-a", { enabled: false, timeoutMs: 300_000 }) }); try {
+      await h.flush(); assert.equal(h.value.enabled, false); assert.equal(h.value.timeoutMs, 300_000); assert.deepEqual(h.writes, []); assert.deepEqual(h.prompts, []);
+    } finally { h.close(); }
+  });
+  it("preserves legacy On enrollment with two minutes and no storage rewrite", async () => {
+    const h = providerHarness({ "user-a": enrollment("user-a") }); try {
+      await h.flush(); assert.equal(h.value.enabled, true); assert.equal(h.value.locked, true); assert.equal(h.value.timeoutMs, 120_000); assert.deepEqual(h.writes, []); assert.deepEqual(h.prompts, []);
+    } finally { h.close(); }
+  });
+  it("enables only after explicit successful device authentication with PIN fallback permitted", async () => {
+    const h = providerHarness(); try {
+      await h.flush(); assert.equal(await h.value.enable(), true); await h.flush(); assert.equal(h.prompts.length, 1); assert.equal(h.prompts[0].disableDeviceFallback, false);
+      assert.equal(h.value.enabled, true); assert.equal(h.value.locked, false); assert.equal(h.value.timeoutMs, 120_000); assert.equal(JSON.parse(h.writes[0].value).enabled, true);
+    } finally { h.close(); }
+  });
+  it("keeps canceled setup Off and accepts a later explicit retry", async () => {
+    const h = providerHarness(); try {
+      await h.flush(); h.authenticateWith(async () => ({ success: false, error: "user_cancel" })); assert.equal(await h.value.enable(), false); await h.flush(); assert.equal(h.value.enabled, false); assert.deepEqual(h.writes, []);
+      h.authenticateWith(async () => ({ success: true })); assert.equal(await h.value.enable(), true); await h.flush(); assert.equal(h.value.enabled, true);
+    } finally { h.close(); }
+  });
+  it("persists every allowed delay only after enrollment and retains its value when disabled", async () => {
+    const h = providerHarness({ "user-a": enrollment("user-a") }); try {
+      await h.flush(); for (const option of BIOMETRIC_LOCK_DELAY_OPTIONS) { assert.equal(await h.value.setAutoLockDelay(option.value), true); await h.flush(); assert.equal(h.value.timeoutMs, option.value); }
+      assert.equal(h.prompts.length, 0); assert.equal(await h.value.disable(), true); await h.flush(); const count = h.writes.length; assert.equal(await h.value.setAutoLockDelay(0), false); assert.equal(h.writes.length, count); assert.equal(h.value.enabled, false); assert.equal(h.value.timeoutMs, 300_000);
+    } finally { h.close(); }
+  });
+  it("rejects invalid delays and retains confirmed settings after a failed write", async () => {
+    const h = providerHarness({ "user-a": enrollment("user-a") }); try {
+      await h.flush(); assert.equal(await h.value.setAutoLockDelay(42), false); assert.deepEqual(h.writes, []);
+      h.failWrites(true); assert.equal(await h.value.setAutoLockDelay(0), false); await h.flush(); assert.equal(h.value.timeoutMs, 120_000); assert.match(h.value.error, /could not be saved/);
+      h.failWrites(false); assert.equal(await h.value.setAutoLockDelay(0), true); await h.flush(); assert.equal(h.value.timeoutMs, 0); assert.equal(h.value.error, null);
+    } finally { h.close(); }
+  });
+  it("relocks at the selected boundary and does not reuse recent unlock after Lock now or Immediate", async () => {
+    const h = providerHarness({ "user-a": enrollment("user-a", { timeoutMs: 30_000 }) }); try {
+      await h.flush(); await h.value.unlock(); await h.flush(); assert.equal(h.prompts.length, 1);
+      h.state("background"); h.advance(29_999); h.state("active"); await h.flush(); assert.equal(h.value.locked, false);
+      h.state("background"); h.advance(30_000); h.state("active"); await h.flush(); assert.equal(h.value.locked, true); await h.value.unlock(); await h.flush(); assert.equal(h.prompts.length, 2);
+      h.value.lockNow(); await h.flush(); assert.equal(h.value.locked, true); await h.value.unlock(); await h.flush(); assert.equal(h.prompts.length, 3);
+      await h.value.setAutoLockDelay(0); await h.flush(); h.state("background"); h.state("active"); await h.flush(); assert.equal(h.value.locked, true); await h.value.unlock(); await h.flush(); assert.equal(h.prompts.length, 4);
+    } finally { h.close(); }
+  });
+  it("coalesces rapid unlocks and ignores background events from the authentication prompt", async () => {
+    const h = providerHarness({ "user-a": enrollment("user-a", { timeoutMs: 0 }) }); try {
+      await h.flush(); const auth = deferred<NativeResult>(); h.authenticateWith(() => auth.promise); const first = h.value.unlock(), second = h.value.unlock(); await h.flush(); assert.equal(h.prompts.length, 1);
+      h.state("background"); h.advance(100_000); h.state("active"); auth.resolve({ success: true }); assert.deepEqual(await Promise.all([first, second]), [true, true]); await h.flush(); assert.equal(h.value.locked, false); assert.equal(h.value.busy, false);
+    } finally { h.close(); }
+  });
+  it("discards setup authentication completed for a previous signed-in user", async () => {
+    const h = providerHarness(); try {
+      await h.flush(); const auth = deferred<NativeResult>(); h.authenticateWith(() => auth.promise); const pending = h.value.enable(); await h.flush(); h.user("user-b"); await h.flush(); auth.resolve({ success: true });
+      assert.equal(await pending, false); await h.flush(); assert.equal(h.value.enabled, false); assert.equal(h.value.busy, false); assert.deepEqual(h.writes, []);
+    } finally { h.close(); }
+  });
+  it("does not publish a previous user's delayed write into the current user's enabled lock", async () => {
+    const h = providerHarness({ "user-a": enrollment("user-a"), "user-b": enrollment("user-b", { timeoutMs: 300_000 }) }); try {
+      await h.flush(); const write = deferred<void>(); h.holdWrites(write.promise); const pending = h.value.disable(); await h.flush(); h.user("user-b"); await h.flush(); write.resolve(); assert.equal(await pending, false); await h.flush();
+      assert.equal(h.value.enabled, true); assert.equal(h.value.locked, true); assert.equal(h.value.timeoutMs, 300_000); assert.equal(h.writes[0].key, biometricLockStorageKey("user-a"));
+    } finally { h.close(); }
+  });
+  it("does not share native unlock results across users with the same native credential ID", async () => {
+    const h = providerHarness({ "user-a": enrollment("user-a"), "user-b": enrollment("user-b") }); try {
+      await h.flush(); const auth = deferred<NativeResult>(); let count = 0; h.authenticateWith(() => ++count === 1 ? auth.promise : Promise.resolve({ success: false, error: "user_cancel" }));
+      const oldUnlock = h.value.unlock(); await h.flush(); h.user("user-b"); await h.flush(); assert.equal(await h.value.unlock(), false); auth.resolve({ success: true }); assert.equal(await oldUnlock, false); await h.flush();
+      assert.equal(h.value.enabled, true); assert.equal(h.value.locked, true); assert.equal(h.prompts.length, 2);
+    } finally { h.close(); }
+  });
+  it("does not relock an Immediate enrollment because its setup prompt returns focus late", async () => {
+    const h = providerHarness({ "user-a": enrollment("user-a", { enabled: false, timeoutMs: 0 }) }); try {
+      await h.flush(); const auth = deferred<NativeResult>(); h.authenticateWith(() => auth.promise);
+      const pending = h.value.enable(); await h.flush(); h.state("background"); h.advance(5_000);
+      auth.resolve({ success: true }); assert.equal(await pending, true); await h.flush();
+      h.state("active"); await h.flush(); assert.equal(h.value.enabled, true); assert.equal(h.value.locked, false); assert.equal(h.prompts.length, 1);
+      h.state("background"); h.state("active"); await h.flush(); assert.equal(h.value.locked, true);
+    } finally { h.close(); }
+  });
+  it("an old delay callback cannot turn a successfully disabled lock back on before re-render", async () => {
+    const h = providerHarness({ "user-a": enrollment("user-a") }); try {
+      await h.flush(); const oldDelaySetter = h.value.setAutoLockDelay;
+      assert.equal(await h.value.disable(), true); assert.equal(await oldDelaySetter(0), false); await h.flush();
+      assert.equal(h.value.enabled, false); assert.equal(h.writes.length, 1); assert.equal(JSON.parse(h.writes[0].value).enabled, false);
+    } finally { h.close(); }
+  });
+  it("does not reuse a successful native unlock for a different signed-in user", async () => {
+    const h = providerHarness({ "user-a": enrollment("user-a"), "user-b": enrollment("user-b") }); try {
+      await h.flush(); assert.equal(await h.value.unlock(), true); await h.flush();
+      h.user("user-b"); await h.flush(); h.authenticateWith(async () => ({ success: false, error: "user_cancel" }));
+      assert.equal(await h.value.unlock(), false); await h.flush(); assert.equal(h.prompts.length, 2); assert.equal(h.value.locked, true);
+    } finally { h.close(); }
+  });
+  it("keeps a previous user's failed delay write from changing the current user's lock or error", async () => {
+    const h = providerHarness({ "user-a": enrollment("user-a"), "user-b": enrollment("user-b", { timeoutMs: 300_000 }) }); try {
+      await h.flush(); const write = deferred<void>(); h.holdWrites(write.promise); const pending = h.value.setAutoLockDelay(0);
+      await h.flush(); h.user("user-b"); await h.flush(); h.failWrites(true); write.resolve();
+      assert.equal(await pending, false); await h.flush(); assert.equal(h.value.timeoutMs, 300_000); assert.equal(h.value.enabled, true); assert.equal(h.value.error, null); assert.equal(h.value.busy, false);
+    } finally { h.close(); }
+  });
+  it("allows one setup prompt during rapid repeated enable taps", async () => {
+    const h = providerHarness(); try {
+      await h.flush(); const auth = deferred<NativeResult>(); h.authenticateWith(() => auth.promise);
+      const first = h.value.enable(), second = h.value.enable(); await h.flush(); assert.equal(h.prompts.length, 1); assert.equal(await second, false);
+      auth.resolve({ success: true }); assert.equal(await first, true); await h.flush(); assert.equal(h.writes.length, 1);
+    } finally { h.close(); }
+  });
+  it("does not publish a delayed unlock after the provider unmounts", async () => {
+    const h = providerHarness({ "user-a": enrollment("user-a") }); await h.flush();
+    const auth = deferred<NativeResult>(); h.authenticateWith(() => auth.promise); const pending = h.value.unlock(); await h.flush();
+    h.close(); auth.resolve({ success: true }); assert.equal(await pending, false);
+  });
+
 });
