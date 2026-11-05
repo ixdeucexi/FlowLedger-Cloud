@@ -10,7 +10,7 @@ import {
   clearPlaidAccountsPending, discardPendingPlaidAttempt, matchesStoredPlaidSession,
   notifyPlaidConnectionState, plaidCompletionInFlight,
   PLAID_CONNECTION_RESULT_EVENT, PLAID_CONNECTION_STATE_EVENT, PLAID_RESUME_CONNECTION_EVENT,
-  readPendingPlaidOAuthSession, readPlaidAccountsPending, type PlaidOAuthSession, type SavedPlaidAccountsPending,
+  readPendingPlaidOAuthSession, readPlaidAccountsPending, savedPlaidAccountsAvailability, type PlaidOAuthSession, type SavedPlaidAccountsPending,
 } from "@/lib/plaidOAuth";
 
 type RecoveryState = { scope: string; attempt: PlaidOAuthSession | null; saved: SavedPlaidAccountsPending | null; busy: boolean; message: string };
@@ -78,27 +78,35 @@ export function PlaidConnectionRecovery() {
       const payload = await response.json().catch(() => null);
       if (!current()) return;
       const latest = readPlaidAccountsPending(window.localStorage, { userId, householdId });
-      if (!latest || JSON.stringify(latest) !== JSON.stringify(saved)) return;
-      if (!response.ok || !Array.isArray(payload?.accounts)) throw new Error("Could not check saved accounts. Try again.");
-      const ready = saved.itemIds.every(id => payload.accounts.some((account: { plaid_item_record_id?: string; is_active?: boolean }) => account.plaid_item_record_id === id && account.is_active !== false));
-      if (ready) {
+      if (!latest || JSON.stringify(latest) !== JSON.stringify(saved)) { read(); return; }
+      if (!response.ok) throw new Error("Could not check saved accounts. Try again.");
+      const availability = savedPlaidAccountsAvailability(payload, saved);
+      if (availability === "unavailable") {
+        if (!clearPlaidAccountsPending(window.localStorage, saved)) { read(); return; }
+        notifyPlaidConnectionState();
+        setState(previous => ({ ...previous, saved: null, busy: false, message: "This connection is not available. Check Bank connections for its current status." }));
+      } else if (availability === "ready") {
         await refreshBankData({ savedOnly: true });
         if (!current()) return;
         const latestAfterRefresh = readPlaidAccountsPending(window.localStorage, { userId, householdId });
         if (!latestAfterRefresh || JSON.stringify(latestAfterRefresh) !== JSON.stringify(saved)) { read(); return; }
-        clearPlaidAccountsPending(window.localStorage, saved);
+        if (!clearPlaidAccountsPending(window.localStorage, saved)) { read(); return; }
         notifyPlaidConnectionState();
         setState(previous => ({ ...previous, saved: null, busy: false, message: "Your saved accounts are ready." }));
-      } else setState(previous => ({ ...previous, busy: false, message: "Your bank connection is saved. Accounts are not ready yet. Check again shortly or use Refresh below." }));
+      } else setState(previous => ({ ...previous, busy: false, message: "Accounts are not available yet. Check Bank connections for the latest status." }));
     } catch (error) {
-      if (current()) setState(previous => ({ ...previous, busy: false, message: error instanceof Error ? error.message : "Could not check saved accounts." }));
+      if (current()) {
+        const latest = readPlaidAccountsPending(window.localStorage, { userId, householdId });
+        if (!latest || JSON.stringify(latest) !== JSON.stringify(saved)) { read(); return; }
+        setState(previous => ({ ...previous, busy: false, message: error instanceof Error ? error.message : "Could not check saved accounts." }));
+      }
     }
   };
 
   if (demoMode || !userId || !householdId || !shown || (!shown.attempt && !shown.saved && !shown.message)) return null;
   return <View accessibilityLiveRegion="polite" style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
     <Text style={[styles.title, { color: c.foreground }]}>{shown.attempt ? shown.busy ? "Checking your connection" : "Connection not finished" : shown.saved ? "Waiting for bank accounts" : "Connection update"}</Text>
-    <Text style={[styles.copy, { color: c.mutedForeground }]}>{shown.attempt ? "Your sign-in is saved in this browser. Continue to check the same connection." : shown.saved ? "Your bank connection was saved. Accounts are still being prepared; you do not need to sign in again." : shown.message}</Text>
+    <Text style={[styles.copy, { color: c.mutedForeground }]}>{shown.attempt ? "Your sign-in is saved in this browser. Continue to check the same connection." : shown.saved ? "Your bank connection was saved. Accounts are not available yet. Check Bank connections for the latest status." : shown.message}</Text>
     {shown.message && (shown.attempt || shown.saved) ? <Text style={[styles.copy, { color: c.mutedForeground }]}>{shown.message}</Text> : null}
     <View style={styles.actions}>
       {shown.attempt ? <>

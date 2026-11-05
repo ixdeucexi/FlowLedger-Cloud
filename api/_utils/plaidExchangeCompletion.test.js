@@ -64,6 +64,7 @@ function subject(options = {}) {
     } }),
     connectPlaidPublicToken: async input => {
       exchanges.push(input);
+      if (options.exchangeError) throw options.exchangeError;
       if (options.results?.length) return options.results.shift();
       return options.result === undefined ? { item_id: "fixture-item", accounts_count: 2, transactions_count: 7,
         transactions_pending: true, history_status: "importing", subscriptions_pending: true } : options.result;
@@ -239,4 +240,25 @@ test("operational diagnostics contain only classifications, counts, and sanitize
   const malicious = subject({ linkResponses: [{ ...success, request_id: "public-do-not-log" }] });
   await malicious.request();
   assert(malicious.diagnostics.every(entry => entry.provider_request_id === null));
+});
+
+test("failed completion diagnostics include only bounded uppercase error codes", async () => {
+  for (const code of ["23514", "INVALID_PUBLIC_TOKEN", "PLAID_CONNECTION_UNVERIFIED"]) {
+    const s = subject({ exchangeError: { response: { data: { error_code: code, message: "private-error-bait", public_token: "public-private-bait" } } } });
+    assert.equal((await s.request()).code, 500);
+    const diagnostic = s.diagnostics.at(-1);
+    assert.equal(diagnostic.classification, "failed");
+    assert.equal(diagnostic.error_code, code);
+    assert.deepEqual(Object.keys(diagnostic).sort(), ["classification", "error_code", "provider_request_id", "public_token_count", "session_count"]);
+    assert(!JSON.stringify(s.diagnostics).includes("private"));
+  }
+  for (const code of ["access-sandbox-private-bait", "sk-private-key-bait", "TOKEN\nprivate-bait", "X".repeat(81),
+    { access_token: "private-bait" }, 23514, ["INVALID_PUBLIC_TOKEN"]]) {
+    const s = subject({ exchangeError: { code, message: "private-message-bait" } });
+    assert.equal((await s.request()).code, 500);
+    const diagnostic = s.diagnostics.at(-1);
+    assert.equal(diagnostic.classification, "failed");
+    assert(!Object.hasOwn(diagnostic, "error_code"));
+    assert(!JSON.stringify(s.diagnostics).includes("private"));
+  }
 });

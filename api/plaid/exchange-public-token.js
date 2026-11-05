@@ -111,13 +111,14 @@ function aggregateConnections(results) {
   };
 }
 
-function completionDiagnostic(report, classification, linkData, tokenCount = 0) {
+function completionDiagnostic(report, classification, linkData, tokenCount = 0, errorCode) {
   const requestId = linkData?.request_id;
   const safeRequestId = typeof requestId === "string" && /^[a-zA-Z0-9_-]{1,128}$/.test(requestId)
     && !/^(?:access|public|link)-/.test(requestId) ? requestId : null;
   try {
     report({ classification, session_count: Array.isArray(linkData?.link_sessions) ? linkData.link_sessions.length : 0,
-      public_token_count: tokenCount, provider_request_id: safeRequestId });
+      public_token_count: tokenCount, provider_request_id: safeRequestId,
+      ...(typeof errorCode === "string" && /^[A-Z0-9_]{1,80}$/.test(errorCode) ? { error_code: errorCode } : {}) });
   } catch { /* Diagnostics cannot change whether a connection completes. */ }
 }
 
@@ -172,11 +173,11 @@ function createExchangePublicTokenHandler(dependencies = {}) {
     completionDiagnostic(report, result.status, linkData, publicTokens.length);
     return res.status(200).json(result);
   } catch (error) {
-    completionDiagnostic(report, "failed", linkData, completedTokenCount);
+    const code = error && error.response && error.response.data && error.response.data.error_code || error.code || "PUBLIC_TOKEN_EXCHANGE_FAILED";
+    completionDiagnostic(report, "failed", linkData, completedTokenCount, code);
     if (error instanceof PlaidItemConflictError) {
       return res.status(error.status).json({ error: error.code, message: error.message });
     }
-    const code = error && error.response && error.response.data && error.response.data.error_code || error.code || "PUBLIC_TOKEN_EXCHANGE_FAILED";
     if (code === "PLAID_ACCOUNT_ALREADY_CONNECTED_TO_ANOTHER_HOUSEHOLD") {
       return res.status(409).json({
         error: code,

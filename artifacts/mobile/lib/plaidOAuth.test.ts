@@ -8,6 +8,7 @@ import {
   matchesStoredPlaidSession,
   verifiedPlaidConnection,
   savePlaidAccountsPending,
+  savedPlaidAccountsAvailability,
   readPlaidAccountsPending,
   clearPlaidAccountsPending,
   PLAID_SAVED_PENDING_KEY,
@@ -250,4 +251,19 @@ test("Start over is exact-attempt local cleanup only after completion is idle", 
   assert(matchesStoredPlaidSession(storage, next));
   assert.equal(discardPendingPlaidAttempt(storage, next), true);
   assert.equal(readPendingPlaidOAuthSession(storage, next.userId, next.createdAt), null);
+});
+
+
+test("saved-account status requires valid Item and account evidence before local marker cleanup", () => {
+  const saved = { userId: "fixture-user", householdId: "fixture-household", itemIds: ["fixture-item"], createdAt: Date.now() };
+  const account = { id: "fixture-account", plaid_item_record_id: "fixture-item", is_active: true };
+  assert.equal(savedPlaidAccountsAvailability({ items: [{ id: "fixture-item", status: "active" }], accounts: [account] }, saved), "ready");
+  assert.equal(savedPlaidAccountsAvailability({ items: [{ id: "fixture-item", status: "needs_repair" }], accounts: [] }, saved), "waiting");
+  assert.equal(savedPlaidAccountsAvailability({ items: [], accounts: [] }, saved), "unavailable");
+  assert.equal(savedPlaidAccountsAvailability({ items: [{ id: "different-item", status: "active" }], accounts: [] }, saved), "unavailable");
+  assert.equal(savedPlaidAccountsAvailability({ items: [{ id: "fixture-item", status: "removed" }], accounts: [account] }, saved), "unavailable");
+  assert.equal(savedPlaidAccountsAvailability({ items: [{ id: "fixture-item", status: "active", disconnect_cleanup_needed: true }], accounts: [account] }, saved), "unavailable");
+  for (const payload of [null, {}, { items: [] }, { accounts: [] }, { ok: false, items: [], accounts: [] }, { items: [null], accounts: [] }, { items: [{ id: "fixture-item", status: "unknown-future-status" }], accounts: [] }, { items: [], accounts: [null] }, { items: [], accounts: [{ id: "bad-account" }] }]) {
+    assert.throws(() => savedPlaidAccountsAvailability(payload, saved), /Could not check saved accounts/);
+  }
 });

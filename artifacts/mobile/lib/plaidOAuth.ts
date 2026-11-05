@@ -169,7 +169,7 @@ export function verifiedPlaidConnection(value: unknown): VerifiedPlaidConnection
   return result as VerifiedPlaidConnection;
 }
 
-export const PLAID_ACCOUNTS_PENDING_MESSAGE = "Bank connection saved. Your accounts are still being prepared. You do not need to sign in again.";
+export const PLAID_ACCOUNTS_PENDING_MESSAGE = "Bank connection saved. Accounts are not available yet. Check Bank connections for the latest status.";
 export type SavedPlaidAccountsPending = PlaidConnectionScope & { itemIds: string[]; createdAt: number };
 
 export function savePlaidAccountsPending(storage: BrowserStorage, scope: PlaidConnectionScope, result: VerifiedPlaidConnection) {
@@ -186,9 +186,36 @@ export function readPlaidAccountsPending(storage: BrowserStorage, scope: PlaidCo
   } catch { return null; }
 }
 
+/** Interpret only a valid scoped status response; stale local IDs reveal no other connection details. */
+export function savedPlaidAccountsAvailability(payload: unknown, saved: SavedPlaidAccountsPending): "ready" | "waiting" | "unavailable" {
+  const status = payload as { ok?: unknown; error?: unknown; items?: unknown; accounts?: unknown } | null;
+  const invalid = () => new Error("Could not check saved accounts. Try again.");
+  if (!status || typeof status !== "object" || status.ok === false || status.error
+    || !Array.isArray(status.items) || !Array.isArray(status.accounts)) throw invalid();
+  const validId = (value: unknown): value is string => typeof value === "string" && Boolean(value.trim()) && value.length <= 128;
+  const knownStatuses = new Set(["active", "needs_repair", "removed", "error", "needs_reauth", "login_required", "requires_update", "reauth_required", "pending", "syncing"]);
+  type Item = { id: string; status: string; disconnect_cleanup_needed?: boolean };
+  type Account = { id: string; plaid_item_record_id: string; is_active: boolean };
+  if (!status.items.every((item: Item | null) => item && validId(item.id) && knownStatuses.has(item.status)
+    && (item.disconnect_cleanup_needed === undefined || typeof item.disconnect_cleanup_needed === "boolean"))
+    || !status.accounts.every((account: Account | null) => account && validId(account.id)
+      && validId(account.plaid_item_record_id) && typeof account.is_active === "boolean")) throw invalid();
+  const items = status.items as Item[];
+  const accounts = status.accounts as Account[];
+  const itemsById = new Map(items.map(item => [item.id, item]));
+  if (itemsById.size !== items.length) throw invalid();
+  if (saved.itemIds.some(id => {
+    const item = itemsById.get(id);
+    return !item || item.status === "removed" || item.disconnect_cleanup_needed === true;
+  })) return "unavailable";
+  return saved.itemIds.every(id => accounts.some(account => account.plaid_item_record_id === id && account.is_active)) ? "ready" : "waiting";
+}
+
 export function clearPlaidAccountsPending(storage: BrowserStorage, expected: SavedPlaidAccountsPending) {
   const current = readPlaidAccountsPending(storage, expected);
-  if (current && JSON.stringify(current) === JSON.stringify(expected)) storage.removeItem(PLAID_SAVED_PENDING_KEY);
+  if (!current || JSON.stringify(current) !== JSON.stringify(expected)) return false;
+  storage.removeItem(PLAID_SAVED_PENDING_KEY);
+  return true;
 }
 
 export function matchesStoredPlaidSession(storage: BrowserStorage, expected: PlaidOAuthSession) {
