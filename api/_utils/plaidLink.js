@@ -21,7 +21,7 @@ function normalizeLinkPlatform(value) {
   return LINK_PLATFORMS.has(normalized) ? normalized : null;
 }
 
-function buildLinkTokenRequest({ userId, config, intent, platform = "web", hosted = false, accessToken = null }) {
+function buildLinkTokenRequest({ userId, config, intent, platform = "web", hosted = false, accessToken = null, historyDaysRequested = 90 }) {
   const request = {
     user: { client_user_id: userId },
     client_name: "FlowLedger",
@@ -34,7 +34,10 @@ function buildLinkTokenRequest({ userId, config, intent, platform = "web", hoste
   } else {
     request.products = [Products.Transactions];
     request.additional_consented_products = [Products.Liabilities];
-    request.transactions = { days_requested: 90 };
+    if (!Number.isInteger(historyDaysRequested) || historyDaysRequested < 1 || historyDaysRequested > 730) {
+      throw new RangeError("Choose a supported bank history period.");
+    }
+    request.transactions = { days_requested: historyDaysRequested };
   }
 
   if (!accessToken && intent === LINK_INTENTS.creditCard) {

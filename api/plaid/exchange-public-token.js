@@ -24,6 +24,10 @@ function aggregateConnections(results) {
     liability_details_available: results.some(result => result.liability_details_available),
     transactions_count: results.reduce((total, result) => total + Number(result.transactions_count || 0), 0),
     transactions_pending: results.some(result => result.transactions_pending),
+    history_status: results.some(result => result.history_status === "importing") ? "importing"
+      : results.some(result => result.history_status === "complete") ? "complete" : null,
+    subscriptions_pending: results.some(result => result.subscriptions_pending),
+    subscriptions_count: results.reduce((total, result) => total + Number(result.subscriptions_count || 0), 0),
   };
 }
 
@@ -53,7 +57,7 @@ module.exports = async function exchangePublicToken(req, res) {
         return res.status(202).json({ ok: false, status: "pending", message: "Plaid is finishing the secure connection." });
       }
       if (completion.status === "exited") {
-        return res.status(409).json({ error: "PLAID_LINK_EXITED", message: "Card connection was not completed. Please try again." });
+        return res.status(409).json({ error: "PLAID_LINK_EXITED", message: "Account connection was not completed. Please try again." });
       }
       publicTokens = completion.publicTokens;
     }

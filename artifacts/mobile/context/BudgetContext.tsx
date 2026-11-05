@@ -312,7 +312,7 @@ interface BudgetContextType {
   loadError: string | null;
   dataUpdatedAt: string | null;
   retryBudgetLoad: () => void;
-  refreshBankData: () => Promise<void>;
+  refreshBankData: (options?: { savedOnly?: boolean }) => Promise<void>;
   demoMode: boolean;
   selectedYear: number;
   setSelectedYear: (y: number) => void;
@@ -2588,9 +2588,13 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (bankDataResults.every(result => !result.error)) setDataUpdatedAt(new Date().toISOString());
   }, [user, demoMode, applyHouseholdSelect, householdTimeZone, loadAllTransactions, loadScopedSettings]);
 
-  const refreshBankData = useCallback(async () => {
+  const refreshBankData = useCallback(async (options?: { savedOnly?: boolean }) => {
     if (!user || demoMode || Platform.OS !== "web" || !loaded.current) return;
     if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+    if (options?.savedOnly) {
+      await loadBankData();
+      return;
+    }
     if (plaidSyncPromiseRef.current) return plaidSyncPromiseRef.current;
 
     const now = Date.now();

@@ -39,3 +39,35 @@ test("Hosted Link completion waits, reports exits, and extracts deduplicated pub
     }],
   }), { status: "success", publicTokens: ["public-one", "public-two"] });
 });
+
+test("new Hosted Link bank and card sessions complete with the same security bindings", () => {
+  const previous = process.env.PLAID_TOKEN_ENCRYPTION_KEY;
+  process.env.PLAID_TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 9).toString("base64");
+  try {
+    const now = Date.UTC(2026, 10, 5, 17);
+    const payload = {
+      version: 1, linkToken: "link-fixture-new-connection", userId: "fixture-user",
+      householdId: "fixture-household", expiresAt: new Date(now + 60_000).toISOString(),
+    };
+    const scope = { userId: payload.userId, householdId: payload.householdId, now };
+    for (const intent of ["bank", "credit_card"]) {
+      const session = sealPlaidLinkSession({ ...payload, intent });
+      assert.equal(validateHostedLinkSession(session, scope).intent, intent);
+      assert.throws(() => validateHostedLinkSession(session, { ...scope, userId: "another-user" }), /expired/i);
+      assert.throws(() => validateHostedLinkSession(session, { ...scope, householdId: "another-household" }), /expired/i);
+      assert.throws(() => validateHostedLinkSession(session, { ...scope, now: now + 60_000 }), /expired/i);
+    }
+    for (const change of [
+      { intent: "BANK" }, { intent: "investments" }, { intent: "" }, { intent: null },
+      { version: 2 }, { linkToken: "public-invalid-token" }, { expiresAt: "not-a-date" },
+    ]) {
+      const session = sealPlaidLinkSession({ ...payload, intent: "bank", ...change });
+      assert.throws(() => validateHostedLinkSession(session, scope), /expired/i);
+    }
+    const session = sealPlaidLinkSession({ ...payload, intent: "bank" });
+    assert.throws(() => validateHostedLinkSession(session.slice(0, -3) + "bad", scope));
+  } finally {
+    if (previous == null) delete process.env.PLAID_TOKEN_ENCRYPTION_KEY;
+    else process.env.PLAID_TOKEN_ENCRYPTION_KEY = previous;
+  }
+});

@@ -13,7 +13,7 @@ function validateHostedLinkSession(value, { userId, householdId, now = Date.now(
   const payload = openPlaidLinkSession(String(value));
   const expiresAt = Date.parse(String(payload.expiresAt || ""));
   if (payload.version !== 1
-    || payload.intent !== "credit_card"
+    || !["bank", "credit_card"].includes(payload.intent)
     || typeof payload.linkToken !== "string"
     || !payload.linkToken.startsWith("link-")
     || payload.linkToken.length > 512

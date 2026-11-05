@@ -54,7 +54,7 @@ function createPlaidWebhookHandler(dependencies = {}) {
     console.log("[plaid:webhook] received", { type, code });
     try {
       const client = database();
-      const { data: item, error } = await client.from("plaid_items").select("id,user_id,household_id,status,encrypted_access_token,access_token_ciphertext,transactions_cursor,cursor").eq("plaid_item_id", itemId).maybeSingle();
+      const { data: item, error } = await client.from("plaid_items").select("id,user_id,household_id,status,encrypted_access_token,access_token_ciphertext,transactions_cursor,cursor,initial_import_version,initial_import_from,initial_history_complete_at").eq("plaid_item_id", itemId).maybeSingle();
       if (error) throw error;
       if (!item) return res.status(200).json({ ok: true, ignored: true });
       if (item.status === "removed") return res.status(200).json({ ok: true, ignored: true, reason: item.status });
@@ -62,7 +62,9 @@ function createPlaidWebhookHandler(dependencies = {}) {
         return res.status(200).json({ ok: true, ignored: true, reason: "pro_required" });
       }
       if (shouldSyncTransactionWebhook(type, code) || shouldSyncLiabilityWebhook(type, code)) {
-        const result = await synchronize({ userId: item.user_id, item });
+        const result = await synchronize({ userId: item.user_id, item,
+          webhookHistoricalComplete: shouldSyncTransactionWebhook(type, code) && payload.historical_update_complete === true,
+        });
         console.log("[plaid:webhook] sync completed", {
           type,
           code,

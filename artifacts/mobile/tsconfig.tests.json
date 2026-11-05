@@ -4,6 +4,7 @@
     "module": "CommonJS",
     "moduleResolution": "Node",
     "resolveJsonModule": true,
+    "allowJs": true,
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -11,6 +12,7 @@
     "outDir": ".test-dist"
   },
   "include": [
+    "lib/subscriptionDetector.js",
     "lib/moneyPrivacy.test.ts",
     "lib/appearance.test.ts",
     "lib/customColors.test.ts",
@@ -312,5 +314,8 @@
     ,"lib/floCreationForm.test.ts"
     ,"lib/recentChanges.test.ts"
     ,"lib/recentChangesUndo.test.ts"
+    ,"lib/bankConnectionManagement.test.ts"
+    ,"lib/importedSubscriptionCandidates.test.ts"
+    ,"lib/bankConnectionManager.test.ts"
   ]
 }

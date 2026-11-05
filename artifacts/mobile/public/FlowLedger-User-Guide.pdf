@@ -132,7 +132,7 @@ endobj
 endobj
 16 0 obj
 <<
-/Author (FlowLedger) /CreationDate (D:20261105150324+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:26f5b36995944835e2a64eb5482ae47dcc630c4e220824d484f356cff60290f6) /ModDate (D:20261105150324+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+/Author (FlowLedger) /CreationDate (D:20261105171445+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:1f2202e65d699486c0f9187a2d113d1286d006b2896fd1314d7635c570b203a0) /ModDate (D:20261105171445+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
   /Subject (Current Dashboard, Activity, Bills, Forecast, payoff, Flo, and Settings guidance) /Title (FlowLedger User Guide) /Trapped /False
 >>
 endobj
@@ -2092,7 +2092,7 @@ endstream
 endobj
 26 0 obj
 <<
-/Length 9398
+/Length 10285
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -2172,15 +2172,15 @@ BT 1 0 0 1 56 530 Tm (households; each keeps its own money and budgets.) Tj T* E
 .160784 .207843 .321569 RG
 .8 w
 n
-58 421 m
-283 421 l
-291.8448 421 299 428.1552 299 437 c
+58 432 m
+283 432 l
+291.8448 432 299 439.1552 299 448 c
 299 493 l
 299 501.8448 291.8448 509 283 509 c
 58 509 l
 49.1552 509 42 501.8448 42 493 c
-42 437 l
-42 428.1552 49.1552 421 58 421 c
+42 448 l
+42 439.1552 49.1552 432 58 432 c
 h
 B*
 .654902 .545098 .980392 rg
@@ -2193,44 +2193,46 @@ n
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 67 494 Tm (Categories and monthly budgets) Tj T* ET
+BT 1 0 0 1 67 494 Tm (Bank connections) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 479 Tm (Open Settings > Plan > Categories to set monthly limits or) Tj T* ET
-BT 1 0 0 1 56 468 Tm (manage categories. Choose This month or Every month,) Tj T* ET
-BT 1 0 0 1 56 457 Tm (then Save. Each category shows Spent and Left. Clear a) Tj T* ET
-BT 1 0 0 1 56 446 Tm (limit to remove it; category changes keep linked activity) Tj T* ET
-BT 1 0 0 1 56 435 Tm (together.) Tj T* ET
+BT 1 0 0 1 56 479 Tm (Open Settings > Bank connections to see linked accounts.) Tj T* ET
+BT 1 0 0 1 56 468 Tm (New links request two months of history. Review) Tj T* ET
+BT 1 0 0 1 56 457 Tm (subscription flags. Unlink disconnects all accounts at that) Tj T* ET
+BT 1 0 0 1 56 446 Tm (bank and keeps past activity.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-58 359 m
-283 359 l
-291.8448 359 299 366.1552 299 375 c
-299 398 l
-299 406.8448 291.8448 414 283 414 c
-58 414 l
-49.1552 414 42 406.8448 42 398 c
-42 375 l
-42 366.1552 49.1552 359 58 359 c
+58 337 m
+283 337 l
+291.8448 337 299 344.1552 299 353 c
+299 409 l
+299 417.8448 291.8448 425 283 425 c
+58 425 l
+49.1552 425 42 417.8448 42 409 c
+42 353 l
+42 344.1552 49.1552 337 58 337 c
 h
 B*
 .654902 .545098 .980392 rg
 n
-60 397 m
-60 399.2091 58.20914 401 56 401 c
-53.79086 401 52 399.2091 52 397 c
-52 394.7909 53.79086 393 56 393 c
-58.20914 393 60 394.7909 60 397 c
+60 408 m
+60 410.2091 58.20914 412 56 412 c
+53.79086 412 52 410.2091 52 408 c
+52 405.7909 53.79086 404 56 404 c
+58.20914 404 60 405.7909 60 408 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 67 399 Tm (Setup & walkthrough) Tj T* ET
+BT 1 0 0 1 67 410 Tm (Categories and monthly budgets) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 384 Tm (Run setup again after a major change or replay the Guided) Tj T* ET
-BT 1 0 0 1 56 373 Tm (Tour from its first step.) Tj T* ET
+BT 1 0 0 1 56 395 Tm (Open Settings > Plan > Categories to set monthly limits or) Tj T* ET
+BT 1 0 0 1 56 384 Tm (manage categories. Choose This month or Every month,) Tj T* ET
+BT 1 0 0 1 56 373 Tm (then Save. Each category shows Spent and Left. Clear a) Tj T* ET
+BT 1 0 0 1 56 362 Tm (limit to remove it; category changes keep linked activity) Tj T* ET
+BT 1 0 0 1 56 351 Tm (together.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
@@ -2238,44 +2240,42 @@ n
 58 275 m
 283 275 l
 291.8448 275 299 282.1552 299 291 c
-299 336 l
-299 344.8448 291.8448 352 283 352 c
-58 352 l
-49.1552 352 42 344.8448 42 336 c
+299 314 l
+299 322.8448 291.8448 330 283 330 c
+58 330 l
+49.1552 330 42 322.8448 42 314 c
 42 291 l
 42 282.1552 49.1552 275 58 275 c
 h
 B*
 .654902 .545098 .980392 rg
 n
-60 335 m
-60 337.2091 58.20914 339 56 339 c
-53.79086 339 52 337.2091 52 335 c
-52 332.7909 53.79086 331 56 331 c
-58.20914 331 60 332.7909 60 335 c
+60 313 m
+60 315.2091 58.20914 317 56 317 c
+53.79086 317 52 315.2091 52 313 c
+52 310.7909 53.79086 309 56 309 c
+58.20914 309 60 310.7909 60 313 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 67 337 Tm (Notifications and App Lock) Tj T* ET
+BT 1 0 0 1 67 315 Tm (Setup & walkthrough) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 322 Tm (Choose reminders in Settings. App Lock starts Off. In) Tj T* ET
-BT 1 0 0 1 56 311 Tm (Security, you can enable fingerprint or face unlock with) Tj T* ET
-BT 1 0 0 1 56 300 Tm (device PIN/passcode backup, choose a delay, and use) Tj T* ET
-BT 1 0 0 1 56 289 Tm (Lock now.) Tj T* ET
+BT 1 0 0 1 56 300 Tm (Run setup again after a major change or replay the Guided) Tj T* ET
+BT 1 0 0 1 56 289 Tm (Tour from its first step.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-58 213 m
-283 213 l
-291.8448 213 299 220.1552 299 229 c
+58 191 m
+283 191 l
+291.8448 191 299 198.1552 299 207 c
 299 252 l
 299 260.8448 291.8448 268 283 268 c
 58 268 l
 49.1552 268 42 260.8448 42 252 c
-42 229 l
-42 220.1552 49.1552 213 58 213 c
+42 207 l
+42 198.1552 49.1552 191 58 191 c
 h
 B*
 .654902 .545098 .980392 rg
@@ -2288,11 +2288,43 @@ n
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 67 253 Tm (Help & user guide) Tj T* ET
+BT 1 0 0 1 67 253 Tm (Notifications and App Lock) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 238 Tm (Open this guide again or use Support when an account or) Tj T* ET
-BT 1 0 0 1 56 227 Tm (plan needs help.) Tj T* ET
+BT 1 0 0 1 56 238 Tm (Choose reminders in Settings. App Lock starts Off. In) Tj T* ET
+BT 1 0 0 1 56 227 Tm (Security, you can enable fingerprint or face unlock with) Tj T* ET
+BT 1 0 0 1 56 216 Tm (device PIN/passcode backup, choose a delay, and use) Tj T* ET
+BT 1 0 0 1 56 205 Tm (Lock now.) Tj T* ET
+.070588 .113725 .203922 rg
+.160784 .207843 .321569 RG
+.8 w
+n
+58 129 m
+283 129 l
+291.8448 129 299 136.1552 299 145 c
+299 168 l
+299 176.8448 291.8448 184 283 184 c
+58 184 l
+49.1552 184 42 176.8448 42 168 c
+42 145 l
+42 136.1552 49.1552 129 58 129 c
+h
+B*
+.654902 .545098 .980392 rg
+n
+60 167 m
+60 169.2091 58.20914 171 56 171 c
+53.79086 171 52 169.2091 52 167 c
+52 164.7909 53.79086 163 56 163 c
+58.20914 163 60 164.7909 60 167 c
+f*
+BT /F2 9.5 Tf 11.4 TL ET
+1 1 1 rg
+BT 1 0 0 1 67 169 Tm (Help & user guide) Tj T* ET
+BT /F1 8.6 Tf 10.32 TL ET
+.666667 .701961 .784314 rg
+BT 1 0 0 1 56 154 Tm (Open this guide again or use Support when an account or) Tj T* ET
+BT 1 0 0 1 56 143 Tm (plan needs help.) Tj T* ET
 .654902 .545098 .980392 rg
 BT /F2 9 Tf 10.8 TL ET
 BT 1 0 0 1 313 611 Tm (CHOOSE YOUR HOUSEHOLD PLAN) Tj T* ET
@@ -3102,12 +3134,12 @@ xref
 0000037568 00000 n 
 0000044670 00000 n 
 0000051302 00000 n 
-0000060752 00000 n 
-0000067113 00000 n 
+0000061640 00000 n 
+0000068001 00000 n 
 trailer
 <<
 /ID 
-[<fb7d2c31240301a8a7f89fa0a0b2b3b4><fb7d2c31240301a8a7f89fa0a0b2b3b4>]
+[<393c07ccf3c078bbfb89dc2b8aad64ca><393c07ccf3c078bbfb89dc2b8aad64ca>]
 % ReportLab generated PDF document -- digest (opensource)
 
 /Info 16 0 R
@@ -3115,5 +3147,5 @@ trailer
 /Size 29
 >>
 startxref
-76565
+77453
 %%EOF

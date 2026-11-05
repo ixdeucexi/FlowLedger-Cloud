@@ -5,13 +5,17 @@ const { serviceSupabase, safeError } = require("./supabase");
 const { decryptAccessToken } = require("./crypto");
 const { localDateInZone } = require("./moneyHealth");
 const {
+  hasInitialImportProfile, INITIAL_IMPORT_COLUMNS, initialHistoryComplete, initialHistoryStatus,
+} = require("./plaidInitialImport");
+const { refreshNewConnectionSubscriptions } = require("./newConnectionSubscriptions");
+const {
   displayNameForSyncedPlaidAccount,
   indexedPlaidAccountDisplayNames,
 } = require("./plaidAccountNickname");
 const {
   deliverPendingPostedTransactionNotifications,
-  queuePendingTransactionNotifications,
-  queuePostedTransactionNotifications,
+  queuePendingTransactionNotifications: defaultQueuePendingTransactionNotifications,
+  queuePostedTransactionNotifications: defaultQueuePostedTransactionNotifications,
 } = require("./push");
 
 function tokenFor(item) {
@@ -941,7 +945,11 @@ async function persistCanonicalPlaidTransaction({ db, existing, canonicalRow, us
   if (updateError) throw updateError;
 }
 
-async function syncTransactions({ client, userId, item, accessToken }) {
+async function syncTransactions({ client, userId, item, accessToken, webhookHistoricalComplete = false,
+  database = serviceSupabase, importTransaction = upsertPlaidTransaction,
+  queuePending: queuePendingTransactionNotifications = defaultQueuePendingTransactionNotifications,
+  queuePosted: queuePostedTransactionNotifications = defaultQueuePostedTransactionNotifications,
+  deliverPending = deliverPendingPostedTransactionNotifications }) {
   if (!item || !item.household_id) throw new Error("PLAID_HOUSEHOLD_REQUIRED");
   const originalCursor = item.transactions_cursor || item.cursor || null;
   let cursor = originalCursor;
@@ -949,6 +957,8 @@ async function syncTransactions({ client, userId, item, accessToken }) {
   let added = 0;
   let modified = 0;
   let removed = 0;
+  let historyStatus = null;
+  const suppressBootstrapNotifications = hasInitialImportProfile(item) && !item.initial_history_complete_at;
   const notificationTransactionIds = [];
   const pendingNotificationTransactionIds = [];
 
@@ -978,7 +988,7 @@ async function syncTransactions({ client, userId, item, accessToken }) {
       .filter(Boolean);
     const accountRows = {};
     if (accountIds.length) {
-      const db = serviceSupabase();
+      const db = database();
       const { data, error } = await db
         .from("plaid_accounts")
         .select("id,plaid_account_id,persistent_account_id,name,official_name,mask,type,subtype,account_type,account_subtype")
@@ -1005,22 +1015,22 @@ async function syncTransactions({ client, userId, item, accessToken }) {
     for (const transaction of page.added || []) {
       const accountRow = accountRows[transaction.account_id];
       if (!accountRow) continue;
-      const imported = await upsertPlaidTransaction({ userId, householdId: item.household_id, accountRow, transaction });
-      if (shouldQueuePostedNotification(originalCursor, imported)) notificationTransactionIds.push(imported.flowledgerId);
-      if (shouldQueuePendingNotification(originalCursor, imported)) pendingNotificationTransactionIds.push(imported.plaidTransactionId);
+      const imported = await importTransaction({ userId, householdId: item.household_id, accountRow, transaction });
+      if (!suppressBootstrapNotifications && shouldQueuePostedNotification(originalCursor, imported)) notificationTransactionIds.push(imported.flowledgerId);
+      if (!suppressBootstrapNotifications && shouldQueuePendingNotification(originalCursor, imported)) pendingNotificationTransactionIds.push(imported.plaidTransactionId);
       added += 1;
     }
     for (const transaction of page.modified || []) {
       const accountRow = accountRows[transaction.account_id];
       if (!accountRow) continue;
-      const imported = await upsertPlaidTransaction({ userId, householdId: item.household_id, accountRow, transaction });
-      if (shouldQueuePostedNotification(originalCursor, imported)) notificationTransactionIds.push(imported.flowledgerId);
-      if (shouldQueuePendingNotification(originalCursor, imported)) pendingNotificationTransactionIds.push(imported.plaidTransactionId);
+      const imported = await importTransaction({ userId, householdId: item.household_id, accountRow, transaction });
+      if (!suppressBootstrapNotifications && shouldQueuePostedNotification(originalCursor, imported)) notificationTransactionIds.push(imported.flowledgerId);
+      if (!suppressBootstrapNotifications && shouldQueuePendingNotification(originalCursor, imported)) pendingNotificationTransactionIds.push(imported.plaidTransactionId);
       modified += 1;
     }
     for (const transaction of page.removed || []) {
       const now = new Date().toISOString();
-      const db = serviceSupabase();
+      const db = database();
       const { error: plaidError } = await db
         .from("plaid_transactions")
         .update({ removed_at: now, updated_at: now })
@@ -1028,7 +1038,7 @@ async function syncTransactions({ client, userId, item, accessToken }) {
         .eq("household_id", item.household_id)
         .eq("plaid_transaction_id", transaction.transaction_id);
       if (plaidError) throw plaidError;
-      const { error: transactionError } = await serviceSupabase()
+      const { error: transactionError } = await db
         .from("transactions")
         .update({ removed_at: now })
         .eq("user_id", userId)
@@ -1048,27 +1058,37 @@ async function syncTransactions({ client, userId, item, accessToken }) {
       removed += 1;
     }
 
+    // Completion is a provider fact, not an empty-page inference. Keep it
+    // across pagination; it is only persisted after every page succeeds.
+    if (page.transactions_update_status === "HISTORICAL_UPDATE_COMPLETE"
+      || (historyStatus !== "HISTORICAL_UPDATE_COMPLETE" && typeof page.transactions_update_status === "string")) {
+      historyStatus = page.transactions_update_status;
+    }
     cursor = page.next_cursor || cursor;
     if (!page.has_more) break;
   }
   try {
-    if (originalCursor && pendingNotificationTransactionIds.length) {
+    if (!suppressBootstrapNotifications && originalCursor && pendingNotificationTransactionIds.length) {
       await queuePendingTransactionNotifications(userId, item.household_id, pendingNotificationTransactionIds);
     }
-    if (originalCursor && notificationTransactionIds.length) {
+    if (!suppressBootstrapNotifications && originalCursor && notificationTransactionIds.length) {
       await queuePostedTransactionNotifications(userId, item.household_id, notificationTransactionIds);
-    } else if (!pendingNotificationTransactionIds.length) {
-      await deliverPendingPostedTransactionNotifications(userId);
+    } else if (!suppressBootstrapNotifications && !pendingNotificationTransactionIds.length) {
+      await deliverPending(userId);
     }
   } catch (error) {
     console.error("[plaid:push] notification delivery deferred", {
       error: safeError(error, "Push notification delivery failed."),
     });
   }
-  return { cursor, added, modified, removed };
+  return { cursor, added, modified, removed,
+    ...(hasInitialImportProfile(item) ? { history_complete: initialHistoryComplete(item, historyStatus, webhookHistoricalComplete) } : {}),
+  };
 }
 
-async function syncItemUnlocked({ userId, item, accessToken, client, db }) {
+async function syncItemUnlocked({ userId, item, accessToken, client, db, webhookHistoricalComplete = false,
+  synchronizeAccounts = syncAccounts, synchronizeLiabilities = syncLiabilities,
+  synchronizeTransactions = syncTransactions, refreshSubscriptions = refreshNewConnectionSubscriptions }) {
   const attempted = new Date().toISOString();
   await db
     .from("plaid_items")
@@ -1084,7 +1104,7 @@ async function syncItemUnlocked({ userId, item, accessToken, client, db }) {
     .eq("household_id", item.household_id);
 
   try {
-    const accountSync = await syncAccounts({ client, userId, item, accessToken });
+    const accountSync = await synchronizeAccounts({ client, userId, item, accessToken });
     const accounts = accountSync.accounts;
     if (accountSync.duplicateItemIds.includes(item.id)) {
       return {
@@ -1097,10 +1117,10 @@ async function syncItemUnlocked({ userId, item, accessToken, client, db }) {
         account_observed_at: accountSync.observedAt,
       };
     }
-    const liabilities = await syncLiabilities({ client, userId, item, accessToken, accounts });
+    const liabilities = await synchronizeLiabilities({ client, userId, item, accessToken, accounts });
     let transactions;
     try {
-      transactions = await syncTransactions({ client, userId, item, accessToken });
+      transactions = await synchronizeTransactions({ client, userId, item, accessToken, webhookHistoricalComplete });
     } catch (error) {
       if (!isTransactionsPending(error)) throw error;
       const pendingAt = new Date().toISOString();
@@ -1120,12 +1140,14 @@ async function syncItemUnlocked({ userId, item, accessToken, client, db }) {
         liabilities,
         transactions: { cursor: item.transactions_cursor || item.cursor || null, added: 0, modified: 0, removed: 0 },
         transactions_pending: true,
+        history_status: initialHistoryStatus(item),
         item_id: item.id,
         account_observed_at: accountSync.observedAt,
       };
     }
 
     const completed = new Date().toISOString();
+    const initialComplete = !hasInitialImportProfile(item) || transactions.history_complete;
     const { error } = await db
       .from("plaid_items")
       .update({
@@ -1137,16 +1159,33 @@ async function syncItemUnlocked({ userId, item, accessToken, client, db }) {
         error_code: null,
         error_message: null,
         updated_at: completed,
+        ...(hasInitialImportProfile(item) && initialComplete && !item.initial_history_complete_at
+          ? { initial_history_complete_at: completed } : {}),
       })
       .eq("id", item.id)
       .eq("user_id", userId)
       .eq("household_id", item.household_id);
     if (error) throw error;
+    let subscriptionScan = { candidates: 0 }, subscriptionsPending = false;
+    if (hasInitialImportProfile(item)) {
+      try {
+        subscriptionScan = await refreshSubscriptions({ db, userId, item });
+      } catch (subscriptionError) {
+        // The bank and imported cursor are valid. Insight persistence can be
+        // retried by the next normal sync/webhook without another bank login.
+        subscriptionsPending = true;
+        console.error("[plaid:subscriptions] review deferred", {
+          error: safeError(subscriptionError, "Subscription review will retry on the next sync."),
+        });
+      }
+    }
     return {
       accounts: accounts.length,
       liabilities,
       transactions,
-      transactions_pending: false,
+      transactions_pending: !initialComplete,
+      history_status: hasInitialImportProfile(item) ? (initialComplete ? "complete" : "importing") : null,
+      ...(hasInitialImportProfile(item) ? { subscriptions_pending: subscriptionsPending, subscriptions_count: subscriptionScan.candidates } : {}),
       item_id: item.id,
       account_observed_at: accountSync.observedAt,
     };
@@ -1166,21 +1205,40 @@ async function syncItemUnlocked({ userId, item, accessToken, client, db }) {
   }
 }
 
-async function syncItem({ userId, item }) {
-  const accessToken = tokenFor(item);
-  const client = plaid();
-  const db = serviceSupabase();
-  return withPlaidSyncLock(
-    { db, itemId: item.id, userId },
-    () => syncItemUnlocked({ userId, item, accessToken, client, db }),
-  );
+function createItemSynchronizer(dependencies = {}) {
+  const database = dependencies.serviceSupabase || serviceSupabase;
+  const provider = dependencies.plaid || plaid;
+  const decrypt = dependencies.tokenFor || tokenFor;
+  const synchronize = dependencies.syncItemUnlocked || syncItemUnlocked;
+  return async function synchronizeItem({ userId, item, webhookHistoricalComplete = false }) {
+    const db = database();
+    return withPlaidSyncLock({ db, itemId: item.id, userId }, async () => {
+      // Unlink and sync share this lease. A queued caller may have captured a
+      // token before unlink; never use that stale snapshot after acquiring it.
+      const { data: current, error } = await db.from("plaid_items")
+        .select(`id,user_id,household_id,status,encrypted_access_token,access_token_ciphertext,transactions_cursor,cursor,${INITIAL_IMPORT_COLUMNS}`)
+        .eq("id", item.id).eq("user_id", userId).eq("household_id", item.household_id).maybeSingle();
+      if (error) throw error;
+      if (!current || current.status === "removed" || !(current.encrypted_access_token || current.access_token_ciphertext)) {
+        return { accounts: 0, liabilities: { cards: 0, debts: 0, available: false },
+          transactions: { cursor: null, added: 0, modified: 0, removed: 0 },
+          transactions_pending: false, skipped: true, reason: "disconnected", item_id: item.id,
+          account_observed_at: null };
+      }
+      return synchronize({ userId, item: current, accessToken: decrypt(current), client: provider(), db, webhookHistoricalComplete });
+    });
+  };
 }
+
+const syncItem = createItemSynchronizer();
 
 module.exports = {
   syncItem,
   syncAccounts,
   syncLiabilities,
   syncTransactions,
+  createItemSynchronizer,
+  syncItemUnlocked,
   findConnectedCardDebt,
   defaultBudgetId,
   recalculateSnowballMinimums,

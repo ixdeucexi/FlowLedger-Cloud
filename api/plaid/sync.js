@@ -111,7 +111,7 @@ module.exports = async function plaidSync(req, res) {
     const { data: items, error } = await client
       .from("plaid_items")
       .select(
-        "id,user_id,household_id,encrypted_access_token,access_token_ciphertext,transactions_cursor,cursor,status",
+        "id,user_id,household_id,encrypted_access_token,access_token_ciphertext,transactions_cursor,cursor,status,initial_import_version,initial_import_from,initial_history_complete_at",
       )
       .eq("household_id", access.householdId)
       .in("status", ["active", "needs_repair"])

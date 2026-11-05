@@ -8,10 +8,14 @@ import { usePlaidLink } from "react-plaid-link";
 
 import { supabase } from "@/lib/supabase";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import { useBudget } from "@/context/BudgetContext";
 import {
   clearPlaidOAuthSession,
+  PLAID_CONNECTION_RESULT_EVENT,
+  PLAID_RESUME_CONNECTION_EVENT,
   markPlaidOAuthAwaitingReturn,
+  readPendingPlaidOAuthSession,
   savePlaidOAuthSession,
   takePlaidConnectionResult,
 } from "@/lib/plaidOAuth";
@@ -68,32 +72,54 @@ async function getFreshSession() {
 }
 
 export function PlaidLinkButton({ colors, onConnected }: Props) {
-  const { activeHousehold } = useBudget();
+  const { demoMode: authDemoMode } = useAuth();
+  const { demoMode: budgetDemoMode } = useBudget();
+  if (authDemoMode || budgetDemoMode) return null;
+  return <ActivePlaidLinkButton colors={colors} onConnected={onConnected} />;
+}
+
+function ActivePlaidLinkButton({ colors, onConnected }: Props) {
+  const { user, demoMode: authDemoMode } = useAuth();
+  const { activeHousehold, demoMode: budgetDemoMode } = useBudget();
+  const demoMode = authDemoMode || budgetDemoMode;
   const householdId = activeHousehold?.householdId ?? "";
+  const userId = user?.id ?? "";
+  const scopeKey = `${userId}:${householdId}:${demoMode ? "demo" : "real"}`;
+  const liveScope = useRef({ key: scopeKey, mounted: true, demoMode });
+  liveScope.current.key = scopeKey;
+  liveScope.current.demoMode = demoMode;
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>({});
   const [activeAction, setActiveAction] = useState<ActiveAction>(null);
-  const [message, setMessage] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return takePlaidConnectionResult(window.localStorage);
-  });
+  const [message, setMessage] = useState<string | null>(null);
+  const [pendingConnection, setPendingConnection] = useState(false);
   const opened = useRef(false);
   const linkUserId = useRef<string | null>(null);
   const busy = activeAction !== null;
+  const isCurrentScope = useCallback(() => liveScope.current.mounted && !liveScope.current.demoMode && liveScope.current.key === scopeKey, [scopeKey]);
+
+  useEffect(() => {
+    liveScope.current.mounted = true;
+    return () => { liveScope.current.mounted = false; };
+  }, []);
 
   const loadStatus = useCallback(async () => {
+    if (!isCurrentScope()) return;
     const session = await getFreshSession();
-    if (!session) return;
+    if (!session || session.user.id !== userId || !isCurrentScope()) return;
     try {
       const response = await apiFetch("/api/plaid/status", {
         credentials: "include",
         headers: { Authorization: `Bearer ${session.access_token}`, "X-FlowLedger-Household-Id": householdId },
       });
-      if (response.ok) setStatus((await response.json()) as Status);
+      if (response.ok) {
+        const result = await response.json() as Status;
+        if (isCurrentScope()) setStatus(result);
+      }
     } catch {
       // Status is informational; the connect action reports actionable errors.
     }
-  }, [householdId]);
+  }, [householdId, isCurrentScope, userId]);
 
   useEffect(() => { void loadStatus(); }, [loadStatus]);
 
@@ -105,9 +131,40 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
     setMessage(text);
   }, []);
 
+  useEffect(() => {
+    setStatus({});
+    setMessage(null);
+    setPendingConnection(false);
+    setLinkToken(null);
+    setActiveAction(null);
+    opened.current = false;
+    linkUserId.current = null;
+    const consumeResult = () => {
+      if (typeof window === "undefined" || !userId || !householdId || !isCurrentScope()) return;
+      try {
+        const pending = readPendingPlaidOAuthSession(window.localStorage, userId);
+        setPendingConnection(Boolean(pending?.hostedSession && pending.householdId === householdId));
+        const result = takePlaidConnectionResult(window.localStorage, Date.now(), { userId, householdId });
+        if (result) {
+          finish(result);
+          void loadStatus();
+        }
+      } catch { /* The connected-account list still reads saved bank data. */ }
+    };
+    consumeResult();
+    window.addEventListener(PLAID_CONNECTION_RESULT_EVENT, consumeResult);
+    window.addEventListener("focus", consumeResult);
+    return () => {
+      window.removeEventListener(PLAID_CONNECTION_RESULT_EVENT, consumeResult);
+      window.removeEventListener("focus", consumeResult);
+    };
+  }, [finish, householdId, isCurrentScope, loadStatus, userId]);
+
   const onSuccess = useCallback(async (publicToken: string) => {
+    if (!isCurrentScope()) return;
     try {
       const session = await getFreshSession();
+      if (!isCurrentScope()) return;
       if (!session) return finish("Please sign in again before finishing the connection.");
       const response = await apiFetch("/api/plaid/exchange-public-token", {
         method: "POST",
@@ -120,6 +177,7 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
         body: JSON.stringify({ public_token: publicToken }),
       });
       const result = await response.json().catch(() => ({}));
+      if (!isCurrentScope()) return;
       if (!response.ok) throw new Error(result.message || "Could not finish connecting this bank.");
       if (typeof window !== "undefined") clearPlaidOAuthSession(window.localStorage);
       finish(result.already_connected
@@ -132,38 +190,44 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
       onConnected?.();
       await loadStatus();
     } catch (error) {
-      finish(error instanceof Error ? error.message : "Could not finish connecting this bank.");
+      if (isCurrentScope()) finish(error instanceof Error ? error.message : "Could not finish connecting this bank.");
     }
-  }, [finish, householdId, loadStatus, onConnected]);
+  }, [finish, householdId, isCurrentScope, loadStatus, onConnected]);
 
   const onExit = useCallback(() => {
+    if (!isCurrentScope()) return;
     if (typeof window !== "undefined") clearPlaidOAuthSession(window.localStorage);
     finish("Bank connection canceled. You can try again whenever you are ready.");
-  }, [finish]);
+  }, [finish, isCurrentScope]);
   const onEvent = useCallback((eventName: string) => {
-    if (eventName !== "OPEN_OAUTH" || typeof window === "undefined" || !linkUserId.current) return;
+    if (!isCurrentScope() || eventName !== "OPEN_OAUTH" || typeof window === "undefined" || !linkUserId.current) return;
     markPlaidOAuthAwaitingReturn(window.localStorage, linkUserId.current);
-  }, []);
-  const { ready, error, open } = usePlaidLink({ token: linkToken, onSuccess, onExit, onEvent });
+  }, [isCurrentScope]);
+  const { ready, error, open } = usePlaidLink({ token: demoMode ? null : linkToken, onSuccess, onExit, onEvent });
 
   useEffect(() => {
-    if (!linkToken || !ready || opened.current) return;
+    if (!isCurrentScope() || !linkToken || !ready || opened.current) return;
     opened.current = true;
     open();
-  }, [linkToken, ready, open]);
+  }, [isCurrentScope, linkToken, ready, open]);
 
   useEffect(() => {
-    if (!linkToken || !error) return;
+    if (!isCurrentScope() || !linkToken || !error) return;
     if (typeof window !== "undefined") clearPlaidOAuthSession(window.localStorage);
     finish("Plaid could not open this connection. Please try again.");
-  }, [error, finish, linkToken]);
+  }, [error, finish, isCurrentScope, linkToken]);
 
   const connect = useCallback(async (intent: LinkIntent) => {
-    if (busy || linkToken) return;
+    if (!isCurrentScope() || busy || linkToken) return;
+    if (pendingConnection) {
+      window.dispatchEvent(new Event(PLAID_RESUME_CONNECTION_EVENT));
+      return;
+    }
     setActiveAction(intent);
     setMessage(null);
     opened.current = false;
     const session = await getFreshSession();
+    if (!isCurrentScope()) return;
     if (!session) {
       setActiveAction(null);
       setMessage("Please sign in again before connecting a bank.");
@@ -177,6 +241,7 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
         body: JSON.stringify({ intent, platform: "web" }),
       });
       const result = await response.json().catch(() => ({}));
+      if (!isCurrentScope()) return;
       if (!response.ok || !result.link_token) throw new Error(result.message || "Could not start secure bank linking.");
       if (typeof window !== "undefined") {
         savePlaidOAuthSession(window.localStorage, {
@@ -196,17 +261,20 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
       }
       setLinkToken(result.link_token);
     } catch (error) {
-      setActiveAction(null);
-      setMessage(error instanceof Error ? error.message : "Could not start secure bank linking.");
+      if (isCurrentScope()) {
+        setActiveAction(null);
+        setMessage(error instanceof Error ? error.message : "Could not start secure bank linking.");
+      }
     }
-  }, [busy, householdId, linkToken]);
+  }, [busy, householdId, isCurrentScope, linkToken, pendingConnection]);
 
   const attachCard = useCallback(async (accountRecordId: string, debtId?: string) => {
-    if (busy) return;
+    if (!isCurrentScope() || busy) return;
     setActiveAction(`attach:${accountRecordId}`);
     setMessage(null);
     try {
       const session = await getFreshSession();
+      if (!isCurrentScope()) return;
       if (!session) throw new Error("Please sign in again before attaching this card.");
       const response = await apiFetch("/api/plaid/attach-credit-card", {
         method: "POST",
@@ -219,35 +287,39 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
         body: JSON.stringify({ plaid_account_record_id: accountRecordId, debt_id: debtId || undefined }),
       });
       const result = await response.json().catch(() => ({}));
+      if (!isCurrentScope()) return;
       if (!response.ok) throw new Error(result.message || "Could not add this card to Debt and Snowball.");
       setMessage(`${result.debt_name || "Credit card"} is now included in Debt and Snowball.`);
       await loadStatus();
       onConnected?.();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not add this card to Debt and Snowball.");
+      if (isCurrentScope()) setMessage(error instanceof Error ? error.message : "Could not add this card to Debt and Snowball.");
     } finally {
-      setActiveAction(null);
+      if (isCurrentScope()) setActiveAction(null);
     }
-  }, [busy, householdId, loadStatus, onConnected]);
+  }, [busy, householdId, isCurrentScope, loadStatus, onConnected]);
 
   const sync = useCallback(async () => {
-    if (busy) return;
+    if (!isCurrentScope() || busy) return;
     setActiveAction("sync");
     setMessage(null);
     try {
       const session = await getFreshSession();
+      if (!isCurrentScope()) return;
       if (!session) throw new Error("Please sign in again before syncing your bank.");
       const response = await apiFetch("/api/plaid/sync", { method: "POST", credentials: "include", headers: { Authorization: `Bearer ${session.access_token}`, "X-FlowLedger-Household-Id": householdId } });
       const result = await response.json().catch(() => ({}));
+      if (!isCurrentScope()) return;
       if (!response.ok) throw new Error(result.message || "Could not sync bank activity.");
       setMessage("Bank activity is up to date.");
       onConnected?.();
       void loadStatus();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not sync bank activity.");
-    } finally { setActiveAction(null); }
-  }, [busy, householdId, loadStatus, onConnected]);
+      if (isCurrentScope()) setMessage(error instanceof Error ? error.message : "Could not sync bank activity.");
+    } finally { if (isCurrentScope()) setActiveAction(null); }
+  }, [busy, householdId, isCurrentScope, loadStatus, onConnected]);
 
+  if (demoMode) return null;
   const item = status.items?.[0];
   const connected = Boolean(item);
   return (
@@ -323,13 +395,13 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
       <View style={styles.actions}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Connect a bank account or credit card through Plaid"
+          accessibilityLabel={pendingConnection ? "Continue connection" : "Connect a bank account or credit card through Plaid"}
           disabled={busy}
           onPress={() => void connect("bank")}
           style={({ pressed }) => [styles.button, { backgroundColor: colors.primary, opacity: pressed || busy ? 0.7 : 1 }]}
         >
           {activeAction === "bank" ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Feather name="plus-circle" size={16} color={colors.primaryForeground} />}
-          <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Connect account</Text>
+          <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>{pendingConnection ? "Continue connection" : "Connect account"}</Text>
         </Pressable>
         {connected && (
           <Pressable

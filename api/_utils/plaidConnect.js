@@ -102,7 +102,7 @@ function createPlaidConnector(dependencies = {}) {
   });
   let sync;
   try {
-    sync = await synchronize({ userId, item: { id: saved.data.id, household_id: saved.data.household_id, encrypted_access_token: encrypted, transactions_cursor: null, cursor: null } });
+    sync = await synchronize({ userId, item: { ...saved.data, encrypted_access_token: encrypted } });
   } catch (error) {
     if (!saved.refreshedExistingItem && plaidProviderCode(error) === "PLAID_ACCOUNT_ALREADY_CONNECTED_TO_ANOTHER_HOUSEHOLD") {
       await cleanupConflictingNewPlaidItem({ plaidClient, client, userId, householdId, itemRecordId: saved.data.id, accessToken });
@@ -119,6 +119,10 @@ function createPlaidConnector(dependencies = {}) {
     liability_details_available: sync.liabilities.available,
     transactions_count: sync.transactions.added + sync.transactions.modified,
     transactions_pending: Boolean(sync.transactions_pending),
+    history_status: sync.history_status || null,
+    history_from: saved.data.initial_import_from || null,
+    subscriptions_pending: Boolean(sync.subscriptions_pending),
+    subscriptions_count: Number(sync.subscriptions_count || 0),
   };
   };
 }

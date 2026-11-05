@@ -3,6 +3,7 @@ const { buildLinkTokenRequest, normalizeLinkIntent, normalizeLinkPlatform } = re
 const { decryptAccessToken, sealPlaidLinkSession } = require("../_utils/crypto");
 const { authenticatedUser, publicError, serviceSupabase } = require("../_utils/supabase");
 const { authorizeProHousehold, requestedHouseholdId } = require("../_utils/plaidAccess");
+const { newConnectionImportProfile } = require("../_utils/plaidInitialImport");
 
 function body(req) {
   if (!req.body) return {};
@@ -10,9 +11,18 @@ function body(req) {
   return req.body;
 }
 
-module.exports = async function createLinkToken(req, res) {
+function createLinkTokenHandler(dependencies = {}) {
+  const authenticate = dependencies.authenticatedUser || authenticatedUser;
+  const database = dependencies.serviceSupabase || serviceSupabase;
+  const authorize = dependencies.authorizeProHousehold || authorizeProHousehold;
+  const provider = dependencies.plaid || plaid;
+  const options = dependencies.plaidOptions || plaidOptions;
+  const profileFor = dependencies.newConnectionImportProfile || newConnectionImportProfile;
+  const seal = dependencies.sealPlaidLinkSession || sealPlaidLinkSession;
+  const decrypt = dependencies.decryptAccessToken || decryptAccessToken;
+  return async function createLinkToken(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "METHOD_NOT_ALLOWED" });
-  const auth = await authenticatedUser(req);
+  const auth = await authenticate(req);
   if (!auth.user) return res.status(401).json({ error: auth.error, message: "Please sign in again." });
   const intent = normalizeLinkIntent(body(req).intent);
   if (!intent) return res.status(400).json({ error: "LINK_INTENT_INVALID", message: "Choose a supported account type to connect." });
@@ -20,10 +30,10 @@ module.exports = async function createLinkToken(req, res) {
   if (!platform) return res.status(400).json({ error: "LINK_PLATFORM_INVALID", message: "Use a supported FlowLedger app to connect this bank." });
   const mode = body(req).mode === "update" ? "update" : "create";
   try {
-    const db = serviceSupabase();
-    const access = await authorizeProHousehold(auth.user.id, requestedHouseholdId(req), db);
+    const db = database();
+    const access = await authorize(auth.user.id, requestedHouseholdId(req), db);
     if (!access.ok) return res.status(access.status).json({ error: access.error, message: access.message });
-    const config = plaidOptions();
+    const config = options();
     let accessToken = null;
     if (mode === "update") {
       const itemId = String(body(req).item_id || "").trim();
@@ -33,20 +43,26 @@ module.exports = async function createLinkToken(req, res) {
         .eq("id", itemId).eq("user_id", auth.user.id).eq("household_id", access.householdId).neq("status", "removed").maybeSingle();
       if (itemError) throw itemError;
       if (!item) return res.status(404).json({ error: "PLAID_ITEM_NOT_FOUND", message: "That bank connection is no longer available." });
-      accessToken = decryptAccessToken(item.encrypted_access_token || item.access_token_ciphertext);
+      accessToken = decrypt(item.encrypted_access_token || item.access_token_ciphertext);
     }
     // Hosted Link remains web-only. Native builds open Plaid's official SDK,
     // and Android OAuth is bound to FlowLedger's exact package identifier.
     const hosted = platform === "web";
-    const request = buildLinkTokenRequest({ userId: auth.user.id, config, intent, platform, hosted, accessToken });
-    const response = await plaid().linkTokenCreate(request);
+    const importProfile = mode === "create"
+      ? await profileFor({ db, userId: auth.user.id })
+      : null;
+    const request = buildLinkTokenRequest({
+      userId: auth.user.id, config, intent, platform, hosted, accessToken,
+      historyDaysRequested: importProfile?.daysRequested ?? 90,
+    });
+    const response = await provider().linkTokenCreate(request);
     const data = response.data || response;
     if (hosted && !data.hosted_link_url) {
       const error = new Error("Plaid did not return a secure mobile connection URL.");
       error.code = "PLAID_HOSTED_LINK_UNAVAILABLE";
       throw error;
     }
-    const hostedSession = hosted ? sealPlaidLinkSession({
+    const hostedSession = hosted ? seal({
       version: 1,
       linkToken: data.link_token,
       userId: auth.user.id,
@@ -67,4 +83,8 @@ module.exports = async function createLinkToken(req, res) {
     const code = error && error.response && error.response.data && error.response.data.error_code;
     return res.status(500).json({ error: code || error.code || "LINK_TOKEN_FAILED", message: publicError(error, "Could not start secure bank linking.") });
   }
-};
+  };
+}
+
+module.exports = createLinkTokenHandler();
+module.exports.createLinkTokenHandler = createLinkTokenHandler;

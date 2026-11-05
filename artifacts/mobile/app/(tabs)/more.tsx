@@ -31,6 +31,7 @@ import { Modal, Platform, ScrollView, StyleSheet, useWindowDimensions } from "re
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ConnectedBalanceList } from "@/components/ConnectedBalanceList";
+import { BankConnectionManager } from "@/components/BankConnectionManager";
 import { AccountModal } from "@/components/AccountModal";
 import { AdminMembershipTools } from "@/components/AdminMembershipTools";
 import { BiometricLockSettings } from "@/components/BiometricLockSettings";
@@ -157,6 +158,8 @@ import {
   type SubscriptionCandidate,
 } from "@/lib/competitiveGrowth";
 import { buildCategoryPlan } from "@/lib/categoryPlanning";
+import { importedSubscriptionDecisionUpdate, importedSubscriptionMetadata, mergeImportedSubscriptionCandidates, parseImportedSubscriptionCandidates, type ImportedSubscriptionCandidate } from "@/lib/importedSubscriptionCandidates";
+import { PLAID_CONNECTION_RESULT_EVENT } from "@/lib/plaidOAuth";
 
 const ReportsInsightsView = React.lazy(() =>
   import("@/components/ReportsInsightsView").then(module => ({ default: module.ReportsInsightsView })),
@@ -391,7 +394,7 @@ export default function MoreScreen({
     ready: hapticsReady,
     setEnabled: setHapticsEnabled,
   } = Haptics.useHapticsPreference();
-  const { signOut, user } = useAuth();
+  const { signOut, user, demoMode: authDemoMode } = useAuth();
   const { newFeedbackCount, refreshFeedbackCount } = useFeedbackBadge();
   const {
     actualPlan,
@@ -400,6 +403,8 @@ export default function MoreScreen({
     isAdmin: feedbackAdmin,
     loading: membershipLoading,
     previewTier,
+    accessReady: membershipAccessReady,
+    isFeatureLocked,
   } = useMembership();
   const adminProAccess = hasAdminProAccess(actualPlan);
   const {
@@ -422,6 +427,8 @@ export default function MoreScreen({
     connectedBankAccounts,
     householdTimeZone,
     startupCoreReady,
+    dataUpdatedAt,
+    demoMode: budgetDemoMode,
     forecastConfidence,
     addIncome,
     updateIncome,
@@ -632,7 +639,25 @@ export default function MoreScreen({
   const [subscriptionDecisions, setSubscriptionDecisions] = useState<
     Record<string, SubscriptionDecision>
   >({});
+  const demoMode = Boolean(authDemoMode || budgetDemoMode);
+  const newSubscriptionReviewsEnabled = !demoMode && !membershipLoading && membershipAccessReady && !feedbackAdmin && !isFeatureLocked("connected_insights");
+  const subscriptionReviewScope = JSON.stringify([user?.id, activeHousehold?.householdId, activeHousehold?.budgetId, newSubscriptionReviewsEnabled, canEditHousehold]);
+  const subscriptionReviewLive = useRef({ key: subscriptionReviewScope, generation: 0 });
+  const subscriptionReviewMounted = useRef(true);
+  if (subscriptionReviewLive.current.key !== subscriptionReviewScope) subscriptionReviewLive.current = { key: subscriptionReviewScope, generation: subscriptionReviewLive.current.generation + 1 };
+  const [importedSubscriptionState, setImportedSubscriptionState] = useState<{ scope: string; candidates: ImportedSubscriptionCandidate[]; loading?: boolean; error?: string }>({ scope: subscriptionReviewScope, candidates: [] });
+  const importedSubscriptions = importedSubscriptionState.scope === subscriptionReviewScope ? importedSubscriptionState.candidates : [];
+  const [importedSubscriptionReload, setImportedSubscriptionReload] = useState(0);
+  const importedSubscriptionDataVersion = newSubscriptionReviewsEnabled ? dataUpdatedAt : null;
+  useEffect(() => {
+    subscriptionReviewMounted.current = true;
+    return () => { subscriptionReviewMounted.current = false; subscriptionReviewLive.current.generation += 1; };
+  }, []);
   const [subscriptionMatchBusy, setSubscriptionMatchBusy] = useState<string | null>(null);
+  const importedSubscriptionActions = useRef(new Set<string>());
+  const [importedSubscriptionActionBusy, setImportedSubscriptionActionBusy] = useState(false);
+  const importedSubscriptionReadBusy = newSubscriptionReviewsEnabled ? importedSubscriptionActionBusy : false;
+  const importedSubscriptionBusyScope = useRef<string | null>(null);
   const [goalContributionBusy, setGoalContributionBusy] = useState<string | null>(null);
   const [goalEditor, setGoalEditor] = useState<Goal | "new" | null>(null);
   const [contributionGoalId, setContributionGoalId] = useState<string | null>(null);
@@ -645,6 +670,11 @@ export default function MoreScreen({
   const goalContributionInFlightRef = useRef(false);
   const [subscriptionBillLinks, setSubscriptionBillLinks] = useState<Record<string, string>>({});
   const [subscriptionLinkCandidate, setSubscriptionLinkCandidate] = useState<SubscriptionCandidate | null>(null);
+  const subscriptionLinkScope = useRef<{ scope: string; generation: number } | null>(null);
+  useEffect(() => {
+    if (subscriptionLinkScope.current && subscriptionLinkScope.current.scope !== subscriptionReviewScope) { subscriptionLinkScope.current = null; setSubscriptionLinkCandidate(null); }
+    if (importedSubscriptionBusyScope.current && importedSubscriptionBusyScope.current !== subscriptionReviewScope) { importedSubscriptionBusyScope.current = null; setSubscriptionMatchBusy(null); }
+  }, [subscriptionReviewScope]);
   const [statementImportOpen, setStatementImportOpen] = useState(false);
   const [statementImportBusy, setStatementImportBusy] = useState(false);
   const [statementImportFeedback, setStatementImportFeedback] = useState<StatementImportFeedback | null>(null);
@@ -810,23 +840,31 @@ export default function MoreScreen({
 
   useEffect(() => {
     let cancelled = false;
+    const generation = subscriptionReviewLive.current.generation;
+    if (newSubscriptionReviewsEnabled && importedSubscriptionActions.current.size > 0) return;
+    setImportedSubscriptionState(previous => ({ scope: subscriptionReviewScope, candidates: previous.scope === subscriptionReviewScope && newSubscriptionReviewsEnabled ? previous.candidates : [], loading: newSubscriptionReviewsEnabled, error: "" }));
     void (async () => {
       const value = await AsyncStorage.getItem(
         subscriptionDecisionStorageKey,
       ).catch(() => null);
-      if (!cancelled)
-        setSubscriptionDecisions(
-          value
-            ? normalizeStorageMap<SubscriptionDecision>(JSON.parse(value))
-            : {},
-        );
+      if (!cancelled) {
+        if (newSubscriptionReviewsEnabled) {
+          try { setSubscriptionDecisions(value ? normalizeStorageMap<SubscriptionDecision>(JSON.parse(value)) : {}); } catch { /* A fresh remote read can recover a malformed device cache. */ }
+        } else setSubscriptionDecisions(value ? normalizeStorageMap<SubscriptionDecision>(JSON.parse(value)) : {});
+      }
       if (!user?.id || !activeHousehold?.householdId) return;
-      const { data, error } = await supabase
-        .from("subscription_candidates")
-        .select("merchant,status")
-        .eq("household_id", activeHousehold.householdId)
-        .neq("status", "review");
-      if (cancelled || error || !data) return;
+      const query = supabase.from("subscription_candidates");
+      const { data, error } = newSubscriptionReviewsEnabled
+        ? await query.select("id,household_id,merchant,status,cadence,average_amount,monthly_equivalent,yearly_equivalent,confidence,source_transaction_ids,initial_import_version,initial_import_item_id,source_plaid_transaction_ids")
+          .eq("household_id", activeHousehold.householdId)
+          .or("status.neq.review,and(status.eq.review,initial_import_version.eq.1)")
+        : await query.select("merchant,status").eq("household_id", activeHousehold.householdId).neq("status", "review");
+      if (cancelled || subscriptionReviewLive.current.key !== subscriptionReviewScope || subscriptionReviewLive.current.generation !== generation) return;
+      if (error || !data) {
+        if (newSubscriptionReviewsEnabled) setImportedSubscriptionState(previous => ({ ...previous, loading: false, error: "Could not load subscription suggestions. Try again." }));
+        return;
+      }
+      if (newSubscriptionReviewsEnabled) setImportedSubscriptionState({ scope: subscriptionReviewScope, candidates: parseImportedSubscriptionCandidates(data, activeHousehold.householdId), loading: false, error: "" });
       const mapped = (data as SubscriptionDecisionRow[]).reduce<
         Record<string, SubscriptionDecision>
       >((acc, row) => {
@@ -840,12 +878,34 @@ export default function MoreScreen({
         JSON.stringify(mapped),
       ).catch(() => undefined);
     })().catch(() => {
-      if (!cancelled) setSubscriptionDecisions({});
+      if (!cancelled) {
+        if (newSubscriptionReviewsEnabled && subscriptionReviewLive.current.key === subscriptionReviewScope) setImportedSubscriptionState(previous => ({ ...previous, loading: false, error: "Could not load subscription suggestions. Try again." }));
+        else if (!newSubscriptionReviewsEnabled) setSubscriptionDecisions({});
+      }
     });
     return () => {
       cancelled = true;
     };
-  }, [activeHousehold?.householdId, subscriptionDecisionStorageKey, user?.id]);
+  }, [activeHousehold?.householdId, importedSubscriptionDataVersion, importedSubscriptionReadBusy, importedSubscriptionReload, newSubscriptionReviewsEnabled, subscriptionDecisionStorageKey, subscriptionReviewScope, user?.id]);
+
+  useEffect(() => {
+    if (!newSubscriptionReviewsEnabled || typeof globalThis.addEventListener !== "function") return;
+    const reload = () => setImportedSubscriptionReload(previous => previous + 1);
+    globalThis.addEventListener(PLAID_CONNECTION_RESULT_EVENT, reload);
+    return () => globalThis.removeEventListener(PLAID_CONNECTION_RESULT_EVENT, reload);
+  }, [newSubscriptionReviewsEnabled]);
+
+  useEffect(() => {
+    if (!newSubscriptionReviewsEnabled || activeSettingsSection !== "subscriptions" || !settingsRouteActive) return;
+    setImportedSubscriptionReload(previous => previous + 1);
+    let checks = 0;
+    const timer = setInterval(() => {
+      checks += 1;
+      if (typeof document === "undefined" || document.visibilityState === "visible") setImportedSubscriptionReload(previous => previous + 1);
+      if (checks >= 6) clearInterval(timer);
+    }, 10_000);
+    return () => clearInterval(timer);
+  }, [activeSettingsSection, newSubscriptionReviewsEnabled, settingsRouteActive, subscriptionReviewScope]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1356,13 +1416,15 @@ export default function MoreScreen({
   );
   const subscriptions = useMemo(
     () =>
-      detectSubscriptions(growthTransactions).filter(
+      (newSubscriptionReviewsEnabled
+        ? mergeImportedSubscriptionCandidates(detectSubscriptions(growthTransactions), importedSubscriptions)
+        : detectSubscriptions(growthTransactions)).filter(
         (item) => {
           if (subscriptionDecisions[subscriptionKey(item)] === "not_subscription") return false;
           return subscriptionNeedsCleanup(item, transactions, subscriptionBillLinks[subscriptionKey(item)]);
         },
       ),
-    [growthTransactions, subscriptionBillLinks, subscriptionDecisions, transactions],
+    [growthTransactions, importedSubscriptions, newSubscriptionReviewsEnabled, subscriptionBillLinks, subscriptionDecisions, transactions],
   );
   const subscriptionBillMatches = useMemo(() => {
     const result = new Map<string, { transactionId: string; transactionName: string; target?: RankedReviewTarget }>();
@@ -1643,10 +1705,55 @@ export default function MoreScreen({
     ).catch(() => undefined);
   };
 
+  const beginImportedSubscriptionAction = (subscription: SubscriptionCandidate) => {
+    const imported = importedSubscriptionMetadata(subscription);
+    if (!subscriptionReviewMounted.current || subscriptionReviewLive.current.key !== subscriptionReviewScope || !imported || !newSubscriptionReviewsEnabled || demoMode || !canEditHousehold || importedSubscriptionActions.current.size > 0 || subscriptionCreateInFlightRef.current || subscriptionMatchBusy
+      || !importedSubscriptions.some(candidate => candidate.savedCandidateId === imported.savedCandidateId)) return null;
+    importedSubscriptionActions.current.add(imported.savedCandidateId);
+    const generation = ++subscriptionReviewLive.current.generation;
+    importedSubscriptionBusyScope.current = subscriptionReviewScope;
+    setImportedSubscriptionActionBusy(true);
+    setSubscriptionMatchBusy(subscriptionKey(subscription));
+    const current = () => subscriptionReviewMounted.current && subscriptionReviewLive.current.key === subscriptionReviewScope && subscriptionReviewLive.current.generation === generation;
+    return { current, finish: () => {
+      importedSubscriptionActions.current.delete(imported.savedCandidateId);
+      if (!subscriptionReviewMounted.current) return;
+      setImportedSubscriptionActionBusy(false);
+      if (importedSubscriptionBusyScope.current === subscriptionReviewScope && subscriptionReviewLive.current.key === subscriptionReviewScope) {
+        importedSubscriptionBusyScope.current = null;
+        setSubscriptionMatchBusy(null);
+      }
+    } };
+  };
+
   const markSubscriptionDecision = async (
     subscription: SubscriptionCandidate,
     decision: SubscriptionDecision,
   ) => {
+    const imported = importedSubscriptionMetadata(subscription);
+    if (imported) {
+      if (!user?.id || !activeHousehold?.householdId) return;
+      const action = beginImportedSubscriptionAction(subscription);
+      if (!action) return;
+      try {
+        assertFinancialMutationOnline();
+        const status = subscriptionDecisionToStatus(decision);
+        const { data, error } = await supabase.from("subscription_candidates")
+          .update(importedSubscriptionDecisionUpdate(status, new Date().toISOString(), user.id))
+          .eq("id", imported.savedCandidateId).eq("household_id", activeHousehold.householdId).eq("initial_import_version", 1)
+          .select("id,status").maybeSingle();
+        if (!action.current()) return;
+        if (error || !data) throw new Error("Could not confirm the saved subscription choice. Please retry.");
+        setImportedSubscriptionState(previous => previous.scope === subscriptionReviewScope ? { ...previous, loading: false, candidates: previous.candidates.map(candidate => candidate.savedCandidateId === imported.savedCandidateId ? { ...candidate, savedStatus: status } : candidate) } : previous);
+        await saveSubscriptionDecisions({ ...subscriptionDecisions, [subscriptionKey(subscription)]: decision });
+      } catch (error) {
+        if (action.current()) {
+          setImportedSubscriptionState(previous => ({ ...previous, loading: false }));
+          throw error;
+        }
+      } finally { action.finish(); }
+      return;
+    }
     const nextDecisions = {
       ...subscriptionDecisions,
       [subscriptionKey(subscription)]: decision,
@@ -1678,6 +1785,11 @@ export default function MoreScreen({
   const handleCreateBillFromSubscription = async (
     subscription: SubscriptionCandidate,
   ) => {
+    const imported = importedSubscriptionMetadata(subscription);
+    if (imported?.evidenceOnly) return;
+    const generation = subscriptionReviewLive.current.generation;
+    let importedAction: ReturnType<typeof beginImportedSubscriptionAction> = null;
+    const importedScopeCurrent = () => !imported || (importedAction ? importedAction.current() : subscriptionReviewMounted.current && newSubscriptionReviewsEnabled && !demoMode && subscriptionReviewLive.current.key === subscriptionReviewScope && subscriptionReviewLive.current.generation === generation);
     const householdId = activeHousehold?.householdId;
     const key = subscriptionKey(subscription);
     if (!user?.id || !householdId || !canEditHousehold || subscriptionMatchBusy) {
@@ -1706,9 +1818,10 @@ export default function MoreScreen({
       message: `I’ll add ${subscription.merchant} as a recurring bill for about $${amount.toFixed(2)} due around the ${dueDay}.`,
       confirmText: "Create bill",
       onConfirm: async () => {
-        if (subscriptionCreateInFlightRef.current) return;
+        if (subscriptionCreateInFlightRef.current || !importedScopeCurrent()) return;
+        if (imported) { importedAction = beginImportedSubscriptionAction(subscription); if (!importedAction) return; }
         subscriptionCreateInFlightRef.current = true;
-        const candidateId = stableUuidFromString(
+        const candidateId = imported?.savedCandidateId || stableUuidFromString(
           `subscription:${householdId}:${key}`,
         );
         const billId = stableUuidFromString(
@@ -1729,17 +1842,19 @@ export default function MoreScreen({
             monthlyEquivalent: subscription.monthlyEquivalent,
             yearlyEquivalent: subscription.yearlyEquivalent,
             confidence: subscription.confidence,
-            sourceTransactionIds: subscription.transactionIds,
+            sourceTransactionIds: imported ? imported.persistedTransactionIds : subscription.transactionIds,
             amount,
             startDate: latestDate,
             dueDay,
             frequency:
               subscription.cadence === "weekly" ? "weekly" : "monthly",
           });
+          if (!importedScopeCurrent()) return;
           await saveSubscriptionDecisions({
             ...subscriptionDecisions,
             [key]: "bill_created",
           });
+          if (!importedScopeCurrent()) return;
           setSubscriptionBillLinks((current) => ({
             ...current,
             [key]: billId,
@@ -1747,6 +1862,7 @@ export default function MoreScreen({
           await retryBudgetLoad();
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (error) {
+          if (!importedScopeCurrent()) return;
           privacyAlert(
             "Couldn’t create bill",
             error instanceof Error ? error.message : "Try again.",
@@ -1754,7 +1870,8 @@ export default function MoreScreen({
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
           subscriptionCreateInFlightRef.current = false;
-          setSubscriptionMatchBusy(null);
+          if (importedAction) importedAction.finish();
+          else setSubscriptionMatchBusy(null);
         }
       },
     });
@@ -1769,15 +1886,21 @@ export default function MoreScreen({
     subscription: SubscriptionCandidate,
     match: { transactionId: string; transactionName: string; target?: RankedReviewTarget },
   ) => {
+    const imported = importedSubscriptionMetadata(subscription);
+    if (imported?.evidenceOnly) return;
+    const importedAction = imported ? beginImportedSubscriptionAction(subscription) : null;
+    if (imported && !importedAction) return;
     const transaction = transactions.find(item => item.id === match.transactionId);
-    if (!transaction || subscriptionMatchBusy) return;
+    if (!transaction || subscriptionMatchBusy) { importedAction?.finish(); return; }
     if (!match.target) {
       openSubscriptionInReview(match.transactionId);
+      importedAction?.finish();
       return;
     }
     const actual = Math.abs(transaction.amount);
     if (Math.abs(actual - match.target.plannedAmount) >= 0.005) {
       openSubscriptionInReview(match.transactionId);
+      importedAction?.finish();
       return;
     }
     const key = subscriptionKey(subscription);
@@ -1791,21 +1914,38 @@ export default function MoreScreen({
         plannedAmount: match.target.plannedAmount,
         settlement: "exact",
       });
+      if (importedAction && !importedAction.current()) return;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
+      if (importedAction && !importedAction.current()) return;
       privacyAlert("Couldn’t match bill", error instanceof Error ? error.message : "Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
-      setSubscriptionMatchBusy(null);
+      if (importedAction) importedAction.finish();
+      else setSubscriptionMatchBusy(null);
     }
+  };
+
+  const openSubscriptionBillPicker = (subscription: SubscriptionCandidate) => {
+    const imported = importedSubscriptionMetadata(subscription);
+    if (imported) {
+      if (!subscriptionReviewMounted.current || subscriptionReviewLive.current.key !== subscriptionReviewScope || !newSubscriptionReviewsEnabled || demoMode || !canEditHousehold || importedSubscriptionActionBusy || !importedSubscriptions.some(candidate => candidate.savedCandidateId === imported.savedCandidateId)) return;
+      subscriptionLinkScope.current = { scope: subscriptionReviewScope, generation: subscriptionReviewLive.current.generation };
+    } else subscriptionLinkScope.current = null;
+    setSubscriptionLinkCandidate(subscription);
   };
 
   const handleLinkSubscriptionBill = async (billId: string) => {
     const subscription = subscriptionLinkCandidate;
     const householdId = activeHousehold?.householdId;
     if (!subscription || !user?.id || !householdId || subscriptionMatchBusy) return;
+    const imported = importedSubscriptionMetadata(subscription);
+    if (imported && (!subscriptionReviewMounted.current || subscriptionReviewLive.current.key !== subscriptionReviewScope || !subscriptionLinkScope.current || subscriptionLinkScope.current.scope !== subscriptionReviewScope || subscriptionLinkScope.current.generation !== subscriptionReviewLive.current.generation)) return;
+    const importedAction = imported ? beginImportedSubscriptionAction(subscription) : null;
+    if (imported && !importedAction) return;
     if (!canEditHousehold) {
       privacyAlert("View only", "You need household edit access to link a subscription to a bill.");
+      importedAction?.finish();
       return;
     }
     const key = subscriptionKey(subscription);
@@ -1819,7 +1959,9 @@ export default function MoreScreen({
         bill_id: billId,
         updated_at: new Date().toISOString(),
       }, { onConflict: "household_id,merchant_key" });
+      if (importedAction && !importedAction.current()) return;
       if (error) throw error;
+      subscriptionLinkScope.current = null;
       setSubscriptionBillLinks(current => ({ ...current, [key]: billId }));
       setSubscriptionLinkCandidate(null);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1831,10 +1973,12 @@ export default function MoreScreen({
         privacyAlert("Bill linked", `Future ${subscription.merchant} charges will suggest ${billName} first.`);
       }
     } catch (error) {
+      if (importedAction && !importedAction.current()) return;
       privacyAlert("Couldn’t link bill", error instanceof Error ? error.message : "Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
-      setSubscriptionMatchBusy(null);
+      if (importedAction) importedAction.finish();
+      else setSubscriptionMatchBusy(null);
     }
   };
 
@@ -2689,6 +2833,14 @@ export default function MoreScreen({
 
         {activeSettingsSection === "plaid" && (
           <>
+            <ConnectedBalanceList
+              accounts={connectedBankAccounts}
+              ready={startupCoreReady && !budgetLoading && !budgetLoadError}
+              unavailable={Boolean(budgetLoadError)}
+              timeZone={householdTimeZone}
+              presentation="connections"
+            />
+            <BankConnectionManager ready={startupCoreReady && !budgetLoading && !budgetLoadError} />
             <View
               style={[
                 styles.card,
@@ -2704,7 +2856,7 @@ export default function MoreScreen({
                       <Text style={[styles.infoCardText, { color: c.mutedForeground }]}>Use manual accounts and activity for now. We’ll open secure bank connections after production approval and testing are complete.</Text>
                     </View>
                   </View>
-                ) : <PlaidLinkButton colors={c} onConnected={refreshBankData} />}
+                ) : <PlaidLinkButton colors={c} onConnected={feedbackAdmin && !membershipLoading ? refreshBankData : () => refreshBankData({ savedOnly: true })} />}
               </PlanFeatureGate>
               <Pressable
                 accessibilityRole="button"
@@ -4139,6 +4291,12 @@ export default function MoreScreen({
           <>
             <PlanFeatureGate feature="connected_insights" compact>
               <SLabel c={c} text="Subscription Cleanup" />
+              {newSubscriptionReviewsEnabled ? <View style={{ gap: 8, marginBottom: 12 }}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Reload subscription suggestions" disabled={importedSubscriptionState.scope === subscriptionReviewScope && importedSubscriptionState.loading === true} onPress={() => setImportedSubscriptionReload(previous => previous + 1)} style={[styles.growthPillButton, { alignSelf: "flex-start", backgroundColor: c.primary + "18", borderColor: c.primary + "44" }]}>
+                  <Text style={[styles.growthPillButtonText, { color: c.primary }]}>{importedSubscriptionState.loading ? "Loading…" : "Reload suggestions"}</Text>
+                </Pressable>
+                {importedSubscriptionState.scope === subscriptionReviewScope && importedSubscriptionState.error ? <Text accessibilityRole="alert" style={{ color: c.destructive }}>{importedSubscriptionState.error}</Text> : null}
+              </View> : null}
               <View
                 style={[
                   styles.card,
@@ -4218,6 +4376,9 @@ export default function MoreScreen({
                 </View>
                 {subscriptions.slice(0, 10).map((subscription, index) => {
                   const key = subscriptionKey(subscription);
+                  const imported = importedSubscriptionMetadata(subscription);
+                  const importedReadOnly = Boolean(imported) && (!canEditHousehold || demoMode || !newSubscriptionReviewsEnabled);
+                  const importedBusy = Boolean(imported) && (importedSubscriptionActionBusy || subscriptionMatchBusy !== null);
                   const match = subscriptionBillMatches.get(key);
                   const linkedBillId = subscriptionBillLinks[key];
                   const linkedBill = linkedBillId ? bills.find(bill => bill.id === linkedBillId) : undefined;
@@ -4281,12 +4442,13 @@ export default function MoreScreen({
                             ? "A similar recurring charge exists. Review it before creating another bill."
                             : "No confident bill match yet. You can create one or classify this charge."}
                       </Text>
+                      {imported?.evidenceOnly ? <Text style={[styles.growthTinyText, { color: c.mutedForeground }]}>Review this in bank history first.</Text> : null}
                       <View style={styles.subscriptionActionRow}>
-                        {match?.target ? (
+                        {match?.target && !imported?.evidenceOnly ? (
                           <Pressable
                             accessibilityRole="button"
                             accessibilityLabel={`Match ${match.transactionName} to ${match.target.name}`}
-                            disabled={matching}
+                            disabled={matching || importedBusy || importedReadOnly || imported?.evidenceOnly === true}
                             onPress={() => void handleMatchSubscriptionBill(subscription, match)}
                             style={({ pressed }) => [
                               styles.growthPillButton,
@@ -4309,8 +4471,8 @@ export default function MoreScreen({
                         <Pressable
                           accessibilityRole="button"
                           accessibilityLabel={`${linkedBill ? "Change" : "Link"} bill for ${subscription.merchant}`}
-                          disabled={matching || !canEditHousehold}
-                          onPress={() => setSubscriptionLinkCandidate(subscription)}
+                          disabled={matching || importedBusy || !canEditHousehold}
+                          onPress={() => openSubscriptionBillPicker(subscription)}
                           style={({ pressed }) => [
                             styles.growthPillButton,
                             {
@@ -4325,6 +4487,9 @@ export default function MoreScreen({
                           </Text>
                         </Pressable>
                         <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Keep ${subscription.merchant}`}
+                          disabled={Boolean(imported) && (importedReadOnly || importedBusy || matching)}
                           onPress={() =>
                             handleMarkSubscription(subscription, "keep")
                           }
@@ -4350,8 +4515,8 @@ export default function MoreScreen({
                           <Pressable
                             accessibilityRole="button"
                             accessibilityLabel={`Create recurring bill for ${subscription.merchant}`}
-                            accessibilityState={{ disabled: matching, busy: matching }}
-                            disabled={matching}
+                            accessibilityState={{ disabled: matching || importedReadOnly || imported?.evidenceOnly === true, busy: matching }}
+                            disabled={matching || importedBusy || importedReadOnly || imported?.evidenceOnly === true}
                             onPress={() =>
                               void handleCreateBillFromSubscription(subscription)
                             }
@@ -4375,6 +4540,9 @@ export default function MoreScreen({
                           </Pressable>
                         ) : null}
                         <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Not a subscription: ${subscription.merchant}`}
+                          disabled={Boolean(imported) && (importedReadOnly || importedBusy || matching)}
                           onPress={() =>
                             handleMarkSubscription(
                               subscription,
@@ -4400,6 +4568,9 @@ export default function MoreScreen({
                           </Text>
                         </Pressable>
                         <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Mark ${subscription.merchant} for manual cancellation`}
+                          disabled={Boolean(imported) && (importedReadOnly || importedBusy || matching)}
                           onPress={() =>
                             handleMarkSubscription(subscription, "cancelled")
                           }

@@ -39,7 +39,7 @@ module.exports = async function automaticPlaidSync(req, res) {
     const db = serviceSupabase();
     const { data: items, error } = await db
       .from("plaid_items")
-      .select("id,user_id,household_id,status,encrypted_access_token,access_token_ciphertext,transactions_cursor,cursor")
+      .select("id,user_id,household_id,status,encrypted_access_token,access_token_ciphertext,transactions_cursor,cursor,initial_import_version,initial_import_from,initial_history_complete_at")
       .in("status", ["active", "needs_repair"]);
     if (error) throw error;
 

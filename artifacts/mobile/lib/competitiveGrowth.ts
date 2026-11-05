@@ -1,3 +1,5 @@
+import { detectSubscriptions as detectSharedSubscriptions, normalizeMerchant as normalizeSubscriptionMerchant, KNOWN_SUBSCRIPTION_WORDS } from "./subscriptionDetector";
+
 export type MoneyDirection = "income" | "expense" | "transfer" | "debt_payment" | "any";
 
 export interface GrowthTransaction {
@@ -191,28 +193,8 @@ export interface ReminderItem {
   severity: "info" | "watch" | "risk";
 }
 
-const KNOWN_SUBSCRIPTION_WORDS = [
-  "netflix",
-  "hulu",
-  "spotify",
-  "disney",
-  "apple",
-  "google",
-  "youtube",
-  "prime",
-  "chatgpt",
-  "gym",
-  "fitness",
-  "subscription",
-];
-
 export function normalizeMerchant(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\b(pos|debit|card|purchase|payment|inc|llc|co)\b/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return normalizeSubscriptionMerchant(value);
 }
 
 export function subscriptionLinkKeys(transaction: {
@@ -306,48 +288,7 @@ export function buildReviewQueue(
 }
 
 export function detectSubscriptions(transactions: GrowthTransaction[]): SubscriptionCandidate[] {
-  const expenses = transactions.filter(transaction => transaction.amount < 0);
-  const groups = new Map<string, GrowthTransaction[]>();
-  expenses.forEach(transaction => {
-    const merchant = normalizeMerchant(transaction.description);
-    if (!merchant) return;
-    if (!groups.has(merchant)) groups.set(merchant, []);
-    groups.get(merchant)!.push(transaction);
-  });
-
-  const candidates: SubscriptionCandidate[] = [];
-  groups.forEach((items, merchant) => {
-    const sorted = items.slice().sort((a, b) => a.date.localeCompare(b.date));
-    const cadence = inferCadence(sorted.map(item => item.date));
-    const amountValues = sorted.map(item => Math.abs(item.amount));
-    const averageAmount = roundCurrency(amountValues.reduce((sum, amount) => sum + amount, 0) / amountValues.length);
-    const lastAmount = roundCurrency(amountValues[amountValues.length - 1] ?? 0);
-    const firstAmount = roundCurrency(amountValues[0] ?? 0);
-    const likelyByName = KNOWN_SUBSCRIPTION_WORDS.some(word => merchant.includes(word));
-    if (sorted.length < 2 && !likelyByName) return;
-    if (cadence === "unknown" && !likelyByName) return;
-
-    const monthlyEquivalent = cadence === "weekly"
-      ? averageAmount * 4.33
-      : cadence === "annual"
-      ? averageAmount / 12
-      : averageAmount;
-
-    candidates.push({
-      merchant,
-      cadence,
-      averageAmount,
-      lastAmount,
-      monthlyEquivalent: roundCurrency(monthlyEquivalent),
-      yearlyEquivalent: roundCurrency(monthlyEquivalent * 12),
-      transactionIds: sorted.map(item => item.id),
-      priceIncrease: lastAmount > firstAmount + 0.99,
-      duplicateRisk: merchantHasDuplicate(merchant, groups),
-      confidence: cadence !== "unknown" && sorted.length >= 3 ? "high" : likelyByName ? "medium" : "low",
-    });
-  });
-
-  return candidates.sort((a, b) => b.monthlyEquivalent - a.monthlyEquivalent);
+  return detectSharedSubscriptions(transactions);
 }
 
 export function evaluateForecastReadiness(input: ForecastReadinessInput): ForecastReadinessResult {
@@ -585,38 +526,6 @@ function summarizeReviewReasons(reasons: ReviewReason[]) {
 
 function priorityRank(priority: ReviewItem["priority"]) {
   return priority === "high" ? 3 : priority === "medium" ? 2 : 1;
-}
-
-function inferCadence(dates: string[]): SubscriptionCandidate["cadence"] {
-  if (dates.length < 2) return "unknown";
-  const sorted = dates.slice().sort();
-  const gaps: number[] = [];
-  for (let index = 1; index < sorted.length; index++) {
-    gaps.push(daysBetween(sorted[index - 1], sorted[index]));
-  }
-  const avg = gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length;
-  if (avg >= 5 && avg <= 9) return "weekly";
-  if (avg >= 24 && avg <= 38) return "monthly";
-  if (avg >= 330 && avg <= 400) return "annual";
-  return "unknown";
-}
-
-function merchantHasDuplicate(merchant: string, groups: Map<string, GrowthTransaction[]>) {
-  const words = new Set(merchant.split(" ").filter(word => word.length > 3));
-  if (!words.size) return false;
-  let similar = 0;
-  groups.forEach((_items, other) => {
-    if (other === merchant) return;
-    const overlap = other.split(" ").some(word => words.has(word));
-    if (overlap) similar += 1;
-  });
-  return similar > 0;
-}
-
-function daysBetween(a: string, b: string) {
-  const start = new Date(`${a}T00:00:00`);
-  const end = new Date(`${b}T00:00:00`);
-  return Math.abs(Math.round((end.getTime() - start.getTime()) / 86_400_000));
 }
 
 function monthsUntil(date: string, today: Date) {

@@ -21,6 +21,7 @@ test("adding a new Plaid Item inserts it without updating existing connections",
   let call = 0;
   const client = {
     from(table) {
+      if (table === "feedback_admins") return { select() { return this; }, eq() { return this; }, async maybeSingle() { return { data: null, error: null }; } };
       assert.equal(table, "plaid_items");
       call += 1;
       if (call === 1) return existingLookup(null, requestedIds);
@@ -45,6 +46,8 @@ test("adding a new Plaid Item inserts it without updating existing connections",
 
   assert.deepEqual(requestedIds, [["plaid_item_id", "new-item"]]);
   assert.equal(inserted.length, 1);
+  assert.equal(inserted[0].initial_import_version, 1);
+  assert.match(inserted[0].initial_import_from, /^\d{4}-\d{2}-\d{2}$/);
   assert.equal(updated.length, 0);
   assert.equal(result.refreshedExistingItem, false);
 });

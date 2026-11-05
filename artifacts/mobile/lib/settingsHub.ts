@@ -43,7 +43,7 @@ export interface SettingsStatus {
 
 export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
   { id: "accounts", label: "Household & accounts", description: "Balances, savings names, and household access", icon: "users" },
-  { id: "plaid", label: "Bank connections", description: "Bank sync planned for Pro", icon: "credit-card" },
+  { id: "plaid", label: "Bank connections", description: "View linked accounts and recorded balances", icon: "credit-card" },
   { id: "money", label: "Plan settings", description: "Categories, income timing, and payoff rules", icon: "sliders" },
   { id: "goals", label: "Savings goals", description: "Savings plans", icon: "target" },
   { id: "buckets", label: "Buckets", description: "Spending plans, purchases, and money left", icon: "shopping-bag" },
