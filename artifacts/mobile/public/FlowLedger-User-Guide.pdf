@@ -132,7 +132,7 @@ endobj
 endobj
 16 0 obj
 <<
-/Author (FlowLedger) /CreationDate (D:20261105171445+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:1f2202e65d699486c0f9187a2d113d1286d006b2896fd1314d7635c570b203a0) /ModDate (D:20261105171445+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+/Author (FlowLedger) /CreationDate (D:20261105183058+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:7a4968ee75eae096f06677b91efce2139ab5043d4f0395276c7d1ede0d8128af) /ModDate (D:20261105183058+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
   /Subject (Current Dashboard, Activity, Bills, Forecast, payoff, Flo, and Settings guidance) /Title (FlowLedger User Guide) /Trapped /False
 >>
 endobj
@@ -2092,7 +2092,7 @@ endstream
 endobj
 26 0 obj
 <<
-/Length 10285
+/Length 10274
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -2164,10 +2164,10 @@ BT /F2 9.5 Tf 11.4 TL ET
 BT 1 0 0 1 67 578 Tm (Household access) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 563 Tm (Open Settings > Household & accounts to create an invite) Tj T* ET
-BT 1 0 0 1 56 552 Tm (or join with a code. Choose Can edit to help change a plan,) Tj T* ET
-BT 1 0 0 1 56 541 Tm (or View only. Use the Dashboard people button to switch) Tj T* ET
-BT 1 0 0 1 56 530 Tm (households; each keeps its own money and budgets.) Tj T* ET
+BT 1 0 0 1 56 563 Tm (Open Settings > Household to create an invite or join with a) Tj T* ET
+BT 1 0 0 1 56 552 Tm (code. Choose Can edit to help change a plan, or View only.) Tj T* ET
+BT 1 0 0 1 56 541 Tm (Use the Dashboard people button to switch households;) Tj T* ET
+BT 1 0 0 1 56 530 Tm (each keeps its own money and budgets.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
@@ -3134,12 +3134,12 @@ xref
 0000037568 00000 n 
 0000044670 00000 n 
 0000051302 00000 n 
-0000061640 00000 n 
-0000068001 00000 n 
+0000061629 00000 n 
+0000067990 00000 n 
 trailer
 <<
 /ID 
-[<393c07ccf3c078bbfb89dc2b8aad64ca><393c07ccf3c078bbfb89dc2b8aad64ca>]
+[<753d459f77c23075bd6b4ad47c5eb773><753d459f77c23075bd6b4ad47c5eb773>]
 % ReportLab generated PDF document -- digest (opensource)
 
 /Info 16 0 R
@@ -3147,5 +3147,5 @@ trailer
 /Size 29
 >>
 startxref
-77453
+77442
 %%EOF

@@ -10,7 +10,7 @@ const { sendPushToUser } = require("./_utils/push");
 const { authenticatedUser, publicError, safeError, serviceSupabase } = require("./_utils/supabase");
 
 const accountDeletion = createAccountDeletionHandler();
-const { UPDATE_REQUEST_ACTIONS, manageUpdateRequest } = require("./_utils/updateCenter");
+const { UPDATE_REQUEST_ACTIONS, copyFeedbackToUpdateCenter, manageUpdateRequest } = require("./_utils/updateCenter");
 const healthz = require("./_utils/healthz");
 
 async function submitFeedback(db, auth, body, res) {
@@ -86,6 +86,8 @@ async function manageFeedback(db, auth, body, res) {
     .maybeSingle();
   if (feedbackError) throw feedbackError;
   if (!feedback) return res.status(404).json({ error: "FEEDBACK_NOT_FOUND", message: "That feedback no longer exists." });
+
+  if (input.action === "copyToUpdateCenter") return copyFeedbackToUpdateCenter(db, auth, feedback, res);
 
   if (input.action === "delete") {
     const { error } = await db.from("app_feedback").delete().eq("id", feedback.id);

@@ -317,5 +317,6 @@
     ,"lib/bankConnectionManagement.test.ts"
     ,"lib/importedSubscriptionCandidates.test.ts"
     ,"lib/bankConnectionManager.test.ts"
+    ,"lib/feedbackUpdateCenterCopy.test.ts"
   ]
 }

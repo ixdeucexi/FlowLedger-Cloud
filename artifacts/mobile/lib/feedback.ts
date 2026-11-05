@@ -18,6 +18,11 @@ export type FeedbackType = typeof FEEDBACK_TYPES[number]["id"];
 export type FeedbackStatus = typeof FEEDBACK_STATUSES[number]["id"];
 export type FeedbackAdminFilter = "active" | "archived" | "all" | FeedbackStatus;
 export type FeedbackManagementAction = "reviewing" | "updated" | "not_planned" | "archive" | "restore" | "delete";
+export type FeedbackUpdateCenterCopyResult = {
+  ok: true;
+  copiedRequest: { id: string; archived_at: string | null; status: FeedbackStatus };
+  alreadyExists: boolean;
+};
 
 export type AppFeedbackRow = {
   id: string;

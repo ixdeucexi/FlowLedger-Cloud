@@ -7,7 +7,7 @@ const FEEDBACK_TYPE_LABELS = {
   setup: "Setup feedback",
   other: "General feedback",
 };
-const FEEDBACK_MANAGEMENT_ACTIONS = new Set(["reviewing", "updated", "not_planned", "archive", "restore", "delete"]);
+const FEEDBACK_MANAGEMENT_ACTIONS = new Set(["reviewing", "updated", "not_planned", "archive", "restore", "delete", "copyToUpdateCenter"]);
 
 function boundedText(value, maximum, fallback = null) {
   const text = String(value || "").trim();
@@ -52,22 +52,24 @@ function feedbackNotificationPayload(feedbackId, feedbackType, sender) {
 }
 
 function normalizeFeedbackManagementInput(body) {
+  const action = boundedText(body?.action, 24, "");
   const feedbackId = boundedText(body?.feedback_id, 80, "");
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(feedbackId)) {
+  if ((action === "copyToUpdateCenter" && typeof body?.feedback_id !== "string")
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(feedbackId)) {
     const error = new Error("Choose valid feedback before continuing.");
     error.code = "FEEDBACK_ID_INVALID";
     throw error;
   }
-  const action = boundedText(body?.action, 24, "");
-  if (!FEEDBACK_MANAGEMENT_ACTIONS.has(action)) {
+  if (!FEEDBACK_MANAGEMENT_ACTIONS.has(action) || (action === "copyToUpdateCenter" && typeof body?.action !== "string")) {
     const error = new Error("Choose a valid feedback action.");
     error.code = "FEEDBACK_ACTION_INVALID";
     throw error;
   }
   return {
-    feedback_id: feedbackId,
+    // UUIDs are case-insensitive; canonicalize copy IDs for deterministic retries.
+    feedback_id: action === "copyToUpdateCenter" ? feedbackId.toLowerCase() : feedbackId,
     action,
-    admin_note: boundedText(body?.admin_note, 1000),
+    admin_note: action === "copyToUpdateCenter" ? null : boundedText(body?.admin_note, 1000),
   };
 }
 

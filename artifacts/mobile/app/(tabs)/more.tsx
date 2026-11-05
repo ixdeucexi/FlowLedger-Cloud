@@ -640,6 +640,8 @@ export default function MoreScreen({
     Record<string, SubscriptionDecision>
   >({});
   const demoMode = Boolean(authDemoMode || budgetDemoMode);
+  const feedbackCopyScopeKey = JSON.stringify([user?.id, activeHousehold?.householdId, activeHousehold?.budgetId, demoMode, feedbackAdmin, membershipLoading, membershipAccessReady]);
+  useEffect(() => { setManagedFeedback(null); }, [feedbackCopyScopeKey]);
   const newSubscriptionReviewsEnabled = !demoMode && !membershipLoading && membershipAccessReady && !feedbackAdmin && !isFeatureLocked("connected_insights");
   const subscriptionReviewScope = JSON.stringify([user?.id, activeHousehold?.householdId, activeHousehold?.budgetId, newSubscriptionReviewsEnabled, canEditHousehold]);
   const subscriptionReviewLive = useRef({ key: subscriptionReviewScope, generation: 0 });
@@ -5818,6 +5820,15 @@ export default function MoreScreen({
                     if (!feedbackManageBusy) setManagedFeedback(null);
                   }}
                   onAction={handleManageFeedbackAction}
+                  updateCenterCopyAccess={{
+                    scopeKey: feedbackCopyScopeKey,
+                    userId: user?.id ?? null,
+                    allowed: Boolean(user?.id && feedbackAdmin && membershipAccessReady && !membershipLoading && !demoMode),
+                  }}
+                  onOpenUpdateCenter={() => {
+                    setManagedFeedback(null);
+                    openSettingsSection("updates");
+                  }}
                 />
               </>
             ) : null}

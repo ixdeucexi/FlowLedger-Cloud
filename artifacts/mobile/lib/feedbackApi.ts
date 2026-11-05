@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import type { AppFeedbackRow, FeedbackManagementAction, FeedbackType } from "@/lib/feedback";
+import type { AppFeedbackRow, FeedbackManagementAction, FeedbackType, FeedbackUpdateCenterCopyResult } from "@/lib/feedback";
 import { apiFetch } from "@/lib/api";
 import type { UpdateRequestAction } from "./updateCenter";
 
@@ -28,6 +28,21 @@ export interface FeedbackSubmission {
 async function responseMessage(response: Response) {
   const payload = await response.json().catch(() => ({})) as { message?: string };
   return payload.message || "Could not send feedback.";
+}
+
+export async function copyFeedbackToUpdateCenter(feedbackId: string, expectedUserId: string, isCurrent: () => boolean) {
+  const { data } = await supabase.auth.getSession();
+  const session = data.session;
+  if (!session?.access_token || session.user.id !== expectedUserId || !isCurrent()) {
+    throw new Error("Your account changed. Reopen the feedback and try again.");
+  }
+  const response = await apiFetch("/api/feedback", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ feedback_id: feedbackId, action: "copyToUpdateCenter" }),
+  });
+  if (!response.ok) throw new Error(await responseMessage(response));
+  return await response.json() as FeedbackUpdateCenterCopyResult;
 }
 
 export async function submitFeedback(submission: FeedbackSubmission) {

@@ -219,7 +219,7 @@
       {
         "title": "Keep the workspace current",
         "items": [
-          { "title": "Household access", "body": "Open Settings > Household & accounts to create an invite or join with a code. Choose Can edit to help change a plan, or View only. Use the Dashboard people button to switch households; each keeps its own money and budgets.", "icon": "users" },
+          { "title": "Household access", "body": "Open Settings > Household to create an invite or join with a code. Choose Can edit to help change a plan, or View only. Use the Dashboard people button to switch households; each keeps its own money and budgets.", "icon": "users" },
           { "title": "Bank connections", "body": "Open Settings > Bank connections to see linked accounts. New links request two months of history. Review subscription flags. Unlink disconnects all accounts at that bank and keeps past activity.", "icon": "credit-card" },
           { "title": "Categories and monthly budgets", "body": "Open Settings > Plan > Categories to set monthly limits or manage categories. Choose This month or Every month, then Save. Each category shows Spent and Left. Clear a limit to remove it; category changes keep linked activity together.", "icon": "tag" },
           { "title": "Setup & walkthrough", "body": "Run setup again after a major change or replay the Guided Tour from its first step.", "icon": "compass" },
