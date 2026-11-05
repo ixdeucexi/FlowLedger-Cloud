@@ -676,21 +676,6 @@ function MobileDashboardContent({
   );
   // The hero is a bank snapshot. Forecasted balances belong on Monthly only.
   const dashboardCheckingBalance = bankCurrentCheckingBalance;
-  const savingsAccountRowsHeight = savingsAccounts.length > 0
-    ? savingsAccounts.length * (viewportWidth < 600 ? 76 : 36) + 8
-    : 44;
-  const goalsScrollViewportHeight = isCommandWide ? 220 : 156;
-  const goalRowsHeight = currentGoals.length === 0
-    ? 80
-    : Math.min(goalsScrollViewportHeight, currentGoals.length * 56 + 14);
-  const compactSavingsFaceHeight = (viewportWidth < 600 ? 152 : 92)
-    + savingsAccountRowsHeight
-    + goalRowsHeight;
-  const heroFrontFaceHeight = isCommandWide ? 260 : 250;
-  const heroCardVerticalPadding = isCommandWide ? 60 : 22;
-  const heroFrontCardHeight = heroFrontFaceHeight + heroCardVerticalPadding;
-  const heroBackCardHeight = Math.max(compactSavingsFaceHeight, heroFrontFaceHeight)
-    + heroCardVerticalPadding;
 
   const saveSavingsAccountName = useCallback(async (account: DashboardSavingsAccount, name: string) => {
     if (account.source === "connected") {
@@ -1110,12 +1095,7 @@ function MobileDashboardContent({
 
       {!customizerOpen ? <DashboardLayoutStatus {...dashboardPreferences} /> : null}
       <DashboardSections layout={dashboardLayout} sections={{
-overview: (<View
-        style={[
-          styles.referenceCommandHeroFlipShell,
-          { minHeight: flipped ? heroBackCardHeight : heroFrontCardHeight },
-        ]}
-      >
+overview: (<View style={styles.referenceCommandHeroFlipShell}>
           <Animated.View
             pointerEvents={flipped ? "none" : "auto"}
             style={[
@@ -1123,8 +1103,8 @@ overview: (<View
               isCommandWide && styles.referenceCommandHeroWide,
               isCommandWide ? styles.referenceHeroFrontWide : styles.referenceHeroFaceCompact,
               styles.referenceCommandHeroFlipFace,
+              flipped && styles.referenceCommandHeroInactiveFace,
               {
-                minHeight: flipped ? heroBackCardHeight : heroFrontCardHeight,
                 backgroundColor: heroSurface,
                 borderColor: dashboardTheme.heroBorder,
                 shadowColor: dashboardTheme.heroShadow,
@@ -1218,7 +1198,7 @@ overview: (<View
               isCommandWide && styles.referenceCommandHeroWide,
               !isCommandWide && styles.referenceHeroFaceCompact,
               styles.referenceCommandHeroFlipFace,
-              styles.referenceCommandHeroBackFace,
+              !flipped && styles.referenceCommandHeroInactiveFace,
               {
                 backgroundColor: heroSurface,
                 borderColor: dashboardTheme.heroBorder,
@@ -1283,12 +1263,7 @@ overview: (<View
             </View>
             {currentGoals.length > 0 && bucketPersonalization.unavailableReason ? <AppText style={{ color: dashboardTheme.mutedText, fontSize: 12 }}>{bucketPersonalization.unavailableReason}</AppText> : null}
             {currentGoals.length > 0 ? (
-              <ScrollView
-                style={[styles.referenceGoalsScroll, { maxHeight: goalsScrollViewportHeight }]}
-                contentContainerStyle={styles.referenceGoalsScrollContent}
-                nestedScrollEnabled
-                showsVerticalScrollIndicator={currentGoals.length * 56 + 14 > goalsScrollViewportHeight}
-              >
+              <View style={styles.referenceGoalsList}>
                 {currentGoals.map(goal => {
                   const bucket = goal.goal_type === "planned_expense" ? spendingBucketSummary(goal) : null;
                   const percent = goal.target_amount > 0 ? Math.min(100, Math.max(0, (goal.current_amount / goal.target_amount) * 100)) : 0;
@@ -1311,7 +1286,7 @@ overview: (<View
                     </Pressable>
                   );
                 })}
-              </ScrollView>
+              </View>
             ) : (
               <Pressable onPress={() => { setEditGoal(null); setGoalModalVisible(true); }} style={[styles.referenceGoalsEmpty, { backgroundColor: dashboardTheme.purpleSurface, borderColor: dashboardTheme.purpleBorder }]}>
                 <Feather name="target" size={17} color="#a78bfa" />
@@ -2202,9 +2177,9 @@ const styles = StyleSheet.create({
   referenceCommandHeroWide: { minHeight: 320, padding: 30 },
   referenceCommandHeroFlipShell: { width: "100%", position: "relative", marginBottom: 6 },
   referenceCommandHeroFlipFace: { width: "100%", marginBottom: 0, backfaceVisibility: "hidden" },
-  referenceCommandHeroBackFace: { ...StyleSheet.absoluteFillObject, marginBottom: 0 },
-  referenceHeroFaceCompact: { minHeight: 250 },
-  referenceHeroFrontWide: { minHeight: 260, alignItems: "stretch" },
+  referenceCommandHeroInactiveFace: { ...StyleSheet.absoluteFillObject, marginBottom: 0 },
+  referenceHeroFaceCompact: { minHeight: 272 },
+  referenceHeroFrontWide: { minHeight: 320, alignItems: "stretch" },
   referenceHeroMoneyPanel: { width: "100%" },
   referenceHeroMoneyPanelWide: { flex: 1, width: "auto" },
   referenceMoneyHeader: { flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", gap: 10 },
@@ -2238,8 +2213,7 @@ const styles = StyleSheet.create({
   referenceGoalsHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8, marginBottom: 5 },
   referenceGoalsTitle: { color: "#f8fafc", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   referenceGoalAddButton: { width: 28, height: 28, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.42)", borderWidth: 1, borderColor: "rgba(196,181,253,0.28)" },
-  referenceGoalsScroll: { flexGrow: 0, marginBottom: 2 },
-  referenceGoalsScrollContent: { paddingBottom: 2 },
+  referenceGoalsList: { marginBottom: 2, paddingBottom: 2 },
   referenceGoalItem: { minHeight: 44, borderRadius: 10, backgroundColor: "rgba(15,23,42,0.56)", borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", paddingHorizontal: 9, paddingVertical: 6, marginTop: 4 },
   referenceGoalTopRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
   referenceGoalName: { flex: 1, minWidth: 120, color: "#e2e8f0", fontSize: 11, fontFamily: "Inter_700Bold" },
