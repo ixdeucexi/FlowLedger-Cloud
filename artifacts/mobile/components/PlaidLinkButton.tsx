@@ -4,6 +4,7 @@ import { createPlaidLinkSession, type LinkExit, type LinkSuccess } from "react-n
 import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Platform, StyleSheet } from "react-native";
 
+import { PLAID_ACCOUNTS_PENDING_MESSAGE, verifiedPlaidConnection } from "@/lib/plaidOAuth";
 import { useBudget } from "@/context/BudgetContext";
 import { apiFetch } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
@@ -96,8 +97,9 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
       body: JSON.stringify({ public_token: success.publicToken }),
     });
     const result = await responseJson(response, "Could not finish connecting this bank.");
+    const verified = verifiedPlaidConnection(result);
     const creditCount = Number(result.credit_card_debts_count || result.credit_cards_count || 0);
-    setMessage(creditCount > 0
+    setMessage(verified.status === "accounts_pending" ? PLAID_ACCOUNTS_PENDING_MESSAGE : creditCount > 0
       ? `${creditCount} credit card${creditCount === 1 ? "" : "s"} connected. Card purchases stay out of Activity and Forecast.`
       : result.already_connected ? "That account was already connected." : "Account connected. Recent activity is syncing now.");
     await loadStatus();

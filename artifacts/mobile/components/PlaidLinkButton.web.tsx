@@ -12,6 +12,13 @@ import { useAuth } from "@/context/AuthContext";
 import { useBudget } from "@/context/BudgetContext";
 import {
   clearPlaidOAuthSession,
+  PLAID_ACCOUNTS_PENDING_MESSAGE,
+  PLAID_CONNECTION_STATE_EVENT,
+  savePlaidAccountsPending,
+  verifiedPlaidConnection,
+  matchesStoredPlaidSession,
+  notifyPlaidConnectionState,
+  readPlaidOAuthAttempt,
   PLAID_CONNECTION_RESULT_EVENT,
   PLAID_RESUME_CONNECTION_EVENT,
   markPlaidOAuthAwaitingReturn,
@@ -153,9 +160,11 @@ function ActivePlaidLinkButton({ colors, onConnected }: Props) {
     };
     consumeResult();
     window.addEventListener(PLAID_CONNECTION_RESULT_EVENT, consumeResult);
+    window.addEventListener(PLAID_CONNECTION_STATE_EVENT, consumeResult);
     window.addEventListener("focus", consumeResult);
     return () => {
       window.removeEventListener(PLAID_CONNECTION_RESULT_EVENT, consumeResult);
+      window.removeEventListener(PLAID_CONNECTION_STATE_EVENT, consumeResult);
       window.removeEventListener("focus", consumeResult);
     };
   }, [finish, householdId, isCurrentScope, loadStatus, userId]);
@@ -163,6 +172,8 @@ function ActivePlaidLinkButton({ colors, onConnected }: Props) {
   const onSuccess = useCallback(async (publicToken: string) => {
     if (!isCurrentScope()) return;
     try {
+      const attempt = readPlaidOAuthAttempt(window.localStorage, userId);
+      if (attempt && (attempt.householdId !== householdId || attempt.linkToken !== linkToken)) return;
       const session = await getFreshSession();
       if (!isCurrentScope()) return;
       if (!session) return finish("Please sign in again before finishing the connection.");
@@ -177,10 +188,15 @@ function ActivePlaidLinkButton({ colors, onConnected }: Props) {
         body: JSON.stringify({ public_token: publicToken }),
       });
       const result = await response.json().catch(() => ({}));
-      if (!isCurrentScope()) return;
+      if (!isCurrentScope() || (attempt && !matchesStoredPlaidSession(window.localStorage, attempt))) return;
       if (!response.ok) throw new Error(result.message || "Could not finish connecting this bank.");
-      if (typeof window !== "undefined") clearPlaidOAuthSession(window.localStorage);
-      finish(result.already_connected
+      const verified = verifiedPlaidConnection(result);
+      if (typeof window !== "undefined") {
+        if (verified.status === "accounts_pending") savePlaidAccountsPending(window.localStorage, { userId, householdId }, verified);
+        if (attempt) clearPlaidOAuthSession(window.localStorage, attempt);
+        notifyPlaidConnectionState();
+      }
+      finish(verified.status === "accounts_pending" ? PLAID_ACCOUNTS_PENDING_MESSAGE : result.already_connected
         ? "That account is already connected. FlowLedger kept the existing secure connection."
         : result.credit_card_debts_count > 0
           ? `${result.credit_card_debts_count} credit card${result.credit_card_debts_count === 1 ? "" : "s"} added to Debt and Snowball with live balances.`
@@ -192,7 +208,7 @@ function ActivePlaidLinkButton({ colors, onConnected }: Props) {
     } catch (error) {
       if (isCurrentScope()) finish(error instanceof Error ? error.message : "Could not finish connecting this bank.");
     }
-  }, [finish, householdId, isCurrentScope, loadStatus, onConnected]);
+  }, [finish, householdId, isCurrentScope, linkToken, loadStatus, onConnected, userId]);
 
   const onExit = useCallback(() => {
     if (!isCurrentScope()) return;

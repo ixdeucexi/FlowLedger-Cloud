@@ -40,6 +40,18 @@ test("Hosted Link completion waits, reports exits, and extracts deduplicated pub
   }), { status: "success", publicTokens: ["public-one", "public-two"] });
 });
 
+test("finished Hosted Link sessions wait for delayed results unless an exit is explicit", () => {
+  const finished = { finished_at: "2026-11-05T17:00:00Z", results: null, on_success: null, exit: null, on_exit: null };
+  assert.deepEqual(hostedLinkCompletion({ link_sessions: [finished] }), { status: "pending", publicTokens: [] });
+  for (const exit of [null, false, "exit", []]) {
+    assert.equal(hostedLinkCompletion({ link_sessions: [{ ...finished, exit }] }).status, "pending");
+  }
+  assert.equal(hostedLinkCompletion({ link_sessions: [{ ...finished, on_exit: {} }] }).status, "exited");
+  assert.equal(hostedLinkCompletion({ link_sessions: [{ ...finished, exit: {} }, finished] }).status, "pending");
+  assert.deepEqual(hostedLinkCompletion({ link_sessions: [{ ...finished, on_success: { public_token: "public-fixture-delayed" } }] }),
+    { status: "success", publicTokens: ["public-fixture-delayed"] });
+});
+
 test("new Hosted Link bank and card sessions complete with the same security bindings", () => {
   const previous = process.env.PLAID_TOKEN_ENCRYPTION_KEY;
   process.env.PLAID_TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 9).toString("base64");

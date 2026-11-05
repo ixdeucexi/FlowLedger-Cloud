@@ -39,9 +39,14 @@ function hostedLinkCompletion(data) {
   const sessions = Array.isArray(data?.link_sessions) ? data.link_sessions : [];
   const publicTokens = [...new Set(sessions.flatMap(publicTokensFromSession))].slice(0, MAX_HOSTED_PUBLIC_TOKENS);
   if (publicTokens.length > 0) return { status: "success", publicTokens };
-  if (sessions.some(session => !session?.finished_at)) return { status: "pending", publicTokens: [] };
-  if (sessions.length === 0) return { status: "pending", publicTokens: [] };
-  return { status: "exited", publicTokens: [] };
+  // Plaid may finish the hosted session before its result payload is available.
+  // Only an explicit exit callback confirms cancellation; finished_at does not.
+  const explicitlyExited = session => [session?.exit, session?.on_exit]
+    .some(exit => exit !== null && typeof exit === "object" && !Array.isArray(exit));
+  if (sessions.length > 0 && sessions.every(explicitlyExited)) {
+    return { status: "exited", publicTokens: [] };
+  }
+  return { status: "pending", publicTokens: [] };
 }
 
 module.exports = { hostedLinkCompletion, validateHostedLinkSession };

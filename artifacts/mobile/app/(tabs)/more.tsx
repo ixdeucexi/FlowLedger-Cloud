@@ -52,6 +52,7 @@ import { PlanFeatureGate } from "@/components/PlanFeatureGate";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { ReviewCenter } from "@/components/ReviewCenter";
 import { PWA_INSTALL_EVENT } from "@/components/PwaInstallPrompt";
+import { PlaidConnectionRecovery } from "@/components/PlaidConnectionRecovery";
 import { PlaidLinkButton } from "@/components/PlaidLinkButton";
 import { RecentlyDeletedTransactions } from "@/components/RecentlyDeletedTransactions";
 import { RecentChanges } from "@/components/RecentChanges";
@@ -2835,6 +2836,7 @@ export default function MoreScreen({
 
         {activeSettingsSection === "plaid" && (
           <>
+            <PlaidConnectionRecovery />
             <ConnectedBalanceList
               accounts={connectedBankAccounts}
               ready={startupCoreReady && !budgetLoading && !budgetLoadError}

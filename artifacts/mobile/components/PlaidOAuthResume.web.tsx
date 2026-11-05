@@ -10,7 +10,14 @@ import { useAuth } from "@/context/AuthContext";
 import { useBudget } from "@/context/BudgetContext";
 import { apiFetch } from "@/lib/api";
 import {
+  beginPlaidCompletion,
   clearPlaidOAuthSession,
+  matchesStoredPlaidSession,
+  notifyPlaidConnectionState,
+  PLAID_ACCOUNTS_PENDING_MESSAGE,
+  savePlaidAccountsPending,
+  verifiedPlaidConnection,
+  type VerifiedPlaidConnection,
   PLAID_CONNECTION_RESULT_EVENT,
   PLAID_OAUTH_SESSION_KEY,
   PLAID_RESUME_CONNECTION_EVENT,
@@ -30,12 +37,10 @@ type LegacyResumeProps = {
   onError: () => void;
 };
 
-type ConnectionResult = {
-  credit_cards_count?: number;
-  credit_card_debts_count?: number;
-};
+type ConnectionResult = VerifiedPlaidConnection;
 
 function completedConnectionMessage(result: ConnectionResult) {
+  if (result.status === "accounts_pending") return PLAID_ACCOUNTS_PENDING_MESSAGE;
   const attachedCards = Number(result.credit_card_debts_count || 0);
   if (attachedCards > 0) {
     return `${attachedCards} credit card${attachedCards === 1 ? " is" : "s are"} now in Debt and Snowball.`;
@@ -91,7 +96,7 @@ export function PlaidOAuthResume() {
   const attemptKey = resume ? plaidOAuthSessionKey(resume) : null;
   const live = useRef({ userId, householdId, attemptKey, demoMode, accessToken: session?.access_token, refreshBankData, mounted: true });
   live.current = { ...live.current, userId, householdId, attemptKey, demoMode, accessToken: session?.access_token, refreshBankData };
-  const hostedJob = useRef<{ key: string; promise: ReturnType<typeof pollHostedPlaidCompletion<ConnectionResult>> } | null>(null);
+  const hostedJob = useRef<{ key: string; promise: ReturnType<typeof pollHostedPlaidCompletion> } | null>(null);
   const legacyJob = useRef<{ key: string; promise: Promise<void> } | null>(null);
   const completedJob = useRef<{ key: string; promise: Promise<void> } | null>(null);
 
@@ -104,7 +109,8 @@ export function PlaidOAuthResume() {
     && !live.current.demoMode
     && live.current.userId === attempt.userId
     && live.current.householdId === attempt.householdId
-    && live.current.attemptKey === plaidOAuthSessionKey(attempt), []);
+    && live.current.attemptKey === plaidOAuthSessionKey(attempt)
+    && matchesStoredPlaidSession(window.localStorage, attempt), []);
 
   useEffect(() => {
     const detectReturn = () => {
@@ -137,6 +143,7 @@ export function PlaidOAuthResume() {
     if (!isCurrent(attempt)) return;
     try {
       if (clear) clearPlaidOAuthSession(window.localStorage, attempt);
+      notifyPlaidConnectionState();
       savePlaidConnectionResult(window.localStorage, message, Date.now(), { userId: attempt.userId, householdId: attempt.householdId });
       window.dispatchEvent(new Event(PLAID_CONNECTION_RESULT_EVENT));
     } catch { /* A storage limit must not restart a successful bank sign-in. */ }
@@ -151,11 +158,16 @@ export function PlaidOAuthResume() {
     }
     const key = plaidOAuthSessionKey(attempt);
     if (completedJob.current?.key === key) return completedJob.current.promise;
+    const release = beginPlaidCompletion(attempt);
     const promise = (async () => {
       if (!isCurrent(attempt)) {
         clearCompletedSession(attempt);
         if (completedJob.current?.key === key) completedJob.current = null;
         return;
+      }
+      // The Item has already been saved; keep a token-free waiting state if accounts lag.
+      if (result.status === "accounts_pending") {
+        try { savePlaidAccountsPending(window.localStorage, attempt, result); } catch { /* Saved Item remains authoritative. */ }
       }
       let refreshed = true;
       try {
@@ -168,8 +180,8 @@ export function PlaidOAuthResume() {
         if (completedJob.current?.key === key) completedJob.current = null;
         return;
       }
-      finish(attempt, refreshed ? completedConnectionMessage(result) : "Account connected. Refresh Bank connections to show your saved accounts.");
-    })();
+      finish(attempt, result.status === "accounts_pending" || refreshed ? completedConnectionMessage(result) : "Account connected. Refresh Bank connections to show your saved accounts.");
+    })().finally(release);
     completedJob.current = { key, promise };
     return promise;
   }, [clearCompletedSession, finish, isCurrent]);
@@ -179,6 +191,7 @@ export function PlaidOAuthResume() {
     if (!attempt || !isCurrent(attempt) || !live.current.accessToken) return;
     const key = plaidOAuthSessionKey(attempt);
     if (legacyJob.current?.key === key) return legacyJob.current.promise;
+    const release = beginPlaidCompletion(attempt);
     const promise = (async () => {
       try {
         const response = await apiFetch("/api/plaid/exchange-public-token", {
@@ -193,12 +206,12 @@ export function PlaidOAuthResume() {
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new PlaidCompletionError(result.message || "Could not finish connecting this account.", response.status === 400);
-        await completed(attempt, result);
+        await completed(attempt, verifiedPlaidConnection(result));
       } catch (error) {
         legacyJob.current = null;
         finish(attempt, error instanceof Error ? error.message : "Could not finish connecting this account.", error instanceof PlaidCompletionError && error.clearSession);
       }
-    })();
+    })().finally(release);
     legacyJob.current = { key, promise };
     return promise;
   }, [completed, finish, isCurrent, resume]);
@@ -217,9 +230,10 @@ export function PlaidOAuthResume() {
     let active = true;
     let job = hostedJob.current;
     if (!job || job.key !== key) {
+      const release = beginPlaidCompletion(attempt);
       job = {
         key,
-        promise: pollHostedPlaidCompletion<ConnectionResult>({
+        promise: pollHostedPlaidCompletion({
           isCurrent: () => isCurrent(attempt),
           wait: () => new Promise(resolve => window.setTimeout(resolve, 1_500)),
           request: async () => {
@@ -237,7 +251,7 @@ export function PlaidOAuthResume() {
             });
             return { status: response.status, ok: response.ok, result: await response.json().catch(() => ({})) };
           },
-        }),
+        }).finally(release),
       };
       hostedJob.current = job;
     }

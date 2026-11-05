@@ -2,6 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  beginPlaidCompletion,
+  discardPendingPlaidAttempt,
+  plaidCompletionInFlight,
+  matchesStoredPlaidSession,
+  verifiedPlaidConnection,
+  savePlaidAccountsPending,
+  readPlaidAccountsPending,
+  clearPlaidAccountsPending,
+  PLAID_SAVED_PENDING_KEY,
   PLAID_BACKGROUND_RETURN_DELAY_MS,
   PLAID_CONNECTION_RESULT_KEY,
   PLAID_LINK_SESSION_MAX_AGE_MS,
@@ -151,14 +160,15 @@ test("connection result stores only scope identifiers and the completion time", 
 test("a delayed Hosted Link result continues the same completion request", async () => {
   let requests = 0;
   let waits = 0;
-  const completed = await pollHostedPlaidCompletion<{ accounts_count?: number }>({
+  const result = { ok: true as const, status: "connected" as const, connection_saved: true as const, item_id: "fixture-item", item_ids: ["fixture-item"], accounts_count: 2 };
+  const completed = await pollHostedPlaidCompletion({
     request: async () => ++requests === 1
       ? { status: 202, ok: false, result: {} }
-      : { status: 200, ok: true, result: { accounts_count: 2 } },
+      : { status: 200, ok: true, result },
     isCurrent: () => true,
     wait: async () => { waits += 1; },
   });
-  assert.deepEqual(completed, { status: "success", result: { accounts_count: 2 } });
+  assert.deepEqual(completed, { status: "success", result });
   assert.equal(requests, 2);
   assert.equal(waits, 1);
 });
@@ -197,4 +207,47 @@ test("Hosted completion distinguishes invalid sessions from retryable server err
       wait: async () => {},
     }), failure => failure instanceof PlaidCompletionError && failure.clearSession === clear);
   }
+});
+
+
+test("malformed and negative HTTP200 completion never publish success", async () => {
+  const valid = { ok: true, status: "connected", connection_saved: true, item_id: "fixture-item", item_ids: ["fixture-item"], accounts_count: 1 };
+  for (const result of [null, {}, { ok: false }, { ...valid, ok: false }, { ...valid, item_id: "" }, { ...valid, item_ids: [] }, { ...valid, connection_saved: false }, { ...valid, accounts_count: 0 }, { ...valid, accounts_count: NaN }, { ...valid, accounts_count: -1 }, { ...valid, accounts_count: 1.2 }]) {
+    await assert.rejects(pollHostedPlaidCompletion({ request: async () => ({ status: 200, ok: true, result: result as never }), isCurrent: () => true, wait: async () => {} }), error => error instanceof PlaidCompletionError && !error.clearSession);
+  }
+});
+
+test("verified saved connections awaiting any accounts become token-free recoverable state", () => {
+  const storage = memoryStorage();
+  const scope = { userId: "fixture-user", householdId: "fixture-household" };
+  for (const count of [0, 2]) {
+    const result = verifiedPlaidConnection({ ok: true, status: "accounts_pending", connection_saved: true, item_id: "fixture-item", item_ids: ["fixture-item", "fixture-second-item"], accounts_count: count });
+    savePlaidAccountsPending(storage, scope, result);
+    const pending = readPlaidAccountsPending(storage, scope)!;
+    assert.deepEqual(pending.itemIds, result.item_ids);
+    assert.equal(readPlaidAccountsPending(storage, { ...scope, userId: "someone-else" }), null);
+    assert.equal(readPlaidAccountsPending(storage, { ...scope, householdId: "another-household" }), null);
+    assert(!storage.getItem(PLAID_SAVED_PENDING_KEY)!.includes("token"));
+    clearPlaidAccountsPending(storage, { ...pending, createdAt: pending.createdAt - 1 });
+    assert(readPlaidAccountsPending(storage, scope));
+    clearPlaidAccountsPending(storage, pending);
+    assert.equal(readPlaidAccountsPending(storage, scope), null);
+  }
+});
+
+test("Start over is exact-attempt local cleanup only after completion is idle", () => {
+  const storage = memoryStorage();
+  const attempt = { userId: "fixture-user", householdId: "fixture-household", createdAt: Date.now(), hostedSession: "sealed-fictional", linkToken: "link-fictional", intent: "bank" as const };
+  savePlaidOAuthSession(storage, attempt);
+  const release = beginPlaidCompletion(attempt);
+  assert(plaidCompletionInFlight(attempt));
+  assert.equal(discardPendingPlaidAttempt(storage, attempt), false);
+  release(); release();
+  assert.equal(plaidCompletionInFlight(attempt), false);
+  const next = { ...attempt, createdAt: attempt.createdAt + 1, linkToken: "link-newer" };
+  savePlaidOAuthSession(storage, next);
+  assert.equal(discardPendingPlaidAttempt(storage, attempt), false);
+  assert(matchesStoredPlaidSession(storage, next));
+  assert.equal(discardPendingPlaidAttempt(storage, next), true);
+  assert.equal(readPendingPlaidOAuthSession(storage, next.userId, next.createdAt), null);
 });
