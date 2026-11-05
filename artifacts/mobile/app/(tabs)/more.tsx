@@ -4432,7 +4432,9 @@ export default function MoreScreen({
                         {subscription.priceIncrease
                           ? "Possible price increase. "
                           : ""}
-                        {linkedBill
+                        {imported?.evidenceOnly
+                          ? "Review this in bank history, then choose Keep or Not a subscription."
+                          : linkedBill
                           ? `Linked to ${linkedBill.name}. Future charges will suggest this bill first.`
                           : match?.target
                           ? `Likely bill: ${match.target.name}. ${match.target.reasons.slice(0, 2).join(" · ")}`
@@ -4442,7 +4444,6 @@ export default function MoreScreen({
                             ? "A similar recurring charge exists. Review it before creating another bill."
                             : "No confident bill match yet. You can create one or classify this charge."}
                       </Text>
-                      {imported?.evidenceOnly ? <Text style={[styles.growthTinyText, { color: c.mutedForeground }]}>Review this in bank history first.</Text> : null}
                       <View style={styles.subscriptionActionRow}>
                         {match?.target && !imported?.evidenceOnly ? (
                           <Pressable
@@ -4515,7 +4516,7 @@ export default function MoreScreen({
                           <Pressable
                             accessibilityRole="button"
                             accessibilityLabel={`Create recurring bill for ${subscription.merchant}`}
-                            accessibilityState={{ disabled: matching || importedReadOnly || imported?.evidenceOnly === true, busy: matching }}
+                            accessibilityState={{ disabled: matching || importedBusy || importedReadOnly || imported?.evidenceOnly === true, busy: matching }}
                             disabled={matching || importedBusy || importedReadOnly || imported?.evidenceOnly === true}
                             onPress={() =>
                               void handleCreateBillFromSubscription(subscription)
@@ -4525,7 +4526,7 @@ export default function MoreScreen({
                               {
                                 backgroundColor: c.primary + "18",
                                 borderColor: c.primary + "44",
-                                opacity: matching ? 0.5 : pressed ? 0.72 : 1,
+                                opacity: matching || importedBusy || importedReadOnly || imported?.evidenceOnly === true ? 0.5 : pressed ? 0.72 : 1,
                               },
                             ]}
                           >
