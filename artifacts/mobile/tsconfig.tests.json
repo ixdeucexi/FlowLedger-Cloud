@@ -78,6 +78,8 @@
     ,"lib/dataFreshnessUi.test.ts"
     ,"lib/categoryPlanning.ts"
     ,"lib/categoryPlanning.test.ts"
+    ,"lib/categoryBudgetRules.ts"
+    ,"lib/categoryBudgetRules.test.ts"
     ,"lib/competitiveGrowth.ts"
     ,"lib/competitiveGrowth.test.ts"
     ,"lib/decisionPersistence.ts"

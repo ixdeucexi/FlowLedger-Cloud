@@ -13,16 +13,15 @@ import { useAuth } from "@/context/AuthContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
-import { isCashFlowTransaction } from "@/lib/billMatching";
 import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
 import { applyCategoryBudgetMove, buildCategoryPlan, buildZeroBudgetSummary, type CategoryPlanRow } from "@/lib/categoryPlanning";
-import { loadCategoryBudgetsExact, readCategoryBudgetCache, saveCategoryBudgets, subscribeCategoryCatalog } from "@/lib/categoryBudgetStore";
+import { loadCategoryBudgetsExact, readCategoryBudgetCache, saveMonthlyCategoryBudgetChanges, subscribeCategoryCatalog } from "@/lib/categoryBudgetStore";
 import { categoryMatches, remapCategoryBudgetMap, remapCategoryDrafts } from "@/lib/categoryCatalog";
-import { buildReviewQueue } from "@/lib/reviewCenter";
+import { applyCategoryBudgetChanges, changedCategoryBudgets, parseCategoryBudgetChanges } from "@/lib/categoryBudgetRules";
+import { buildReviewQueue, transactionCategoryParts } from "@/lib/reviewCenter";
 import { unmatchedPendingTransactions } from "@/lib/pendingPlanMatches";
 import { assertFinancialMutationOnline } from "@/lib/networkStatus";
 import { useLocalDay } from "@/hooks/useLocalDay";
-import { parseCategoryAssignments } from "@/lib/moneyFormInput";
 
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const CAT_COLORS: Record<string, string> = {
@@ -56,7 +55,6 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
     pendingPlanMatches,
     selectedYear,
     settings,
-    updateSettings,
     activeHousehold,
     canEditHousehold,
   } = useBudget();
@@ -68,6 +66,7 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [repeatChanges, setRepeatChanges] = useState(true);
   const [saveMessage, setSaveMessage] = useState("");
   const [loadReady, setLoadReady] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -101,7 +100,7 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
     void loadCategoryBudgetsExact(budgetScope, month, year).then(result => {
       if (cancelled || version !== scopeVersion.current) return;
       setCategoryBudgets(result.value);
-      setLoadReady(!result.error);
+      setLoadReady(!result.error && (!budgetScope.userId || result.exact));
       setLoadError(result.error ?? "");
     });
     return () => { cancelled = true; scopeVersion.current += 1; };
@@ -122,14 +121,20 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
     void loadCategoryBudgetsExact(budgetScope, month, year).then(result => {
       if (version !== scopeVersion.current) return;
       setCategoryBudgets(result.value);
-      setLoadReady(!result.error);
+      setLoadReady(!result.error && (!budgetScope.userId || result.exact));
       setLoadError(result.error ?? "");
     });
   }), [budgetScope, month, year]);
 
   useEffect(() => {
-    setDrafts(previous => Object.fromEntries(editableCategories.map(category => [category, dirtyRef.current.has(category) ? previous[category] ?? "" : categoryBudgets[category] === undefined ? "" : String(categoryBudgets[category])])));
+    setDrafts(previous => Object.fromEntries(editableCategories.map(category => [category, dirtyRef.current.has(category) ? previous[category] ?? "" : Object.prototype.hasOwnProperty.call(categoryBudgets, category) ? String(categoryBudgets[category]) : ""])));
   }, [categoryBudgets, editableCategories]);
+
+  const previewBudgets = useMemo(() => {
+    try {
+      return applyCategoryBudgetChanges(categoryBudgets, parseCategoryBudgetChanges(drafts, [...dirtyRef.current]));
+    } catch { return categoryBudgets; }
+  }, [categoryBudgets, drafts]);
 
   const categoryPlan = useMemo(() => {
     return buildCategoryPlan(
@@ -137,16 +142,21 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
       getMonthlyBills(month, year)
         .filter(isBillEligibleForUpcomingPlan)
         .map(bill => ({ category: bill.is_debt ? "Debt" : bill.category || "Other", amount: getBillMonthlyTotal(bill, month, year) })),
-      getTransactionsForMonth(month, year).filter(tx => isCashFlowTransaction(tx) && tx.category !== "Income").map(tx => ({ category: tx.category || "Other", amount: tx.amount })),
-      Object.entries(categoryBudgets).map(([category, amount]) => ({ category, amount })),
-    ).sort((left, right) => statusRank(left.status) - statusRank(right.status) || left.remaining - right.remaining);
-  }, [categoryBudgets, editableCategories, getBillMonthlyTotal, getMonthlyBills, getTransactionsForMonth, month, year]);
+      getTransactionsForMonth(month, year).flatMap(tx => transactionCategoryParts(tx)).filter(tx => tx.category !== "Income"),
+      Object.entries(previewBudgets).map(([category, amount]) => ({ category, amount })),
+    ).map(row => {
+      const hasBudget = settings.zeroBasedBudgetEnabled || Object.prototype.hasOwnProperty.call(previewBudgets, row.category) || row.budgeted > 0.005;
+      return hasBudget ? { ...row, hasBudget } : { ...row, hasBudget, remaining: 0, percentUsed: 0, status: "available" as const };
+    }).sort((left, right) => statusRank(left.status) - statusRank(right.status) || left.remaining - right.remaining);
+  }, [previewBudgets, editableCategories, getBillMonthlyTotal, getMonthlyBills, getTransactionsForMonth, month, year, settings.zeroBasedBudgetEnabled]);
 
   const visibleRows = categoryPlan.filter(row => filter === "all" || row.status === filter);
   const sourceOptions = categoryPlan.filter(row => moveTarget && row.category !== moveTarget.category && row.remaining > 0.005);
   const monthlyIncome = getMonthlyIncome(month, year);
   const zeroBudgetSummary = buildZeroBudgetSummary(monthlyIncome, categoryPlan);
   const unassigned = zeroBudgetSummary.leftToAssign;
+  const budgetedTotal = categoryPlan.reduce((sum, row) => sum + row.budgeted, 0);
+  const spentTotal = categoryPlan.reduce((sum, row) => sum + (row.hasBudget ? row.spent : 0), 0);
   const reviewCount = useMemo(() => {
     return buildReviewQueue(transactions, localDay).length;
   }, [transactions, localDay]);
@@ -155,22 +165,27 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
     [pendingBankTransactions, pendingPlanMatches],
   );
 
-  const persistBudgets = async (next: Record<string, number>) => {
+  const persistBudgets = async (next: Record<string, number>, changedCategories?: string[], repeat = repeatChanges) => {
     if (!canEditHousehold || !loadReady || busyRef.current) return false;
+    const differences = changedCategoryBudgets(categoryBudgets, next);
+    const changed = changedCategories ?? Object.keys(differences);
+    if (!changed.length) { setSaveMessage("Change a monthly budget before saving."); return false; }
+    const nextValues = new Map(Object.entries(next));
+    const changes = Object.fromEntries(changed.map(category => [category, nextValues.get(category) ?? null]));
     const version = scopeVersion.current;
     busyRef.current = true;
     setSaving(true);
     setSaveMessage("Saving…");
     try {
       if (budgetScope.userId) assertFinancialMutationOnline();
-      await saveCategoryBudgets(budgetScope, month, year, next);
+      const result = await saveMonthlyCategoryBudgetChanges(budgetScope, month, year, changes, repeat);
       if (version !== scopeVersion.current) return false;
       dirtyRef.current.clear();
-      setCategoryBudgets(next);
-      setSaveMessage("Assignments saved.");
+      setCategoryBudgets(result.budgets);
+      setSaveMessage(repeat ? "Monthly budgets saved. They repeat from this month." : "Budgets saved for this month.");
       return true;
     } catch (error) {
-      if (version === scopeVersion.current) setSaveMessage(error instanceof Error ? error.message : "Could not save these assignments. Your changes are still here; try again.");
+      if (version === scopeVersion.current) setSaveMessage(error instanceof Error ? error.message : "Could not save these budgets. Your changes are still here; try again.");
       return false;
     } finally {
       busyRef.current = false;
@@ -180,9 +195,11 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
 
   const saveDrafts = () => {
     try {
-      void persistBudgets(parseCategoryAssignments(drafts));
+      const changed = [...dirtyRef.current];
+      const changes = parseCategoryBudgetChanges(drafts, changed);
+      void persistBudgets(applyCategoryBudgetChanges(categoryBudgets, changes), changed);
       Keyboard.dismiss();
-    } catch (error) { setSaveMessage(error instanceof Error ? error.message : "Check your assignments."); }
+    } catch (error) { setSaveMessage(error instanceof Error ? error.message : "Check your monthly budgets."); }
   };
 
   const shiftMonth = (delta: number) => {
@@ -190,7 +207,7 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
     const next = new Date(year, month + delta, 1);
     const change = () => { setMonth(next.getMonth()); setYear(next.getFullYear()); };
     if (dirtyRef.current.size) {
-      privacyAlert("Unsaved assignments", "Save your changes before changing months, or discard them.", [
+      privacyAlert("Unsaved budgets", "Save your changes before changing months, or discard them.", [
         { text: "Keep editing", style: "cancel" }, { text: "Discard", style: "destructive", onPress: change },
       ]);
     } else change();
@@ -214,7 +231,7 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
       setMoveError(`You can move up to $${Math.max(0, source?.remaining ?? 0).toFixed(0)} from ${moveSource}.`);
       return;
     }
-    if (await persistBudgets(applyCategoryBudgetMove(categoryBudgets, categoryPlan, moveSource, moveTarget.category, amount))) setMoveTarget(null);
+    if (await persistBudgets(applyCategoryBudgetMove(categoryBudgets, categoryPlan, moveSource, moveTarget.category, amount), undefined, false)) setMoveTarget(null);
     else setMoveError("The move was not saved. Check your connection and try again.");
   };
 
@@ -228,43 +245,20 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
     if (result.error) { setSaveMessage(`Could not load the previous month: ${result.error}`); return; }
     const previous = result.value;
     if (!Object.keys(previous).length) {
-      privacyAlert("Nothing to copy", "The previous month does not have any saved assignments yet.");
+      privacyAlert("Nothing to copy", "The previous month does not have any saved budgets yet.");
       return;
     }
-    const applyCopy = () => { if (version === scopeVersion.current && !dirtyRef.current.size) void persistBudgets(previous); };
+    const applyCopy = () => { if (version === scopeVersion.current && !dirtyRef.current.size) void persistBudgets(previous, undefined, false); };
     if (!Object.keys(categoryBudgets).length) {
       applyCopy();
       return;
     }
-    privacyAlert("Replace this month?", "Copying will replace this month's saved assignments. Planned bill amounts will still refresh for this month.", [
+    privacyAlert("Replace this month?", "Copying will replace this month's saved budgets. Planned bill amounts will still refresh for this month.", [
       { text: "Cancel", style: "cancel" },
       { text: "Replace", style: "destructive", onPress: applyCopy },
     ]);
   };
 
-  if (!settings.zeroBasedBudgetEnabled) {
-    return (
-      <View style={[styles.screen, { backgroundColor: c.background, paddingTop: insets.top + 10 }]}>
-        <PremiumBackdrop variant="green" />
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: c.card }]}>
-            <Feather name="chevron-left" size={20} color={c.foreground} />
-          </Pressable>
-          <Text style={[styles.title, { color: c.foreground }]}>Category Budget</Text>
-        </View>
-        <View style={[styles.modeGate, { backgroundColor: c.card, borderColor: c.border }]}>
-          <View style={[styles.modeGateIcon, { backgroundColor: c.primary + "18" }]}>
-            <Feather name="pie-chart" size={24} color={c.primary} />
-          </View>
-          <Text style={[styles.modeGateTitle, { color: c.foreground }]}>Zero-Based Budget is off</Text>
-          <Text style={[styles.modeGateText, { color: c.mutedForeground }]}>Turn it on to assign and move money by category.</Text>
-          <Pressable onPress={() => void updateSettings({ zeroBasedBudgetEnabled: true })} style={[styles.modeGateButton, { backgroundColor: c.primary }]}>
-            <Text style={[styles.modeGateButtonText, { color: c.primaryForeground }]}>Use Zero Budget</Text>
-          </Pressable>
-        </View>
-      </View>
-    );
-  }
 
   if (!categoriesReady) {
     return (
@@ -277,8 +271,8 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
             </Pressable>
           ) : null}
           <View style={{ flex: 1 }}>
-            {embedded ? <PlanViewSelector textStyle={styles.title} /> : <Text style={[styles.title, { color: c.foreground }]}>Category Budget</Text>}
-            <Text style={[styles.subtitle, { color: c.mutedForeground }]}>Give every dollar a job</Text>
+            {embedded ? <PlanViewSelector textStyle={styles.title} /> : <Text style={[styles.title, { color: c.foreground }]}>Category budgets</Text>}
+            <Text style={[styles.subtitle, { color: c.mutedForeground }]}>Set a monthly amount for each category</Text>
             <DataFreshnessLabel compact />
           </View>
         </View>
@@ -306,23 +300,23 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
         {!embedded && <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: c.card }]}>
           <Feather name="chevron-left" size={20} color={c.foreground} />
         </Pressable>}
-        <View style={{ flex: 1 }}>
-          {embedded ? <PlanViewSelector textStyle={styles.title} /> : <Text style={[styles.title, { color: c.foreground }]}>Category Budget</Text>}
-          <Text style={[styles.subtitle, { color: c.mutedForeground }]}>Give every dollar a job</Text>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          {embedded ? <PlanViewSelector textStyle={styles.title} /> : <Text style={[styles.title, { color: c.foreground }]}>Category budgets</Text>}
+          <Text style={[styles.subtitle, { color: c.mutedForeground }]}>Set a monthly amount for each category</Text>
           <DataFreshnessLabel compact />
         </View>
-        <Pressable disabled={!canEditHousehold || saving || !loadReady} onPress={saveDrafts} style={[styles.saveBtn, { backgroundColor: c.primary, opacity: canEditHousehold && !saving && loadReady ? 1 : 0.5 }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Save monthly budgets" disabled={!canEditHousehold || saving || !loadReady} onPress={saveDrafts} style={[styles.saveBtn, { backgroundColor: c.primary, opacity: canEditHousehold && !saving && loadReady ? 1 : 0.5 }]}>
           <Text style={[styles.saveText, { color: c.primaryForeground }]}>{saving ? "Saving…" : "Save"}</Text>
         </Pressable>
       </View>
       {saveMessage ? <Text accessibilityLiveRegion="polite" style={[styles.subtitle, { color: c.foreground }]}>{saveMessage}</Text> : null}
-      {!loadReady ? <Text accessibilityLiveRegion="polite" style={[styles.subtitle, { color: c.mutedForeground }]}>{loadError ? "Could not confirm your saved assignments. Retry before editing." : "Loading saved assignments…"}</Text> : null}
-      {loadError ? <Pressable onPress={() => setLoadAttempt(value => value + 1)} style={styles.copyPreviousButton}><Text style={{ color: c.primary }}>Retry loading assignments</Text></Pressable> : null}
+      {!loadReady ? <Text accessibilityLiveRegion="polite" style={[styles.subtitle, { color: c.mutedForeground }]}>{loadError ? "Could not confirm your saved budgets. Retry before editing." : "Loading saved budgets…"}</Text> : null}
+      {loadError ? <Pressable onPress={() => setLoadAttempt(value => value + 1)} style={styles.copyPreviousButton}><Text style={{ color: c.primary }}>Retry loading budgets</Text></Pressable> : null}
 
       <View style={[styles.monthCard, { backgroundColor: c.card }]}>
-        <Pressable onPress={() => shiftMonth(-1)} style={styles.monthBtn}><Feather name="chevron-left" size={18} color={c.foreground} /></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Previous month" disabled={saving || year === 2000 && month === 0} onPress={() => shiftMonth(-1)} style={styles.monthBtn}><Feather name="chevron-left" size={18} color={c.foreground} /></Pressable>
         <Text style={[styles.monthTitle, { color: c.foreground }]}>{MONTH_FULL[month]} {year}</Text>
-        <Pressable onPress={() => shiftMonth(1)} style={styles.monthBtn}><Feather name="chevron-right" size={18} color={c.foreground} /></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Next month" disabled={saving || year === 2200 && month === 11} onPress={() => shiftMonth(1)} style={styles.monthBtn}><Feather name="chevron-right" size={18} color={c.foreground} /></Pressable>
       </View>
       <Pressable disabled={!canEditHousehold || saving || !loadReady} onPress={() => void copyPreviousMonth()} style={styles.copyPreviousButton}>
         <Feather name="copy" size={13} color={canEditHousehold ? c.primary : c.mutedForeground} />
@@ -330,9 +324,36 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
       </Pressable>
 
       <View style={styles.summaryRow}>
-        <SummaryBox label="Income" value={`$${zeroBudgetSummary.plannedIncome.toFixed(0)}`} color={c.success} />
-        <SummaryBox label="Assigned" value={`$${zeroBudgetSummary.assigned.toFixed(0)}`} color={c.primary} />
-        <SummaryBox label={Math.abs(unassigned) < 0.005 ? "Ready" : unassigned > 0 ? "To assign" : "Over"} value={`${unassigned < -0.005 ? "-" : ""}$${Math.abs(unassigned).toFixed(0)}`} color={Math.abs(unassigned) < 0.005 ? c.success : unassigned > 0 ? c.warning : c.destructive} />
+        {settings.zeroBasedBudgetEnabled ? <>
+          <SummaryBox label="Income" value={money(zeroBudgetSummary.plannedIncome)} color={c.success} />
+          <SummaryBox label="Budgeted" value={money(zeroBudgetSummary.assigned)} color={c.primary} />
+          <SummaryBox label={Math.abs(unassigned) < 0.005 ? "Ready" : unassigned > 0 ? "To budget" : "Over"} value={money(unassigned)} color={Math.abs(unassigned) < 0.005 ? c.success : unassigned > 0 ? c.warning : c.destructive} />
+        </> : <>
+          <SummaryBox label="Budgeted" value={money(budgetedTotal)} color={c.primary} />
+          <SummaryBox label="Spent" value={money(spentTotal)} color={c.mutedForeground} />
+          <SummaryBox label="Left" value={money(budgetedTotal - spentTotal)} color={budgetedTotal >= spentTotal ? c.success : c.destructive} />
+        </>}
+      </View>
+      {!settings.zeroBasedBudgetEnabled ? <Text style={[styles.totalsNote, { color: c.mutedForeground }]}>Totals cover categories with a monthly budget or planned bill amount.</Text> : null}
+
+      <View style={[styles.applyCard, { backgroundColor: c.card, borderColor: c.border }]}>
+        <Text style={[styles.inputLabel, { color: c.mutedForeground }]}>Apply edited budgets</Text>
+        <View style={styles.applyOptions}>
+          {[{ repeat: false, label: "This month only" }, { repeat: true, label: "Every month" }].map(option => (
+            <Pressable key={String(option.repeat)} accessibilityRole="radio" accessibilityLabel={option.label}
+              accessibilityState={{ checked: repeatChanges === option.repeat, disabled: !canEditHousehold || saving || !loadReady }}
+              aria-checked={repeatChanges === option.repeat} aria-disabled={!canEditHousehold || saving || !loadReady}
+              disabled={!canEditHousehold || saving || !loadReady} onPress={() => setRepeatChanges(option.repeat)}
+              style={[styles.applyOption, { backgroundColor: repeatChanges === option.repeat ? c.primary : c.muted }]}>
+              <Text style={[styles.actionText, { color: repeatChanges === option.repeat ? c.primaryForeground : c.foreground }]}>{option.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text style={[styles.rowSub, { color: c.mutedForeground }]}>{repeatChanges
+          ? `Repeats from ${MONTH_FULL[month]} ${year}. Clearing a budget stops it from this month.`
+          : "Only this month changes. Your repeating budgets stay in place for other months."}</Text>
+        <Text style={[styles.rowSub, { color: c.mutedForeground }]}>A blank budget uses planned bills, if any. Spending updates as transactions are recorded.</Text>
+        {!canEditHousehold ? <Text style={[styles.rowSub, { color: c.mutedForeground }]}>You have view-only access to this household.</Text> : null}
       </View>
 
       {embedded && <Pressable
@@ -361,38 +382,44 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
 
       <View style={styles.rows}>
         {visibleRows.map(row => {
-          const color = row.status === "over" ? c.destructive : row.status === "watch" ? c.warning : CAT_COLORS[row.category] ?? c.primary;
+          const color = !row.hasBudget ? c.mutedForeground : row.status === "over" ? c.destructive : row.status === "watch" ? c.warning : CAT_COLORS[row.category] ?? c.primary;
           return (
-            <View key={row.category} style={[styles.rowCard, { backgroundColor: c.card, borderColor: c.border }]}>
+            <View key={row.category} testID={`category-budget-${row.category}`} style={[styles.rowCard, { backgroundColor: c.card, borderColor: c.border }]}>
               <View style={styles.rowTop}>
                 <View style={[styles.icon, { backgroundColor: color + "18" }]}>
                   <Feather name={row.status === "over" ? "alert-triangle" : row.status === "watch" ? "eye" : "tag"} size={15} color={color} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.rowName, { color: c.foreground }]}>{row.category}</Text>
-                  <Text style={[styles.rowSub, { color: c.mutedForeground }]}>Spent ${row.spent.toFixed(0)} of ${row.budgeted.toFixed(0)}</Text>
+                  <Text style={[styles.rowSub, { color: c.mutedForeground }]}>{row.hasBudget ? `Spent ${money(row.spent)} of ${money(row.budgeted)}` : `Spent ${money(row.spent)} · No monthly budget`}</Text>
                 </View>
-                <Text style={[styles.leftValue, { color }]}>{row.remaining < 0 ? "-" : ""}${Math.abs(row.remaining).toFixed(0)}</Text>
+                <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65} style={[styles.leftValue, { color }]}>{row.hasBudget ? `${money(row.remaining)} left` : "No limit"}</Text>
               </View>
               <View style={[styles.track, { backgroundColor: c.muted }]}>
                 <View style={[styles.fill, { backgroundColor: color, width: `${Math.min(100, row.percentUsed)}%` as any }]} />
               </View>
               <View style={styles.editLine}>
-                  <Text style={[styles.inputLabel, { color: c.mutedForeground }]}>Monthly assignment</Text>
+                  <Text style={[styles.inputLabel, { color: c.mutedForeground }]}>Monthly budget</Text>
                 <View style={[styles.inputWrap, { backgroundColor: c.muted }]}>
                   <Text style={[styles.dollar, { color: c.mutedForeground }]}>$</Text>
                   <TextInput sensitive
-                    value={drafts[row.category] ?? ""}
-                    onChangeText={value => { dirtyRef.current.add(row.category); setSaveMessage("Unsaved assignments"); setDrafts(previous => ({ ...previous, [row.category]: value })); }}
+                    accessibilityLabel={`Monthly budget for ${row.category}`}
+                    value={Object.prototype.hasOwnProperty.call(drafts, row.category) ? drafts[row.category] : ""}
+                    onChangeText={value => { dirtyRef.current.add(row.category); setSaveMessage("Unsaved monthly budgets"); setDrafts(previous => ({ ...previous, [row.category]: value })); }}
                     editable={canEditHousehold && !saving && loadReady}
                     keyboardType="decimal-pad"
-                    placeholder={row.budgeted.toFixed(0)}
+                    placeholder={row.budgeted.toFixed(2)}
                     placeholderTextColor={c.mutedForeground}
                     style={[styles.input, { color: c.foreground }]}
                   />
                 </View>
               </View>
               {canEditHousehold && <View style={styles.actions}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Clear budget for ${row.category}`}
+                  disabled={saving || !loadReady} onPress={() => { dirtyRef.current.add(row.category); setDrafts(previous => ({ ...previous, [row.category]: "" })); setSaveMessage(repeatChanges ? "Save to clear this budget and stop repeating it." : "Save to clear this month’s budget."); }}
+                  style={[styles.actionBtn, { backgroundColor: c.muted }]}>
+                  <Text style={[styles.actionText, { color: c.mutedForeground }]}>Clear budget</Text>
+                </Pressable>
                 <Pressable onPress={() => openMove(row)} style={[styles.actionBtn, { backgroundColor: c.success + "18" }]}>
                   <Text style={[styles.actionText, { color: c.success }]}>Move money</Text>
                 </Pressable>
@@ -441,10 +468,14 @@ export default function CategoryBudgetRoute() {
 function SummaryBox({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <View style={styles.summaryBox}>
-      <Text style={[styles.summaryValue, { color }]}>{value}</Text>
+      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.55} style={[styles.summaryValue, { color }]}>{value}</Text>
       <Text style={styles.summaryLabel}>{label}</Text>
     </View>
   );
+}
+
+function money(amount: number) {
+  return `${amount < 0 ? "-" : ""}$${Math.abs(amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function statusRank(status: CategoryPlanRow["status"]) {
@@ -460,7 +491,7 @@ const styles = StyleSheet.create({
   rows: { padding: 16 },
   header: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 20, paddingBottom: 14 },
   backBtn: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
-  title: { fontSize: 28, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.8 },
+  title: { fontSize: 26, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.8 },
   subtitle: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   saveBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12 },
   saveText: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
@@ -485,6 +516,10 @@ const styles = StyleSheet.create({
   modeGateText: { fontSize: 13, fontFamily: "Inter_500Medium", lineHeight: 19, textAlign: "center" },
   modeGateButton: { minHeight: 46, borderRadius: 14, alignItems: "center", justifyContent: "center", paddingHorizontal: 18, marginTop: 18 },
   modeGateButtonText: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
+  totalsNote: { marginHorizontal: 18, marginTop: -4, marginBottom: 12, fontSize: 11, lineHeight: 16, fontFamily: "Inter_400Regular" },
+  applyCard: { borderWidth: 1, borderRadius: 18, padding: 14, marginHorizontal: 16, marginBottom: 14, gap: 8 },
+  applyOptions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  applyOption: { minHeight: 42, borderRadius: 12, paddingHorizontal: 14, justifyContent: "center" },
   filterRow: { flexDirection: "row", gap: 8, paddingHorizontal: 16, marginBottom: 2 },
   filterChip: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   filterText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
@@ -493,7 +528,7 @@ const styles = StyleSheet.create({
   icon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   rowName: { fontSize: 15, fontFamily: "Inter_800ExtraBold" },
   rowSub: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
-  leftValue: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
+  leftValue: { maxWidth: "52%", fontSize: 16, fontFamily: "Inter_800ExtraBold" },
   track: { height: 7, borderRadius: 4, overflow: "hidden" },
   fill: { height: 7, borderRadius: 4 },
   editLine: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 },

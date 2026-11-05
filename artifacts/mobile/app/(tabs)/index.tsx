@@ -347,6 +347,7 @@ function MobileDashboardContent({
     () => ({ ...dashboardSnapshot.categoryBudgets }),
   );
   const [categoryBudgetDrafts, setCategoryBudgetDrafts] = useState<Record<string, string>>({});
+  const categoryBudgetEditorBaselineRef = useRef<Record<string, number>>({});
   const [categorySaving, setCategorySaving] = useState(false);
   const categorySavingRef = useRef(false);
   const categorySaveScopeRef = useRef(0);
@@ -579,15 +580,15 @@ function MobileDashboardContent({
   );
   const zeroBudgetIncome = zeroBudgetSummary.plannedIncome;
   const zeroBudgetLeftToAssign = zeroBudgetSummary.leftToAssign;
-  const persistCategoryBudgets = async (next: Record<string, number>) => {
+  const persistCategoryBudgets = async (next: Record<string, number>, baseline = categoryBudgets) => {
     if (!canEditHousehold || categorySavingRef.current) return false;
     categorySavingRef.current = true;
     setCategorySaving(true);
     const scope = categorySaveScopeRef.current;
     try {
-      await saveCategoryBudgetsRemote(categoryBudgetScope, currentMonth, currentYear, next);
+      const confirmed = await saveCategoryBudgetsRemote(categoryBudgetScope, currentMonth, currentYear, next, baseline);
       if (scope !== categorySaveScopeRef.current) return false;
-      setCategoryBudgets(next);
+      setCategoryBudgets(confirmed);
       return true;
     } catch (error) {
       if (scope === categorySaveScopeRef.current) privacyAlert("Category budget not saved", error instanceof Error ? error.message : "Your changes are still here. Please try again.");
@@ -599,11 +600,10 @@ function MobileDashboardContent({
   };
 
   const openCategoryBudgetEditorForCategory = (category: string) => {
-    const drafts: Record<string, string> = {};
-    budgetEditableCategories.forEach(item => {
-      drafts[item] = categoryBudgets[item] === undefined ? "" : String(categoryBudgets[item]);
-    });
-    if (!drafts[category]) drafts[category] = categoryBudgets[category] === undefined ? "" : String(categoryBudgets[category]);
+    categoryBudgetEditorBaselineRef.current = { ...categoryBudgets };
+    const values = new Map(Object.entries(categoryBudgets));
+    const drafts = Object.fromEntries([...new Set([...budgetEditableCategories, category])]
+      .map(name => [name, values.has(name) ? String(values.get(name)) : ""]));
     setCategoryBudgetDrafts(drafts);
     setSelectedCategory(null);
     setCategoryBudgetModalVisible(true);
@@ -650,12 +650,12 @@ function MobileDashboardContent({
 
   const saveCategoryBudgets = async () => {
     try {
-      if (await persistCategoryBudgets(parseCategoryAssignments(categoryBudgetDrafts))) setCategoryBudgetModalVisible(false);
+      if (await persistCategoryBudgets(parseCategoryAssignments(categoryBudgetDrafts), categoryBudgetEditorBaselineRef.current)) setCategoryBudgetModalVisible(false);
     } catch (error) { privacyAlert("Check assignments", error instanceof Error ? error.message : "Enter valid assignments."); }
   };
 
   const clearCategoryBudgets = async () => {
-    if (!await persistCategoryBudgets({})) return;
+    if (!await persistCategoryBudgets({}, categoryBudgetEditorBaselineRef.current)) return;
     setCategoryBudgetDrafts({});
     setCategoryBudgetModalVisible(false);
   };

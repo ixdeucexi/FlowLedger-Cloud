@@ -219,8 +219,8 @@
       {
         "title": "Keep the workspace current",
         "items": [
-          { "title": "Household & accounts", "body": "Choose the active household, confirm member access, and keep each manual account balance current.", "icon": "users" },
-          { "title": "Manage categories", "body": "Open Settings > Plan to rename or delete spending categories. Renaming updates linked items; deleting moves them to Other. Other, Debt and Savings stay available for system tracking.", "icon": "tag" },
+          { "title": "Household access", "body": "Open Settings > Household & accounts to create an invite or join with a code. Choose Can edit to help change a plan, or View only. Use the Dashboard people button to switch households; each keeps its own money and budgets.", "icon": "users" },
+          { "title": "Categories and monthly budgets", "body": "Open Settings > Plan > Categories to set monthly limits or manage categories. Choose This month or Every month, then Save. Each category shows Spent and Left. Clear a limit to remove it; category changes keep linked activity together.", "icon": "tag" },
           { "title": "Setup & walkthrough", "body": "Run setup again after a major change or replay the Guided Tour from its first step.", "icon": "compass" },
           { "title": "Notifications and App Lock", "body": "Choose reminders in Settings. App Lock starts Off. In Security, you can enable fingerprint or face unlock with device PIN/passcode backup, choose a delay, and use Lock now.", "icon": "shield" },
           { "title": "Help & user guide", "body": "Open this guide again or use Support when an account or plan needs help.", "icon": "book-open" }

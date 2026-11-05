@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { assertFinancialMutationOnline } from "@/lib/networkStatus";
+import { changedCategoryBudgets } from "@/lib/categoryBudgetRules";
 import { remapCategoryBudgetMap } from "@/lib/categoryCatalog";
 import {
   createExactCategoryBudgetMemoryCache,
@@ -12,6 +13,7 @@ export const CATEGORY_BUDGETS_EVENT = "flowledger-category-budgets-updated";
 const categoryBudgetListeners = new Set<() => void>();
 const categoryBudgetCacheRevisions = new Map<string, number>();
 const categoryBudgetMemoryCache = createExactCategoryBudgetMemoryCache();
+const categoryRecurringMemory = new Map<string, string[]>();
 const categoryCatalogListeners = new Set<(change: CategoryCatalogChange) => void>();
 
 export interface CategoryBudgetScope {
@@ -108,7 +110,7 @@ export function writeCategoryBudgetCache(month: number, year: number, budgets: R
     (categoryBudgetCacheRevisions.get(storageKey) ?? 0) + 1,
   );
   if (Platform.OS === "web") {
-    globalThis.localStorage?.setItem(storageKey, JSON.stringify(clean));
+    try { globalThis.localStorage?.setItem(storageKey, JSON.stringify(clean)); } catch { /* Confirmed memory still publishes when browser storage is unavailable. */ }
     if (notify) globalThis.dispatchEvent?.(new Event(CATEGORY_BUDGETS_EVENT));
   }
   if (notify) categoryBudgetListeners.forEach(listener => listener());
@@ -123,6 +125,7 @@ export interface CategoryBudgetLoadResult {
   value: Record<string, number>;
   exact: boolean;
   error: string | null;
+  recurringCategories?: string[];
 }
 
 export async function loadCategoryBudgetsExact(scope: CategoryBudgetScope, month: number, year: number): Promise<CategoryBudgetLoadResult> {
@@ -136,16 +139,21 @@ export async function loadCategoryBudgetsExact(scope: CategoryBudgetScope, month
   const revisionAtStart = categoryBudgetCacheRevisions.get(storageKey) ?? 0;
   categoryBudgetCacheRevisions.set(storageKey, revisionAtStart);
   try {
-    const value = await resolveGuardedRemoteValue({
+    const result = await resolveGuardedRemoteValue({
       revisionAtStart,
       currentRevision: () => categoryBudgetCacheRevisions.get(storageKey) ?? 0,
-      readCurrent: () => readCategoryBudgetCache(month, year, scope),
+      readCurrent: () => ({ budgets: readCategoryBudgetCache(month, year, scope), recurringCategories: categoryRecurringMemory.get(storageKey) ?? [] }),
       loadRemote: async () => {
-        const query = applyScope(
-          supabase.from("category_budgets").select("category, amount"),
-          scope,
+        if (scope.householdId && scope.budgetId) {
+          const { data, error } = await supabase.rpc("get_monthly_category_budget_plan", {
+            p_household_id: scope.householdId, p_budget_id: scope.budgetId, p_month: month, p_year: year,
+          });
+          if (error) throw error;
+          return parseMonthlyCategoryBudgetPlan(data);
+        }
+        const { data, error } = await applyScope(
+          supabase.from("category_budgets").select("category, amount"), scope,
         ).eq("month", month).eq("year", year);
-        const { data, error } = await query;
         if (error) throw error;
         const remote: Array<[string, number]> = [];
         (data ?? []).forEach((row: any) => {
@@ -153,14 +161,16 @@ export async function loadCategoryBudgetsExact(scope: CategoryBudgetScope, month
           const amount = Number(row.amount);
           if (category && Number.isFinite(amount) && amount >= 0) remote.push([category, amount]);
         });
-        return Object.fromEntries(remote);
+        return { budgets: Object.fromEntries(remote), recurringCategories: [] as string[] };
       },
-      commitRemote: value => {
-        writeCategoryBudgetCache(month, year, value, scope, false);
+      commitRemote: result => {
+        categoryRecurringMemory.set(storageKey, result.recurringCategories);
+        writeCategoryBudgetCache(month, year, result.budgets, scope, false);
       },
     });
     return {
-      value,
+      value: result.budgets,
+      recurringCategories: result.recurringCategories,
       exact: hasCategoryBudgetCache(month, year, scope),
       error: null,
     };
@@ -177,12 +187,76 @@ export async function loadCategoryBudgets(scope: CategoryBudgetScope, month: num
   return (await loadCategoryBudgetsExact(scope, month, year)).value;
 }
 
-export async function saveCategoryBudgets(scope: CategoryBudgetScope, month: number, year: number, budgets: Record<string, number>): Promise<void> {
+export interface MonthlyCategoryBudgetPlan {
+  budgets: Record<string, number>;
+  recurringCategories: string[];
+}
+
+function parseMonthlyCategoryBudgetPlan(value: unknown): MonthlyCategoryBudgetPlan {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Could not confirm your saved category budgets.");
+  const result = value as Record<string, unknown>;
+  const budgets = parseCategoryBudgetCache(JSON.stringify(result.budgets));
+  if (!budgets || !Array.isArray(result.recurringCategories) || result.recurringCategories.some(category => typeof category !== "string")) {
+    throw new Error("Could not confirm your saved category budgets.");
+  }
+  return { budgets, recurringCategories: result.recurringCategories as string[] };
+}
+
+function invalidateFutureCategoryBudgets(scope: CategoryBudgetScope, month: number, year: number) {
+  const prefix = `flowledger-category-budgets-${scopeKey(scope)}-`;
+  const period = `${year}-${String(month + 1).padStart(2, "0")}`;
+  const keys = new Set([...categoryBudgetMemoryCache.keys(), ...categoryBudgetCacheRevisions.keys()]);
+  if (Platform.OS === "web") {
+    try {
+      for (let index = 0; index < (globalThis.localStorage?.length ?? 0); index++) {
+        const key = globalThis.localStorage.key(index);
+        if (key) keys.add(key);
+      }
+    } catch { /* Fresh remote loads remain authoritative. */ }
+  }
+  for (const key of keys) {
+    if (!key.startsWith(prefix) || key.slice(prefix.length) < period) continue;
+    categoryBudgetCacheRevisions.set(key, (categoryBudgetCacheRevisions.get(key) ?? 0) + 1);
+    categoryBudgetMemoryCache.remove(key);
+    categoryRecurringMemory.delete(key);
+    if (Platform.OS === "web") {
+      try { globalThis.localStorage?.removeItem(key); } catch { /* Keep memory invalidation. */ }
+    }
+  }
+}
+
+/** Apply only edited categories so another editor's unrelated changes survive. */
+export async function saveMonthlyCategoryBudgetChanges(
+  scope: CategoryBudgetScope, month: number, year: number,
+  changes: Record<string, number | null>, repeat: boolean,
+): Promise<MonthlyCategoryBudgetPlan> {
+  if (!scope.userId || !scope.householdId || !scope.budgetId) {
+    throw new Error("Sign in and select a household before saving monthly budgets.");
+  }
+  assertFinancialMutationOnline();
+  const { data, error } = await supabase.rpc("save_monthly_category_budget_plan", {
+    p_household_id: scope.householdId, p_budget_id: scope.budgetId,
+    p_month: month, p_year: year, p_changes: changes, p_repeat: repeat,
+  });
+  if (error) throw new Error(`Save category budgets: ${error.message}`);
+  const result = parseMonthlyCategoryBudgetPlan(data);
+  if (repeat) invalidateFutureCategoryBudgets(scope, month, year);
+  categoryRecurringMemory.set(categoryBudgetStorageKey(month, year, scope), result.recurringCategories);
+  writeCategoryBudgetCache(month, year, result.budgets, scope);
+  return result;
+}
+
+export async function saveCategoryBudgets(scope: CategoryBudgetScope, month: number, year: number, budgets: Record<string, number>, baseline?: Record<string, number>): Promise<Record<string, number>> {
   if (scope.userId) assertFinancialMutationOnline();
   const clean = normalizeBudgetMap(budgets);
+  if (scope.userId && scope.householdId && scope.budgetId) {
+    const previous = baseline ?? readCategoryBudgetCache(month, year, scope);
+    const changes = changedCategoryBudgets(previous, clean);
+    return (await saveMonthlyCategoryBudgetChanges(scope, month, year, changes, false)).budgets;
+  }
   if (!scope.userId) {
     writeCategoryBudgetCache(month, year, clean, scope);
-    return;
+    return clean;
   }
 
   if (!Object.keys(clean).length) {
@@ -192,7 +266,7 @@ export async function saveCategoryBudgets(scope: CategoryBudgetScope, month: num
     ).eq("month", month).eq("year", year);
     if (error) throw new Error(`Clear category budgets: ${error.message}`);
     writeCategoryBudgetCache(month, year, clean, scope);
-    return;
+    return clean;
   }
 
   const rows = Object.entries(clean).map(([category, amount]) => ({
@@ -226,6 +300,7 @@ export async function saveCategoryBudgets(scope: CategoryBudgetScope, month: num
     if (deleted.error) throw new Error(`Remove category budgets: ${deleted.error.message}`);
   }
   writeCategoryBudgetCache(month, year, clean, scope);
+  return clean;
 }
 
 function applyScope(query: any, scope: CategoryBudgetScope) {

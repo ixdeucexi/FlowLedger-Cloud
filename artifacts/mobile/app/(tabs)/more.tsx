@@ -2865,6 +2865,8 @@ export default function MoreScreen({
                     </Text>
                   </View>
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Refresh households"
                     onPress={refreshHouseholds}
                     disabled={householdBusy}
                     hitSlop={10}
@@ -3190,6 +3192,8 @@ export default function MoreScreen({
                         borderColor: c.border,
                       },
                     ]}
+                    accessibilityLabel="Household invite code"
+                    editable={!householdBusy}
                     value={householdJoinCode}
                     onChangeText={(text) =>
                       setHouseholdJoinCode(text.toUpperCase())
@@ -3201,6 +3205,8 @@ export default function MoreScreen({
                     onSubmitEditing={handleJoinHousehold}
                   />
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Join household"
                     onPress={handleJoinHousehold}
                     disabled={householdBusy || !householdJoinCode.trim()}
                     style={({ pressed }) => [
@@ -3220,8 +3226,10 @@ export default function MoreScreen({
                       size={16}
                       color={c.primaryForeground}
                     />
+                    <Text style={{ color: c.primaryForeground, fontFamily: "Inter_700Bold", fontSize: 13 }}>{householdBusy ? "Please wait…" : "Join household"}</Text>
                   </Pressable>
                 </View>
+                <Text style={[styles.switchDesc, { color: c.mutedForeground, marginTop: 10 }]}>Ask the owner for Can edit access if you want to make changes.</Text>
               </View>
 
               <View
@@ -3762,9 +3770,11 @@ export default function MoreScreen({
                 { backgroundColor: c.card, borderRadius: colors.radius },
               ]}
             >
-              {settings.zeroBasedBudgetEnabled && (
+              {(
                 <Pressable
-                  onPress={() => router.push("/(tabs)/transactions" as any)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Category budgets"
+                  onPress={() => router.push("/(tabs)/category-budget" as any)}
                   style={({ pressed }) => [
                     styles.categoryBudgetLink,
                     {
@@ -3780,16 +3790,16 @@ export default function MoreScreen({
                       { backgroundColor: c.primary + "18" },
                     ]}
                   >
-                    <Feather name="grid" size={16} color={c.primary} />
+                    <Feather name="pie-chart" size={16} color={c.primary} />
                   </View>
                   <View style={styles.switchInfo}>
                     <Text style={[styles.switchLabel, { color: c.foreground }]}>
-                      Open Zero Budget
+                      Category budgets
                     </Text>
                     <Text
                       style={[styles.switchDesc, { color: c.mutedForeground }]}
                     >
-                      Assign and move money in Budget.
+                      Set monthly amounts and see what is left.
                     </Text>
                   </View>
                   <Feather name="chevron-right" size={18} color={c.primary} />
@@ -6397,7 +6407,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   joinButton: {
-    width: 44,
+    minWidth: 136,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    gap: 7,
     height: 44,
     borderRadius: 12,
     alignItems: "center",

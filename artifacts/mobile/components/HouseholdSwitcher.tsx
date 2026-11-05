@@ -1,12 +1,18 @@
 import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
-import React, { useCallback, useState } from "react";
+import { useRouter } from "expo-router";
+import React, { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, useWindowDimensions } from "react-native";
 
 import { useBudget } from "@/context/BudgetContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
-import { householdRoleLabel } from "@/lib/householdPermissions";
+import { canEditHouseholdPlan, householdRoleLabel, type HouseholdRole } from "@/lib/householdPermissions";
+
+function accessLabel(role: HouseholdRole) {
+  const label = householdRoleLabel(role);
+  return canEditHouseholdPlan(role) && role !== "editor" ? `${label} · Can edit` : label;
+}
 
 export function HouseholdSwitcher({
   appearance = "header",
@@ -14,55 +20,90 @@ export function HouseholdSwitcher({
   appearance?: "header" | "settings";
 }) {
   const colors = useColors();
+  const router = useRouter();
   const { width } = useWindowDimensions();
   const {
     activeHousehold,
     householdRole,
     households,
+    refreshHouseholds,
     switchHousehold,
   } = useBudget();
   const [visible, setVisible] = useState(false);
   const [switchingId, setSwitchingId] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
+  const pendingRef = useRef(false);
+  const busy = Boolean(switchingId) || refreshing;
   const compact = appearance === "header" && width < 480;
 
   const close = useCallback(() => {
-    if (switchingId) return;
+    if (pendingRef.current) return;
     setVisible(false);
     setMessage(null);
-  }, [switchingId]);
+  }, []);
   useBackDismiss(visible, close);
 
   const chooseHousehold = useCallback(
     async (householdId: string) => {
-      if (switchingId || activeHousehold?.householdId === householdId) return;
+      if (pendingRef.current || activeHousehold?.householdId === householdId) return;
+      pendingRef.current = true;
       setSwitchingId(householdId);
       setMessage(null);
       try {
         await switchHousehold(householdId);
         setVisible(false);
       } catch (error) {
-        setMessage(
-          error instanceof Error
+        setMessage({
+          text: error instanceof Error
             ? error.message
             : "Could not switch households. Try again.",
-        );
+          error: true,
+        });
       } finally {
+        pendingRef.current = false;
         setSwitchingId(null);
       }
     },
-    [activeHousehold?.householdId, switchHousehold, switchingId],
+    [activeHousehold?.householdId, switchHousehold],
   );
 
+  const refresh = async () => {
+    if (pendingRef.current) return;
+    pendingRef.current = true;
+    setRefreshing(true);
+    setMessage(null);
+    try {
+      await refreshHouseholds();
+      setMessage({ text: "Household list updated.", error: false });
+    } catch (error) {
+      setMessage({
+        text: error instanceof Error ? error.message : "Could not refresh households. Try again.",
+        error: true,
+      });
+    } finally {
+      pendingRef.current = false;
+      setRefreshing(false);
+    }
+  };
+
+  const openHouseholdSettings = () => {
+    if (pendingRef.current) return;
+    close();
+    router.push({ pathname: "/(tabs)/more", params: { section: "accounts" } });
+  };
+
   const currentName = activeHousehold?.name ?? "Personal";
-  const canSwitch = households.length > 1;
+  const messageColor = message?.error ? colors.destructive : colors.success;
 
   return (
     <>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Current household: ${currentName}${canSwitch ? ". Switch household" : ""}`}
-        accessibilityHint={canSwitch ? "Opens your household list" : undefined}
+        accessibilityLabel={`Current household: ${currentName}. Switch or join a household`}
+        accessibilityHint="Opens your household list and invitation options"
+        accessibilityState={{ expanded: visible }}
+        aria-expanded={visible}
         onPress={() => {
           setMessage(null);
           setVisible(true);
@@ -86,7 +127,7 @@ export function HouseholdSwitcher({
             </Text>
             {appearance === "settings" ? (
               <Text numberOfLines={1} style={[styles.triggerMeta, { color: colors.mutedForeground }]}>
-                {householdRole ? householdRoleLabel(householdRole) : "Private"}
+                {householdRole ? accessLabel(householdRole) : "Private"}
               </Text>
             ) : null}
           </View>
@@ -121,14 +162,15 @@ export function HouseholdSwitcher({
               </View>
               <View style={styles.sheetHeaderCopy}>
                 <Text style={[styles.sheetTitle, { color: colors.foreground }]}>Switch household</Text>
-                <Text style={[styles.sheetDescription, { color: colors.mutedForeground }]}>Choose which FlowLedger plan and accounts you want to view.</Text>
+                <Text style={[styles.sheetDescription, { color: colors.mutedForeground }]}>Choose a plan to view or edit with your access.</Text>
               </View>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Close household switcher"
+                disabled={busy}
                 hitSlop={8}
                 onPress={close}
-                style={[styles.closeButton, { backgroundColor: colors.muted }]}
+                style={[styles.closeButton, { backgroundColor: colors.muted, opacity: busy ? 0.5 : 1 }]}
               >
                 <Feather name="x" size={18} color={colors.mutedForeground} />
               </Pressable>
@@ -142,14 +184,16 @@ export function HouseholdSwitcher({
             >
               {households.map((household) => {
                 const selected = household.householdId === activeHousehold?.householdId;
-                const busy = switchingId === household.householdId;
+                const switchingThisHousehold = switchingId === household.householdId;
                 return (
                   <Pressable
                     key={household.householdId}
                     accessibilityRole="button"
-                    accessibilityState={{ selected, disabled: Boolean(switchingId) }}
-                    accessibilityLabel={`${household.name}, ${householdRoleLabel(household.role)}${selected ? ", selected" : ""}`}
-                    disabled={Boolean(switchingId)}
+                    accessibilityState={{ selected, disabled: busy }}
+                    aria-pressed={selected}
+                    aria-disabled={busy}
+                    accessibilityLabel={`${household.name}, ${accessLabel(household.role)}${selected ? ", current household" : ""}`}
+                    disabled={busy}
                     onPress={() => void chooseHousehold(household.householdId)}
                     style={({ pressed }) => [
                       styles.householdRow,
@@ -177,10 +221,10 @@ export function HouseholdSwitcher({
                         {household.name}
                       </Text>
                       <Text style={[styles.householdMeta, { color: colors.mutedForeground }]}>
-                        {household.isPersonal ? "Personal plan" : "Shared household"} · {householdRoleLabel(household.role)}
+                        {selected ? "Current household · " : ""}{household.isPersonal ? "Personal plan" : "Shared household"} · {accessLabel(household.role)}
                       </Text>
                     </View>
-                    {busy ? (
+                    {switchingThisHousehold ? (
                       <ActivityIndicator color={colors.primary} />
                     ) : selected ? (
                       <View style={[styles.selectedIcon, { backgroundColor: colors.primary }]}>
@@ -196,15 +240,47 @@ export function HouseholdSwitcher({
                 <View style={[styles.emptyState, { backgroundColor: colors.background, borderColor: colors.border }]}>
                   <Feather name="home" size={21} color={colors.mutedForeground} />
                   <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No household available</Text>
-                  <Text style={[styles.emptyCopy, { color: colors.mutedForeground }]}>Open Accounts & household in Settings to create or join one.</Text>
+                  <Text style={[styles.emptyCopy, { color: colors.mutedForeground }]}>Refresh the list or join with an invite code below.</Text>
                 </View>
               ) : null}
             </ScrollView>
 
+            <View style={[styles.footer, { borderTopColor: colors.border }]}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Refresh households"
+                accessibilityState={{ disabled: busy, busy: refreshing }}
+                aria-disabled={busy}
+                disabled={busy}
+                onPress={() => void refresh()}
+                style={({ pressed }) => [styles.refreshButton, { borderColor: colors.border, opacity: busy ? 0.5 : pressed ? 0.75 : 1 }]}
+              >
+                {refreshing ? <ActivityIndicator size="small" color={colors.primary} /> : <Feather name="refresh-cw" size={16} color={colors.primary} />}
+                <Text style={[styles.footerButtonText, { color: colors.primary }]}>{refreshing ? "Refreshing…" : "Refresh households"}</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Join or manage households"
+                accessibilityState={{ disabled: busy }}
+                aria-disabled={busy}
+                disabled={busy}
+                onPress={openHouseholdSettings}
+                style={({ pressed }) => [styles.manageButton, { backgroundColor: colors.primary + "16", borderColor: colors.primary + "45", opacity: busy ? 0.5 : pressed ? 0.75 : 1 }]}
+              >
+                <Feather name="user-plus" size={18} color={colors.primary} />
+                <View style={styles.footerCopy}>
+                  <Text style={[styles.footerButtonText, { color: colors.foreground }]}>Join or manage households</Text>
+                  <Text style={[styles.footerDescription, { color: colors.mutedForeground }]}>Enter an invite code or share your plan.</Text>
+                </View>
+                <Feather name="chevron-right" size={18} color={colors.primary} />
+              </Pressable>
+              <Text style={[styles.accessHint, { color: colors.mutedForeground }]}>To help someone make changes, ask for an invite with Can edit access.</Text>
+            </View>
+
             {message ? (
-              <View style={[styles.message, { backgroundColor: colors.destructive + "14", borderColor: colors.destructive + "55" }]}>
-                <Feather name="alert-circle" size={15} color={colors.destructive} />
-                <Text style={[styles.messageText, { color: colors.destructive }]}>{message}</Text>
+              <View style={[styles.message, { backgroundColor: messageColor + "14", borderColor: messageColor + "55" }]}>
+                <Feather name={message.error ? "alert-circle" : "check-circle"} size={15} color={messageColor} />
+                <Text accessibilityRole={message.error ? "alert" : undefined} accessibilityLiveRegion="polite" style={[styles.messageText, { color: messageColor }]}>{message.text}</Text>
               </View>
             ) : null}
           </Pressable>
@@ -274,6 +350,13 @@ const styles = StyleSheet.create({
   householdCopy: { flex: 1, minWidth: 0 },
   householdName: { fontSize: 14, fontFamily: "Inter_700Bold" },
   householdMeta: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_500Medium", marginTop: 3 },
+  footer: { borderTopWidth: 1, marginTop: 14, paddingTop: 14, gap: 10 },
+  refreshButton: { minHeight: 42, borderWidth: 1, borderRadius: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 12 },
+  manageButton: { minHeight: 64, borderWidth: 1, borderRadius: 14, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12, paddingVertical: 10 },
+  footerCopy: { flex: 1, minWidth: 0 },
+  footerButtonText: { fontSize: 12, fontFamily: "Inter_700Bold" },
+  footerDescription: { fontSize: 11, lineHeight: 16, marginTop: 3 },
+  accessHint: { fontSize: 11, lineHeight: 16 },
   selectedIcon: { width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   emptyState: { minHeight: 130, borderWidth: 1, borderRadius: 16, alignItems: "center", justifyContent: "center", padding: 18 },
   emptyTitle: { fontSize: 14, fontFamily: "Inter_700Bold", marginTop: 8 },

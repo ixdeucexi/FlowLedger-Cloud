@@ -49,6 +49,9 @@ export function createExactCategoryBudgetMemoryCache() {
     keys(): string[] {
       return [...values.keys()];
     },
+    remove(key: string): void {
+      values.delete(key);
+    },
     has(key: string): boolean {
       return values.has(key);
     },
