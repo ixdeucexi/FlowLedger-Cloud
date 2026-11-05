@@ -54,6 +54,8 @@ export function BiometricLockSettings({
         <Pressable
           accessibilityRole="switch"
           accessibilityLabel="App Lock"
+          aria-checked={enabled}
+          aria-disabled={busy || !supported}
           accessibilityState={{
             checked: enabled,
             disabled: busy || !supported,
@@ -116,6 +118,8 @@ export function BiometricLockSettings({
               key={option.value}
               accessibilityRole="radio"
               accessibilityLabel={`Lock after leaving: ${option.label}`}
+              aria-checked={timeoutMs === option.value}
+              aria-disabled={!enabled || busy}
               accessibilityState={{ checked: timeoutMs === option.value, disabled: !enabled || busy }}
               disabled={!enabled || busy}
               onPress={() => { void setAutoLockDelay(option.value); }}

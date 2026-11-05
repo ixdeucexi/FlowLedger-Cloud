@@ -798,6 +798,12 @@ function RootNavigator({
       onTouchStart={overlayActivity.interact}
     >
       <View
+        {...(Platform.OS === "web"
+          ? { inert: biometricLocked || effectivePrivacyShielded || !readyToReveal }
+          : {})}
+        aria-hidden={
+          biometricLocked || effectivePrivacyShielded || !readyToReveal
+        }
         accessibilityElementsHidden={
           biometricLocked || effectivePrivacyShielded || !readyToReveal
         }

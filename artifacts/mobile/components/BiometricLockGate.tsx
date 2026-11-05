@@ -1,12 +1,13 @@
 import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
-import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Image, StyleSheet } from "react-native";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ActivityIndicator, Image, Modal, Platform, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/context/AuthContext";
 import { useBiometricLock } from "@/context/BiometricLockContext";
 import { useColors } from "@/hooks/useColors";
+import { isolateAppLockWebPortals } from "@/lib/appLockWebIsolation";
 
 const FLOWLEDGER_LOGO = require("../assets/images/startup_f_transparent.png");
 
@@ -17,7 +18,14 @@ export function BiometricLockGate() {
   const { locked, busy, error, unlock } = useBiometricLock();
   const unlockRef = useRef(unlock);
   const autoUnlockStarted = useRef(false);
+  const gateRef = useRef<View>(null);
   const [showFallback, setShowFallback] = useState(false);
+
+  useLayoutEffect(() => {
+    if (Platform.OS !== "web" || !locked) return;
+    const gate = gateRef.current as unknown as HTMLElement | null;
+    if (gate) return isolateAppLockWebPortals(gate);
+  }, [locked]);
 
   useEffect(() => {
     unlockRef.current = unlock;
@@ -48,68 +56,87 @@ export function BiometricLockGate() {
 
   if (!locked) return null;
 
-  if (!showFallback) {
-    return (
-      <View
-        accessibilityLabel="Unlocking FlowLedger"
-        accessibilityViewIsModal
-        style={[styles.root, { backgroundColor: colors.background }]}
-      >
-        <Image
-          accessibilityIgnoresInvertColors
-          accessibilityLabel="FlowLedger"
-          source={FLOWLEDGER_LOGO}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-      </View>
-    );
-  }
-
+  // Keep one modal mounted through the automatic check and retry screen so the
+  // lock owns focus and system back handling until authentication succeeds.
   return (
-    <View
-      accessibilityLabel="Unlock FlowLedger"
-      accessibilityViewIsModal
-      style={[
-        styles.root,
-        {
-          backgroundColor: colors.background,
-          paddingTop: Math.max(28, insets.top),
-          paddingBottom: Math.max(28, insets.bottom),
-        },
-      ]}
+    <Modal
+      visible
+      accessibilityLabel="App Lock"
+      animationType="none"
+      transparent
+      presentationStyle="overFullScreen"
+      onRequestClose={() => {}}
     >
-      <Image
-        accessibilityIgnoresInvertColors
-        accessibilityLabel="FlowLedger"
-        source={FLOWLEDGER_LOGO}
-        style={styles.logo}
-        resizeMode="contain"
-      />
-      <Text style={[styles.title, { color: colors.foreground }]}>Unlock FlowLedger</Text>
-      <Text style={[styles.description, { color: colors.mutedForeground }]}>Your bank and plan are hidden.</Text>
-
-      {error ? <Text accessibilityRole="alert" style={[styles.error, { color: colors.destructive }]}>{error}</Text> : null}
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Unlock FlowLedger with fingerprint, face, or device screen lock"
-        disabled={busy}
-        onPress={() => void unlock()}
-        style={({ pressed }) => [styles.unlock, { backgroundColor: colors.primary, opacity: pressed || busy ? 0.72 : 1 }]}
+      <View
+        ref={gateRef}
+        accessibilityViewIsModal
+        {...(Platform.OS === "web" ? { tabIndex: -1 } : {})}
+        style={[styles.modalRoot, { backgroundColor: colors.background }]}
       >
-        {busy ? <ActivityIndicator color={colors.primaryForeground} /> : <Feather name="unlock" size={20} color={colors.primaryForeground} />}
-        <Text style={[styles.unlockText, { color: colors.primaryForeground }]}>{busy ? "Checking…" : "Unlock"}</Text>
-      </Pressable>
+        {!showFallback ? (
+          <View
+            accessibilityLabel="Unlocking FlowLedger"
+            accessibilityViewIsModal
+            style={[styles.root, { backgroundColor: colors.background }]}
+          >
+            <Image
+              accessibilityIgnoresInvertColors
+              accessibilityLabel="FlowLedger"
+              source={FLOWLEDGER_LOGO}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+          </View>
+        ) : (
+          <View
+            accessibilityLabel="Unlock FlowLedger"
+            accessibilityViewIsModal
+            style={[
+              styles.root,
+              {
+                backgroundColor: colors.background,
+                paddingTop: Math.max(28, insets.top),
+                paddingBottom: Math.max(28, insets.bottom),
+              },
+            ]}
+          >
+            <Image
+              accessibilityIgnoresInvertColors
+              accessibilityLabel="FlowLedger"
+              source={FLOWLEDGER_LOGO}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+            <Text style={[styles.title, { color: colors.foreground }]}>Unlock FlowLedger</Text>
+            <Text style={[styles.description, { color: colors.mutedForeground }]}>Your bank and plan are hidden.</Text>
 
-      <Pressable accessibilityRole="button" disabled={busy} onPress={() => void signOut()} style={styles.signOut}>
-        <Text style={[styles.signOutText, { color: colors.mutedForeground }]}>Sign out instead</Text>
-      </Pressable>
-    </View>
+            {error ? <Text accessibilityRole="alert" style={[styles.error, { color: colors.destructive }]}>{error}</Text> : null}
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Unlock FlowLedger with fingerprint, face, or device screen lock"
+              disabled={busy}
+              onPress={() => void unlock()}
+              style={({ pressed }) => [styles.unlock, { backgroundColor: colors.primary, opacity: pressed || busy ? 0.72 : 1 }]}
+            >
+              {busy ? <ActivityIndicator color={colors.primaryForeground} /> : <Feather name="unlock" size={20} color={colors.primaryForeground} />}
+              <Text style={[styles.unlockText, { color: colors.primaryForeground }]}>{busy ? "Checking…" : "Unlock"}</Text>
+            </Pressable>
+
+            <Pressable accessibilityRole="button" disabled={busy} onPress={() => void signOut()} style={styles.signOut}>
+              <Text style={[styles.signOutText, { color: colors.mutedForeground }]}>Sign out instead</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  modalRoot: {
+    flex: 1,
+  },
   root: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 100_000,
