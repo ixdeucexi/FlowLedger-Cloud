@@ -26,7 +26,7 @@ import { useLocalDay } from "@/hooks/useLocalDay";
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const CAT_COLORS: Record<string, string> = {
   Housing: "#0f9b8e", Utilities: "#f0b429", Insurance: "#6366f1",
-  Transportation: "#ec4899", Food: "#f97316", Entertainment: "#8b5cf6",
+  Transportation: "#ec4899", Food: "#f97316", Groceries: "#f97316", Restaurant: "#ea580c", Entertainment: "#8b5cf6",
   Health: "#ef4444", Education: "#3b82f6", Savings: "#22c55e", Debt: "#e11d48", Other: "#94a3b8",
 };
 

@@ -668,7 +668,7 @@ function createDemoBudgetData(today = new Date()) {
     { id: "demo-paycheck", name: "Paycheck", amount: 2300, frequency: "biweekly", start_date: startDate, next_payment_date: demoDate(year, month, 29), amount_history: [], last_reviewed_at: now },
   ];
   const transactions: Transaction[] = [
-    { id: "demo-market", date: demoDate(year, month, Math.max(1, today.getDate() - 3)), amount: -86.42, category: "Food", note: "Neighborhood Market" },
+    { id: "demo-market", date: demoDate(year, month, Math.max(1, today.getDate() - 3)), amount: -86.42, category: "Groceries", note: "Neighborhood Market" },
     { id: "demo-fuel", date: demoDate(year, month, Math.max(1, today.getDate() - 2)), amount: -44.17, category: "Transportation", note: "Fuel" },
     { id: "demo-pay", date: demoDate(year, month, Math.max(1, today.getDate() - 1)), amount: 2300, category: "Income", note: "Paycheck" },
   ];

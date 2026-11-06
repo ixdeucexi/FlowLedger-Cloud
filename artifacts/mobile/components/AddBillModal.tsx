@@ -8,6 +8,7 @@ import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as
 
 import colors from "@/constants/colors";
 import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
+import { BillFrequencyPicker } from "@/components/BillFrequencyPicker";
 import { BillPaymentHistoryPanel } from "@/components/BillPaymentHistoryPanel";
 import { DebtPaymentPauseModal, type DebtPaymentPauseDateField, type DebtPaymentPauseInput, type DebtPaymentPauseStep } from "@/components/DebtPaymentPauseModal";
 import type { Bill } from "@/context/BudgetContext";
@@ -91,6 +92,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   const [dayOfWeek,     setDayOfWeek]     = useState(0);      // 0=Sun … 6=Sat
   const [isRecurring,   setIsRecurring]   = useState(true);
   const [frequency,     setFrequency]     = useState<Bill["frequency"]>("monthly");
+  const [frequencyOpen, setFrequencyOpen] = useState(false);
   const [nextPaymentDate, setNextPaymentDate] = useState("");
   const [billStartDate, setBillStartDate] = useState("");     // YYYY-MM-DD
   const [billEndDate,   setBillEndDate]   = useState("");     // YYYY-MM-DD
@@ -114,6 +116,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   pauseDraftRef.current = { visible: pauseVisible, revision: pauseDraftRevision };
   pauseAccessRef.current = { scopeKey: pauseScopeKey, canEdit: canEditHousehold, visible, billId: editBill?.id };
   const dismissLayer = () => {
+    if (frequencyOpen) { setFrequencyOpen(false); return; }
     if (confirmation) { setConfirmation(null); return; }
     if (pauseVisible) {
       if (pausePendingRef.current) { setPauseBackRevision(revision => revision + 1); return; }
@@ -127,7 +130,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   };
   // A refused browser Back has consumed its nested entry; a new revision
   // asks the existing controller to restore that owned entry while saving.
-  useBackDismiss(visible, dismissLayer, true, pauseVisible ? (pauseDateField || pauseStep === "transfer" ? 2 : 1) + pauseBackRevision * 3 : historyVisible ? 1 : 0);
+  useBackDismiss(visible, dismissLayer, true, pauseVisible ? (pauseDateField || pauseStep === "transfer" ? 2 : 1) + pauseBackRevision * 3 : historyVisible || frequencyOpen ? 1 : 0);
 
   useEffect(() => {
     setPauseVisible(false);
@@ -137,9 +140,12 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
     setPauseActionError("");
   }, [editBill?.id, currentDebt?.id, visible, pauseScopeKey]);
 
+  useEffect(() => { setFrequencyOpen(false); }, [visible, editBill?.id, pauseScopeKey, isDebt, forceDebt]);
+
   const beginPaymentPause = (selected?: DebtPaymentPause) => {
     if (pausePendingRef.current || saving || pauseUnavailable) return;
     Keyboard.dismiss();
+    setFrequencyOpen(false);
     setActionMenuVisible(false);
     // Keep the selected interval as the edit baseline through refreshes/retries.
     setEditingPaymentPause(selected ? Object.freeze({
@@ -328,6 +334,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
         setSaving(false);
       }
     };
+    setFrequencyOpen(false);
     setConfirmation({
       title: `Delete ${noun}`,
       message: `Delete "${editBill.name}" completely? This removes it from Bills and Calendar. Existing manual transactions stay in Activity.`,
@@ -354,6 +361,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
         setSaving(false);
       }
     };
+    setFrequencyOpen(false);
     setConfirmation({
       title: `Pause ${noun}`,
       message: `Pause "${editBill.name}" after this month's scheduled payments? Past months and saved monthly details will stay unchanged.`,
@@ -378,6 +386,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
         setSaving(false);
       }
     };
+    setFrequencyOpen(false);
     setConfirmation({
       title: `Resume ${noun}`,
       message: `Resume "${editBill.name}" and restore its future scheduled payments?`,
@@ -415,7 +424,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
                   accessibilityLabel="More bill actions"
                   accessibilityState={{ expanded: actionMenuVisible, disabled: saving || pauseActionSaving }}
                   disabled={saving || pauseActionSaving}
-                  onPress={() => setActionMenuVisible((visible) => !visible)}
+                  onPress={() => { setFrequencyOpen(false); setActionMenuVisible((visible) => !visible); }}
                   hitSlop={8}
                   style={({ pressed }) => [styles.headerActionButton, { backgroundColor: actionMenuVisible ? c.primary + "18" : "transparent", opacity: pressed ? 0.7 : 1 }]}
                 >
@@ -619,7 +628,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
             ) : null}
 
             {editBill ? <Pressable accessibilityRole="button" accessibilityLabel={`Payment history for ${editBill.name}`}
-              onPress={() => { Keyboard.dismiss(); setActionMenuVisible(false); setHistoryVisible(true); }}
+              onPress={() => { Keyboard.dismiss(); setFrequencyOpen(false); setActionMenuVisible(false); setHistoryVisible(true); }}
               style={({ pressed }) => [styles.historyLink, { backgroundColor: c.primary + "12", borderColor: c.primary + "35", opacity: pressed ? 0.75 : 1 }]}>
               <Feather name="clock" size={21} color={c.primary} />
               <View style={styles.actionMenuCopy}>
@@ -643,19 +652,8 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
 
             {/* Frequency */}
             <Text style={lbl}>Frequency</Text>
-            <View style={[styles.segRow, { backgroundColor: c.muted, borderRadius: 10 }]}>
-              {((isDebt || forceDebt ? ["monthly", "quarterly", "biweekly", "weekly"] : ["monthly", "quarterly", "yearly", "biweekly", "weekly"]) as Bill["frequency"][]).map(f => (
-                <Pressable key={f} onPress={() => setFrequency(f)}
-                  style={[styles.segBtn, { backgroundColor: frequency === f ? c.primary : "transparent", borderRadius: 8 }]}
-                >
-                  <Feather name={f === "monthly" ? "calendar" : "repeat"} size={12}
-                    color={frequency === f ? c.primaryForeground : c.mutedForeground} />
-                  <Text style={[styles.segLabel, { color: frequency === f ? c.primaryForeground : c.mutedForeground }]}>
-                    {f === "monthly" ? "Monthly" : f === "quarterly" ? "Every 3 months" : f === "yearly" ? "Yearly" : f === "biweekly" ? "Biweekly" : "Weekly"}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
+            <BillFrequencyPicker value={frequency} onChange={setFrequency} debt={Boolean(isDebt || forceDebt)}
+              open={frequencyOpen} onOpenChange={setFrequencyOpen} disabled={saving || pauseActionSaving} />
 
             {/* Monthly → calendar day picker; Weekly → day-of-week grid */}
             <DatePickerField
@@ -985,9 +983,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontFamily: "Inter_700Bold" },
   label: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginBottom: 6, marginTop: 14, textTransform: "uppercase", letterSpacing: 0.7 },
   input: { height: 48, borderRadius: 10, paddingHorizontal: 14, fontSize: 16, fontFamily: "Inter_400Regular" },
-  segRow: { flexDirection: "row", flexWrap: "wrap", padding: 4, gap: 4 },
-  segBtn: { flexBasis: "48%", flexGrow: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10 },
-  segLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   dowRow: { flexDirection: "row", gap: 6, marginTop: 4 },
   dowBtn: { flex: 1, alignItems: "center", paddingVertical: 10 },
   dowLabel: { fontSize: 12, fontFamily: "Inter_700Bold" },

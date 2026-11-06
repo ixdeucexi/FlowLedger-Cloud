@@ -1,6 +1,6 @@
 /** Starter labels are seeded once; saved household categories are authoritative. */
 export const DEFAULT_CATEGORIES = [
-  "Housing", "Utilities", "Insurance", "Transportation", "Food",
+  "Housing", "Utilities", "Insurance", "Transportation", "Groceries", "Restaurant",
   "Entertainment", "Health", "Education", "Savings", "Debt",
   "Shopping", "Rent", "Other",
 ];

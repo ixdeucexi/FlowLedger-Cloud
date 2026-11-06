@@ -341,6 +341,44 @@ test("native requestClose honors pending-save, calendar, pause and existing paym
   h.child("Modal").props.onRequestClose(); assert.equal(h.closes(), 1);
 });
 
+test("native Back returns from history immediately after an open frequency menu", () => {
+  const h = editorHarness({ native: true });
+  h.child("BillFrequencyPicker").props.onOpenChange(true);
+  assert.equal(h.child("BillFrequencyPicker").props.open, true);
+  h.button("Payment history for First card").props.onPress();
+  assert.ok(h.child("BillPaymentHistoryPanel"));
+  h.child("Modal").props.onRequestClose();
+  assert.equal(h.child("BillPaymentHistoryPanel"), undefined);
+  assert.equal(h.child("BillFrequencyPicker").props.open, false);
+  assert.equal(h.closes(), 0);
+  h.child("Modal").props.onRequestClose();
+  assert.equal(h.closes(), 1);
+});
+
+test("higher bill editor layers close frequency before native Back without persisting anything", () => {
+  let writes = 0;
+  const h = editorHarness({ native: true, budget: { pauseDebtPayments: async () => { writes++; } } });
+  h.child("BillFrequencyPicker").props.onOpenChange(true);
+  h.button("Pause debt payments").props.onPress();
+  assert.equal(h.child("BillFrequencyPicker").props.open, false);
+  assert.equal(h.child("DebtPaymentPauseModal").props.visible, true);
+  h.child("Modal").props.onRequestClose();
+  assert.equal(h.child("DebtPaymentPauseModal").props.visible, false);
+  assert.equal(h.closes(), 0);
+  h.child("BillFrequencyPicker").props.onOpenChange(true);
+  h.button("More bill actions").props.onPress();
+  assert.equal(h.child("BillFrequencyPicker").props.open, false);
+  h.props.onDelete = async () => { writes++; };
+  h.child("BillFrequencyPicker").props.onOpenChange(true);
+  h.button("Delete Debt").props.onPress();
+  assert.equal(h.child("BillFrequencyPicker").props.open, false);
+  assert.ok(h.child("ConfirmActionOverlay").props.request);
+  h.child("Modal").props.onRequestClose();
+  assert.equal(h.child("ConfirmActionOverlay").props.request, null);
+  assert.equal(h.closes(), 0);
+  assert.equal(writes, 0);
+});
+
 test("shared date picker preserves uncontrolled callbacks and exposes controlled dates with accessible pending state", () => {
   const dates: string[] = [];
   const h = harness("DatePickerField", { label: "Pause starts", value: "2026-01-31", onChange: (date: string) => dates.push(date) });

@@ -11,15 +11,26 @@ import { parseCategoryBudgetCache } from "./categoryBudgetLoadPolicy";
 import { parseCategoryAssignments } from "./moneyFormInput";
 
 test("saved catalog and cache do not resurrect a renamed or deleted starter category", () => {
-  const renamed = DEFAULT_CATEGORIES.map(name => name === "Food" ? "Groceries" : name);
+  const renamed = DEFAULT_CATEGORIES.map(name => name === "Groceries" ? "Family groceries" : name);
   const removed = renamed.filter(name => name !== "Utilities");
   for (const saved of [removed, fallbackCategoryList(removed), JSON.parse(JSON.stringify(removed))]) {
     const loaded = fallbackCategoryList(saved);
-    assert(!loaded.includes("Food")); assert(!loaded.includes("Utilities"));
-    assert(loaded.includes("Groceries"));
+    assert(!loaded.includes("Food")); assert(!loaded.includes("Utilities")); assert(!loaded.includes("Groceries"));
+    assert(loaded.includes("Family groceries")); assert(loaded.includes("Restaurant"));
     for (const name of ["Other", "Debt", "Savings"]) assert(loaded.includes(name));
   }
   assert.deepEqual(fallbackCategoryList([]), ["Savings", "Debt", "Other"]);
+});
+
+test("starter categories separate groceries and restaurants without changing saved Food catalogs", () => {
+  assert(DEFAULT_CATEGORIES.includes("Groceries"));
+  assert(DEFAULT_CATEGORIES.includes("Restaurant"));
+  assert(!DEFAULT_CATEGORIES.includes("Food"));
+  const legacy = ["Food", "Family", "Other"];
+  assert.deepEqual(fallbackCategoryList(legacy), ["Food", "Family", "Other", "Savings", "Debt"]);
+  assert.deepEqual(legacy, ["Food", "Family", "Other"]);
+  assert(!fallbackCategoryList(legacy).includes("Groceries"));
+  assert(!fallbackCategoryList(legacy).includes("Restaurant"));
 });
 
 test("ordinary starter names are editable while financial sentinel names are protected", () => {
@@ -66,7 +77,7 @@ test("unsaved assignment drafts move with renamed or merged labels, including in
 function mutationHarness(demo = false) {
   const source = readFileSync("context/BudgetContext.tsx", "utf8");
   const state = {
-    categories: [...DEFAULT_CATEGORIES], bills: [{ id: "bill", category: "Food", amount: 30 }],
+    categories: [...DEFAULT_CATEGORIES, "Food"], bills: [{ id: "bill", category: "Food", amount: 30 }],
     transactions: [{ id: "active", category: "Food", amount: -20, review_allocations: [{ type: "category", category: "Food", amount: 20 }] }],
     deleted: [{ id: "deleted", category: "Other", amount: -10, review_allocations: [{ type: "category", category: "Food", amount: 10 }] }],
   };

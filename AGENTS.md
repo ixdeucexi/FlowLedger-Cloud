@@ -146,7 +146,7 @@ Do not run FORGE and SENTINEL as parallel writers.
 
 ## Product guardrails
 
-- When the owner asks to complete/review saved updates, follow `docs/update-center.md` to read their admin-authored Update Center requests. Submit only saves requests; never poll or execute them automatically.
+- When the owner asks to complete/review saved updates, follow `docs/update-center.md` to read their admin-authored Update Center requests. Submit only saves requests. The owner has authorized the scheduled review to implement eligible saved app updates after reading them; follow the runbook and its verification/release gates instead of treating submission itself as an execution trigger.
 - FlowLedger is a financial decision-support product. Calculation correctness is business-critical.
 - Website and PWA behavior are both first-class requirements.
 - Supabase is the persistent data layer.

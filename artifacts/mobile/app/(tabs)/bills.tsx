@@ -56,7 +56,7 @@ const CAT_COLORS: Record<string, string> = {
   Utilities: "#f0b429",
   Insurance: "#6366f1",
   Transportation: "#ec4899",
-  Food: "#f97316",
+  Food: "#f97316", Groceries: "#f97316", Restaurant: "#ea580c",
   Entertainment: "#8b5cf6",
   Health: "#ef4444",
   Education: "#3b82f6",
