@@ -302,9 +302,15 @@ export function createFinancialProjection(
     const o = overridesByBillMonth.get(`${bill.id}:${year}-${month}`);
     if (
       o?.custom_due_day !== undefined &&
-      (bill.frequency === "monthly" || bill.frequency === "quarterly")
+      (bill.frequency === "monthly" || bill.frequency === "quarterly" || (bill.frequency === "yearly" && occ.length > 0))
     ) {
-      occ = [Math.min(o.custom_due_day, daysInMonth)];
+      const day = Math.min(o.custom_due_day, daysInMonth);
+      const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      occ = bill.frequency !== "yearly" || (
+        date >= (bill.next_payment_date ?? bill.start_date ?? "").slice(0, 10)
+        && (!bill.start_date || date >= bill.start_date.slice(0, 10))
+        && (!bill.end_date || date <= bill.end_date.slice(0, 10))
+      ) ? [day] : [];
     }
     return applyBillDateMovesToOccurrences(bill, month, year, occ);
   };
@@ -353,6 +359,7 @@ export function createFinancialProjection(
     const result = bills.filter(
       (b) =>
         (b.is_recurring || b.is_debt) &&
+        (b.frequency !== "yearly" || getBillOccurrencesInMonth(b, month, year).length > 0) &&
         (isBillActiveForMonth(b, month, year) ||
           getBillOccurrencesInMonth(b, month, year).length > 0),
     );
@@ -1711,6 +1718,51 @@ export function createFinancialProjection(
     const displayEvents = suppressDebtBillPlanDuplicates(financialEvents);
     let balanceEvents = [...displayEvents];
     if (bankAnchor?.date.startsWith(currentMonthPrefix)) {
+      // A fresh bank observation still contains cash owed on older annual
+      // bills. Find their actual occurrence months, including moved dates,
+      // even when the next anniversary is beyond the forecast horizon.
+      bills.filter(bill => bill.frequency === "yearly" && isBillEligibleForUpcomingPlan(bill) && bill.is_recurring)
+        .forEach(bill => {
+          const anchor = bill.next_payment_date ?? bill.start_date;
+          if (!anchor || !/^\d{4}-\d{2}-\d{2}$/.test(anchor.slice(0, 10))) return;
+          const firstYear = Number(anchor.slice(0, 4));
+          const annualMonth = Number(anchor.slice(5, 7)) - 1;
+          const months = new Map<string, { month: number; year: number }>();
+          for (let annualYear = firstYear; annualYear <= year; annualYear += 1) {
+            months.set(`${annualYear}-${annualMonth}`, { month: annualMonth, year: annualYear });
+          }
+          resolveBillDateMoves(bill.id, billDateMoves, bill).forEach(move => {
+            const moveYear = Number(move.to_date.slice(0, 4));
+            const moveMonth = Number(move.to_date.slice(5, 7)) - 1;
+            months.set(`${moveYear}-${moveMonth}`, { month: moveMonth, year: moveYear });
+          });
+          months.forEach(({ month: occurrenceMonth, year: occurrenceYear }) => {
+            const prefix = `${occurrenceYear}-${String(occurrenceMonth + 1).padStart(2, "0")}`;
+            if (prefix >= currentMonthPrefix) return;
+            const override = getOverride(bill.id, occurrenceMonth, occurrenceYear);
+            const hasReviewedOccurrence = matchedAllocationIndexes.reviewedBillIdsByMonth.get(prefix)?.has(bill.id) ?? false;
+            if (override?.actual_amount !== undefined && !hasReviewedOccurrence) return;
+            getBillOccurrencesInMonth(bill, occurrenceMonth, occurrenceYear).forEach(day => {
+              const date = `${prefix}-${String(day).padStart(2, "0")}`;
+              const payment = resolveBillOccurrencePayment({
+                occurrenceDate: date,
+                scheduledAmount: getBillOccurrenceAmount(bill, date),
+                frequency: bill.frequency,
+                match: billMatches.get(occurrenceKey(bill.id, date)),
+                monthlyPaidAmount: override?.paid_amount,
+                monthlyPaidDate: override?.paid_date,
+              });
+              if (payment.remainingAmount <= 0.005) return;
+              balanceEvents.push({
+                id: `bill:${bill.id}:${occurrenceYear}-${occurrenceMonth + 1}-${day}`,
+                sourceType: "bill", sourceId: bill.id, date, kind: "bill",
+                amount: -payment.remainingAmount, status: "planned", name: bill.name,
+                configuredOccurrenceAmount: getBillOccurrenceAmount(bill, date),
+                settledOccurrenceAmount: payment.paidAmount,
+              });
+            });
+          });
+        });
       // The bank balance still contains money reserved in older open buckets.
       // Restore that commitment once in the observed month without inventing
       // a second calendar occurrence or changing the original target date.

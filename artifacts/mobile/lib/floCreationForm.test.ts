@@ -163,6 +163,16 @@ test("invalid full fields fail visibly; unknown frequency, direction, account an
     [account],
   );
 });
+test("yearly bill form keeps annual amount and requires an anchor; income/debt cannot choose yearly", () => {
+  const yearly = { ...values.create_bill, amount: "1200", frequency: "yearly", first_date: "2028-02-29" };
+  const result = validateFloForm("create_bill", yearly, [account]);
+  assert.deepEqual(result.errors, {});
+  assert.equal(result.input.fields.amount, 1200);
+  assert.equal(result.input.fields.frequency, "yearly");
+  assert.equal(result.input.fields.first_date, "2028-02-29");
+  for (const first_date of ["", "2026-02-29"]) assert.ok(validateFloForm("create_bill", { ...yearly, first_date }, [account]).errors.first_date);
+  for (const kind of ["create_income", "create_debt"] as const) assert.ok(validateFloForm(kind, { ...values[kind], frequency: "yearly" }, [account]).errors.frequency);
+});
 test("known values prefill; server-rejected raw text overrides only its own fields and is retained exactly", () => {
   const creation = {
     status: "needs_details",
@@ -736,4 +746,19 @@ test("web frequency direction account and month-end controls expose checked stat
   );
   assert.equal(nativeOneTime.props["aria-checked"], undefined);
   assert.equal(nativeOneTime.props.accessibilityState.checked, true);
+});
+test("Flo offers Yearly only for bills and saves it without changing its full annual amount", async () => {
+  for (const kind of ["create_income", "create_debt"] as const) {
+    assert.equal(flatten(componentHarness(kind).render()).some(node => node.props?.accessibilityLabel === "Yearly"), false);
+  }
+  const bill = componentHarness("create_bill", { ...values.create_bill, amount: "1200", first_date: "2028-02-29" });
+  let tree = bill.render();
+  flatten(tree).find(node => node.props?.accessibilityLabel === "Yearly").props.onPress();
+  tree = bill.render();
+  assert.equal(flatten(tree).find(node => node.props?.accessibilityLabel === "Yearly").props["aria-checked"], true);
+  await flatten(tree).find(node => node.props?.accessibilityLabel === "Save bill").props.onPress();
+  assert.equal(bill.events.saves.length, 1);
+  assert.equal(bill.events.saves[0].fields.frequency, "yearly");
+  assert.equal(bill.events.saves[0].fields.amount, 1200);
+  assert.equal(bill.events.saves[0].fields.first_date, "2028-02-29");
 });

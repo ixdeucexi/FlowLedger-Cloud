@@ -98,7 +98,7 @@ export function recurringAnalysis(snapshot:AnalysisSnapshot,request:AnalysisRequ
   if(request.domain==="subscriptions") {
     const configured=rows("bills").filter(b=>!b.is_debt&&b.is_recurring&&(!b.end_date||b.end_date>=snapshot.today)&&(!b.start_date||b.start_date<=snapshot.today)&&/subscription|entertainment|stream|software/i.test(b.category??"")&&matches(b.name,request.entity));
     const valid=configured.filter(b=>numeric(b.amount)!==null);
-    const cost=sum(valid.map(b=>round(Number(b.amount)*(b.frequency==="weekly"?52/12:b.frequency==="biweekly"?26/12:b.frequency==="quarterly"?1/3:1))));
+    const cost=sum(valid.map(b=>round(Number(b.amount)*(b.frequency==="weekly"?52/12:b.frequency==="biweekly"?26/12:b.frequency==="quarterly"?1/3:b.frequency==="yearly"?1/12:1))));
     base.facts.configuredSubscriptionMonthlyCost=cost;
     base.text+=`\n\nConfigured subscription-category bills total about ${dollars(cost)}/month at their current rates. Canceling one would avoid its future charges only after the provider confirms cancellation; do not remove its next bill before then.`;
     if(valid.length!==configured.length)base.missing.push("A configured subscription amount is missing");

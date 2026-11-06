@@ -11,7 +11,8 @@ export const PLAN_SIMULATION_VERSION = 1;
 export const PLAN_SIMULATION_HORIZONS = [3, 6, 12, 24] as const;
 export type PlanSimulationHorizon = typeof PLAN_SIMULATION_HORIZONS[number];
 export type SimulationIncomeFrequency = "monthly" | "biweekly" | "weekly";
-export type SimulationBillFrequency = "monthly" | "quarterly" | "biweekly" | "weekly";
+export type SimulationBillFrequency = "monthly" | "quarterly" | "yearly" | "biweekly" | "weekly";
+export type SimulationDebtFrequency = Exclude<SimulationBillFrequency, "yearly">;
 
 type ChangeBase = { id: string };
 export type PlanSimulationChange =
@@ -27,7 +28,7 @@ export type PlanSimulationChange =
   | (ChangeBase & { type: "savings_once"; name: string; amount: number; date: string })
   | (ChangeBase & { type: "debt_edit"; debtId: string; amount: number; effectiveDate: string })
   | (ChangeBase & { type: "debt_pause"; debtId: string; effectiveDate: string; resumeDate: string })
-  | (ChangeBase & { type: "debt_add"; name: string; balance: number; apr: number; amount: number; frequency: SimulationBillFrequency; startDate: string })
+  | (ChangeBase & { type: "debt_add"; name: string; balance: number; apr: number; amount: number; frequency: SimulationDebtFrequency; startDate: string })
   | (ChangeBase & { type: "debt_extra"; amount: number; date: string })
   | (ChangeBase & { type: "debt_payoff"; debtId: string; date: string });
 
@@ -266,7 +267,7 @@ function decodeChange(value: unknown): PlanSimulationChange | null {
     case "bill_add":
       return hasExactKeys(row, ["id", "type", "name", "amount", "frequency", "startDate"])
         && isName(row.name) && isAmount(row.amount)
-        && (row.frequency === "monthly" || row.frequency === "quarterly" || row.frequency === "biweekly" || row.frequency === "weekly")
+        && (row.frequency === "monthly" || row.frequency === "quarterly" || row.frequency === "yearly" || row.frequency === "biweekly" || row.frequency === "weekly")
         && isValidPlanSimulationDate(row.startDate)
         ? { id: row.id, type: row.type, name: row.name.trim(), amount: cents(row.amount), frequency: row.frequency, startDate: row.startDate }
         : null;
@@ -417,7 +418,7 @@ export function recurringSimulationDates(
     return output;
   }
   const [startYear, startMonth, anchorDay] = startDate.split("-").map(Number);
-  const step = frequency === "quarterly" ? 3 : 1;
+  const step = frequency === "yearly" ? 12 : frequency === "quarterly" ? 3 : 1;
   for (let offset = 0; ; offset += step) {
     const first = new Date(Date.UTC(startYear, startMonth - 1 + offset, 1));
     const lastDay = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();

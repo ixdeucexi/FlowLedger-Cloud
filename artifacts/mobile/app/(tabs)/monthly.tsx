@@ -70,7 +70,7 @@ import { readInterfacePreferences, updateInterfacePreferences } from "@/lib/inte
 const calendarRuntimeScopes = new Set<string>();
 
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly", quarterly: "Quarterly" };
+const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly", quarterly: "Quarterly", yearly: "Yearly" };
 
 type TabView = "bills" | "calendar";
 type DueDayPickerState = { bill: Bill; fromDate: string };
@@ -2260,7 +2260,7 @@ export default function MonthlyScreen() {
                     </View>
                   </View>
 
-                  {(bill.frequency === "monthly" || bill.frequency === "quarterly") && (
+                  {(bill.frequency === "monthly" || bill.frequency === "quarterly" || bill.frequency === "yearly") && (
                     <View style={styles.dueDayRow}>
                       <Feather name="calendar" size={11} color={customDay !== undefined ? c.primary : c.mutedForeground} style={{ marginRight: 6 }} />
                       <Text style={[styles.fieldLabel, { color: customDay !== undefined ? c.primary : c.mutedForeground, marginBottom: 0, marginRight: 8 }]}>

@@ -140,7 +140,7 @@ import { countReviewQueue } from "@/lib/reviewCenter";
 import { normalizePlanningTools } from "@/lib/planningMode";
 import { canonicalDebtPaymentMethod } from "@/lib/debtOrder";
 import { addDebtPaymentPause, editDebtPaymentPauseHistory, isDebtPaymentPauseDate, normalizeDebtPaymentPauses, resumeDebtPaymentPause, type DebtPaymentPause, type DebtPaymentPauseEditInput } from "@/lib/debtPaymentPause";
-import { localDateString } from "@/lib/dateLabels";
+import { dateOnlyToLocalDate, localDateString } from "@/lib/dateLabels";
 import { spendingBucketSummary, validateCreateSpendingBucketMatch } from "@/lib/spendingBuckets";
 import { hasBucketRemainderFunding, latestBucketRemainderAvailableDate, removeBucketRemainderFundingSource, resizeSnowballFundingSources } from "@/lib/snowballFunding";
 import { canonicalConnectedAccounts, isInferredPendingBankHold, pendingPlaidActivityWithBalanceHolds } from "@/lib/plaidActivity";
@@ -520,6 +520,14 @@ function monthKey(year: number, month: number) {
 
 function dateFromParts(year: number, month: number, day: number) {
   return `${monthKey(year, month)}-${String(day).padStart(2, "0")}`;
+}
+
+function assertYearlyBillSchedule(bill: Pick<Bill, "frequency" | "is_debt" | "next_payment_date" | "start_date">) {
+  if (bill.frequency !== "yearly") return;
+  if (bill.is_debt) throw new Error("Yearly is available for bills. Choose another debt payment frequency.");
+  if (!dateOnlyToLocalDate(bill.next_payment_date ?? bill.start_date ?? "")) {
+    throw new Error("Choose a valid first payment date for this yearly bill.");
+  }
 }
 
 function billStartMonth(bill: Pick<Bill, "start_date" | "created_at">): { year: number; month: number } {
@@ -2906,6 +2914,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const addBill = useCallback(async (bill: Omit<Bill, "id" | "created_at">) => {
     if (!user) throw new Error("Sign in to add a bill");
     assertCanEditHousehold("add a bill");
+    assertYearlyBillSchedule(bill);
     const nb: Bill = { ...bill, id: genId(), created_at: new Date().toISOString() };
     if (demoMode) {
       setBills(prev => reorderDebtPriorities([...prev, nb]));
@@ -2960,6 +2969,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (editableFields.length === 0) return;
     const submittedPatch = billEditablePatch(bill, editableFields) as Partial<Bill>;
     const reviewedBill: Bill = { ...existing, ...submittedPatch, last_reviewed_at: new Date().toISOString() };
+    assertYearlyBillSchedule(reviewedBill);
     const editToken = genId();
     let billFieldTokens = billEditFieldTokensRef.current.get(bill.id);
     if (!billFieldTokens) {
@@ -6391,9 +6401,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const importBills = useCallback(async (imported: Omit<Bill, "id" | "created_at">[]) => {
     if (!user) return;
     assertCanEditHousehold("import bills");
+    imported.forEach(assertYearlyBillSchedule);
     const newBills = imported.map(b => ({
       ...b,
-      frequency:   (["monthly", "quarterly", "biweekly", "weekly"].includes(String(b.frequency)) ? b.frequency : "monthly") as "monthly" | "quarterly" | "biweekly" | "weekly",
+      frequency:   (["monthly", "quarterly", "yearly", "biweekly", "weekly"].includes(String(b.frequency)) ? b.frequency : "monthly") as "monthly" | "quarterly" | "yearly" | "biweekly" | "weekly",
       day_of_week: b.day_of_week ?? 0,
       next_payment_date: b.next_payment_date ?? undefined,
       id:          genId(),

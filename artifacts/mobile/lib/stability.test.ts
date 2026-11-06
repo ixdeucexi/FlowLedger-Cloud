@@ -3,6 +3,16 @@ import test from "node:test";
 
 import { buildStabilityProgress, stabilityBasisExplanation } from "./stability";
 
+test("annual overdue guidance uses the yearly cadence", () => {
+  const result = buildStabilityProgress({
+    balances: [{ day: 6, balance: 1000 }], todayDay: 6, safetyFloor: 200,
+    monthlyRequiredOutflow: 1200, overdueBills: 1, forecastConfidence: "high",
+    attentionBill: { name: "Insurance", overdueAmount: 1200, dueLabel: "Nov 5", frequency: "yearly", overdueOccurrenceCount: 1 },
+  });
+  assert.match(result.explanation, /yearly payment/);
+  assert.doesNotMatch(result.explanation, /weekly/);
+});
+
 test("zero full backup days can coexist with a safe payday and later-month risk is separate", () => {
   const base = { todayDay: 1, safetyFloor: 200, monthlyRequiredOutflow: 3000, overdueBills: 0, forecastConfidence: "high" as const };
   const progress = buildStabilityProgress({ ...base, balances: [{ day: 1, balance: 250 }, { day: 3, balance: 300, income: 1000 }, { day: 30, balance: 210 }] });

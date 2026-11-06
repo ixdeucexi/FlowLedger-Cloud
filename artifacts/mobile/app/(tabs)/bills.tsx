@@ -455,6 +455,7 @@ export default function BillsScreen() {
     if (bill.frequency === "weekly") return "/week";
     if (bill.frequency === "biweekly") return "biweekly";
     if (bill.frequency === "quarterly") return "every 3 months";
+    if (bill.frequency === "yearly") return "/year";
     return "/month";
   }, []);
   const formatStoppedText = useCallback((bill: Bill) => {

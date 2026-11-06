@@ -36,6 +36,37 @@ describe("bill scheduling", () => {
     assert.deepEqual(getBillOccurrenceDays(bill, 0, 2027), [27]);
   });
 
+  it("schedules one full yearly anniversary with valid anchors and inclusive bounds", () => {
+    const bill = { frequency: "yearly" as const, due_day: 15, next_payment_date: "2026-11-15", start_date: "2026-11-15", end_date: "2028-11-15" };
+    assert.deepEqual(getBillOccurrenceDays(bill, 10, 2025), []);
+    assert.deepEqual(getBillOccurrenceDays(bill, 9, 2026), []);
+    assert.deepEqual(getBillOccurrenceDays(bill, 10, 2026), [15]);
+    assert.deepEqual(getBillOccurrenceDays(bill, 0, 2027), []);
+    assert.deepEqual(getBillOccurrenceDays(bill, 10, 2027), [15]);
+    assert.deepEqual(getBillOccurrenceDays(bill, 10, 2028), [15]);
+    assert.deepEqual(getBillOccurrenceDays(bill, 10, 2029), []);
+    assert.deepEqual(getBillOccurrenceDays({ ...bill, next_payment_date: undefined, start_date: undefined }, 10, 2026), []);
+    assert.deepEqual(getBillOccurrenceDays({ ...bill, next_payment_date: "2026-02-31" }, 1, 2027), []);
+    assert.deepEqual(getBillOccurrenceDays({ ...bill, due_day: 14 }, 10, 2026), []);
+    assert.deepEqual(getBillOccurrenceDays({ ...bill, next_payment_date: undefined }, 10, 2027), [15]);
+  });
+
+  it("clamps leap anniversaries per occurrence and restores February 29 in leap years", () => {
+    const bill = { frequency: "yearly" as const, due_day: 29, next_payment_date: "2024-02-29" };
+    assert.deepEqual([2024, 2025, 2026, 2027, 2028].map(year => getBillOccurrenceDays(bill, 1, year)), [[29], [28], [28], [28], [29]]);
+    assert.equal(bill.due_day, 29);
+  });
+
+  it("moves or skips one annual obligation without consuming the next anniversary", () => {
+    const bill = { frequency: "yearly" as const, due_day: 15, next_payment_date: "2026-11-15" };
+    const moves = [{ bill_id: "annual", from_date: "2026-11-15", to_date: "2026-12-01" }, { bill_id: "annual", from_date: "2026-12-01", to_date: "2027-01-05" }];
+    assert.deepEqual(applyBillDateMovesToOccurrenceDays("annual", 10, 2026, [15], moves, bill), []);
+    assert.deepEqual(applyBillDateMovesToOccurrenceDays("annual", 11, 2026, [], moves, bill), []);
+    assert.deepEqual(applyBillDateMovesToOccurrenceDays("annual", 0, 2027, [], moves, bill), [5]);
+    assert.deepEqual(applyBillDateMovesToOccurrenceDays("annual", 10, 2027, [15], moves, bill), [15]);
+    assert.deepEqual(applyBillDateMovesToOccurrenceDays("annual", 0, 2027, [], [...moves, { bill_id: "annual", from_date: "2027-01-05", to_date: "2027-01-05", is_skipped: true }], bill), []);
+  });
+
   it("clamps a quarterly occurrence to the end of a shorter month", () => {
     const bill = {
       frequency: "quarterly" as const,

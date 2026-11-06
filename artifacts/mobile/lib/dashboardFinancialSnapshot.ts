@@ -59,7 +59,7 @@ export interface DashboardUpcomingBill {
   month: number;
   year: number;
   isDebt: boolean;
-  frequency?: "monthly" | "quarterly" | "biweekly" | "weekly";
+  frequency?: "monthly" | "quarterly" | "yearly" | "biweekly" | "weekly";
   pending: boolean;
   sourceId?: string;
   kind?: "required" | "rollover" | "extra";

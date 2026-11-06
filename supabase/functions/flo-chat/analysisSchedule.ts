@@ -40,7 +40,8 @@ export function scheduleAnalysis(snapshot: AnalysisSnapshot, request: AnalysisRe
   for (const row of selected) {
     if (money(row.amount) === null || Number(row.amount) < 0) missing.push("A scheduled amount is unavailable");
     if (!row.id || typeof row.name !== "string") missing.push("A scheduled source identity is unavailable");
-    if (!["monthly","weekly","biweekly",...(!incomeQuestion ? ["quarterly"] : [])].includes(row.frequency)) missing.push("A schedule frequency is unavailable");
+    if (!["monthly","weekly","biweekly",...(!incomeQuestion ? ["quarterly","yearly"] : [])].includes(row.frequency)) missing.push("A schedule frequency is unavailable");
+    if (!incomeQuestion && row.frequency === "yearly" && !validDate(row.next_payment_date ?? row.start_date)) missing.push("A yearly bill first payment anchor is required");
     for (const field of ["start_date","end_date","next_payment_date"]) if (row[field] != null && !validDate(row[field])) missing.push("A schedule anchor is invalid");
   }
   if (incomeQuestion) {

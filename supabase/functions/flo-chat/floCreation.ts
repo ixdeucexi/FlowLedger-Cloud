@@ -16,6 +16,8 @@ export const creationRegistry:Record<FloCreationKind,{label:string;required:stri
  create_savings_goal:{label:"savings goal",required:["name","target_amount","target_date"]},
 };
 const labels:Record<string,string>={name:"name",amount:"amount",balance:"current balance",minimum_payment:"minimum payment",apr:"APR (say 0% if interest-free)",frequency:"how often it repeats",first_date:"first payment date (YYYY-MM-DD)",direction:"money in or money out",date:"transaction date",category:"category",note:"description",account_id:"which active account",target_amount:"target amount",target_date:"target date"};
+function creationFrequencies(kind:FloCreationKind):string[]{return ["monthly","weekly","biweekly",...(kind==="create_income"?[]:["quarterly"]),...(kind==="create_bill"?["yearly"]:[])];}
+function creationFrequencyChoices(kind:FloCreationKind):string{const frequencies=creationFrequencies(kind);return `${frequencies.slice(0,-1).join(", ")}, or ${frequencies.at(-1)}`;}
 function creationFieldLabel(kind:FloCreationKind,key:string):string {
  if(kind==="create_income"){if(key==="name")return "income name";if(key==="amount")return "take-home amount";if(key==="frequency")return "pay frequency (monthly, weekly, or biweekly)";if(key==="first_date")return "first payday";}
  if(key==="current_amount")return "amount already saved";
@@ -26,7 +28,7 @@ function date(value:unknown){if(typeof value!=="string"||!/^\d{4}-\d{2}-\d{2}$/.
 function money(value:unknown,zero=false){return typeof value==="number"&&Number.isFinite(value)&&value<1e9&&(zero?value>=0:value>0)&&Math.abs(Math.round(value*100)-value*100)<0.00001;}
 function text(value:unknown,max=120){return typeof value==="string"&&value.trim().length>0&&value.trim().length<=max;}
 function kindOf(message:string):FloCreationKind|null {
- const object=message.match(/\b(?:add|create|record|log|set up|save)\s+(?:(?:a|an|new|my|our|the|recurring|monthly|weekly|biweekly|quarterly|one[- ]time)\s+)*(savings? goal|savings? target|spending bucket|bucket|income|paycheck|paycheque|salary|debt|loan|credit card|manual transaction|transaction|expense|purchase|bill|subscription)\b/i)?.[1].toLocaleLowerCase();
+ const object=message.match(/\b(?:add|create|record|log|set up|save)\s+(?:(?:a|an|new|my|our|the|recurring|monthly|weekly|biweekly|quarterly|yearly|annual(?:ly)?|every (?:year|(?:12|twelve) months)|once (?:a|per) year|one[- ]time)\s+)*(savings? goal|savings? target|spending bucket|bucket|income|paycheck|paycheque|salary|debt|loan|credit card|manual transaction|transaction|expense|purchase|bill|subscription)\b/i)?.[1].toLocaleLowerCase();
  if(object){if(/savings/.test(object))return "create_savings_goal";if(/bucket/.test(object))return "create_bucket";if(/income|paycheck|paycheque|salary/.test(object))return "create_income";if(/debt|loan|credit card/.test(object))return "create_debt";if(/transaction|expense|purchase/.test(object))return "create_manual_transaction";return "create_bill";}
  if(/\b(?:savings? goal|savings? target)\b/i.test(message))return "create_savings_goal";
  if(/\b(?:bucket|spending budget)\b/i.test(message))return "create_bucket";
@@ -51,7 +53,7 @@ export function creationIntent(message:string,draft?:FloCreationDraft):{kind:Flo
  if(kind&&explicit.test(m))return {kind,mode:"create"};
  if(draft&&/^(?:yes|yep|yeah|ok(?:ay)?|sure|go ahead|do it|please|thanks)[.!\s]*$/i.test(m))return {kind:draft.kind,mode:"capability"};
  if(draft&&!m.includes("?")&&!/^(?:cancel|stop|never mind|nevermind|no\b|thanks|thank you|tell me|check|review|compare|list)\b/i.test(m)
-  &&(/[\d$£€]|\b(?:monthly|weekly|biweekly|quarterly|annually|every|named|name|call it|called|amount|balance|minimum|target|category|description|date|account|checking|savings|APR|interest|zero|expense|inflow|payday)\b/i.test(m)))return {kind:draft.kind,mode:"create"};
+  &&(/[\d$£€]|\b(?:monthly|weekly|biweekly|quarterly|yearly|annual(?:ly)?|every|named|name|call it|called|amount|balance|minimum|target|category|description|date|account|checking|savings|APR|interest|zero|expense|inflow|payday)\b/i.test(m)))return {kind:draft.kind,mode:"create"};
  return null;
 }
 export function parseCreationDraft(value:unknown,householdId:string,now:string):FloCreationDraft|undefined {
@@ -70,7 +72,7 @@ export function creationMissingFields(kind:FloCreationKind,fields:Record<string,
   if(key==="apr")return !(typeof v==="number"&&Number.isFinite(v)&&v>=0&&v<=100&&Math.abs(v*10000-Math.round(v*10000))<0.00001);
   if(["first_date","target_date","date"].includes(key))return !date(v);
   if(key==="frequency"&&kind==="create_bill"&&fields.is_recurring===false)return false;
-  if(key==="frequency")return !["monthly","weekly","biweekly",...(kind==="create_income"?[]:["quarterly"])].includes(String(v));
+  if(key==="frequency")return !creationFrequencies(kind).includes(String(v));
   if(key==="direction")return !["expense","inflow"].includes(String(v));
   return !text(v,key==="note"?2000:120);
  });
@@ -99,10 +101,28 @@ export function creationEvidenceMatches(source:string,proof:string,numeric=false
  }
  return false;
 }
-function enumEvidence(key:string,value:unknown,proof:string):boolean {
+/** Evidence may quote just "annual" from "annual APR". Resolve every exact
+ * quote in its source so a rate adjective cannot become a payment cadence. */
+function yearlyFrequencyEvidence(source:string,proof:string):boolean {
+ const haystack=source.toLocaleLowerCase(),needle=proof.trim().toLocaleLowerCase();
+ if(!needle)return false;
+ for(let at=haystack.indexOf(needle);at>=0;at=haystack.indexOf(needle,at+1)){
+  if((/[a-z0-9]/i.test(needle[0])&&/[a-z0-9]/i.test(haystack[at-1]??""))||(/[a-z0-9]/i.test(needle.at(-1)??"")&&/[a-z0-9]/i.test(haystack[at+needle.length]??"")))continue;
+  for(const cadence of needle.matchAll(/\b(?:yearly|annual(?:ly)?|every year|once (?:a|per) year|every (?:12|twelve) months)\b/g)){
+   const offset=at+cadence.index!;
+   const before=haystack.slice(Math.max(0,offset-70),offset),after=haystack.slice(offset+cadence[0].length,offset+cadence[0].length+70);
+   if(/\b(?:apr|interest(?:\s+rate)?|percentage(?:\s+rate)?|rate|yield|compound(?:s|ed|ing)?|accru(?:es?|ed|ing|al)|calculat(?:es?|ed|ing|ion))\s*(?:(?:of|is|at|:|=)\s*|on\s+(?:an?\s+)?)?$|\d+(?:\.\d+)?\s*%\s*$/.test(before))continue;
+   if(/^\s*(?:apr\b|(?:interest|percentage)(?:\s+rate)?\b|rate\b|yield\b|compound(?:s|ed|ing)?\b|accru(?:es?|ed|ing|al)\b|calculat(?:es?|ed|ing|ion)\b|\d+(?:\.\d+)?\s*%)/.test(after))continue;
+   return true;
+  }
+ }
+ return false;
+}
+function enumEvidence(key:string,value:unknown,proof:string,source:string):boolean {
  if(key==="apr")return /\b(?:apr|interest|rate)\b|%/i.test(proof);
  if(key==="frequency"){
   if(/\b(?:semi.?monthly|twice.*month|every (?:2|two) months)\b/i.test(proof))return false;
+  if(value==="yearly")return yearlyFrequencyEvidence(source,proof);
   const match:Record<string,RegExp>={monthly:/\bmonth(?:ly)?\b/i,weekly:/\bweekly\b|every (?:1 |one )?week\b/i,biweekly:/\bbi.?weekly\b|every (?:2|two) weeks|fortnight/i,quarterly:/quarter|every (?:3|three) months/i};
   return Boolean(match[String(value)]?.test(proof));
  }
@@ -118,12 +138,12 @@ const fieldDescriptions:Record<string,string>={name:"Saved item name only, exclu
 export function creationProviderField(key:string,kind:FloCreationKind):Record<string,unknown>{
  const result:Record<string,unknown>={type:[fieldTypes[key],"null"],description:fieldDescriptions[key]??`User-supplied ${key}; no invented/default value.`};
  if(["date","first_date","target_date"].includes(key))result.pattern="^\\d{4}-\\d{2}-\\d{2}$";
- if(key==="frequency")result.enum=["monthly","weekly","biweekly",...(kind==="create_income"?[]:["quarterly"]),null];
+ if(key==="frequency")result.enum=[...creationFrequencies(kind),null];
  if(key==="direction")result.enum=["expense","inflow",null];
  return result;
 }
 function creationKindInstructions(kind:FloCreationKind):string {
- const specific:Record<FloCreationKind,string>={create_bill:"Map bill cost to amount and the first payment calendar date to first_date. Example: monthly Internet bill $80 first payment November 1, 2026 => name Internet, amount 80, frequency monthly, first_date 2026-11-01. For an explicit once/one-time bill, is_recurring=false and frequency=null; code supplies nonrecurring canonical storage.",create_debt:"Use balance for total owed, minimum_payment for each minimum, apr for explicit interest, and first_date for the first payment. Do not substitute minimum for balance or invent APR.",create_income:"Use take-home per paycheck amount and real first_date payday. Frequency every two weeks is biweekly. Annual salary is not a take-home paycheck amount. Preserve the real first payday; monthly_last_day true only when the user explicitly says last day/end of month.",create_manual_transaction:"Use note for the transaction name/description, never name. Expense named Cafe lunch => note Cafe lunch; amount 25, direction expense, date 2026-09-10, category Food, account_name Manual Checking when those exact details were supplied.",create_bucket:"Use name, target_amount and target_date only. Example December 25, 2026 => target_date 2026-12-25.",create_savings_goal:"Use name, target_amount, target_date; current_amount only if explicit. Example December 31, 2026 => target_date 2026-12-31. No invented current savings."};return specific[kind];
+ const specific:Record<FloCreationKind,string>={create_bill:"Map bill cost to amount and the first payment calendar date to first_date. Example: monthly Internet bill $80 first payment November 1, 2026 => name Internet, amount 80, frequency monthly, first_date 2026-11-01. For a bill paid yearly, annually, every year, or every 12 months, use frequency yearly and the full annual amount, with the first payment date required. Never infer payment cadence from annual APR or an annual percentage rate. For an explicit once/one-time bill, is_recurring=false and frequency=null; code supplies nonrecurring canonical storage.",create_debt:"Use balance for total owed, minimum_payment for each minimum, apr for explicit interest, and first_date for the first payment. Do not substitute minimum for balance or invent APR.",create_income:"Use take-home per paycheck amount and real first_date payday. Frequency every two weeks is biweekly. Annual salary is not a take-home paycheck amount. Preserve the real first payday; monthly_last_day true only when the user explicitly says last day/end of month.",create_manual_transaction:"Use note for the transaction name/description, never name. Expense named Cafe lunch => note Cafe lunch; amount 25, direction expense, date 2026-09-10, category Food, account_name Manual Checking when those exact details were supplied.",create_bucket:"Use name, target_amount and target_date only. Example December 25, 2026 => target_date 2026-12-25.",create_savings_goal:"Use name, target_amount, target_date; current_amount only if explicit. Example December 31, 2026 => target_date 2026-12-31. No invented current savings."};return specific[kind];
 }
 function validatedCreationFields(kind:FloCreationKind,values:Record<string,unknown>,proofs:Record<string,string|null>,source:string){
  const fields:Record<string,unknown>={},evidence:Record<string,string>={};
@@ -132,7 +152,7 @@ function validatedCreationFields(kind:FloCreationKind,values:Record<string,unkno
  const allowed=new Set(extractionFields(kind));
  for(const [original,value]of Object.entries(values)){
   const key=allowed.has(original)?original:aliases[original];if(!key||!allowed.has(key)||value==null)continue;
-  const proof=proofs[original];if(typeof proof!=="string"||!proof.trim()||!creationEvidenceMatches(source,proof,["amount","balance","minimum_payment","apr","target_amount","current_amount"].includes(key))||!enumEvidence(key,value,proof))continue;
+  const proof=proofs[original];if(typeof proof!=="string"||!proof.trim()||!creationEvidenceMatches(source,proof,["amount","balance","minimum_payment","apr","target_amount","current_amount"].includes(key))||!enumEvidence(key,value,proof,source))continue;
   if(["date","first_date","target_date"].includes(key)){const supplied=proof.match(/\b\d{4}-\d{2}-\d{2}\b/g);if(supplied?.length&&!supplied.includes(String(value))||!date(value))continue;}
   if(["amount","balance","minimum_payment","apr","target_amount","current_amount"].includes(key)){
    const numbers=proof.match(/\(\s*[$£€]?\s*\d[\d,]*(?:\.\d+)?\s*\)|(?:(?:\bminus|\bnegative)\s*|[-+−]?\s*)[$£€]?\s*\d[\d,]*(?:\.\d+)?/gi)?.map(n=>{const normalized=n.replace(/[$£€,\s]/g,"").replace("−","-");return normalized.startsWith("(")?-Number(normalized.slice(1,-1)):/^(?:minus|negative)/i.test(normalized)?-Number(normalized.replace(/^(?:minus|negative)/i,"")):Number(normalized);})??[];
@@ -203,7 +223,7 @@ export async function runFloCreation(input:{client:any;userId:string;householdId
  const missing=creationMissingFields(kind,fields);
  if(kind==="create_savings_goal"&&fields.current_amount!==undefined&&!money(fields.current_amount,true))missing.push("current_amount");
  const nextDraft:FloCreationDraft={kind,fields,evidence,authorizationText:draft?.authorizationText??input.message,userText,householdId:input.householdId,expiresAt:new Date(Date.parse(input.now)+30*60_000).toISOString()};
- if(missing.length)return response({status:"needs_details",kind,prompt:`${missing.includes("frequency")&&/\b(?:annual(?:ly)?|yearly|semi.?monthly|twice (?:a|per) month|every (?:two|2) months)\b/i.test(input.message)?`That repeat schedule isn’t supported. Choose ${kind==="create_income"?"monthly, weekly, or biweekly":"monthly, weekly, biweekly, or quarterly"}. `:""}To add this ${registry.label}, send ${missing.map(k=>creationFieldLabel(kind,k)).join(", ")}.`,missingFields:missing,draft:nextDraft});
+ if(missing.length)return response({status:"needs_details",kind,prompt:`${missing.includes("frequency")&&(/\b(?:semi.?monthly|twice (?:a|per) month|every (?:two|2) months)\b/i.test(input.message)||kind!=="create_bill"&&/\b(?:annual(?:ly)?|yearly|every year|every (?:12|twelve) months)\b/i.test(input.message))?`That repeat schedule isn’t supported. Choose ${creationFrequencyChoices(kind)}. `:""}To add this ${registry.label}, send ${missing.map(k=>creationFieldLabel(kind,k)).join(", ")}.`,missingFields:missing,draft:nextDraft});
  const payload=Object.fromEntries(supportedFields(kind).filter(k=>fields[k]!==undefined).map(k=>[k,fields[k]]));
  return response({status:"ready",kind,prompt:`I have the details for ${creationDisplayLabel(String(payload.name??payload.note))}. Adding it after the app’s usual safety check.`,missingFields:[],commandId:input.commandId,householdId:input.householdId,payload});
 }
@@ -307,8 +327,8 @@ export async function runFloCreationForm(input: {
    if (!date(rawValue) || String(rawValue).startsWith("0000-")) errors[key] = "Choose a valid date in YYYY-MM-DD format.";
    else payload[key] = rawValue;
   } else if (key === "frequency") {
-   if (typeof rawValue !== "string" || !["monthly", "weekly", "biweekly", ...(kind === "create_income" ? [] : ["quarterly"])].includes(rawValue)) {
-    errors[key] = `Choose ${kind === "create_income" ? "monthly, weekly, or biweekly" : "monthly, weekly, biweekly, or quarterly"}.`;
+   if (typeof rawValue !== "string" || !creationFrequencies(kind).includes(rawValue)) {
+    errors[key] = `Choose ${creationFrequencyChoices(kind)}.`;
    } else payload[key] = rawValue;
   } else if (key === "direction") {
    if (!["expense", "inflow"].includes(String(rawValue))) errors[key] = "Choose money in or money out.";

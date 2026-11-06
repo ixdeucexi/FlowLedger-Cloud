@@ -341,6 +341,9 @@ export function FloCreationForm({
                       ...(kind === "create_income"
                         ? []
                         : [{ value: "quarterly", label: "Quarterly" }]),
+                      ...(kind === "create_bill"
+                        ? [{ value: "yearly", label: "Yearly" }]
+                        : []),
                     ])
                   ) : field.type === "direction" ? (
                     choices(field.key, [

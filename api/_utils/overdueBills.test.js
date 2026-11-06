@@ -1,7 +1,54 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
+const { readFileSync } = require("node:fs");
+const { resolve } = require("node:path");
+const { transpileModule, ModuleKind } = require("typescript");
 
 const { buildOverdueOccurrences, occurrenceDays, suppressPendingMatchedOccurrences } = require("./overdueBills");
+
+test("server annual dates match the canonical scheduler across edits and skips", () => {
+  const canonical = {};
+  const source = readFileSync(resolve(__dirname, "../../artifacts/mobile/lib/schedule.ts"), "utf8");
+  new Function("exports", transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText)(canonical);
+  const bill = { id: "annual", frequency: "yearly", due_day: 29, next_payment_date: "2024-02-29", start_date: "2024-02-29" };
+  const move = (from_date, to_date, rest = {}) => ({ bill_id: "annual", from_date, to_date, ...rest });
+  for (const moves of [[],
+    [move("2026-02-28", "2026-03-05"), move("2026-03-05", "2026-04-10")],
+    [move("2026-02-28", "2026-02-28", { is_skipped: true })],
+    [move("2026-02-28", "2026-03-05", { created_at: "2026-01-01" }), move("2026-03-05", "2026-04-10"), move("2026-02-28", "2026-05-05", { updated_at: "2026-01-02" })],
+    [move("2026-02-28", "2026-03-05"), move("2026-03-05", "2026-02-28")],
+  ]) {
+    for (const [month, year] of [[1, 2023], [1, 2024], [1, 2026], [2, 2026], [3, 2026], [4, 2026], [1, 2027], [1, 2028]]) {
+      const expected = canonical.applyBillDateMovesToOccurrenceDays(bill.id, month, year, canonical.getBillOccurrenceDays(bill, month, year), moves, bill);
+      assert.deepEqual(occurrenceDays(bill, undefined, moves, month, year), expected, JSON.stringify({ moves, month, year }));
+    }
+  }
+});
+
+test("yearly reminders follow full anniversary dates and recover leap day", () => {
+  const bill = { id: "annual", user_id: "owner", name: "Annual insurance", amount: 1200, frequency: "yearly", due_day: 29, next_payment_date: "2024-02-29", start_date: "2024-02-29" };
+  assert.deepEqual([2024, 2025, 2026, 2027, 2028].map(year => occurrenceDays(bill, undefined, [], 1, year)), [[29], [28], [28], [28], [29]]);
+  assert.deepEqual(occurrenceDays(bill, { custom_due_day: 5 }, [], 0, 2027), []);
+  assert.deepEqual(occurrenceDays({ ...bill, next_payment_date: undefined, start_date: undefined }, undefined, [], 1, 2027), []);
+  assert.deepEqual(occurrenceDays({ ...bill, next_payment_date: "2024-02-31" }, undefined, [], 1, 2027), []);
+  assert.deepEqual(occurrenceDays({ ...bill, end_date: "2026-02-28" }, undefined, [], 1, 2026), [28]);
+  assert.deepEqual(occurrenceDays({ ...bill, end_date: "2026-02-27" }, undefined, [], 1, 2026), []);
+  const alerts = buildOverdueOccurrences({ bills: [bill], overrides: [{ bill_id: "annual", paid_amount: 400 }], moves: [], today: "2028-02-29" });
+  assert.deepEqual(alerts, []);
+  const overdue = buildOverdueOccurrences({ bills: [{ ...bill, due_day: 15, next_payment_date: "2026-11-15", start_date: "2026-11-15" }], overrides: [{ bill_id: "annual", paid_amount: 400 }], moves: [], today: "2026-11-16" });
+  assert.deepEqual(overdue.map(alert => [alert.occurrenceDate, alert.remainingAmount]), [["2026-11-15", 800]]);
+});
+
+test("annual reminder moves, repeat edits, skips and next-year payments retain one obligation", () => {
+  const bill = { id: "annual", user_id: "owner", amount: 1200, frequency: "yearly", due_day: 15, next_payment_date: "2026-11-15" };
+  const moves = [{ bill_id: "annual", from_date: "2026-11-15", to_date: "2026-12-01" }, { bill_id: "annual", from_date: "2026-12-01", to_date: "2027-01-05", custom_amount: 1000 }];
+  assert.deepEqual(occurrenceDays(bill, undefined, moves, 10, 2026), []);
+  assert.deepEqual(occurrenceDays(bill, undefined, moves, 11, 2026), []);
+  assert.deepEqual(occurrenceDays(bill, undefined, moves, 0, 2027), [5]);
+  assert.deepEqual(occurrenceDays(bill, undefined, moves, 10, 2027), [15]);
+  assert.deepEqual(buildOverdueOccurrences({ bills: [bill], overrides: [], moves, today: "2027-01-06" }).map(alert => [alert.occurrenceDate, alert.remainingAmount]), [["2027-01-05", 1000]]);
+  assert.deepEqual(occurrenceDays(bill, undefined, [...moves, { bill_id: "annual", from_date: "2027-01-05", to_date: "2027-01-05", is_skipped: true }], 0, 2027), []);
+});
 
 test("closed debts never create overdue notifications", () => {
   const alerts = buildOverdueOccurrences({

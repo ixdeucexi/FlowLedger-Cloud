@@ -16,6 +16,7 @@ import { addDebtPaymentPause, editDebtPaymentPauseHistory, isDebtPaymentPauseDat
 import { normalizeBillRow, normalizeMonthlyOverrideRow } from "./financialProjectionInput";
 import type { Bill } from "./financialProjectionTypes";
 import { parseBudgetPlanCache } from "./budgetPlanCache";
+import { dateOnlyToLocalDate } from "./dateLabels";
 
 type EditableBill = Record<BillEditableField, unknown>;
 
@@ -182,7 +183,7 @@ function pausePersistenceHarness(initialPauses: DebtPaymentPause[] | undefined =
     },
     safeLocalDateInTimeZone: (_date: Date, zone: string) => { assert.equal(zone, "Pacific/Honolulu"); return state.today; },
     genId: (() => { let id = 0; return () => `save-${++id}`; })(),
-    billEditablePatch, billEditableDbPatch, billEditableValuesEqual, normalizedBillEditableFields,
+    billEditablePatch, billEditableDbPatch, billEditableValuesEqual, normalizedBillEditableFields, dateOnlyToLocalDate,
     addDebtPaymentPause, editDebtPaymentPauseHistory, isDebtPaymentPauseDate, normalizeDebtPaymentPauses, resumeDebtPaymentPause,
     activeVersionedPatch, enqueueMutationByKey, enqueueMutationByKeys, monthlyOverridePatchDbPayload,
     assertFinancialMutationScope, runRecoverableFinancialMutation, normalizeBillRow, normalizeMonthlyOverrideRow,
@@ -216,18 +217,41 @@ function pausePersistenceHarness(initialPauses: DebtPaymentPause[] | undefined =
   const tracked = context.slice(trackedStart, context.indexOf("  const retryLastSave =", trackedStart));
   const start = context.indexOf("  const updateBill =");
   const actions = context.slice(start, context.indexOf("  const stopFutureBill =", start));
-  const js = transpileModule(`${tracked}\n${actions}`, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
+  const yearlyGuard = context.slice(context.indexOf("function assertYearlyBillSchedule("), context.indexOf("function billStartMonth("));
+  const js = transpileModule(`${yearlyGuard}\n${tracked}\n${actions}`, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
   const render = () => {
     const values = { ...bindings, bills: state.bills, activeHousehold: { ...householdScopeRef.current } };
     return new Function(...Object.keys(values), `${js}; return {pauseDebtPayments,resumeDebtPayments,editDebtPaymentPause,updateBill};`)(...Object.values(values)) as {
       pauseDebtPayments: (id: string, input: { startDate: string; resumeDate: string; redirectPayment: boolean }) => Promise<void>;
       resumeDebtPayments: (id: string, pauseId: string) => Promise<void>;
       editDebtPaymentPause: (id: string, expectedPause: DebtPaymentPause, input: DebtPaymentPauseEditInput) => Promise<void>;
+      updateBill: (bill: Bill, fields: readonly BillEditableField[], baseline?: Partial<Bill>) => Promise<void>;
     };
   };
   return { state, render, householdScopeRef, userScopeIdRef, financialDataUserIdRef, financialScopeGenerationRef, settingsRef, startupCoreReadyScopeKeyRef,
     billWriteQueuesRef: bindings.billWriteQueuesRef as { current: Map<string, Promise<unknown>> } };
 }
+
+test("actual yearly bill edits retain cadence on reload and reject debt conversion or missing anchors", async () => {
+  const harness = pausePersistenceHarness();
+  const annual: Bill = { ...harness.state.bills[0], name: "Insurance", is_debt: false, frequency: "yearly", next_payment_date: "2028-02-29", start_date: "2028-02-29", due_day: 29 };
+  harness.state.bills = [annual];
+  harness.state.stored = structuredClone(annual);
+  await harness.render().updateBill({ ...annual, name: "Annual insurance" }, ["name"]);
+  const reloaded = normalizeBillRow(JSON.parse(JSON.stringify(harness.state.stored)));
+  assert.equal(reloaded.frequency, "yearly");
+  assert.equal(reloaded.name, "Annual insurance");
+  assert.equal(reloaded.next_payment_date, "2028-02-29");
+  assert.equal(reloaded.due_day, 29);
+  for (const [patch, fields] of [
+    [{ is_debt: true }, ["is_debt"]],
+    [{ next_payment_date: undefined, start_date: undefined }, ["next_payment_date", "start_date"]],
+    [{ next_payment_date: "2027-02-29" }, ["next_payment_date"]],
+  ] as const) {
+    await assert.rejects(() => harness.render().updateBill({ ...reloaded, ...patch }, fields), /Yearly|first payment date/);
+  }
+  assert.equal(harness.state.writes.length, 1);
+});
 
 const newPause = { startDate: "2026-11-03", resumeDate: "2027-01-03", redirectPayment: true };
 const tick = () => new Promise(resolve => setImmediate(resolve));

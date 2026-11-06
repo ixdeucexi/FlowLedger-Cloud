@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {creationIntent,runFloCreation,creationEvidenceMatches,creationLocalDay,parseCreationDraft} from './floCreation.ts';
+import {creationIntent,runFloCreation,creationEvidenceMatches,creationLocalDay,parseCreationDraft,creationProviderField} from './floCreation.ts';
 const householdId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',userId='11111111-1111-4111-8111-111111111111',commandId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',accountId='cccccccc-cccc-4ccc-8ccc-cccccccccccc',now='2026-10-28T12:00:00Z';
 function client(role='owner',accounts=[{id:accountId,name:'Checking'}]){const calls=[];return {calls,from(table){const filters=[];const query={select(){return this;},eq(key,value){filters.push([key,value]);return this;},in(){return this;},order(){return this;},limit(){calls.push({table,filters});return Promise.resolve({data:accounts,error:null});},maybeSingle(){calls.push({table,filters});return Promise.resolve({data:table==='budgets'?{id:'budget'}:{role},error:null});}};return query;},rpc(){throw Error('Edge creation must never write');}};}
 const cases=[
@@ -12,6 +12,60 @@ const cases=[
  ['create_savings_goal','Create a savings goal Rainy Day target $1000 by 2026-12-25 saved $100.',{name:'Rainy Day',target_amount:1000,target_date:'2026-12-25',current_amount:100},{name:'Rainy Day',target_amount:'$1000',target_date:'2026-12-25',current_amount:'saved $100'}],
 ];
 const run=(message,fields={},evidence={},extra={})=>runFloCreation({client:client(),userId,householdId,commandId,message,now,modelId:'fixture',extract:async()=>({fields,evidence}),...extra});
+test('yearly bill cadence preserves the full annual amount and exact first payment date',async()=>{
+ for(const cadence of ['yearly','annual','annually','every year','once a year','every 12 months']){
+  const message=`Create a ${cadence} bill named Salary Insurance for $1200 first payment 2028-02-29.`;
+  const fields={name:'Salary Insurance',amount:1200,frequency:'yearly',first_date:'2028-02-29'};
+  const result=await run(message,fields,{name:'Salary Insurance',amount:'$1200',frequency:cadence,first_date:'2028-02-29'});
+  assert.equal(result.creation.kind,'create_bill');assert.equal(result.creation.status,'ready');assert.deepEqual(result.creation.payload,fields);
+ }
+});
+test('yearly creation requires its first date and stays unavailable for income and debt',async()=>{
+ const annualBill=await run('Create a yearly bill named Insurance for $1200.',{name:'Insurance',amount:1200,frequency:'yearly'},{name:'Insurance',amount:'$1200',frequency:'yearly'});
+ assert.equal(annualBill.creation.status,'needs_details');assert.deepEqual(annualBill.creation.missingFields,['first_date']);assert.doesNotMatch(annualBill.creation.prompt,/isn.t supported/);
+ for(const [kind,base,proofs]of [['create_income',cases[2][2],cases[2][3]],['create_debt',cases[1][2],cases[1][3]]]){
+  const message=kind==='create_income'?'Create a yearly income named Acme take-home $2000 first payday 2026-11-01.':'Create a yearly debt named Visa balance $1000 minimum payment $50 APR 0% first payment 2026-11-01.';
+  const result=await run(message,{...base,frequency:'yearly'},{...proofs,frequency:'yearly'});
+  assert.equal(result.creation.status,'needs_details');assert.ok(result.creation.missingFields.includes('frequency'));assert.match(result.creation.prompt,/isn.t supported/);
+  assert.equal(creationProviderField('frequency',kind).enum.includes('yearly'),false);
+ }
+ assert.ok(creationProviderField('frequency','create_bill').enum.includes('yearly'));
+});
+test('annual APR evidence cannot establish a yearly bill payment cadence',async()=>{
+ for(const proof of ['annual APR 18%','18% annual interest rate']){
+  const result=await run(`Create a bill named Insurance for $1200 first payment 2026-11-01 with ${proof}.`,{name:'Insurance',amount:1200,frequency:'yearly',first_date:'2026-11-01'},{name:'Insurance',amount:'$1200',frequency:proof,first_date:'2026-11-01'});
+  assert.equal(result.creation.status,'needs_details');assert.deepEqual(result.creation.missingFields,['frequency']);
+  assert.doesNotMatch(result.creation.prompt,/isn.t supported/);
+ }
+});
+test('short annual evidence retains adjacent APR context from the full source',async()=>{
+ for(const [word,rate]of [['annual','annual APR 18%'],['annual','annual percentage rate of 18%'],['yearly','yearly interest at 18%'],['annual','18% annual interest rate'],['yearly','interest at 18% yearly'],['annually','18% annually']]){
+  const result=await run(`Create a bill named Insurance for $1200 first payment 2026-11-01 with ${rate}.`,{name:'Insurance',amount:1200,frequency:'yearly',first_date:'2026-11-01'},{name:'Insurance',amount:'$1200',frequency:word,first_date:'2026-11-01'});
+  assert.equal(result.creation.status,'needs_details');assert.deepEqual(result.creation.missingFields,['frequency']);assert.equal(result.creation.draft.fields.frequency,undefined);
+ }
+});
+test('explicit annual payment cadence remains valid alongside a separate annual APR',async()=>{
+ for(const [phrase,proof]of [['yearly bill','yearly'],['annual bill','annual'],['bill paid every 12 months','every 12 months'],['annual bill','Create an annual bill named Insurance for $1200 first payment 2026-11-01 with annual APR 18%.']]){
+  const message=`Create an ${phrase} named Insurance for $1200 first payment 2026-11-01 with annual APR 18%.`;
+  const result=await run(message,{name:'Insurance',amount:1200,frequency:'yearly',first_date:'2026-11-01'},{name:'Insurance',amount:'$1200',frequency:proof,first_date:'2026-11-01'});
+  assert.equal(result.creation.status,'ready');assert.equal(result.creation.payload.frequency,'yearly');assert.equal(result.creation.payload.amount,1200);
+ }
+});
+test('interest compounding and accrual do not establish a bill payment recurrence',async()=>{
+ for(const [proof,rate]of [['annually','APR 18% compounded annually'],['annual','annual compounding at APR 18%'],['annually','annually compounded APR of 18%'],['yearly','interest accrues yearly at 18%'],['every 12 months','interest accrues every 12 months at 18%'],['once a year','APR 18% compounds once a year'],['annual','interest accrual on an annual basis at 18%'],['yearly','yearly interest accrual at 18%']]){
+  const result=await run(`Create a bill named Insurance for $1200 first payment 2026-11-01 with ${rate}.`,{name:'Insurance',amount:1200,frequency:'yearly',first_date:'2026-11-01'},{name:'Insurance',amount:'$1200',frequency:proof,first_date:'2026-11-01'});
+  assert.equal(result.creation.status,'needs_details',rate);assert.deepEqual(result.creation.missingFields,['frequency'],rate);
+ }
+});
+test('explicit yearly bill payments remain valid beside separate annual compounding',async()=>{
+ for(const cadence of ['yearly','annual']){
+  const message=`Create an ${cadence} bill named Insurance for $1200 first payment 2026-11-01 with annual compounding at APR 18%.`;
+  for(const proof of [cadence,message]){
+   const result=await run(message,{name:'Insurance',amount:1200,frequency:'yearly',first_date:'2026-11-01'},{name:'Insurance',amount:'$1200',frequency:proof,first_date:'2026-11-01'});
+   assert.equal(result.creation.status,'ready');assert.equal(result.creation.payload.frequency,'yearly');assert.equal(result.creation.payload.amount,1200);
+  }
+ }
+});
 for(const [kind,message,fields,evidence]of cases)test(`${kind}: complete explicit command emits ready without writes`,async()=>{const c=client();const result=await run(message,fields,evidence,{client:c});assert.equal(result.creation.status,'ready');assert.equal(result.creation.kind,kind);assert.equal(result.creation.commandId,commandId);assert.ok(c.calls.some(call=>call.table==='household_members'&&call.filters.some(([key,value])=>key==='user_id'&&value===userId)));if(kind==='create_manual_transaction'){assert.equal(result.creation.payload.account_id,accountId);assert.ok(c.calls.some(call=>call.table==='accounts'&&call.filters.some(([key])=>key==='budget_id')));}});
 for(const noun of ['bill','debt','income','manual transaction','bucket','savings goal'])test(`capability ${noun} asks fields and creates a scoped draft`,async()=>{let interpreted=0;const result=await run(`Can you add a ${noun}?`,{},{},{extract:async()=>{interpreted++;throw Error();}});assert.equal(result.creation.status,'needs_details');assert.ok(result.creation.draft);assert.equal(result.creation.draft.householdId,householdId);assert.equal(interpreted,0);});
 for(const text of ['What if I create a bill for $80?','Should I add income?','Show my income','Open income settings','Create a bill named Internet for $80 monthly on 2026-11-01, but do not save it','Create an example bill named Internet for $80 monthly on 2026-11-01','Create a draft income $500 weekly starting 2026-11-01','Create a bill for $80, just show a preview'])test(`nonauthorization: ${text}`,async()=>{let calls=0;const r=await run(text,{},{},{extract:async()=>{calls++;throw Error();}});assert.notEqual(r?.creation.status,'ready');assert.equal(calls,0);});

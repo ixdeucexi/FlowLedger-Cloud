@@ -29,17 +29,17 @@ test("standalone bills CSV handles BOM, CRLF, reordered headers and escaped mult
 
 test("all numeric, boolean, frequency and date fields are validated before a result can be imported", () => {
   for (const raw of ["25oops", "Infinity", "NaN", "1e3", "-5", "0", "5.123", "\"1,20.50\""]) assert.throws(() => parseBillCsv(`Name,Amount\nValid,20\nInvalid,${raw}`), /Bill row 2/);
-  for (const [field, raw] of [["Balance", "bad"], ["InterestRate", "2.12345"], ["Priority", "1oops"], ["Priority", "9007199254740992"], ["DueDay", "32"], ["DueDay", "0"], ["DayOfWeek", "7"], ["IsDebt", "maybe"], ["IsRecurring", "sometimes"], ["Frequency", "yearly"], ["NextPaymentDate", "2026-02-30"], ["StartDate", "tomorrow"]]) {
+  for (const [field, raw] of [["Balance", "bad"], ["InterestRate", "2.12345"], ["Priority", "1oops"], ["Priority", "9007199254740992"], ["DueDay", "32"], ["DueDay", "0"], ["DayOfWeek", "7"], ["IsDebt", "maybe"], ["IsRecurring", "sometimes"], ["Frequency", "daily"], ["NextPaymentDate", "2026-02-30"], ["StartDate", "tomorrow"]]) {
     assert.throws(() => parseBillCsv(`Name,Amount,${field}\nRent,50,${raw}`), /Bill row 1/, `${field}:${raw}`);
   }
   assert.throws(() => parseBillCsv("Name,Amount,StartDate,EndDate\nRent,50,2026-10-23,2026-10-22"), /end date/);
 });
 
-test("the actual backup bill export preserves all four frequencies and optional schedule anchors", () => {
+test("the actual backup bill export preserves all supported frequencies and optional schedule anchors", () => {
   const source = readFileSync("app/(tabs)/more.tsx", "utf8");
   const start = source.indexOf("      const billHeader =");
   const body = source.slice(start, source.indexOf("      const txHeader =", start));
-  const bills = ["monthly", "quarterly", "biweekly", "weekly"].map((frequency, index) => ({ name: `Bill ${frequency}`, amount: 50, category: "Debt", priority: index, is_debt: true, balance: 1000, interest_rate: 0, due_day: 23, is_recurring: true, frequency, day_of_week: 5, next_payment_date: "2026-10-23", start_date: "2026-01-01", end_date: "2027-01-01", debt_payment_pauses: [
+  const bills = ["monthly", "quarterly", "biweekly", "weekly", "yearly"].map((frequency, index) => ({ name: `Bill ${frequency}`, amount: 50, category: frequency === "yearly" ? "Insurance" : "Debt", priority: index, is_debt: frequency !== "yearly", balance: frequency === "yearly" ? 0 : 1000, interest_rate: 0, due_day: 23, is_recurring: true, frequency, day_of_week: 5, next_payment_date: "2026-10-23", start_date: "2026-01-01", end_date: "2027-01-01", debt_payment_pauses: frequency === "yearly" ? [] : [
     { id: "history", start_date: "2026-01-01", resume_date: "2026-02-01", redirect_payment: false },
     { id: "scheduled", start_date: "2026-11-03", resume_date: "2027-01-03", redirect_payment: true },
   ] }));
@@ -62,7 +62,7 @@ test("CSV restores pause history and rejects malformed intervals without silentl
 });
 
 test("recurring imports require the schedule facts needed by the canonical occurrence engine", () => {
-  for (const frequency of ["quarterly", "biweekly", "weekly"]) {
+  for (const frequency of ["quarterly", "yearly", "biweekly", "weekly"]) {
     assert.throws(() => parseBillCsv(`Name,Amount,Frequency\nRent,50,${frequency}`), /required/);
   }
   const quarterly = parseBillCsv("Name,Amount,Frequency,DueDay,NextPaymentDate\nQuarterly,50,quarterly,23,2026-10-23")[0];
@@ -79,6 +79,27 @@ test("recurring imports require the schedule facts needed by the canonical occur
   assert.deepEqual(getBillOccurrenceDays(weekly, 9, 2026), [2, 9, 16, 23, 30]);
   const explicitWeekly = parseBillCsv("Name,Amount,Frequency,DayOfWeek\nWeekly,50,weekly,0")[0];
   assert.equal(explicitWeekly.day_of_week, 0);
+});
+
+test("yearly imports keep their full anniversary amount, leap day and non-debt restriction", () => {
+  const january = parseBillCsv("Name,Amount,Frequency,NextPaymentDate\nInsurance,1200,yearly,2027-01-15")[0];
+  assert.equal(january.due_day, 15);
+  assert.deepEqual(getBillOccurrenceDays(january, 0, 2027), [15]);
+  assert.deepEqual(getBillOccurrenceDays(january, 0, 2028), [15]);
+  const yearly = parseBillCsv("Name,Amount,Frequency,NextPaymentDate\nInsurance,1200,yearly,2028-02-29")[0];
+  assert.equal(yearly.frequency, "yearly");
+  assert.equal(yearly.amount, 1200);
+  assert.equal(yearly.due_day, 29);
+  assert.deepEqual(getBillOccurrenceDays(yearly, 1, 2027), []);
+  assert.deepEqual(getBillOccurrenceDays(yearly, 1, 2028), [29]);
+  assert.deepEqual(getBillOccurrenceDays(yearly, 2, 2028), []);
+  assert.deepEqual(getBillOccurrenceDays(yearly, 1, 2029), [28]);
+  assert.deepEqual(getBillOccurrenceDays(yearly, 1, 2032), [29]);
+  const startAnchored = parseBillCsv("Name,Amount,Frequency,StartDate\nInsurance,1200,yearly,2026-11-06")[0];
+  assert.equal(startAnchored.due_day, 6);
+  assert.deepEqual(getBillOccurrenceDays(startAnchored, 10, 2027), [6]);
+  assert.throws(() => parseBillCsv("Name,Amount,Frequency,IsDebt,NextPaymentDate\nValid,50,monthly,false,\nCard,1200,yearly,true,2026-11-06"), /Bill row 2.*non-debt/);
+  assert.throws(() => parseBillCsv("Name,Amount,Frequency,NextPaymentDate\nInsurance,1200,yearly,2027-02-29"), /NextPaymentDate|nextpaymentdate/);
 });
 
 function importHandler(bindings: Record<string, unknown>) {

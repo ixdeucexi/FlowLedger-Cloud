@@ -79,14 +79,16 @@ export function parseBillCsv(csv: string): ImportedBill[] {
     const amount = money("amount");
     if (amount <= 0) invalid("amount (must be positive)");
     const frequency = get("frequency").toLowerCase() || "monthly";
-    if (!["monthly", "quarterly", "biweekly", "weekly"].includes(frequency)) invalid("frequency");
+    if (!["monthly", "quarterly", "yearly", "biweekly", "weekly"].includes(frequency)) invalid("frequency");
+    const isDebt = bool("isdebt", false);
+    if (frequency === "yearly" && isDebt) invalid("frequency (yearly is available for non-debt bills only)");
     const rawRate = get("interestrate");
     const interestRate = rawRate ? parseDecimalInput(rawRate, 4) : 0;
     if (interestRate === null) invalid("interest rate");
     const startDate = date("startdate"), endDate = date("enddate"), nextPaymentDate = date("nextpaymentdate");
     if (startDate && endDate && endDate < startDate) invalid("end date (before start date)");
     const anchor = nextPaymentDate ?? startDate;
-    if ((frequency === "quarterly" || frequency === "biweekly") && !anchor) invalid("NextPaymentDate or StartDate (required for this frequency)");
+    if ((frequency === "quarterly" || frequency === "yearly" || frequency === "biweekly") && !anchor) invalid("NextPaymentDate or StartDate (required for this frequency)");
     if (frequency === "weekly" && !get("dayofweek") && !anchor) invalid("DayOfWeek or a payment/start date (required for weekly bills)");
     const dayOfWeek = get("dayofweek") ? integer("dayofweek", 0, 0, 6)
       : frequency === "weekly" && anchor ? new Date(`${anchor}T00:00:00Z`).getUTCDay() : undefined;
@@ -104,7 +106,7 @@ export function parseBillCsv(csv: string): ImportedBill[] {
     return {
       name, amount, category: get("category") || "Other",
       priority: integer("priority", index + 1, 0, Number.MAX_SAFE_INTEGER),
-      is_debt: bool("isdebt", false), balance: money("balance", 0), interest_rate: interestRate!,
+      is_debt: isDebt, balance: money("balance", 0), interest_rate: interestRate!,
       due_day: dueDay, is_recurring: bool("isrecurring", true),
       frequency: frequency as ImportedBill["frequency"],
       debt_payment_pauses: debtPaymentPauses,

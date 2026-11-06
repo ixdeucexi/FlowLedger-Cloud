@@ -24,7 +24,7 @@ export type TodayDecisionInput = {
     dateLabel: string;
     daysAway: number;
     isDebt?: boolean;
-    frequency?: "monthly" | "quarterly" | "biweekly" | "weekly";
+    frequency?: "monthly" | "quarterly" | "yearly" | "biweekly" | "weekly";
     paidOff?: boolean;
     closed?: boolean;
     rollover?: { name: string; amount: number } | null;
@@ -88,7 +88,7 @@ function money(value: number) {
 }
 
 function paymentCadenceLabel(
-  frequency?: "monthly" | "quarterly" | "biweekly" | "weekly",
+  frequency?: "monthly" | "quarterly" | "yearly" | "biweekly" | "weekly",
 ) {
   switch (frequency) {
     case "weekly":
@@ -99,6 +99,8 @@ function paymentCadenceLabel(
       return " monthly payment";
     case "quarterly":
       return " quarterly payment";
+    case "yearly":
+      return " yearly payment";
     default:
       return "";
   }

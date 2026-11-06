@@ -233,7 +233,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       setDayOfWeek(editBill.day_of_week ?? 0);
       setIsRecurring(editBill.is_recurring);
       setFrequency(editBill.frequency ?? "monthly");
-      setNextPaymentDate(editBill.next_payment_date ?? "");
+      setNextPaymentDate(editBill.next_payment_date ?? (editBill.frequency === "yearly" ? editBill.start_date : undefined) ?? "");
       setBillStartDate(editBill.start_date ?? "");
       setBillEndDate(editBill.end_date ?? "");
     } else {
@@ -268,8 +268,13 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
     const parsedRate = interestRate.trim() ? parseDecimalInput(interestRate, 4) : 0;
     if (parsedAmount === null || parsedAmount <= 0 || (isDebt && (parsedBalance === null || parsedRate === null))) { privacyAlerts.formError("Check bill amounts", "Enter valid nonnegative amounts. Payment and balance allow up to two decimal places; interest rate allows up to four."); return; }
     if (!name.trim()) return;
-    if (frequency === "quarterly" && !nextPaymentDate.trim()) {
-      privacyAlerts.alert("Choose the first payment date", "FlowLedger uses it to repeat this bill every 3 months.");
+    if (frequency === "yearly" && isDebt) {
+      privacyAlerts.formError("Choose a debt payment frequency", "Yearly is available for bills. Choose another frequency before changing this bill to debt.");
+      return;
+    }
+    if ((frequency === "quarterly" && !nextPaymentDate.trim())
+      || (frequency === "yearly" && !dateOnlyToLocalDate(nextPaymentDate.trim()))) {
+      privacyAlerts.formError("Choose the first payment date", frequency === "yearly" ? "FlowLedger uses it to repeat this bill once a year." : "FlowLedger uses it to repeat this bill every 3 months.");
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -639,14 +644,14 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
             {/* Frequency */}
             <Text style={lbl}>Frequency</Text>
             <View style={[styles.segRow, { backgroundColor: c.muted, borderRadius: 10 }]}>
-              {(["monthly", "quarterly", "biweekly", "weekly"] as Bill["frequency"][]).map(f => (
+              {((isDebt || forceDebt ? ["monthly", "quarterly", "biweekly", "weekly"] : ["monthly", "quarterly", "yearly", "biweekly", "weekly"]) as Bill["frequency"][]).map(f => (
                 <Pressable key={f} onPress={() => setFrequency(f)}
                   style={[styles.segBtn, { backgroundColor: frequency === f ? c.primary : "transparent", borderRadius: 8 }]}
                 >
                   <Feather name={f === "monthly" ? "calendar" : "repeat"} size={12}
                     color={frequency === f ? c.primaryForeground : c.mutedForeground} />
                   <Text style={[styles.segLabel, { color: frequency === f ? c.primaryForeground : c.mutedForeground }]}>
-                    {f === "monthly" ? "Monthly" : f === "quarterly" ? "Every 3 months" : f === "biweekly" ? "Biweekly" : "Weekly"}
+                    {f === "monthly" ? "Monthly" : f === "quarterly" ? "Every 3 months" : f === "yearly" ? "Yearly" : f === "biweekly" ? "Biweekly" : "Weekly"}
                   </Text>
                 </Pressable>
               ))}
@@ -734,11 +739,11 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
                   </View>
                 )}
               </>
-            ) : frequency === "quarterly" ? (
+            ) : frequency === "quarterly" || frequency === "yearly" ? (
               <View style={[styles.infoBox, { backgroundColor: c.primary + "12" }]}>
                 <Feather name="info" size={12} color={c.primary} />
                 <Text style={[styles.infoText, { color: c.mutedForeground }]}>
-                  Repeats every 3 months from the first payment date.
+                  {frequency === "yearly" ? "Repeats once a year from the first payment date. The full amount is due each year." : "Repeats every 3 months from the first payment date."}
                 </Text>
               </View>
             ) : frequency === "weekly" ? (
@@ -809,7 +814,13 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
                   <Text style={[styles.toggleLabel, { color: c.foreground }]}>This is a Debt</Text>
                   <Text style={[styles.toggleSub, { color: c.mutedForeground }]}>Tracks balance, interest &amp; payoff</Text>
                 </View>
-                <Switch value={isDebt} onValueChange={setIsDebt}
+                <Switch value={isDebt} onValueChange={value => {
+                  if (value && frequency === "yearly") {
+                    privacyAlerts.formError("Choose a debt payment frequency", "Choose another frequency before changing this yearly bill to debt.");
+                    return;
+                  }
+                  setIsDebt(value);
+                }}
                   trackColor={{ false: c.muted, true: c.primary }} thumbColor="#fff" />
               </View>
             )}

@@ -111,6 +111,20 @@ test("new debt fields validate money, APR and frequency without blocking a posit
   assert.ok(buildSimulationEditorChange({ ...edit, amount: "0.01" }, "13", references, start, end).change);
 });
 
+test("yearly is available only when adding a non-debt bill and retains a required first payment date", () => {
+  const fields = { ...simulationEditorFields(changes[4], start), frequency: "yearly" };
+  const built = buildSimulationEditorChange(fields, "annual", references, start, end);
+  assert.deepEqual(built.change, { id: "annual", type: "bill_add", name: "New bill", amount: 80, frequency: "yearly", startDate: "2026-11-06" });
+  for (const date of ["", "2027-02-29", "tomorrow"]) assert.ok(buildSimulationEditorChange({ ...fields, date }, "annual", references, start, end).error);
+  const debt = simulationEditorFields(changes[14], start);
+  assert.match(buildSimulationEditorChange({ ...debt, frequency: "yearly" }, "debt", references, start, end).error!, /debt payment frequency/);
+  const income = simulationEditorFields(changes[0], start);
+  assert.match(buildSimulationEditorChange({ ...income, frequency: "yearly" }, "income", references, start, end).error!, /income frequency/);
+  const reloaded = simulationEditorFields(built.change!, start);
+  assert.equal(reloaded.frequency, "yearly");
+  assert.equal(reloaded.date, "2026-11-06");
+});
+
 test("type switching resets new debt fields and stale hidden values never enter another change", () => {
   const reset = { ...simulationEditorFields(null, start), type: "debt_pause" as const };
   assert.equal(reset.balance, "");assert.equal(reset.apr, "");assert.equal(reset.targetId, "");assert.equal(reset.resumeDate, "2026-11-27");

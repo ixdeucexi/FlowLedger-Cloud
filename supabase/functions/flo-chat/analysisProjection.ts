@@ -83,7 +83,8 @@ export function projectionInput(snapshot: AnalysisSnapshot): { input: FinancialP
     if (!Array.isArray(income.amount_history ?? []) || !Array.isArray(income.excluded_dates ?? []) || (income.amount_history ?? []).some((e: any) => !validIncomeEffectiveFrom(e?.effective_from)) || (income.excluded_dates ?? []).some((d: any) => !validIncomeExcludedDate(d))) missing.push("An income history or excluded date is invalid");
   }
   for (const bill of rows("bills")) {
-    if (typeof bill.is_debt !== "boolean" || typeof bill.is_recurring !== "boolean" || !["monthly", "quarterly", "weekly", "biweekly"].includes(bill.frequency) || !Number.isInteger(strictNumber(bill.due_day)) || bill.due_day < 1 || bill.due_day > 31) missing.push("A bill recurrence or debt classification is invalid");
+    if (typeof bill.is_debt !== "boolean" || typeof bill.is_recurring !== "boolean" || !["monthly", "quarterly", "yearly", "weekly", "biweekly"].includes(bill.frequency) || !Number.isInteger(strictNumber(bill.due_day)) || bill.due_day < 1 || bill.due_day > 31) missing.push("A bill recurrence or debt classification is invalid");
+    if (bill.frequency === "yearly" && !validDate(bill.next_payment_date ?? bill.start_date)) missing.push("A yearly bill first payment anchor is required");
     if (bill.is_debt && [bill.balance, bill.interest_rate].some(v => strictNumber(v) === null || Number(v) < 0)) missing.push("A debt balance or APR is invalid");
     if (["weekly","biweekly"].includes(bill.frequency) && (!Number.isInteger(strictNumber(bill.day_of_week)) || bill.day_of_week < 0 || bill.day_of_week > 6)) missing.push("A weekly bill weekday is unavailable or invalid");
   }

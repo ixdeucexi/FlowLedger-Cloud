@@ -12,6 +12,15 @@ function snapshot() {
   return {householdId:'test',today:'2026-09-10',capturedAt:'2026-09-10T15:00:00Z',timeZone:'America/Chicago',hash:'test',sources};
 }
 const request = (patch={}) => ({domain:'forecast',operation:'summary',startDate:null,endDate:'2026-09-30',dateEvent:'none',entity:null,merchant:null,category:null,amount:null,...patch});
+test('yearly bills stay full annual cash flow in Flo forecast and require a first payment anchor',()=>{
+ const s=snapshot();s.sources.incomes.rows=[];s.sources.monthly_overrides.rows=[];
+ s.sources.bills.rows=[{...s.sources.bills.rows[0],name:'Insurance',amount:1200,frequency:'yearly',next_payment_date:'2026-11-15',start_date:'2026-09-01'}];
+ assert.deepEqual(projectionInput(s).missing,[]);
+ assert.equal(forecastAnalysis(s,request({endDate:'2026-10-31'})).facts.obligations,0);
+ const due=forecastAnalysis(s,request({endDate:'2026-12-31'}));assert.deepEqual(due.missing,[]);assert.equal(due.facts.obligations,1200);assert.equal(due.facts.projectedBalance,3800);
+ delete s.sources.bills.rows[0].next_payment_date;delete s.sources.bills.rows[0].start_date;
+ assert.ok(projectionInput(s).missing.some(reason=>reason.includes('yearly bill first payment anchor')));
+});
 
 test('complete snapshot uses canonical engine and preserves observed versus projected balance',()=>{
  const s=snapshot(); assert.deepEqual(projectionInput(s).missing,[]);

@@ -38,6 +38,7 @@ test("today decisions name every supported bill cadence", () => {
     ["biweekly", 150, "$150 biweekly payment is due tomorrow."],
     ["monthly", 120, "$120 monthly payment is due tomorrow."],
     ["quarterly", 600, "$600 quarterly payment is due tomorrow."],
+    ["yearly", 1200, "$1,200 yearly payment is due tomorrow."],
   ] as const;
 
   cases.forEach(([frequency, amount, expected]) => {

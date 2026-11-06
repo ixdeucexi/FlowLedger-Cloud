@@ -194,6 +194,7 @@ export function validateFloForm(
           "weekly",
           "biweekly",
           ...(kind === "create_income" ? [] : ["quarterly"]),
+          ...(kind === "create_bill" ? ["yearly"] : []),
         ].includes(value)
       )
         errors[field.key] = "Choose how often this repeats.";

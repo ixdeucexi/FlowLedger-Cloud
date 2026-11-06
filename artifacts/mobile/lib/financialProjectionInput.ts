@@ -74,6 +74,7 @@ export function normalizeBillRow(bill: any): Bill {
     frequency: (bill.frequency ?? "monthly") as
       | "monthly"
       | "quarterly"
+      | "yearly"
       | "biweekly"
       | "weekly",
     day_of_week: bill.day_of_week ?? 0,

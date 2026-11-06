@@ -20,3 +20,24 @@ test('invalid or excessive date windows fail closed',()=>{for(const endDate of [
 test('zero effective income is descriptive but cannot be the next payday',()=>{const s=snapshot();s.sources.incomes.rows=[{...income,amount:0},{...income,id:'side',name:'Side',amount:100,start_date:'2026-09-12',next_payment_date:'2026-09-12'}];const r=scheduleAnalysis(s,req({dateEvent:'next_payday'}));assert.equal(r.facts.nextPayday,'2026-09-12');assert.equal(r.facts.expectedIncome,100);assert.deepEqual(scheduleAnalysis(s,req({dateEvent:'next_payday',entity:'Paycheck'})).facts,{});});
 test('saved month history and ISO exclusions work through schedule answers',()=>{const s=snapshot();s.sources.incomes.rows=[{...income,amount_history:[{effective_from:'2026-09',amount:1700}],excluded_dates:['2026-09-11T12:00:00Z']}];const r=scheduleAnalysis(s,req());assert.deepEqual(r.missing,[]);assert.equal(r.facts.expectedIncome,1700);assert.equal(r.facts.expectedPaymentCount,1);assert.equal(r.facts.nextPayday,'2026-09-25');});
 test('invalid history and exclusions still block schedule output',()=>{for(const patch of [{amount_history:[null]},{amount_history:[{effective_from:'2026-13',amount:1700}]},{amount_history:[{effective_from:'2026-02-30',amount:1700}]},{excluded_dates:['2026-09-11 junk']},{excluded_dates:['2026-02-30T12:00:00Z']}]){const s=snapshot();s.sources.incomes.rows=[{...income,...patch}];assert.deepEqual(scheduleAnalysis(s,req()).facts,{});}});
+test('yearly bill analysis uses one full annual obligation with no off-month payments',()=>{
+ const s=snapshot();s.sources.bills.rows=[{...bill,name:'Insurance',amount:1200,frequency:'yearly',due_day:15,next_payment_date:'2026-11-15',start_date:'2026-09-01'}];
+ const r=scheduleAnalysis(s,req({domain:'bills',endDate:'2027-10-31'}));assert.deepEqual(r.missing,[]);assert.equal(r.facts.occurrenceCount,1);assert.equal(r.facts.configuredObligations,1200);assert.equal(r.facts.remainingObligations,1200);assert.match(r.text,/2026-11-15: Insurance/);
+ const before=scheduleAnalysis(s,req({domain:'bills',endDate:'2026-10-31'}));assert.equal(before.facts.occurrenceCount,0);assert.equal(before.facts.configuredObligations,0);
+});
+test('yearly bill analysis preserves moved or paid one-time obligations and next anniversary',()=>{
+ const s=snapshot();s.sources.bills.rows=[{...bill,name:'Insurance',amount:1200,frequency:'yearly',due_day:15,next_payment_date:'2026-11-15'}];
+ s.sources.bill_date_moves.rows=[{id:'annual-move',bill_id:'b',from_date:'2026-11-15',to_date:'2026-12-02'}];
+ s.sources.monthly_overrides.rows=[{id:'paid',bill_id:'b',month:11,year:2026,paid_amount:1200,actual_amount:1200,paid_date:'2026-12-02'}];
+ const r=scheduleAnalysis(s,req({domain:'bills',endDate:'2027-11-30'}));assert.deepEqual(r.missing,[]);assert.equal(r.facts.occurrenceCount,2);assert.equal(r.facts.recordedPaid,1200);assert.equal(r.facts.remainingObligations,1200);assert.match(r.text,/2026-12-02: Insurance/);assert.match(r.text,/2027-11-15: Insurance/);assert.doesNotMatch(r.text,/2026-11-15: Insurance/);
+});
+test('yearly bill schedule requires its anchor and yearly income remains unsupported',()=>{
+ const s=snapshot();s.sources.bills.rows=[{...bill,frequency:'yearly'}];assert.deepEqual(scheduleAnalysis(s,req({domain:'bills'})).facts,{});
+ s.sources.incomes.rows=[{...income,frequency:'yearly'}];assert.deepEqual(scheduleAnalysis(s,req()).facts,{});
+});
+test('Flo yearly anniversaries recover leap day and off-month due overrides cannot create payments',()=>{
+ const s=snapshot();s.sources.bills.rows=[{...bill,name:'Insurance',amount:1200,frequency:'yearly',due_day:29,next_payment_date:'2024-02-29',start_date:'2024-02-29'}];
+ const leap=scheduleAnalysis(s,req({domain:'bills',startDate:'2027-02-01',endDate:'2028-02-29'}));assert.deepEqual(leap.missing,[]);assert.equal(leap.facts.occurrenceCount,2);assert.equal(leap.facts.configuredObligations,2400);assert.match(leap.text,/2027-02-28: Insurance/);assert.match(leap.text,/2028-02-29: Insurance/);
+ s.sources.bills.rows=[{...s.sources.bills.rows[0],due_day:15,next_payment_date:'2026-11-15',start_date:'2026-09-01'}];s.sources.monthly_overrides.rows=[{bill_id:'b',month:9,year:2026,paid_amount:0,custom_due_day:20},{bill_id:'b',month:10,year:2026,paid_amount:0,custom_due_day:20}];
+ const overridden=scheduleAnalysis(s,req({domain:'bills',endDate:'2026-12-31'}));assert.equal(overridden.facts.occurrenceCount,1);assert.match(overridden.text,/2026-11-20: Insurance/);assert.doesNotMatch(overridden.text,/2026-10-20: Insurance/);
+});

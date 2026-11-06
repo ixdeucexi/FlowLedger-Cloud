@@ -30,7 +30,7 @@ export interface AlgorithmBill {
   monthlyMinimum?: number;
   /** Existing snowball money planned above the lender-required minimum. */
   snowballRollover?: number;
-  frequency?: "monthly" | "quarterly" | "biweekly" | "weekly";
+  frequency?: "monthly" | "quarterly" | "yearly" | "biweekly" | "weekly";
   includeInSnowball?: boolean;
   debt_payment_pauses?: DebtPaymentPause[];
   category: string;

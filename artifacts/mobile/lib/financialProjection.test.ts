@@ -50,6 +50,50 @@ function debtPreviewFixture(): FinancialProjectionSnapshot {
 }
 const previewClock = { now: new Date("2026-10-01T12:00:00Z"), timeZone: "America/Chicago" };
 
+test("yearly bills reserve the full anniversary amount and ignore off-month due overrides", () => {
+  const snapshot = bankObligationFixture("2026-11-01");
+  snapshot.bills[0] = { ...snapshot.bills[0], frequency: "yearly", amount: 1200, due_day: 15, next_payment_date: "2026-11-15", start_date: "2026-11-15" };
+  snapshot.overrides = [{ id: "off-month", bill_id: "bill", month: 0, year: 2027, paid_amount: 0, custom_due_day: 5 }, { id: "annual-date", bill_id: "bill", month: 10, year: 2026, paid_amount: 0, custom_due_day: 20 }];
+  const projection = createFinancialProjection(snapshot, { now: new Date("2026-11-01T12:00:00Z"), timeZone: "UTC" });
+  assert.deepEqual(projection.getBillOccurrencesInMonth(snapshot.bills[0], 10, 2026), [20]);
+  assert.equal(projection.getCashFlow(10, 2026).totalBillsDue, 1200);
+  assert.deepEqual(projection.getDailyBalances(10, 2026).flatMap(day => day.events ?? []).filter(event => event.sourceId === "bill").map(event => [event.date, event.amount]), [["2026-11-20", -1200]]);
+  assert.deepEqual(projection.getMonthlyBills(0, 2027), []);
+  assert.deepEqual(projection.getBillOccurrencesInMonth(snapshot.bills[0], 0, 2027), []);
+  assert.equal(projection.getCashFlow(0, 2027).totalBillsDue, 0);
+  assert.equal(projection.getCashFlow(10, 2027).totalBillsDue, 1200);
+  const reminders = buildForecastBillNotifications({ today: "2026-11-14", bills: snapshot.bills, getDailyBalances: projection.getDailyBalances, getDebtMonthSettlements: projection.getDebtMonthSettlements });
+  assert.equal(reminders.length, 1);
+  assert.equal(reminders[0].id, "bill-due:bill:2026-11-20");
+  assert.match(reminders[0].body, /1,200/);
+});
+
+test("an unpaid annual bill remains reserved across a fresh bank anchor outside the forecast window", () => {
+  for (const manual of [false, true]) {
+    for (const state of ["unpaid", "partial", "paid", "finalized", "skipped", "moved", "matched"] as const) {
+      const snapshot = bankObligationFixture("2027-01-05");
+      snapshot.bills[0] = { ...snapshot.bills[0], frequency: "yearly", amount: 1200, due_day: 15, next_payment_date: "2026-11-15", start_date: "2026-11-15" };
+      if (manual) {
+        snapshot.connectedBankAccounts = [];
+        snapshot.accounts = [{ id: "manual", name: "Checking", account_type: "checking", current_balance: 2000, balance_as_of: "2027-01-05", is_active: true, created_at: "2026-01-01" }];
+      } else snapshot.connectedBankAccounts[0].current_balance = 2000;
+      if (["partial", "paid", "finalized"].includes(state)) snapshot.overrides = [{ id: "paid", bill_id: "bill", month: 10, year: 2026, paid_amount: state === "partial" ? 400 : 1200, ...(state === "finalized" ? { actual_amount: 900 } : {}), paid_date: "2026-11-15" }];
+      if (state === "skipped") snapshot.billDateMoves = [{ id: "skip", created_at: "2026-11-01", bill_id: "bill", from_date: "2026-11-15", to_date: "2026-11-15", is_skipped: true }];
+      if (state === "moved") snapshot.billDateMoves = [{ id: "move", created_at: "2026-11-01", bill_id: "bill", from_date: "2026-11-15", to_date: "2026-12-10", custom_amount: 1000 }];
+      if (state === "matched") snapshot.transactions = [{ id: "matched", date: "2026-11-15", amount: -1200, category: "Bills", note: "Annual bill", source: "statement", review_status: "matched", review_resolution: "bill", review_allocations: [{ type: "bill", targetId: "bill", occurrenceDate: "2026-11-15", amount: 1200, plannedAmount: 1200, settlement: "full" }] }];
+      const projection = createFinancialProjection(snapshot, { now: new Date("2027-01-05T12:00:00Z"), timeZone: "UTC" });
+      const expectedReserve = state === "unpaid" ? 1200 : state === "partial" ? 800 : state === "moved" ? 1000 : 0;
+      // Seed a future month first to exercise carryover; next annual is in November.
+      assert.equal(projection.getDailyBalances(2, 2027).at(-1)?.balance, 2000 - expectedReserve, `${manual}:${state}`);
+      const january = projection.getDailyBalances(0, 2027);
+      assert.equal(january.at(-1)?.balance, 2000 - expectedReserve, `${manual}:${state}`);
+      assert.equal(january.flatMap(day => day.events ?? []).filter(event => event.sourceId === "bill").length, 0);
+      assert.equal(january.flatMap(day => day.projectionEvents ?? []).filter(event => event.sourceId === "bill").length, expectedReserve > 0 ? 1 : 0);
+      assert.equal(projection.getCashFlow(10, 2027).totalBillsDue, 1200, `${manual}:${state}: next anniversary remains open`);
+    }
+  }
+});
+
 test("cash flow counts finalized manual actuals once and releases the settled bill", () => {
   for (const actual of [0, 80, 100, 120]) {
     const snapshot = bankObligationFixture();

@@ -4,6 +4,41 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { transpileModule, ModuleKind } from "typescript";
 import { parseMoneyInput, parseDecimalInput } from "./moneyFormInput";
+import { dateOnlyToLocalDate } from "./dateLabels";
+import { normalizeBillRow } from "./financialProjectionInput";
+import { getBillOccurrenceDays } from "./schedule";
+
+test("yearly bill form requires a real first date and saves a reloadable annual bill", async () => {
+  const source = readFileSync("components/AddBillModal.tsx", "utf8");
+  const dateHandlerStart = source.indexOf("  const handlePaymentDateChange =");
+  const dateHandlerSource = source.slice(dateHandlerStart, source.indexOf("\n  useEffect(", dateHandlerStart));
+  for (const [date, isDebt, expectedSaves] of [["", false, 0], ["2027-02-29", false, 0], ["2028-02-29", true, 0], ["2028-02-29", false, 1], ["2027-01-15", false, 1]] as const) {
+    const saved: any[] = [], alerts: string[] = [];
+    let dueDay = "1";
+    const chooseDate = new Function("setNextPaymentDate", "setDueDay", "setDayOfWeek", "setPickerYear", "setPickerMonth", `${transpileModule(dateHandlerSource, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText}; return handlePaymentDateChange;`)(() => {}, (value: string) => { dueDay = value; }, () => {}, () => {}, () => {});
+    chooseDate(date);
+    const save = handler("components/AddBillModal.tsx", "handleSave", "handleDelete", {
+      saving: false, pausePendingRef: { current: false }, frequency: "yearly", name: "Insurance", amount: "1,200", balance: "0", interestRate: "0", isDebt,
+      nextPaymentDate: date, dueDay, dayOfWeek: 2, billStartDate: date, billEndDate: "", category: "Insurance", isRecurring: true, smartPriority: "must", includeInSnowball: false, editBill: null, noun: "Bill",
+      parseMoneyInput, parseDecimalInput, dateOnlyToLocalDate, normalizeBillImportance: () => "must",
+      Haptics: { impactAsync: () => {}, ImpactFeedbackStyle: { Medium: "medium" } },
+      privacyAlerts: { alert: (title: string) => alerts.push(title), formError: (title: string) => alerts.push(title) },
+      setSaving: () => {}, onClose: () => {}, onSave: async (bill: unknown) => saved.push(bill),
+    });
+    await save();
+    assert.equal(saved.length, expectedSaves, `${date}:${isDebt}`);
+    if (expectedSaves) {
+      const reloaded = normalizeBillRow({ ...saved[0], id: "annual", created_at: "2026-11-06" });
+      assert.equal(reloaded.frequency, "yearly");
+      assert.equal(reloaded.amount, 1200);
+      const [year, month, day] = date.split("-").map(Number);
+      assert.equal(reloaded.due_day, day);
+      assert.equal(reloaded.next_payment_date, date);
+      assert.deepEqual(getBillOccurrenceDays(reloaded, month - 1, year), [day]);
+      assert.deepEqual(getBillOccurrenceDays(reloaded, month - 1, year + 1), [Math.min(day, new Date(year + 1, month, 0).getDate())]);
+    } else assert.equal(alerts.length, 1);
+  }
+});
 
 function handler(file: string, start: string, end: string, bindings: Record<string, unknown>) {
   bindings = revealedPrivacyBindings(bindings);

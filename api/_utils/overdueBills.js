@@ -33,6 +33,65 @@ function anchorOccurrences(anchorDate, fallbackDay, month, year, intervalDays) {
   return days;
 }
 
+function resolvedYearlyMoves(bill, moves) {
+  const validDate = date => {
+    const text = String(date).slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
+    const parsed = new Date(`${text}T00:00:00Z`);
+    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === text;
+  };
+  const activeMoves = new Map();
+  (moves || []).filter(move => move.bill_id === bill.id && validDate(move.from_date)
+    && (move.is_skipped || validDate(move.to_date))).forEach(move => {
+    const existing = activeMoves.get(move.from_date);
+    const freshness = Date.parse(move.updated_at || move.created_at || "") || 0;
+    const existingFreshness = existing ? Date.parse(existing.updated_at || existing.created_at || "") || 0 : -1;
+    if (!existing || freshness >= existingFreshness) activeMoves.set(move.from_date, move);
+  });
+  const selectedMoves = Array.from(activeMoves.values());
+  // Follow edits from one original annual obligation to its final date.
+  // Intermediate edits and skipped occurrences cannot add reminders.
+  const native = date => {
+    const [nativeYear, nativeMonth, nativeDay] = String(date).slice(0, 10).split("-").map(Number);
+    return occurrenceDays(bill, undefined, [], nativeMonth - 1, nativeYear).includes(nativeDay);
+  };
+  const incoming = new Set(selectedMoves.filter(move => !move.is_skipped
+    && move.from_date !== move.to_date && !native(move.to_date)).map(move => move.to_date));
+  const obsolete = new Set();
+  (moves || []).filter(move => move.bill_id === bill.id).forEach(move => {
+    const current = activeMoves.get(move.from_date);
+    if (!current || current.to_date === move.to_date || move.is_skipped) return;
+    let date = move.to_date;
+    const seen = new Set();
+    while (activeMoves.has(date) && !seen.has(date) && !native(date)) {
+      seen.add(date); obsolete.add(date); date = activeMoves.get(date).to_date;
+    }
+  });
+  const visited = new Set();
+  const resolved = [];
+  const follow = root => {
+    if (visited.has(root) || obsolete.has(root)) return;
+    let date = root, skipped = false, customAmount;
+    const chain = new Set();
+    while (activeMoves.has(date) && !chain.has(date)) {
+      chain.add(date); visited.add(date);
+      const move = activeMoves.get(date);
+      if (move.custom_amount !== undefined) customAmount = move.custom_amount;
+      if (move.is_skipped) { skipped = true; break; }
+      if (move.to_date === date) break;
+      date = move.to_date;
+      if (native(date) && date !== root) break;
+    }
+    if (chain.has(date) && activeMoves.get(date)?.to_date !== date) date = root;
+    if ((bill.start_date && root < String(bill.start_date).slice(0, 10))
+      || (bill.end_date && root > String(bill.end_date).slice(0, 10))) return;
+    resolved.push({ ...activeMoves.get(root), from_date: root, to_date: date, is_skipped: skipped, custom_amount: customAmount });
+  };
+  Array.from(activeMoves.keys()).filter(date => !incoming.has(date)).sort().forEach(follow);
+  Array.from(activeMoves.keys()).sort().forEach(follow);
+  return resolved;
+}
+
 function occurrenceDays(bill, override, moves, month, year) {
   const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
   let days = [];
@@ -55,6 +114,22 @@ function occurrenceDays(bill, override, moves, month, year) {
     } else if (bill.frequency === "biweekly") {
       days = anchorOccurrences(bill.next_payment_date || bill.start_date, bill.due_day, month, year, 14)
         .filter(withinExactDates);
+    } else if (bill.frequency === "yearly") {
+      const anchor = String(bill.next_payment_date ?? bill.start_date ?? "").slice(0, 10);
+      const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(anchor);
+      if (match) {
+        const [anchorYear, anchorMonth, anchorDay] = match.slice(1).map(Number);
+        const parsed = new Date(Date.UTC(anchorYear, anchorMonth - 1, anchorDay));
+        const valid = parsed.getUTCFullYear() === anchorYear
+          && parsed.getUTCMonth() === anchorMonth - 1 && parsed.getUTCDate() === anchorDay;
+        if (valid && month === anchorMonth - 1 && year >= anchorYear) {
+          const nativeDay = Math.min(Number(bill.due_day) || anchorDay, daysInMonth);
+          if (nativeDay > 0 && dateKey(year, month, nativeDay) >= anchor && withinExactDates(nativeDay)) {
+            const day = Math.min(override?.custom_due_day ?? nativeDay, daysInMonth);
+            if (day > 0 && dateKey(year, month, day) >= anchor && withinExactDates(day)) days = [day];
+          }
+        }
+      }
     } else {
       const dueDay = override?.custom_due_day ?? bill.due_day;
       const day = Math.min(Math.max(1, Number(dueDay) || 1), daysInMonth);
@@ -70,10 +145,11 @@ function occurrenceDays(bill, override, moves, month, year) {
     const existingFreshness = existing ? Date.parse(existing.updated_at || existing.created_at || "") || 0 : -1;
     if (!existing || freshness >= existingFreshness) activeMoves.set(move.from_date, move);
   });
-  const selectedMoves = Array.from(activeMoves.values());
+  let selectedMoves = Array.from(activeMoves.values());
+  if (bill.frequency === "yearly") selectedMoves = resolvedYearlyMoves(bill, moves);
   const kept = days.filter(day => !selectedMoves.some(move => move.from_date === dateKey(year, month, day)));
   const movedIn = selectedMoves
-    .filter(move => String(move.to_date).startsWith(prefix))
+    .filter(move => (!move.is_skipped || bill.frequency !== "yearly") && String(move.to_date).startsWith(prefix))
     .map(move => Number(String(move.to_date).slice(8, 10)))
     .filter(Number.isFinite);
   return Array.from(new Set([...kept, ...movedIn])).sort((left, right) => left - right);
@@ -106,9 +182,14 @@ function buildOverdueOccurrences({ bills, overrides, moves, today }) {
     let paidRemaining = Math.max(0, Number(override?.paid_amount) || 0);
 
     return days.flatMap(day => {
-      const paidForOccurrence = Math.min(amount, paidRemaining);
+      const annualMove = bill.frequency === "yearly"
+        ? resolvedYearlyMoves(bill, moves).find(move => !move.is_skipped && move.to_date === dateKey(year, month, day))
+        : undefined;
+      const occurrenceAmount = override?.actual_amount == null && annualMove?.custom_amount !== undefined
+        ? Math.max(0, Number(annualMove.custom_amount) || 0) : amount;
+      const paidForOccurrence = Math.min(occurrenceAmount, paidRemaining);
       paidRemaining = Math.max(0, paidRemaining - paidForOccurrence);
-      const remainingAmount = cents(Math.max(0, amount - paidForOccurrence));
+      const remainingAmount = cents(Math.max(0, occurrenceAmount - paidForOccurrence));
       if (day >= todayDay || remainingAmount <= 0.005) return [];
       return [{
         billId: bill.id,

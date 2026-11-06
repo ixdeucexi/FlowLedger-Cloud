@@ -36,7 +36,7 @@ export interface StabilityProgressInput {
     name: string;
     overdueAmount: number;
     dueLabel: string;
-    frequency?: "monthly" | "quarterly" | "biweekly" | "weekly";
+    frequency?: "monthly" | "quarterly" | "yearly" | "biweekly" | "weekly";
     overdueOccurrenceCount?: number;
   } | null;
   forecastConfidence: "high" | "medium" | "low";
@@ -122,7 +122,9 @@ export function buildStabilityProgress(input: StabilityProgressInput): Stability
   if (input.overdueBills > 0 || riskDays > 0) {
     const attentionBill = input.attentionBill;
     const recurringAttention = attentionBill && attentionBill.frequency !== "monthly" && (attentionBill.overdueOccurrenceCount ?? 0) > 0;
-    const recurringLabel = attentionBill?.frequency === "biweekly" ? "biweekly" : "weekly";
+    const recurringLabel = attentionBill?.frequency === "yearly" ? "yearly"
+      : attentionBill?.frequency === "quarterly" ? "quarterly"
+      : attentionBill?.frequency === "biweekly" ? "biweekly" : "weekly";
     return {
       ...base,
       stage: "stabilize",

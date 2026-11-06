@@ -26,7 +26,7 @@ export interface Bill {
   start_date?: string;
   end_date?: string;
   is_recurring: boolean;
-  frequency: "monthly" | "quarterly" | "biweekly" | "weekly";
+  frequency: "monthly" | "quarterly" | "yearly" | "biweekly" | "weekly";
   created_at: string;
   smart_priority?: BillImportance;
   include_in_snowball?: boolean;

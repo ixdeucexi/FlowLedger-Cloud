@@ -80,6 +80,36 @@ test("recurrence clamps month end, handles leap year, and preserves weekly caden
   assert.deepEqual(recurringSimulationDates("2026-08-12", "2026-08-26", "weekly"), ["2026-08-12", "2026-08-19", "2026-08-26"]);
 });
 
+test("yearly simulation dates retain the anniversary and recover leap day without monthly payments", () => {
+  assert.deepEqual(recurringSimulationDates("2027-01-15", "2028-01-15", "yearly"), ["2027-01-15", "2028-01-15"]);
+  assert.deepEqual(recurringSimulationDates("2028-02-29", "2032-02-29", "yearly"), ["2028-02-29", "2029-02-28", "2030-02-28", "2031-02-28", "2032-02-29"]);
+  assert.deepEqual(recurringSimulationDates("2026-11-06", "2027-11-05", "yearly"), ["2026-11-06"]);
+  assert.deepEqual(recurringSimulationDates("2026-11-06", "2027-11-06", "yearly"), ["2026-11-06", "2027-11-06"]);
+  assert.deepEqual(recurringSimulationDates("", "2027-11-06", "yearly"), []);
+  const annual = { id: "annual", type: "bill_add", name: "Insurance", amount: 600, frequency: "yearly", startDate: "2026-11-06" };
+  assert.deepEqual(decodePlanSimulationChanges([annual]), [annual]);
+  for (const startDate of ["", "2027-02-29", "tomorrow"]) assert.equal(decodePlanSimulationChanges([{ ...annual, startDate }]), null);
+  assert.equal(decodePlanSimulationChanges([{ ...annual, type: "income_add" }]), null);
+  assert.equal(decodePlanSimulationChanges([{ ...annual, type: "debt_add", balance: 1200, apr: 0 }]), null);
+});
+
+test("a yearly hypothetical bill charges the full amount only on each anniversary", () => {
+  const days: CanonicalPlanSimulationDay[] = [];
+  for (const cursor = new Date("2026-11-01T00:00:00Z"); cursor.toISOString().slice(0, 10) <= "2027-11-30"; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+    days.push({ date: cursor.toISOString().slice(0, 10), inflow: 0, outflow: 0, net: 0, balance: 2000, events: [] });
+  }
+  const result = projectPlanSimulation({
+    baseline: { startDate: "2026-11-01", endDate: "2027-11-30", openingBalance: 2000, days },
+    changes: [{ id: "annual", type: "bill_add", name: "Insurance", amount: 600, frequency: "yearly", startDate: "2026-11-06" }],
+    references: { ...references, debts: [] }, metrics, safetyFloor: 0,
+  });
+  assert.deepEqual(result.days.flatMap(day => day.events.map(item => [item.date, item.amount])), [["2026-11-06", -600], ["2027-11-06", -600]]);
+  assert.equal(result.endingBalance, 800);
+  assert.equal(result.requiredMonthlyOutflow, metrics.requiredMonthlyOutflow + 600);
+  assert.equal(result.complete, true);
+  assert.deepEqual(days.flatMap(day => day.events), [], "the canonical baseline remains unchanged");
+});
+
 test("zero-change baseline exactly preserves canonical Forecast totals, event dates, and balances", () => {
   const source = baselineDays();
   const baseline = buildCanonicalPlanSimulationBaseline({

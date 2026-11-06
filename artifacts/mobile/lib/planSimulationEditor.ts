@@ -114,7 +114,7 @@ export function buildSimulationEditorChange(fields: SimulationEditorFields, id: 
     case "income_edit": candidate = { id, type, incomeId: targetId, amount, effectiveDate: date }; break;
     case "income_pause": candidate = { id, type, incomeId: targetId, effectiveDate: date }; break;
     case "income_once": candidate = { id, type, name: name.trim(), amount, date }; break;
-    case "bill_add": if (!["weekly", "biweekly", "monthly", "quarterly"].includes(frequency)) return { error: "Choose a bill frequency." }; candidate = { id, type, name: name.trim(), amount, frequency: frequency as "weekly" | "biweekly" | "monthly" | "quarterly", startDate: date }; break;
+    case "bill_add": if (!["weekly", "biweekly", "monthly", "quarterly", "yearly"].includes(frequency)) return { error: "Choose a bill frequency." }; candidate = { id, type, name: name.trim(), amount, frequency: frequency as "weekly" | "biweekly" | "monthly" | "quarterly" | "yearly", startDate: date }; break;
     case "bill_edit": candidate = { id, type, billId: targetId, amount, effectiveDate: date }; break;
     case "bill_pause": candidate = { id, type, billId: targetId, effectiveDate: date }; break;
     case "bill_move": candidate = { id, type, billId: targetId, occurrenceDate: date, newDate }; break;
