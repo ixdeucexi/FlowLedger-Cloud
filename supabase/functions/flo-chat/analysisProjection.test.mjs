@@ -74,6 +74,19 @@ test('safe spending is capped by observed available funds after pending outflows
  const input=projectionInput(s);assert.deepEqual(input.missing,[]);assert.equal(input.availableNow,400);
  const r=forecastAnalysis(s,request({domain:'purchase',amount:201}));assert.ok(r.facts.safeToSpendUnderPlan<=200);assert.match(r.text,/cannot confirm/);
 });
+
+test('Flo projection does not reserve an extra bank hold for split pending charges',()=>{
+ const s=snapshot();s.sources.plaid_accounts.rows=[{id:'bank',plaid_account_id:'provider',name:'Checking',account_type:'depository',account_subtype:'checking',current_balance:1000,available_balance:900,is_active:true,updated_at:s.capturedAt}];
+ s.sources.plaid_transactions.rows=[40,60].map((amount,index)=>({id:`pending-${index}`,plaid_transaction_id:`pending-${index}`,plaid_account_id:'bank',pending:true,amount:-amount,transaction_date:s.today,name:'Pending purchase',category:'Shopping'}));
+ const before=JSON.stringify(s);const result=projectionInput(s);
+ assert.deepEqual(result.missing,[]);assert.equal(result.input.pendingBankTransactions.length,2);assert.equal(result.availableNow,900);assert.equal(result.current,1000);assert.equal(JSON.stringify(s),before);
+});
+
+test('Flo projection treats null available balance as unknown instead of a full-balance hold',()=>{
+ const s=snapshot();s.sources.plaid_accounts.rows=[{id:'bank',plaid_account_id:'provider',name:'Checking',account_type:'depository',account_subtype:'checking',current_balance:1000,available_balance:null,is_active:true,updated_at:s.capturedAt}];
+ s.sources.plaid_transactions.rows=[{id:'pending',plaid_transaction_id:'pending',plaid_account_id:'bank',pending:true,amount:-25,transaction_date:s.today,name:'Pending purchase',category:'Shopping'}];
+ const result=projectionInput(s);assert.deepEqual(result.missing,[]);assert.equal(result.input.pendingBankTransactions.length,1);assert.equal(result.availableNow,975);assert.equal(result.current,1000);
+});
 test('paid overrides remove settled obligations and future-only windows exclude earlier bills',()=>{
  const s=snapshot();s.sources.monthly_overrides.rows=[{id:'paid',bill_id:'rent',month:8,year:2026,paid_amount:900,custom_amount:null,custom_due_day:null,actual_amount:900,paid_date:'2026-09-10'}];
  const r=forecastAnalysis(s,request({domain:'bills'}));assert.equal(r.facts.obligations,0);

@@ -1038,6 +1038,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       .filter((account: any) => account?.account_type !== "credit_card")
       .map(normalizeAccountRow);
     const cachedIdentities = normalizeConnectedBankRows(cache.data.transactionAccountIdentities);
+    const cachedBankAccounts = normalizeConnectedBankRows(cache.data.connectedBankAccounts);
+    const cachedTimeZone = cache.data.householdTimeZone || "UTC";
+    let cachedBalanceDate: string;
+    try {
+      cachedBalanceDate = localDateInTimeZone(new Date(cache.dataUpdatedAt), cachedTimeZone);
+    } catch {
+      return false;
+    }
     const cachedTransactions = [
       ...cache.data.transactions,
       ...cache.data.deletedTransactions,
@@ -1079,7 +1087,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     billDateMovesRef.current = cachedMoves;
     setTransactions(transactionCollections.active);
     setDeletedTransactions(transactionCollections.deleted);
-    setPendingBankTransactions(normalizePendingBankRows(cache.data.pendingBankTransactions));
+    setPendingBankTransactions(pendingPlaidActivityWithBalanceHolds(
+      normalizePendingBankRows(cache.data.pendingBankTransactions),
+      cachedBankAccounts,
+      cachedBalanceDate,
+    ));
     setPendingPlanMatches(cache.data.pendingPlanMatches.map(normalizePendingPlanMatchRow));
     setIncomes(cache.data.incomes.map((income: any) => ({
       ...income,
@@ -1095,9 +1107,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     authoritativeAccountsByIdRef.current = new Map(
       cachedAccounts.map(account => [account.id, account]),
     );
-    const canonicalBankAccounts = canonicalConnectedAccounts(
-      normalizeConnectedBankRows(cache.data.connectedBankAccounts),
-    );
+    const canonicalBankAccounts = canonicalConnectedAccounts(cachedBankAccounts);
     setConnectedBankAccounts(canonicalBankAccounts);
     connectedBankAccountsRef.current = canonicalBankAccounts;
     setTransactionAccountIdentities(cachedIdentities);
@@ -1107,7 +1117,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       scopeKey: `${cache.userId}:${nextHousehold.householdId}`,
       status: "ready",
     });
-    setHouseholdTimeZone(cache.data.householdTimeZone || "UTC");
+    setHouseholdTimeZone(cachedTimeZone);
     setDecisions(cache.data.decisions.map((decision: any) => ({
       ...decision,
       calendar_date: decision.calendar_date ?? undefined,

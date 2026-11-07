@@ -264,7 +264,7 @@ export function normalizeConnectedBankRows(
   return rows.map((account) => {
     const currentBalance = Number(account.current_balance);
     const currentBalanceAvailable =
-      account.current_balance != null && Number.isFinite(currentBalance);
+      account.current_balance_available !== false && account.current_balance != null && Number.isFinite(currentBalance);
     return {
       ...account,
       // Existing account presentation expects a number, but forecasting must

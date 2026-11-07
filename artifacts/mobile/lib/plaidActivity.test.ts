@@ -9,6 +9,7 @@ import {
   unplannedPendingExpenses,
   visiblePendingPlaidActivity,
 } from "./plaidActivity";
+import type { PendingPlaidActivityRow, PlaidAccountIdentityRow } from "./plaidActivity";
 
 test("inferred balance holds are distinct from actual pending bank charges", () => {
   assert.equal(isInferredPendingBankHold({ plaid_transaction_id: "pending-hold:checking:50.00" }), true);
@@ -250,6 +251,169 @@ test("pending checking summary never presents an unavailable current balance as 
   }]);
 
   assert.equal(summary, null);
+});
+
+const checkingFixture = (patch: Partial<PlaidAccountIdentityRow> = {}): PlaidAccountIdentityRow => ({
+  id: "checking", name: "Checking", account_type: "depository", account_subtype: "checking",
+  current_balance: 1000, available_balance: 900, is_active: true, ...patch,
+});
+const pendingFixture = (id: string, amount: number, accountId = "checking"): PendingPlaidActivityRow => ({
+  plaid_transaction_id: id, plaid_account_id: accountId, transaction_date: "2026-07-31", amount, name: id,
+});
+
+test("several real pending charges cover one bank balance gap without an extra hold", () => {
+  const raw = [pendingFixture("fuel", -40), pendingFixture("groceries", -60)];
+  const before = JSON.stringify(raw);
+  const accounts = [checkingFixture()];
+  const pending = pendingPlaidActivityWithBalanceHolds(raw, accounts, "2026-07-31");
+
+  assert.deepEqual(pending.map(row => row.plaid_transaction_id), ["fuel", "groceries"]);
+  assert.deepEqual(summarizePendingCheckingActivity(pending, accounts), {
+    currentBalance: 1000, availableBalance: 900, pendingOutflow: 100, pendingInflow: 0, pendingCount: 2,
+  });
+  assert.equal(JSON.stringify(raw), before);
+});
+
+test("only the unexplained remainder of a bank hold is inferred", () => {
+  const accounts = [checkingFixture()];
+  const pending = pendingPlaidActivityWithBalanceHolds([pendingFixture("fuel", -40)], accounts, "2026-07-31");
+  assert.deepEqual(pending.map(row => row.amount), [-40, -60]);
+  assert.equal(isInferredPendingBankHold(pending[1]), true);
+  assert.equal(summarizePendingCheckingActivity(pending, accounts)?.pendingOutflow, 100);
+});
+
+test("pending credits do not create a synthetic debit when real charges cover the bank gap", () => {
+  for (const debits of [[-100], [-40, -60]]) {
+    const accounts = [checkingFixture()];
+    const raw = [...debits.map((amount, index) => pendingFixture(`debit-${index}`, amount)), pendingFixture("refund", 50)];
+    const pending = pendingPlaidActivityWithBalanceHolds(raw, accounts, "2026-07-31");
+    assert.equal(pending.length, raw.length);
+    assert.equal(pending.some(isInferredPendingBankHold), false);
+    assert.deepEqual(summarizePendingCheckingActivity(pending, accounts), {
+      currentBalance: 1000, availableBalance: 900, pendingOutflow: 100, pendingInflow: 50, pendingCount: raw.length,
+    });
+  }
+});
+
+test("real pending charges above the bank gap remain unchanged without an offsetting invented row", () => {
+  const raw = [pendingFixture("first", -60), pendingFixture("second", -90)];
+  const pending = pendingPlaidActivityWithBalanceHolds(raw, [checkingFixture()], "2026-07-31");
+  assert.deepEqual(pending.map(row => [row.plaid_transaction_id, row.amount]), [["first", -60], ["second", -90]]);
+});
+
+test("missing or nonfinite available balances never become full-balance holds", () => {
+  for (const available of [null, undefined, Number.NaN, Number.POSITIVE_INFINITY]) {
+    const accounts = [checkingFixture({ available_balance: available })];
+    const pending = pendingPlaidActivityWithBalanceHolds([
+      pendingFixture("purchase", -25), pendingFixture("refund", 10),
+    ], accounts, "2026-07-31");
+    assert.equal(pending.length, 2, String(available));
+    assert.equal(pending.some(isInferredPendingBankHold), false, String(available));
+    assert.equal(summarizePendingCheckingActivity(pending, accounts)?.availableBalance, 985, String(available));
+  }
+});
+
+test("zero available and negative current balances remain real bank observations", () => {
+  for (const [current, available, held] of [[100, 0, 100], [-20, -35, 15]]) {
+    const accounts = [checkingFixture({ current_balance: current, available_balance: available })];
+    const pending = pendingPlaidActivityWithBalanceHolds([], accounts, "2026-07-31");
+    assert.deepEqual(pending.map(row => row.amount), [-held]);
+    assert.equal(summarizePendingCheckingActivity(pending, accounts)?.availableBalance, available);
+  }
+});
+
+test("unknown current balances never produce an inferred hold or numeric checking summary", () => {
+  for (const patch of [{ current_balance: null }, { current_balance: undefined }, { current_balance: Number.NaN }, { current_balance: Number.NEGATIVE_INFINITY }, { current_balance_available: false }]) {
+    const accounts = [checkingFixture(patch)];
+    assert.deepEqual(pendingPlaidActivityWithBalanceHolds([], accounts, "2026-07-31"), []);
+    assert.equal(summarizePendingCheckingActivity([], accounts), null);
+  }
+});
+
+test("each checking account derives missing availability from only its own signed pending activity", () => {
+  for (const [refund, available] of [[0, 850], [20, 870]]) {
+    const accounts = [checkingFixture({ id: "first", current_balance: 500, available_balance: 450 }),
+      checkingFixture({ id: "second", current_balance: 500, available_balance: null })];
+    const raw = [pendingFixture("first-purchase", -50, "first"), pendingFixture("second-purchase", -100, "second")];
+    if (refund) raw.push(pendingFixture("second-refund", refund, "second"));
+    const pending = pendingPlaidActivityWithBalanceHolds(raw, accounts, "2026-07-31");
+    const summary = summarizePendingCheckingActivity(pending, accounts);
+    assert.equal(pending.some(isInferredPendingBankHold), false);
+    assert.equal(summary?.currentBalance, 1000);
+    assert.equal(summary?.availableBalance, available);
+    assert.equal(summary?.pendingOutflow, 150);
+    assert.equal(summary?.pendingInflow, refund);
+  }
+});
+
+test("accountless pending activity covers a bank gap only for one canonical checking account", () => {
+  const raw = [{ ...pendingFixture("unassigned", -100), plaid_account_id: undefined }];
+  const one = [checkingFixture()];
+  const single = pendingPlaidActivityWithBalanceHolds(raw, one, "2026-07-31");
+  assert.equal(single.length, 1);
+  assert.equal(summarizePendingCheckingActivity(single, one)?.pendingOutflow, 100);
+
+  const two = [checkingFixture({ id: "first", current_balance: 500, available_balance: 450 }),
+    checkingFixture({ id: "second", current_balance: 500, available_balance: 450 })];
+  const multiple = pendingPlaidActivityWithBalanceHolds(raw, two, "2026-07-31");
+  assert.equal(multiple.filter(isInferredPendingBankHold).length, 2);
+  assert.equal(summarizePendingCheckingActivity(multiple, two)?.pendingCount, 2);
+  assert.equal(summarizePendingCheckingActivity(multiple, two)?.pendingOutflow, 100);
+});
+
+test("pending charges from other account types cannot explain a checking hold", () => {
+  const accounts = [checkingFixture(), checkingFixture({ id: "savings", account_subtype: "savings" }),
+    checkingFixture({ id: "card", account_type: "credit", account_subtype: "credit card" })];
+  const pending = pendingPlaidActivityWithBalanceHolds([
+    pendingFixture("savings-purchase", -100, "savings"), pendingFixture("card-purchase", -100, "card"),
+  ], accounts, "2026-07-31");
+  assert.equal(pending.filter(isInferredPendingBankHold).length, 1);
+  assert.equal(summarizePendingCheckingActivity(pending, accounts)?.pendingOutflow, 100);
+});
+
+test("reconnected sources remap multiple genuine charges before calculating the remaining hold", () => {
+  const accounts = duplicateAccounts.map(account => ({ ...account, current_balance: 1000, available_balance: 900 }));
+  const pending = pendingPlaidActivityWithBalanceHolds([
+    pendingFixture("first-identical", -50, "account-old"), pendingFixture("second-identical", -50, "account-old"),
+  ], accounts, "2026-07-31");
+  assert.deepEqual(pending.map(row => [row.plaid_transaction_id, row.plaid_account_id]), [
+    ["first-identical", "account-new"], ["second-identical", "account-new"],
+  ]);
+  assert.equal(summarizePendingCheckingActivity(pending, accounts)?.pendingOutflow, 100);
+});
+
+test("balance-derived holds are idempotent and are rebuilt when the bank observation changes", () => {
+  const accounts = [checkingFixture()];
+  const first = pendingPlaidActivityWithBalanceHolds([pendingFixture("purchase", -40)], accounts, "2026-07-31");
+  const before = JSON.stringify(first);
+  assert.deepEqual(pendingPlaidActivityWithBalanceHolds(first, accounts, "2026-07-31"), first);
+  assert.equal(JSON.stringify(first), before);
+  const released = pendingPlaidActivityWithBalanceHolds(first, [checkingFixture({ available_balance: 960 })], "2026-08-01");
+  assert.deepEqual(released.map(row => row.plaid_transaction_id), ["purchase"]);
+  const increased = pendingPlaidActivityWithBalanceHolds(first, [checkingFixture({ available_balance: 850 })], "2026-08-01");
+  assert.deepEqual(increased.map(row => row.amount), [-40, -110]);
+  assert.equal(increased[1].transaction_date, "2026-08-01");
+});
+
+test("a real provider row named Pending bank hold remains a real debit during normalization", () => {
+  for (const name of ["Pending bank hold", "Another description"]) {
+    const accounts = [checkingFixture({ available_balance: null })];
+    const real = { ...pendingFixture("provider-real-transaction", -25), name, merchant_name: "Pending bank hold" };
+    const normalized = pendingPlaidActivityWithBalanceHolds([real], accounts, "2026-07-31");
+    assert.equal(normalized.length, 1);
+    assert.equal(normalized[0].plaid_transaction_id, real.plaid_transaction_id);
+    assert.equal(normalized[0].amount, -25);
+    assert.equal(summarizePendingCheckingActivity(normalized, accounts)?.availableBalance, 975);
+  }
+});
+
+test("cent rounding does not add a residual hold after split decimal charges", () => {
+  const accounts = [checkingFixture({ current_balance: 1, available_balance: 0.7 })];
+  const pending = pendingPlaidActivityWithBalanceHolds([
+    pendingFixture("first", -0.1), pendingFixture("second", -0.2),
+  ], accounts, "2026-07-31");
+  assert.equal(pending.length, 2);
+  assert.equal(summarizePendingCheckingActivity(pending, accounts)?.pendingOutflow, 0.3);
 });
 
 test("Flo only calls out real unmatched pending expenses", () => {

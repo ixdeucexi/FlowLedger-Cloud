@@ -106,6 +106,16 @@ function isCheckingAccount(account: PlaidAccountIdentityRow): boolean {
   return type === "depository" && (subtype === "checking" || name.includes("checking") || name.includes("bill account"));
 }
 
+function pendingRowsForCheckingAccount<T extends PendingPlaidActivityRow>(
+  pendingRows: T[],
+  accountId: string,
+  onlyCheckingAccount: boolean,
+): T[] {
+  return pendingRows.filter(row => row.plaid_account_id
+    ? row.plaid_account_id === accountId
+    : onlyCheckingAccount);
+}
+
 export function summarizePendingCheckingActivity<
   T extends PendingPlaidActivityRow,
   A extends PlaidAccountIdentityRow,
@@ -133,15 +143,15 @@ export function summarizePendingCheckingActivity<
   const pendingInflow = roundCurrency(checkingPending
     .filter(row => Number(row.amount) > 0)
     .reduce((sum, row) => sum + Number(row.amount || 0), 0));
-  const bankSuppliesAvailable = checkingAccounts.some(account =>
-    account.available_balance != null && Number.isFinite(Number(account.available_balance))
-  );
-  const availableBalance = bankSuppliesAvailable
-    ? roundCurrency(checkingAccounts.reduce((sum, account) => {
-        const available = account.available_balance == null ? Number.NaN : Number(account.available_balance);
-        return sum + (Number.isFinite(available) ? available : Number(account.current_balance || 0));
-      }, 0))
-    : roundCurrency(currentBalance - pendingOutflow + pendingInflow);
+  const availableBalance = roundCurrency(checkingAccounts.reduce((sum, account) => {
+    const available = account.available_balance == null ? Number.NaN : Number(account.available_balance);
+    if (Number.isFinite(available)) return sum + available;
+    const accountPending = pendingRowsForCheckingAccount(pendingRows, account.id, checkingAccounts.length === 1);
+    return sum + Number(account.current_balance) + accountPending.reduce(
+      (net, row) => net + Number(row.amount || 0),
+      0,
+    );
+  }, 0));
 
   return {
     currentBalance,
@@ -167,24 +177,22 @@ export function unplannedPendingExpenses<T extends PendingPlaidActivityRow>(
     );
 }
 
-function hasMatchingPendingAmount(pendingRows: PendingPlaidActivityRow[], accountId: string, amount: number): boolean {
-  return pendingRows.some(row =>
-    row.plaid_account_id === accountId &&
-    Math.abs(roundCurrency(Number(row.amount || 0)) - amount) < 0.005
-  );
-}
-
 export function pendingPlaidActivityWithBalanceHolds<
   T extends PendingPlaidActivityRow,
   A extends PlaidAccountIdentityRow,
 >(pendingRows: T[], accounts: A[], today: string): Array<PendingPlaidActivityRow & { category: string }> {
+  const canonicalAccounts = canonicalConnectedAccounts(accounts);
+  const checkingAccounts = canonicalAccounts.filter(isCheckingAccount);
   const accountIdentityById = new Map(
     accounts.filter(account => account.is_active).map(account => [account.id, plaidAccountIdentity(account)]),
   );
   const canonicalAccountIdByIdentity = new Map(
-    canonicalConnectedAccounts(accounts).map(account => [plaidAccountIdentity(account), account.id]),
+    canonicalAccounts.map(account => [plaidAccountIdentity(account), account.id]),
   );
-  const visibleRows = visiblePendingPlaidActivity(pendingRows, accounts)
+  // Rebuild app-created placeholders for this snapshot. A provider row's name
+  // is not an identifier and must never cause a real charge to disappear.
+  const realPendingRows = pendingRows.filter(row => !row.plaid_transaction_id.startsWith("pending-hold:"));
+  const visibleRows = visiblePendingPlaidActivity(realPendingRows, accounts)
     .map(row => {
       const identity = row.plaid_account_id ? accountIdentityById.get(row.plaid_account_id) : undefined;
       return {
@@ -195,17 +203,20 @@ export function pendingPlaidActivityWithBalanceHolds<
         category: String(row.category || "Pending"),
       };
     });
-  const inferredRows = canonicalConnectedAccounts(accounts)
-    .filter(isCheckingAccount)
+  const inferredRows = checkingAccounts
     .flatMap(account => {
-      if (account.current_balance_available === false) return [];
+      if (account.current_balance_available === false || account.current_balance == null || account.available_balance == null) return [];
       const current = Number(account.current_balance);
       const available = Number(account.available_balance);
       if (!Number.isFinite(current) || !Number.isFinite(available)) return [];
-      const hold = roundCurrency(current - available);
+      const knownOutflow = pendingRowsForCheckingAccount(visibleRows, account.id, checkingAccounts.length === 1)
+        .filter(row => Number(row.amount) < 0)
+        .reduce((sum, row) => sum + Math.abs(Number(row.amount)), 0);
+      // Pending credits may not be cleared into the bank's available balance.
+      // Cover only the part of its debit hold that no real charge explains.
+      const hold = roundCurrency(current - available - knownOutflow);
       if (hold <= 0.005) return [];
       const amount = -hold;
-      if (hasMatchingPendingAmount(visibleRows, account.id, amount)) return [];
       return [{
         plaid_transaction_id: `pending-hold:${account.id}:${hold.toFixed(2)}`,
         plaid_account_id: account.id,
