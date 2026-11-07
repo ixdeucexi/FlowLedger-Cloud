@@ -1489,7 +1489,7 @@ const styles = StyleSheet.create({
   archivedSection: { borderTopWidth: 1, marginTop: 4, paddingTop: 6 },
   archivedToggle: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8 },
   archivedToggleText: { flex: 1, fontSize: 12, fontFamily: "Inter_700Bold" },
-  archivedRow: { minHeight: 58, borderTopWidth: 1, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 10 },
+  archivedRow: { minHeight: 58, borderTopWidth: 1, paddingVertical: 12, flexDirection: "column", alignItems: "stretch", gap: 10 },
   undoCard: { marginTop: 10, borderWidth: 1, borderRadius: 14, padding: 12, flexDirection: "row", alignItems: "center", gap: 9 },
   undoText: { flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold" }, undoButton: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   emptyCard: { marginTop: 12, borderWidth: 1, borderRadius: 20, padding: 24, alignItems: "center", gap: 8 },
