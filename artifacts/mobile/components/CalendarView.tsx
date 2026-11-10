@@ -62,7 +62,7 @@ export function CalendarView({
   const calendarTheme = {
     surface: c.background, cell: "transparent", selectedBorder: c.primary, line: c.border,
     text: c.foreground, muted: c.mutedForeground, faded: c.mutedForeground,
-    today: c.primary, green: c.success, amber: c.warning, red: c.destructive,
+    today: c.primary, green: c.success, red: c.destructive,
   };
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -218,7 +218,7 @@ export function CalendarView({
               disabled={isBeforeStart}
               onPress={() => onDayPress(ds)}
               accessibilityRole="button"
-              accessibilityLabel={`${ds}. ${visibleBalance ? `Balance ${formatCalendarBalance(visibleBalance.balance)}.` : db ? "Closing balance unavailable." : "No forecast available."}`}
+              accessibilityLabel={`${ds}. ${visibleBalance ? `Balance ${formatCalendarBalance(visibleBalance.balance)}.${isLowRiskDay ? " Below your safety floor." : ""}` : db ? "Closing balance unavailable." : "No forecast available."}`}
               accessibilityState={{ disabled: isBeforeStart, selected: isSelected }}
               style={({ pressed }) => [
                 styles.cellOuter,
@@ -254,7 +254,7 @@ export function CalendarView({
                       textStyle={[
                         styles.balanceText,
                         isDesktop && styles.desktopBalanceText,
-                        { color: visibleBalance.balance >= safetyFloor ? calendarTheme.green : visibleBalance.balance < 0 ? calendarTheme.red : calendarTheme.amber },
+                        { color: isLowRiskDay ? calendarTheme.text : calendarTheme.green },
                       ]}
                       accessibilityLabel={`Balance ${formatCalendarBalance(visibleBalance.balance)}`}
                     />
@@ -273,7 +273,8 @@ export function CalendarView({
                   {hiddenCount > 0 ? <Text style={[styles.moreText, { color: calendarTheme.faded }]}>+{hiddenCount} more</Text> : null}
                 </View>
               </View>
-              {isActive ? <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, styles.activeOutline, { borderColor: calendarTheme.selectedBorder }]} /> : null}
+              {isLowRiskDay ? <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, styles.activeOutline, { borderColor: calendarTheme.red }]} /> : null}
+              {isActive ? <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, styles.activeOutline, isLowRiskDay && styles.insetActiveOutline, { borderColor: calendarTheme.selectedBorder }]} /> : null}
             </Pressable>
           );
           })}
@@ -353,4 +354,5 @@ const styles = StyleSheet.create({
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontSize: 10, fontFamily: "Inter_700Bold" },
   activeOutline: { borderWidth: 2, borderRadius: 12 },
+  insetActiveOutline: { top: 3, right: 3, bottom: 3, left: 3, borderRadius: 9 },
 });
