@@ -26,7 +26,6 @@ import { manualActivityMatchCandidates, resolveMatchedBillBudget } from "@/lib/b
 import { adjacentBillMatchCandidates } from "@/lib/billMatchCandidates";
 import { nextPlannedDebtPayment, snowballTargetDebtId } from "@/lib/billSurplusRouting";
 import { confirmAction } from "@/lib/confirmAction";
-import { FOUNDING_FREE_LAUNCH } from "@/lib/launchMode";
 import { applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupReviewTargets, incomeReviewTargets, matchedIncomeOccurrenceAllocations, matchedOccurrenceAllocations, occurrenceKey, prioritizeReviewTransaction, prioritizeSavedBillTarget, rankReviewTargets, reviewQueueAfterSkips, scheduledSnowballReviewTargets, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
 import { subscriptionLinkKeys } from "@/lib/competitiveGrowth";
 import { createForgottenBillAndReconcile } from "@/lib/atomicFinancialMutations";
@@ -928,15 +927,6 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
   return (
     <>
       {!bucketsOnly ? <>
-      <View style={[styles.hero, { backgroundColor: c.card, borderColor: c.primary + "44" }]}>
-        <View style={[styles.heroIcon, { backgroundColor: c.primary + "18" }]}><Feather name="check-square" size={22} color={c.primary} /></View>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.eyebrow, { color: c.primary }]}>{FOUNDING_FREE_LAUNCH ? "FOUNDING FREE REVIEW CENTER" : "PRO REVIEW CENTER"}</Text>
-          <Text style={[styles.heroTitle, { color: c.foreground }]}>Match the bank to your plan</Text>
-          <Text style={[styles.heroCopy, { color: c.mutedForeground }]}>Match each posted transaction once.</Text>
-        </View>
-      </View>
-
       <View style={styles.filterRow}>
         {([
           ["all", "All"],
@@ -1467,11 +1457,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
 }
 
 const styles = StyleSheet.create({
-  hero: { borderWidth: 1, borderRadius: 20, padding: 16, flexDirection: "row", gap: 12, alignItems: "flex-start" },
   heroIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  eyebrow: { fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1 },
-  heroTitle: { fontSize: 20, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
-  heroCopy: { fontSize: 14, lineHeight: 21, fontFamily: "Inter_400Regular", marginTop: 5 },
   filterRow: { flexDirection: "row", gap: 8, marginTop: 10 },
   filterButton: { flex: 1, minHeight: 40, borderWidth: 1, borderRadius: 13, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
   filterText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
