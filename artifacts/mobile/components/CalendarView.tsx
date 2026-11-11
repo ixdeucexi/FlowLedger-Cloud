@@ -1,6 +1,7 @@
 import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import React from "react";
 import { StyleSheet, useWindowDimensions } from "react-native";
+import Feather from "@expo/vector-icons/Feather";
 
 import type { DailyBalance, DecisionRecord, Goal, GoalExpense, Transaction } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
@@ -62,7 +63,7 @@ export function CalendarView({
   const calendarTheme = {
     surface: c.background, cell: "transparent", selectedBorder: c.primary, line: c.border,
     text: c.foreground, muted: c.mutedForeground, faded: c.mutedForeground,
-    today: c.primary, green: c.success, red: c.destructive,
+    today: c.primary, green: c.success,
   };
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -248,15 +249,19 @@ export function CalendarView({
                     </Text>
                   </View>
                   {visibleBalance ? (
-                    <CalendarAmountLabel
-                      label={formatCalendarBalance(visibleBalance.balance)}
-                      textStyle={[
-                        styles.balanceText,
-                        isDesktop && styles.desktopBalanceText,
-                        { color: isLowRiskDay ? calendarTheme.text : calendarTheme.green },
-                      ]}
-                      accessibilityLabel={`Balance ${formatCalendarBalance(visibleBalance.balance)}`}
-                    />
+                    <View style={[styles.balanceRow, isLowRiskDay && [styles.safetyBalance, { backgroundColor: calendarColors.risk.bg }]]}>
+                      {isLowRiskDay ? <Feather name="shield-off" size={8} color={calendarColors.risk.color} accessible={false} accessibilityElementsHidden importantForAccessibility="no" /> : null}
+                      <CalendarAmountLabel
+                        label={formatCalendarBalance(visibleBalance.balance)}
+                        style={styles.balanceAmount}
+                        textStyle={[
+                          styles.balanceText,
+                          isDesktop && styles.desktopBalanceText,
+                          { color: isLowRiskDay ? calendarColors.risk.text : calendarTheme.green },
+                        ]}
+                        accessibilityLabel={`Balance ${formatCalendarBalance(visibleBalance.balance)}`}
+                      />
+                    </View>
                   ) : null}
                 </View>
 
@@ -272,8 +277,7 @@ export function CalendarView({
                   {hiddenCount > 0 ? <Text style={[styles.moreText, { color: calendarTheme.faded }]}>+{hiddenCount} more</Text> : null}
                 </View>
               </View>
-              {isLowRiskDay ? <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, styles.activeOutline, { borderColor: calendarTheme.red }]} /> : null}
-              {isActive ? <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, styles.activeOutline, isLowRiskDay && styles.insetActiveOutline, { borderColor: calendarTheme.selectedBorder }]} /> : null}
+              {isActive ? <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, styles.activeOutline, { borderColor: calendarTheme.selectedBorder }]} /> : null}
             </Pressable>
           );
           })}
@@ -286,6 +290,10 @@ export function CalendarView({
             <Text style={[styles.legendText, { color: calendarTheme.muted }]}>{label}</Text>
           </View>
         ))}
+        <View style={styles.legendItem}>
+          <Feather name="shield-off" size={11} color={calendarColors.risk.color} accessible={false} />
+          <Text style={[styles.legendText, { color: calendarTheme.muted }]}>Below safety floor</Text>
+        </View>
       </View>
     </View>
   );
@@ -324,6 +332,9 @@ const styles = StyleSheet.create({
   desktopDayTopRow: { alignItems: "center", gap: 4 },
   todayCircle: { minWidth: 26, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center", paddingHorizontal: 5 },
   dayNum: { fontSize: 16 },
+  balanceRow: { width: "100%", minWidth: 0, minHeight: 17, flexDirection: "row", alignItems: "center", gap: 1 },
+  safetyBalance: { borderRadius: 6, paddingHorizontal: 1, paddingVertical: 2 },
+  balanceAmount: { flex: 1, width: "auto" },
   balanceText: { fontSize: 9, fontFamily: "Inter_800ExtraBold" },
   desktopBalanceText: { fontSize: 10 },
   eventStack: { marginTop: 6, gap: 3 },
@@ -353,5 +364,4 @@ const styles = StyleSheet.create({
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontSize: 10, fontFamily: "Inter_700Bold" },
   activeOutline: { borderWidth: 2, borderRadius: 12 },
-  insetActiveOutline: { top: 3, right: 3, bottom: 3, left: 3, borderRadius: 9 },
 });
