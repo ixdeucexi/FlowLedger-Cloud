@@ -1,5 +1,6 @@
+import { mergeAccountNameRead, acknowledgeAccountNameRead, verifiedRoutingMetadataPatch, mergeRoutingMetadata, normalizeAccountDisplayName, type AccountNameIntent } from "@/lib/accountNameMetadata";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { buildAccountForecast, buildForecastAccountCatalog, normalizeAccountForecastPreference, parseForecastAccountRef, resolveForecastAccountReference, transactionForecastAccountRef, type ForecastAccountRef, type ForecastAccountDescriptor, type AccountForecastPreference, type AccountForecastResult, type ForecastRoutingEntity, type ForecastRoutingPatch } from "@/lib/accountForecasts";
+import { buildAccountForecast, buildForecastAccountCatalog, forecastPlanCoverageForRange, normalizeAccountForecastPreference, parseForecastAccountRef, resolveForecastAccountReference, transactionForecastAccountRef, type ForecastAccountRef, type ForecastAccountDescriptor, type AccountForecastPreference, type AccountForecastResult, type ForecastRoutingEntity, type ForecastRoutingPatch, type ForecastPlanCoverage, type ForecastRoutingChange } from "@/lib/accountForecasts";
 import { transferExpected, assertUnallocatedEdit, type TransferMutation } from "@/lib/transferMutation";
 import { previewBucketPurchase, previewBucketBudget } from "@/lib/bucketPurchasePreview";
 import { bucketPurchaseRpc } from "@/lib/bucketPurchaseApi";
@@ -308,6 +309,9 @@ interface BudgetContextType {
   getAccountForecast: (ref: ForecastAccountRef, month: number, year: number) => AccountForecastResult;
   saveAccountForecastPreference: (ref: ForecastAccountRef, patch: { savings_apy?: number | null; safety_floor?: number | null }, expectedUpdatedAt?: string | null) => Promise<void>;
   setForecastAccountRouting: (type: ForecastRoutingEntity, id: string, patch: ForecastRoutingPatch, expected: ForecastRoutingPatch) => Promise<void>;
+  renameForecastAccount: (ref: ForecastAccountRef, name: string | null, expectedName: string) => Promise<void>;
+  setForecastAccountRoutingBatch: (changes: ForecastRoutingChange[]) => Promise<void>;
+  getForecastPlanCoverage: (month: number, year: number, ref?: ForecastAccountRef | null) => ForecastPlanCoverage;
   resolveTransactionAccountRef: (row: { source?: string; account_id?: string | null; plaid_account_id?: string | null; forecast_account_ref?: string | null }) => ForecastAccountRef | null;
   /** Every retained Plaid account identity used to classify historical activity. */
   transactionAccountIdentities: ConnectedBankAccount[];
@@ -813,6 +817,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [forecastVisibilityError, setForecastVisibilityError] = useState<string | null>(null);
   const forecastVisibilityWriteRef = useRef(Promise.resolve());
   const forecastVisibilityStateRef = useRef<{ scope: string | null; version: number; refs: ForecastAccountRef[]; ready: boolean }>({ scope: null, version: 0, refs: [], ready: false });
+  const accountNameVersionRef = useRef(0);
+  const accountNameIntentsRef = useRef<AccountNameIntent[]>([]);
+  const accountRenameQueuesRef = useRef(new Map<string, Promise<unknown>>());
   const [dailyCheckingCloses, setDailyCheckingCloses] = useState<DailyCheckingCloseSnapshot[]>([]);
   const [dailyCheckingCloseLoad, setDailyCheckingCloseLoad] = useState<DailyCheckingCloseLoadState>({
     scopeKey: null,
@@ -1059,11 +1066,13 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       || cache.household.householdId !== nextHousehold.householdId
     ) return false;
 
-    const cachedAccounts = cache.data.accounts
+    const cachedAccountsBase = cache.data.accounts
       .filter((account: any) => account?.account_type !== "credit_card")
       .map(normalizeAccountRow);
-    const cachedIdentities = normalizeConnectedBankRows(cache.data.transactionAccountIdentities);
-    const cachedBankAccounts = normalizeConnectedBankRows(cache.data.connectedBankAccounts);
+    const nameScope = `${cache.userId}:${nextHousehold.householdId}:${nextHousehold.budgetId}`;
+    const cachedAccounts = mergeAccountNameRead(cachedAccountsBase,"manual",nameScope,0,accountNameIntentsRef.current);
+    const cachedIdentities = mergeAccountNameRead(normalizeConnectedBankRows(cache.data.transactionAccountIdentities),"bank",nameScope,0,accountNameIntentsRef.current);
+    const cachedBankAccounts = mergeAccountNameRead(normalizeConnectedBankRows(cache.data.connectedBankAccounts),"bank",nameScope,0,accountNameIntentsRef.current);
     const cachedTimeZone = cache.data.householdTimeZone || "UTC";
     let cachedBalanceDate: string;
     try {
@@ -2130,6 +2139,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         // Version the positional result cache when its shape changes. This
         // prevents an in-memory pre-update array from shifting Decisions into
         // the removed daily-close slot during a web hot reload.
+        const accountNameReadVersion = ++accountNameVersionRef.current;
         const coreQueryKey = ["budget-core", uid, scope?.householdId ?? "personal", scope?.budgetId ?? "default", "core-v5-account-forecasts"] as const;
         const coreLoad = await withLoadTimeout(
           queryClient.fetchQuery({
@@ -2217,7 +2227,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         setBillDateMoves(storedBillDateMoves);
         billDateMovesRef.current = storedBillDateMoves;
         const loadedTimeZone = String(sData?.time_zone || "UTC");
-        const rawConnectedAccounts = normalizeConnectedBankRows(connectedAccountData ?? []);
+        const rawConnectedAccounts = mergeAccountNameRead(normalizeConnectedBankRows(connectedAccountData ?? []),"bank",`${uid}:${scope?.householdId}:${scope?.budgetId}`,accountNameReadVersion,accountNameIntentsRef.current);
+        accountNameIntentsRef.current = acknowledgeAccountNameRead(normalizeConnectedBankRows(connectedAccountData ?? []),"bank",`${uid}:${scope?.householdId}:${scope?.budgetId}`,accountNameReadVersion,accountNameIntentsRef.current);
         const transactionCollections = accountAwareTransactionCollections(tData ?? [], rawConnectedAccounts);
         setTransactions(transactionCollections.active);
         setDeletedTransactions(transactionCollections.deleted);
@@ -2262,11 +2273,13 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           last_reconciled_at: a.last_reconciled_at ?? undefined,
           is_active: a.is_active !== false,
         }));
-        accountsRef.current = loadedAccounts;
+        const namedLoadedAccounts = mergeAccountNameRead<Account>(loadedAccounts,"manual",`${uid}:${scope?.householdId}:${scope?.budgetId}`,accountNameReadVersion,accountNameIntentsRef.current);
+        accountNameIntentsRef.current = acknowledgeAccountNameRead(loadedAccounts,"manual",`${uid}:${scope?.householdId}:${scope?.budgetId}`,accountNameReadVersion,accountNameIntentsRef.current);
+        accountsRef.current = namedLoadedAccounts;
         authoritativeAccountsByIdRef.current = new Map(
-          loadedAccounts.map((account: Account) => [account.id, account]),
+          namedLoadedAccounts.map((account: Account) => [account.id, account]),
         );
-        setAccounts(loadedAccounts);
+        setAccounts(namedLoadedAccounts);
         setDecisions((dData ?? []).map((d: any) => ({ ...d, calendar_date: d.calendar_date ?? undefined, applied_change: d.applied_change ?? undefined })));
         if (sData) {
           setHouseholdTimeZone(loadedTimeZone);
@@ -2500,6 +2513,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const loadBankData = useCallback(async () => {
     if (!user || demoMode) return;
     const requestId = ++bankRefreshRequestRef.current;
+    const accountNameReadVersion = ++accountNameVersionRef.current;
     const uid = user.id;
     if (uid !== userScopeIdRef.current) return;
     const scope = householdScopeRef.current;
@@ -2534,6 +2548,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       requestId !== bankRefreshRequestRef.current
       || uid !== userScopeIdRef.current
       || scope?.householdId !== householdScopeRef.current?.householdId
+      || scope?.budgetId !== householdScopeRef.current?.budgetId
     ) return;
     if (forecastPreferencesResult.error) setAccountForecastError(`Load account forecast settings: ${forecastPreferencesResult.error.message}`);
     else if (scope?.householdId && scope.budgetId) {
@@ -2558,14 +2573,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         last_reconciled_at: a.last_reconciled_at ?? undefined,
         is_active: a.is_active !== false,
       }));
-      accountsRef.current = nextAccounts;
+      const namedAccounts = mergeAccountNameRead<Account>(nextAccounts,"manual",`${uid}:${scope?.householdId}:${scope?.budgetId}`,accountNameReadVersion,accountNameIntentsRef.current);
+      accountNameIntentsRef.current = acknowledgeAccountNameRead(nextAccounts,"manual",`${uid}:${scope?.householdId}:${scope?.budgetId}`,accountNameReadVersion,accountNameIntentsRef.current);
+      accountsRef.current = namedAccounts;
       authoritativeAccountsByIdRef.current = new Map(
-        nextAccounts.map((account: Account) => [account.id, account]),
+        namedAccounts.map((account: Account) => [account.id, account]),
       );
-      setAccounts(nextAccounts);
+      setAccounts(namedAccounts);
     }
     const rawConnectedAccounts = !connectedAccountResult.error
-      ? normalizeConnectedBankRows(connectedAccountResult.data ?? [])
+      ? mergeAccountNameRead(normalizeConnectedBankRows(connectedAccountResult.data ?? []),"bank",`${uid}:${scope?.householdId}:${scope?.budgetId}`,accountNameReadVersion,accountNameIntentsRef.current)
       : transactionAccountIdentitiesRef.current;
     if (!transactionResult.error) {
       const transactionCollections = accountAwareTransactionCollections(transactionResult.data ?? [], rawConnectedAccounts);
@@ -2579,6 +2596,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       }
     }
     if (!connectedAccountResult.error) {
+      accountNameIntentsRef.current = acknowledgeAccountNameRead(normalizeConnectedBankRows(connectedAccountResult.data ?? []),"bank",`${uid}:${scope?.householdId}:${scope?.budgetId}`,accountNameReadVersion,accountNameIntentsRef.current);
       setTransactionAccountIdentities(rawConnectedAccounts);
       transactionAccountIdentitiesRef.current = rawConnectedAccounts;
       const canonicalBankAccounts = canonicalConnectedAccounts(rawConnectedAccounts);
@@ -3519,15 +3537,36 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     if (!saved || saved.id !== entityId) throw new Error("The account assignment could not be verified.");
     if (generation !== financialScopeGenerationRef.current) throw new Error("The household changed. Reopen this plan.");
-    switch (entityType) {
-      case "bill": setBills(previous => previous.map(row => row.id === entityId ? normalizeBillRow(saved) : row)); break;
-      case "income": setIncomes(previous => previous.map(row => row.id === entityId ? { ...saved, amount: Number(saved.amount) } : row)); break;
-      case "goal": setGoals(previous => previous.map(row => row.id === entityId ? normalizeGoalRow(saved) : row)); break;
-      case "decision": setDecisions(previous => previous.map(row => row.id === entityId ? saved : row)); break;
-      case "extra_payment": setExtraPayments(previous => previous.map(row => row.id === entityId ? normalizeExtraPaymentRow(saved) : row)); break;
-      case "transaction": setTransactions(previous => previous.map(row => row.id === entityId ? normalizeTransactionRow(saved) : row)); break;
+    const verified=verifiedRoutingMetadataPatch(patch,saved,forecastAccounts);
+    const merge=<T extends {id:string}>(row:T)=>row.id===entityId?mergeRoutingMetadata(row,expected,verified):row;
+    switch(entityType){case "bill":setBills(previous=>previous.map(merge));break;case "income":setIncomes(previous=>previous.map(merge));break;case "goal":setGoals(previous=>previous.map(merge));break;case "decision":setDecisions(previous=>previous.map(merge));break;case "extra_payment":setExtraPayments(previous=>previous.map(merge));break;case "transaction":setTransactions(previous=>previous.map(merge));break;}
+    if(!demoMode)await refreshBankData({savedOnly:true});
+  }, [refreshBankData,bills, incomes, goals, decisions, extraPayments, transactions, forecastAccounts, demoMode, assertCanEditHousehold]);
+
+  const setForecastAccountRoutingBatch = useCallback(async (changes: ForecastRoutingChange[]) => {
+    assertCanEditHousehold("assign plan accounts");
+    const scope=householdScopeRef.current,generation=financialScopeGenerationRef.current,uid=user?.id;
+    if(!uid||!scope?.householdId||!scope.budgetId)throw new Error("Choose a household first.");
+    if(!changes.length||changes.length>100||new Set(changes.map(row=>`${row.entityType}:${row.entityId}`)).size!==changes.length)throw new Error("Choose between 1 and 100 different plans.");
+    const collections={bill:bills,income:incomes,goal:goals,decision:decisions,extra_payment:extraPayments};
+    for(const change of changes){
+      if(!Object.hasOwn(collections,change.entityType)||!collections[change.entityType].some(row=>row.id===change.entityId))throw new Error("A selected plan is no longer available. Refresh and try again.");
+      for(const value of Object.values(change.patch))if(value!==null&&!resolveForecastAccountReference(value,forecastAccounts))throw new Error("Choose an active household account.");
     }
-  }, [bills, incomes, goals, decisions, extraPayments, transactions, forecastAccounts, demoMode, assertCanEditHousehold]);
+    let results:{entity_type:ForecastRoutingChange["entityType"];row:any}[];
+    if(demoMode)results=changes.map(change=>{const existing=collections[change.entityType].find(row=>row.id===change.entityId)!;for(const [key,value]of Object.entries(change.expected))if(((existing as any)[key]??null)!==value)throw new Error("A selected plan changed. Refresh and try again.");return {entity_type:change.entityType,row:{...existing,...change.patch}};});
+    else { const response=await supabase.rpc("set_forecast_account_routing_batch",{p_household_id:scope.householdId,p_budget_id:scope.budgetId,p_changes:changes.map(change=>({entity_type:change.entityType,entity_id:change.entityId,patch:change.patch,expected:change.expected}))});if(response.error)throw new Error(response.error.message);results=response.data?.results; }
+    if(!Array.isArray(results)||results.length!==changes.length||results.some(result=>!changes.some(change=>change.entityType===result.entity_type&&change.entityId===result.row?.id))||new Set(results.map(result=>`${result.entity_type}:${result.row?.id}`)).size!==changes.length)throw new Error("The account assignments could not be verified. Refresh before retrying.");
+    if(generation!==financialScopeGenerationRef.current||uid!==userScopeIdRef.current)throw new Error("The household changed. Reopen plan accounts.");
+    const verified=changes.map(change=>({change,patch:verifiedRoutingMetadataPatch(change.patch,results.find(result=>result.entity_type===change.entityType&&result.row.id===change.entityId)!.row,forecastAccounts)}));
+    const merge=<T extends {id:string}>(type:ForecastRoutingChange["entityType"],row:T):T=>{const entry=verified.find(item=>item.change.entityType===type&&item.change.entityId===row.id);return entry?mergeRoutingMetadata(row,entry.change.expected,entry.patch):row;};
+    setBills(previous=>previous.map(row=>merge("bill",row)));
+    setIncomes(previous=>previous.map(row=>merge("income",row)));
+    setGoals(previous=>previous.map(row=>merge("goal",row)));
+    setDecisions(previous=>previous.map(row=>merge("decision",row)));
+    setExtraPayments(previous=>previous.map(row=>merge("extra_payment",row)));
+    if(!demoMode)await refreshBankData({savedOnly:true});
+  },[refreshBankData,bills,incomes,goals,decisions,extraPayments,forecastAccounts,demoMode,user,assertCanEditHousehold]);
 
   // One shared read-only engine per financial revision; dated reads refresh lazily.
   const financialProjectionSnapshot = useMemo(() => ({
@@ -3571,6 +3610,13 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const getAccountForecast = useCallback((ref: ForecastAccountRef, month: number, year: number) =>
     buildAccountForecast({ ref, month, year, snapshot: financialProjectionSnapshot, accounts: forecastAccounts, getEvents: financialProjection.getUnanchoredCashEvents }),
     [financialProjectionSnapshot, forecastAccounts, financialProjection]);
+  const getForecastPlanCoverage = useCallback((month: number, year: number, ref?: ForecastAccountRef | null): ForecastPlanCoverage => {
+    const canonical = ref ? resolveForecastAccountReference(ref,forecastAccounts) : null;
+    const account = canonical ? forecastAccounts.find(row=>row.ref===canonical) : undefined;
+    const startDate = account?.asOfDate ?? localDateInTimeZone(new Date(),householdTimeZone);
+    const endDate = `${year}-${String(month+1).padStart(2,"0")}-${String(new Date(Date.UTC(year,month+1,0)).getUTCDate()).padStart(2,"0")}`;
+    return forecastPlanCoverageForRange({snapshot:financialProjectionSnapshot,accounts:forecastAccounts,startDate,endDate,getEvents:financialProjection.getUnanchoredCashEvents});
+  }, [forecastAccounts,householdTimeZone,financialProjectionSnapshot,financialProjection]);
   const previewTransactionSafetyStop = useCallback((transaction: Omit<Transaction, "id"> | Transaction, existingId?: string) => {
     const existing = existingId ? transactions.find(item => item.id === existingId) : undefined;
     if (existing?.linked_plan_type === "goal" && goals.some(goal => goal.id === existing.linked_plan_id && goal.goal_type === "planned_expense")) {
@@ -6401,48 +6447,92 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     await saveManualAccountChange(intendedAccount, balanceChanged, "account_save");
   }, [saveManualAccountChange, user]);
 
-  const updateConnectedBankAccountDisplayName = useCallback(async (accountId: string, displayName: string | null) => {
-    if (!user) return;
-    assertCanEditHousehold("rename a savings account");
-    const previous = connectedBankAccounts.find(account => account.id === accountId);
-    if (!previous || previous.account_subtype !== "savings") throw new Error("Savings account not found.");
-    const normalized = displayName === null ? undefined : displayName.trim().replace(/\s+/g, " ");
-    if (displayName !== null && (!normalized || normalized.length > 80)) {
-      throw new Error(normalized ? "Keep the account name under 80 characters." : "Enter an account name.");
-    }
-
-    setConnectedBankAccounts(current => current.map(account =>
-      account.id === accountId ? { ...account, display_name: normalized } : account,
-    ));
-    const saveOperationId = markSaveStarted();
-    try {
-      const { data } = await supabase.auth.getSession();
-      const accessToken = data.session?.access_token;
-      if (!accessToken) throw new Error("Sign in again before renaming this account.");
-      if (!activeHouseholdId) throw new Error("Choose a household before renaming this account.");
-      const response = await apiFetch("/api/plaid/account-nickname", {
-        method: "PATCH",
-        credentials: "include",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-          "X-FlowLedger-Household-Id": activeHouseholdId,
-        },
-        body: JSON.stringify({ accountId, displayName: normalized ?? null }),
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({})) as { message?: string };
-        throw new Error(payload.message || "Could not update the account name.");
+  const renameForecastAccount = useCallback(async (ref: ForecastAccountRef,name:string|null,expectedName:string) => {
+    if(!user)throw new Error("Sign in to rename an account.");
+    assertCanEditHousehold("rename an account");
+    const scope=householdScopeRef.current,generation=financialScopeGenerationRef.current,uid=user.id;
+    const canonical=resolveForecastAccountReference(ref,forecastAccounts),account=forecastAccounts.find(row=>row.ref===canonical);
+    if(!scope?.householdId||!scope.budgetId||!account)throw new Error("Choose an active household account.");
+    const normalized=normalizeAccountDisplayName(name);
+    if(account.source==="manual"&&normalized===null)throw new Error("Enter an account name.");
+    const nameScopeKey=`${uid}:${scope.householdId}:${scope.budgetId}`;
+    const persistent=account.bankAccountId?transactionAccountIdentitiesRef.current.find(row=>row.id===account.bankAccountId)?.persistent_account_id?.trim():undefined;
+    const queueKeys=[account.ref,...account.aliases,...(account.manualAccountId?[`manual:${account.manualAccountId}`]:[]),...(persistent?[`persistent:${persistent}`]:[])].map(alias=>`${nameScopeKey}:${alias}`);
+    await enqueueMutationByKeys(accountRenameQueuesRef.current,queueKeys,async()=>{
+      assertCanEditHousehold("rename an account");
+      if(generation!==financialScopeGenerationRef.current||uid!==userScopeIdRef.current)throw new Error("The household changed. Reopen this account.");
+      let data:any, verificationVersion:number;
+      if(demoMode){
+        const latestCatalog=buildForecastAccountCatalog({accounts:accountsRef.current,bankAccounts:transactionAccountIdentitiesRef.current,timeZone:householdTimeZone});
+        const latest=latestCatalog.find(row=>row.ref===resolveForecastAccountReference(canonical,latestCatalog));
+        const alreadyDesired=latest?.source==="bank" ? (transactionAccountIdentitiesRef.current.find(row=>row.id===latest.bankAccountId)?.display_name??null)===normalized : latest?.name===normalized;
+        if(!latest||latest.name!==expectedName&&!alreadyDesired)throw new Error("This account name changed. Refresh and try again.");
+        verificationVersion=++accountNameVersionRef.current;
+        data={account_ref:latest.ref,accounts:latest.source==="manual"?[{id:latest.manualAccountId,name:normalized}]:[],bank_accounts:transactionAccountIdentitiesRef.current.map(row=>latest.aliases.includes(`bank:${row.id}`)?{...row,display_name:normalized??undefined}:row)};
+      } else {
+        const response=await supabase.rpc("rename_forecast_account",{p_household_id:scope.householdId,p_budget_id:scope.budgetId,p_account_ref:canonical,p_expected_name:expectedName,p_name:normalized});
+        if(response.error)throw new Error(response.error.message);
+        if(generation!==financialScopeGenerationRef.current||uid!==userScopeIdRef.current)throw new Error("The household changed. Reopen this account.");
+        data=response.data;
+        const manualIds=Array.isArray(data?.accounts)?data.accounts.map((row:any)=>row.id).filter((id:unknown):id is string=>typeof id==="string"):[];
+        if(manualIds.length>1)throw new Error("The saved account name could not be verified.");
+        verificationVersion=++accountNameVersionRef.current;
+        const [bankCheck,manualCheck]=await Promise.all([
+          supabase.rpc("get_household_forecast_accounts",{p_household_id:scope.householdId}),
+          manualIds.length?supabase.from("accounts").select("id,name").eq("household_id",scope.householdId).in("id",manualIds):Promise.resolve({data:[],error:null}),
+        ]);
+        if(bankCheck.error||manualCheck.error)throw new Error("The account name was saved, but could not be refreshed. Reload the account before retrying.");
+        data={...data,bank_accounts:bankCheck.data,accounts:manualCheck.data};
       }
-      markSaveCompleted(saveOperationId);
-    } catch (error) {
-      setConnectedBankAccounts(current => current.map(account =>
-        account.id === accountId ? { ...account, display_name: previous.display_name } : account,
-      ));
-      markSaveFailed(error, () => updateConnectedBankAccountDisplayName(accountId, displayName), saveOperationId);
-      throw error;
-    }
-  }, [activeHouseholdId, assertCanEditHousehold, connectedBankAccounts, markSaveCompleted, markSaveFailed, markSaveStarted, user]);
+      const bankRows=Array.isArray(data?.bank_accounts)?data.bank_accounts:[],manualRows=Array.isArray(data?.accounts)?data.accounts:[];
+      const savedRef=parseForecastAccountRef(data?.account_ref);
+      const renamedCatalog=buildForecastAccountCatalog({accounts,bankAccounts:normalizeConnectedBankRows(bankRows),householdId:demoMode?undefined:scope.householdId,budgetId:scope.budgetId,timeZone:householdTimeZone});
+      const resolvedSaved=resolveForecastAccountReference(savedRef,renamedCatalog);
+      const saved=renamedCatalog.find(row=>row.ref===resolvedSaved)??renamedCatalog.find(row=>row.source==="manual"&&row.manualAccountId===account.manualAccountId);
+      const explicitFallback=saved?.source==="manual"&&Boolean(account.manualAccountId)&&saved.manualAccountId===account.manualAccountId&&bankRows.some((row:any)=>account.aliases.includes(`bank:${row.id}`)&&(row.account_id===saved.manualAccountId||row.flowledger_account_id===saved.manualAccountId));
+      if(!saved||!(saved.ref===canonical||saved.aliases.includes(canonical!)||explicitFallback))throw new Error("The saved account name could not be verified.");
+      const allowedManual=new Set([...account.aliases,...saved.aliases].filter(alias=>alias.startsWith("manual:")).map(alias=>alias.slice(7)));
+      if(account.manualAccountId)allowedManual.add(account.manualAccountId);
+      const explicitBankRows=bankRows.filter((row:any)=>{
+        const links=[row.account_id,row.flowledger_account_id].filter(Boolean);
+        return links.length>0&&links.every((id:string)=>allowedManual.has(id))&&(demoMode||row.household_id===scope.householdId)&&row.account_type==="depository"&&row.account_subtype===account.type;
+      });
+      const physicalClaims=new Set(explicitBankRows.map((row:any)=>row.persistent_account_id?`persistent:${row.persistent_account_id}`:`row:${row.id}`));
+      if(physicalClaims.size>1)throw new Error("This account's bank links need review before renaming.");
+      const aliasIds=new Set([...account.aliases,...saved.aliases].filter(alias=>alias.startsWith("bank:")).map(alias=>alias.slice(5)));
+      explicitBankRows.forEach((row:any)=>aliasIds.add(row.id));
+      const changedBanks=bankRows.filter((row:any)=>aliasIds.has(row.id));
+      const changedManual=manualRows.filter((row:any)=>allowedManual.has(row.id));
+      if(saved.source==="bank"&&!changedBanks.length||saved.source==="manual"&&!changedManual.length
+        ||[...allowedManual].some(id=>!changedManual.some((row:any)=>row.id===id)))throw new Error("The saved account name could not be verified.");
+      const canonicalOverride=saved.bankAccountId?(bankRows.find((row:any)=>row.id===saved.bankAccountId)?.display_name??null):null;
+      const manualEffective=changedManual.find((row:any)=>row.id===saved.manualAccountId)?.name;
+      const inconsistentNames=saved.source==="bank"
+        ? changedBanks.some((row:any)=>(row.display_name??null)!==canonicalOverride)||changedManual.some((row:any)=>row.name!==saved.name)
+        : changedBanks.some((row:any)=>row.display_name!=null&&row.display_name!==manualEffective);
+      if(inconsistentNames)throw new Error("Account names changed while being refreshed. Reload this account and try again.");
+      if(generation!==financialScopeGenerationRef.current||uid!==userScopeIdRef.current)throw new Error("The household changed. Reopen this account.");
+      const nameScope=`${uid}:${scope.householdId}:${scope.budgetId}`;
+      accountNameIntentsRef.current=acknowledgeAccountNameRead(normalizeConnectedBankRows(changedBanks),"bank",nameScope,verificationVersion,accountNameIntentsRef.current);
+      accountNameIntentsRef.current=acknowledgeAccountNameRead(changedManual,"manual",nameScope,verificationVersion,accountNameIntentsRef.current);
+      const keys=new Set([...changedBanks.map((row:any)=>`bank:${row.id}`),...changedManual.map((row:any)=>`manual:${row.id}`)]);
+      const intents=accountNameIntentsRef.current.filter(intent=>intent.scope===nameScope&&keys.has(`${intent.kind}:${intent.id}`));
+      const effectiveName=normalized??saved.name;
+      const nameChanged=intents.some(intent=>intent.kind==="bank"?intent.name!==normalized:intent.name!==effectiveName);
+      const mergeBanks=(rows:ConnectedBankAccount[])=>mergeAccountNameRead(rows,"bank",nameScope,0,intents);
+      setTransactionAccountIdentities(previous=>{const next=mergeBanks(previous);transactionAccountIdentitiesRef.current=next;return next;});
+      setConnectedBankAccounts(previous=>mergeBanks(previous));
+      setAccounts(previous=>{const next=mergeAccountNameRead(previous,"manual",nameScope,0,intents);accountsRef.current=next;for(const row of next)authoritativeAccountsByIdRef.current.set(row.id,row);return next;});
+      queryClient.removeQueries({queryKey:["budget-core",uid,scope.householdId,scope.budgetId]});
+      if(nameChanged)throw new Error("This account name changed again. The latest saved name is shown; review it before retrying.");
+    });
+  },[user,forecastAccounts,accounts,transactionAccountIdentities,demoMode,householdTimeZone,assertCanEditHousehold,queryClient]);
+
+  const updateConnectedBankAccountDisplayName = useCallback(async (accountId:string,displayName:string|null) => {
+    const account=forecastAccounts.find(row=>row.source==="bank"&&(row.bankAccountId===accountId||row.aliases.includes(`bank:${accountId}`)));
+    if(!account)throw new Error("Bank account not found. Refresh and try again.");
+    await renameForecastAccount(account.ref,displayName,account.name);
+  },[forecastAccounts,renameForecastAccount]);
 
   const reconcileAccount = useCallback(async (accountId: string, balance: number, asOfDate: string) => {
     if (!user) return;
@@ -6621,6 +6711,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const budgetContextValue: BudgetContextType = {
       bills, overrides, billDateMoves, transactions, deletedTransactions, pendingBankTransactions, pendingPlanMatches, incomes, goals, extraPayments, categories, settings, accounts, connectedBankAccounts, transactionAccountIdentities, householdTimeZone, decisions,
       forecastAccounts, accountForecastPreferences, accountForecastReady, accountForecastError, selectedForecastAccountRef, setSelectedForecastAccountRef,
+      renameForecastAccount, getForecastPlanCoverage, setForecastAccountRoutingBatch,
       hiddenForecastAccountRefs, forecastVisibilityReady, forecastVisibilityError, setAccountForecastVisible, getAccountForecast, saveAccountForecastPreference, setForecastAccountRouting, resolveTransactionAccountRef,
       households, householdMembers, householdActivity, householdDetailsReady, categoriesReady, activeHousehold, householdRole, canEditHousehold,
       refreshHouseholds, refreshHouseholdsForPrivacy, refreshHouseholdActivity, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,

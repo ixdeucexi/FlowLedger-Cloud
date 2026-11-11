@@ -11,6 +11,7 @@ import {
   AccountForecastPicker,
   accountForecastLabel,
 } from "@/components/AccountForecastPicker";
+import { AccountNameModal } from "@/components/AccountNameModal";
 import { AccountForecastSettings } from "@/components/AccountForecastSettings";
 import { CalendarAmountLabel } from "@/components/CalendarAmountLabel";
 import { CalendarView } from "@/components/CalendarView";
@@ -89,13 +90,17 @@ export function AccountForecastPanel({
     activeHousehold,
     accountForecastReady,
     accountForecastError,
+    canEditHousehold,
   } = useBudget();
   const forecast = useMemo(
     () => getAccountForecast(accountRef, month, year),
     [getAccountForecast, accountRef, month, year],
   );
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [managing, setManaging] = useState(false);
+  const [managing, setManaging] = useState<"accounts" | "assignments" | null>(
+    null,
+  );
+  const [renaming, setRenaming] = useState(false);
   const account = forecast.account;
   const day = selectedDate
     ? forecast.days.find(
@@ -107,13 +112,35 @@ export function AccountForecastPanel({
     : undefined;
   useEffect(() => {
     setSelectedDate(null);
-    setManaging(false);
+    setManaging(null);
+    setRenaming(false);
   }, [accountRef, month, year, activeHousehold?.householdId]);
   useBackDismiss(Boolean(selectedDate), () => setSelectedDate(null));
-  useBackDismiss(managing, () => setManaging(false));
+  useBackDismiss(Boolean(managing), () => setManaging(null));
   const unavailable = accountForecastError || forecast.unavailableReason;
   const selectedEvents =
     day?.events?.filter((event) => event.kind !== "bank_adjustment") ?? [];
+  const periodEvents = forecast.days
+    .flatMap((item) => item.projectionEvents ?? item.events ?? [])
+    .filter((event) => event.kind !== "bank_adjustment");
+  const scheduledEvents = periodEvents.filter(
+    (event) =>
+      event.kind !== "estimated_interest" && Math.abs(event.amount) > 0.005,
+  );
+  const upcoming = [...scheduledEvents]
+    .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
+    .slice(0, 3);
+  const projectedIn = periodEvents.reduce(
+    (sum, event) => sum + Math.max(0, event.amount),
+    0,
+  );
+  const projectedOut = periodEvents.reduce(
+    (sum, event) => sum + Math.max(0, -event.amount),
+    0,
+  );
+  const monthEnd = `${MONTHS[month]} ${new Date(Date.UTC(year, month + 1, 0)).getUTCDate()}, ${year}`;
+  const canShowProjection =
+    accountForecastReady && !unavailable && forecast.endingBalance !== null;
 
   return (
     <>
@@ -157,6 +184,28 @@ export function AccountForecastPanel({
           value={selectedForecastAccountRef}
           onChange={setSelectedForecastAccountRef}
         />
+        <View style={styles.monthNavigation}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Previous account forecast month"
+            onPress={onPreviousMonth}
+            style={[styles.monthArrow, { borderColor: c.border }]}
+          >
+            <Feather name="chevron-left" size={24} color={c.mutedForeground} />
+          </Pressable>
+          <Text style={[styles.monthTitle, { color: c.foreground }]}>
+            {MONTHS[month]} {year}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Next account forecast month"
+            onPress={onNextMonth}
+            style={[styles.monthArrow, { borderColor: c.border }]}
+          >
+            <Feather name="chevron-right" size={24} color={c.mutedForeground} />
+          </Pressable>
+        </View>
+
         {!accountForecastReady ? (
           <View
             style={[
@@ -178,7 +227,11 @@ export function AccountForecastPanel({
           >
             <View style={styles.accountHeading}>
               <View style={styles.accountCopy}>
-                <Text style={[styles.accountName, { color: c.foreground }]}>
+                <Text
+                  numberOfLines={2}
+                  accessibilityLabel={accountForecastLabel(account)}
+                  style={[styles.accountName, { color: c.foreground }]}
+                >
                   {accountForecastLabel(account)}
                 </Text>
                 <Text style={[styles.note, { color: c.mutedForeground }]}>
@@ -187,52 +240,103 @@ export function AccountForecastPanel({
                     : account.type === "cash"
                       ? "Cash"
                       : "Checking"}
-                  {account.asOfDate
-                    ? ` · Balance as of ${account.asOfDate}`
-                    : " · Balance date unavailable"}
+                  {forecast.unassigned.length
+                    ? " · Some plans need an account"
+                    : ""}
                 </Text>
               </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Planning settings for ${account.name}`}
-                onPress={() => setManaging(true)}
-                style={styles.iconButton}
+              <View style={styles.accountActions}>
+                {canEditHousehold ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Rename ${account.name}`}
+                    disabled={
+                      !accountForecastReady ||
+                      !account.active ||
+                      Boolean(account.unavailableReason)
+                    }
+                    onPress={() => setRenaming(true)}
+                    style={styles.rename}
+                  >
+                    <Feather name="edit-2" size={14} color={c.primary} />
+                    <Text style={[styles.textButtonText, { color: c.primary }]}>
+                      Rename
+                    </Text>
+                  </Pressable>
+                ) : null}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Planning settings for ${account.name}`}
+                  onPress={() => setManaging("accounts")}
+                  style={styles.iconButton}
+                >
+                  <Feather name="sliders" size={20} color={c.primary} />
+                </Pressable>
+              </View>
+            </View>
+            <View style={styles.projectedHero}>
+              <Text style={[styles.projectedLabel, { color: c.primary }]}>
+                Projected balance · {monthEnd}
+              </Text>
+              <CalendarAmountLabel
+                label={money(canShowProjection ? forecast.endingBalance : null)}
+                accessibilityLabel={`Projected balance on ${monthEnd}: ${money(canShowProjection ? forecast.endingBalance : null)}`}
+                textStyle={[
+                  styles.projectedAmount,
+                  {
+                    color:
+                      forecast.endingBalance !== null &&
+                      forecast.endingBalance < 0
+                        ? c.destructive
+                        : c.foreground,
+                  },
+                ]}
+              />
+              {canShowProjection ? (
+                <View style={styles.periodMovement}>
+                  <Text sensitive style={[styles.note, { color: c.success }]}>
+                    +{money(projectedIn)} in
+                  </Text>
+                  <Text
+                    sensitive
+                    style={[styles.note, { color: c.mutedForeground }]}
+                  >
+                    −{money(projectedOut)} out
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            {canShowProjection ? (
+              <Text
+                sensitive
+                style={[styles.note, { color: c.mutedForeground }]}
               >
-                <Feather name="sliders" size={20} color={c.primary} />
-              </Pressable>
-            </View>
-            <View style={styles.metrics}>
-              <AccountAmount
-                label="Current balance"
-                value={account.currentBalance}
-              />
-              <AccountAmount
-                label="Available balance"
-                value={account.availableBalance}
-              />
-            </View>
-            <View style={[styles.summaryDivider, { borderColor: c.border }]}>
-              <View style={styles.metrics}>
-                <AccountAmount
-                  label="Projected month end"
-                  value={forecast.endingBalance}
-                  color={
-                    forecast.endingBalance !== null &&
-                    forecast.endingBalance < 0
-                      ? c.destructive
-                      : c.foreground
-                  }
-                />
-                <AccountAmount
-                  label="Least breathing room"
-                  value={forecast.lowestBalance}
-                  color={
-                    forecast.lowestBalance !== null &&
-                    forecast.lowestBalance < 0
-                      ? c.destructive
-                      : c.foreground
-                  }
-                />
+                Least breathing room in {MONTHS[month]}:{" "}
+                {money(forecast.lowestBalance)}
+              </Text>
+            ) : null}
+            <View style={[styles.currentSnapshot, { borderColor: c.border }]}>
+              <Text style={[styles.small, { color: c.mutedForeground }]}>
+                {account.source === "bank"
+                  ? "Bank balance"
+                  : "Recorded balance"}
+                {account.asOfDate
+                  ? ` as of ${account.asOfDate}`
+                  : " · date unavailable"}
+              </Text>
+              <View style={styles.currentAmounts}>
+                <Text
+                  sensitive
+                  style={[styles.snapshotAmount, { color: c.mutedForeground }]}
+                >
+                  Current {money(account.currentBalance)}
+                </Text>
+                <Text
+                  sensitive
+                  style={[styles.snapshotAmount, { color: c.mutedForeground }]}
+                >
+                  Available {money(account.availableBalance)}
+                </Text>
               </View>
             </View>
             {account.type === "savings" ? (
@@ -244,7 +348,7 @@ export function AccountForecastPanel({
                   <Text style={[styles.interestTitle, { color: c.foreground }]}>
                     {account.savingsApy === null
                       ? "Add an APY to estimate interest"
-                      : `${account.savingsApy}% APY · estimated interest ${money(forecast.estimatedInterest)}`}
+                      : `${account.savingsApy}% APY · ${money(forecast.estimatedInterest)} estimated interest in ${MONTHS[month]}`}
                   </Text>
                   <Text style={[styles.small, { color: c.mutedForeground }]}>
                     Estimated interest; your bank’s credits may differ.
@@ -252,6 +356,29 @@ export function AccountForecastPanel({
                 </View>
               </View>
             ) : null}
+          </View>
+        ) : null}
+        {canShowProjection && scheduledEvents.length === 0 ? (
+          <View
+            style={[
+              styles.flatNotice,
+              { backgroundColor: c.card, borderColor: c.border },
+            ]}
+          >
+            <Feather name="calendar" size={18} color={c.mutedForeground} />
+            <View style={styles.noticeCopy}>
+              <Text style={[styles.noticeTitle, { color: c.foreground }]}>
+                No scheduled activity in {MONTHS[month]}
+              </Text>
+              <Text style={[styles.note, { color: c.mutedForeground }]}>
+                {forecast.estimatedInterest > 0
+                  ? "Estimated interest is the only projected change for this account this month."
+                  : "No payments or deposits are assigned to this account for this month."}
+                {forecast.unassigned.length
+                  ? " Assign the upcoming plans below to include them."
+                  : " Its projected balance stays unchanged."}
+              </Text>
+            </View>
           </View>
         ) : null}
         {unavailable ? (
@@ -289,12 +416,12 @@ export function AccountForecastPanel({
                 an account
               </Text>
               <Text style={[styles.note, { color: c.mutedForeground }]}>
-                This forecast includes activity linked to this account. Assign
-                the remaining plans for a fuller picture.
+                These upcoming plans are not included in this account’s
+                projection until you choose where they belong.
               </Text>
               <Pressable
                 accessibilityRole="button"
-                onPress={() => setManaging(true)}
+                onPress={() => setManaging("assignments")}
                 style={styles.textButton}
               >
                 <Text style={[styles.textButtonText, { color: c.primary }]}>
@@ -318,32 +445,54 @@ export function AccountForecastPanel({
           >
             <Feather name="alert-triangle" size={18} color={c.destructive} />
             <Text style={[styles.noticeText, { color: c.foreground }]}>
-              This account needs more breathing room. Money in another
-              account won’t cover it until you plan a transfer.
+              This account needs more breathing room. Money in another account
+              won’t cover it until you plan a transfer.
             </Text>
           </View>
         ) : null}
-        <View style={styles.monthNavigation}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Previous account forecast month"
-            onPress={onPreviousMonth}
-            style={[styles.monthArrow, { borderColor: c.border }]}
-          >
-            <Feather name="chevron-left" size={24} color={c.mutedForeground} />
-          </Pressable>
-          <Text style={[styles.monthTitle, { color: c.foreground }]}>
-            {MONTHS[month]} {year}
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Next account forecast month"
-            onPress={onNextMonth}
-            style={[styles.monthArrow, { borderColor: c.border }]}
-          >
-            <Feather name="chevron-right" size={24} color={c.mutedForeground} />
-          </Pressable>
-        </View>
+        {canShowProjection && upcoming.length ? (
+          <View style={styles.upcoming}>
+            <Text style={[styles.noticeTitle, { color: c.foreground }]}>
+              Coming up in {MONTHS[month]}
+            </Text>
+            {upcoming.map((event) => (
+              <Pressable
+                key={event.id}
+                accessibilityRole="button"
+                accessibilityLabel={`View ${event.name || "activity"} on ${event.date}`}
+                onPress={() => setSelectedDate(event.date)}
+                style={[
+                  styles.upcomingRow,
+                  { borderColor: c.border, backgroundColor: c.card },
+                ]}
+              >
+                <View style={styles.accountCopy}>
+                  <Text style={[styles.eventName, { color: c.foreground }]}>
+                    {event.name || "Planned activity"}
+                  </Text>
+                  <Text style={[styles.small, { color: c.mutedForeground }]}>
+                    {event.date}
+                    {event.transfer ? " · Transfer" : ""}
+                  </Text>
+                </View>
+                <Text
+                  sensitive
+                  style={[
+                    styles.eventAmount,
+                    { color: event.amount >= 0 ? c.success : c.foreground },
+                  ]}
+                >
+                  {money(event.amount)}
+                </Text>
+                <Feather
+                  name="chevron-right"
+                  size={16}
+                  color={c.mutedForeground}
+                />
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
         <CalendarView
           eventsOnly
           month={month}
@@ -359,6 +508,10 @@ export function AccountForecastPanel({
           a forecast, not a posted transaction.
         </Text>
       </ScrollView>
+      <AccountNameModal
+        account={renaming ? account : null}
+        onClose={() => setRenaming(false)}
+      />
       <Modal
         visible={Boolean(selectedDate)}
         transparent
@@ -500,16 +653,16 @@ export function AccountForecastPanel({
         </View>
       </Modal>
       <Modal
-        visible={managing}
+        visible={Boolean(managing)}
         transparent
         animationType="fade"
-        onRequestClose={() => setManaging(false)}
+        onRequestClose={() => setManaging(null)}
       >
         <View style={styles.overlay}>
           <Pressable
             accessibilityLabel="Close account planning"
             style={StyleSheet.absoluteFillObject}
-            onPress={() => setManaging(false)}
+            onPress={() => setManaging(null)}
           />
           <View
             style={[
@@ -519,12 +672,14 @@ export function AccountForecastPanel({
           >
             <View style={styles.sheetHeading}>
               <Text style={[styles.dayTitle, { color: c.foreground }]}>
-                Account planning
+                {managing === "assignments"
+                  ? "Assign plan accounts"
+                  : "Account settings"}
               </Text>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Close account planning"
-                onPress={() => setManaging(false)}
+                onPress={() => setManaging(null)}
                 style={styles.iconButton}
               >
                 <Feather name="x" size={23} color={c.mutedForeground} />
@@ -534,7 +689,13 @@ export function AccountForecastPanel({
               contentContainerStyle={styles.manageContent}
               keyboardShouldPersistTaps="handled"
             >
-              <AccountForecastSettings initialAccountRef={accountRef} />
+              <AccountForecastSettings
+                initialAccountRef={accountRef}
+                initialSection={managing ?? "accounts"}
+                month={month}
+                year={year}
+                onNavigate={() => setManaging(null)}
+              />
             </ScrollView>
           </View>
         </View>
@@ -571,9 +732,49 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   todayText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  projectedHero: { gap: 8, alignItems: "flex-start" },
+  projectedLabel: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_700Bold" },
+  projectedAmount: {
+    fontSize: 38,
+    fontFamily: "Inter_800ExtraBold",
+    letterSpacing: -1,
+  },
+  periodMovement: { flexDirection: "row", flexWrap: "wrap", gap: 18 },
+  currentSnapshot: { borderTopWidth: 1, paddingTop: 12, gap: 6 },
+  currentAmounts: { flexDirection: "row", flexWrap: "wrap", gap: 16 },
+  snapshotAmount: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  rename: {
+    minHeight: 44,
+    paddingHorizontal: 5,
+    flexDirection: "row",
+    gap: 5,
+    alignItems: "center",
+  },
+  flatNotice: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    flexDirection: "row",
+    gap: 10,
+  },
+  upcoming: { gap: 9 },
+  upcomingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+  },
   summary: { borderWidth: 1, borderRadius: 24, padding: 16, gap: 16 },
-  accountHeading: { flexDirection: "row", alignItems: "center", gap: 8 },
-  accountCopy: { flex: 1, minWidth: 0 },
+  accountHeading: { flexDirection: "column", alignItems: "stretch", gap: 8 },
+  accountCopy: { width: "100%", minWidth: 0 },
+  accountActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: 8,
+  },
   accountName: { fontSize: 18, fontFamily: "Inter_700Bold", lineHeight: 25 },
   note: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular" },
   metrics: { flexDirection: "row", gap: 16 },

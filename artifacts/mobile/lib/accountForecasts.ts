@@ -9,6 +9,7 @@ import { localDateInTimeZone } from "./dailyCheckingClose";
 import { savingsInterestCredits } from "./savingsInterest";
 import { createDepositoryTransactionAccountKindClassifier } from "./ledgerEngine";
 import { createTransactionNameResolver } from "./transactionNames";
+import { scenarioDates } from "./decisions";
 
 export type ForecastAccountRef = `manual:${string}` | `bank:${string}`;
 export type ForecastRoutingEntity =
@@ -24,6 +25,32 @@ export interface ForecastRoutingPatch {
   forecast_account_ref?: ForecastAccountRef | null;
   /** Expected local identity when changing a manual transaction's account. */
   account_id?: string | null;
+}
+export type ForecastPlanAccountField =
+  | "funding_account_ref"
+  | "deposit_account_ref"
+  | "forecast_account_ref";
+export interface ForecastPlanItem extends UnassignedAccountPlan {
+  detail: string;
+  fields: ForecastPlanAccountField[];
+  funding?: string | null;
+  deposit?: string | null;
+  /** Stored editable reference, not a derived alias: CAS compares this exact value. */
+  forecast?: ForecastAccountRef | null;
+  accountId?: string | null;
+  readOnlyReason?: string;
+}
+export interface ForecastPlanCoverage {
+  startDate: string;
+  endDate: string;
+  plans: ForecastPlanItem[];
+  unassigned: UnassignedAccountPlan[];
+}
+export interface ForecastRoutingChange {
+  entityType: Exclude<ForecastRoutingEntity, "transaction">;
+  entityId: string;
+  patch: ForecastRoutingPatch;
+  expected: ForecastRoutingPatch;
 }
 export interface AccountForecastPreference {
   household_id: string;
@@ -459,9 +486,12 @@ export function createEventForecastAccountResolver(
     else if (event.sourceType === "decision") {
       const decision = decisions.get(event.sourceId);
       ref =
-        event.amount >= 0
-          ? decision?.deposit_account_ref
-          : decision?.funding_account_ref;
+        decision?.scenario.type === "income_change"
+          ? decision.deposit_account_ref
+          : decision?.scenario.type === "savings_contribution" &&
+              event.amount >= 0
+            ? decision.deposit_account_ref
+            : decision?.funding_account_ref;
     }
     return resolveForecastAccountReference(ref, accounts);
   };
@@ -559,121 +589,329 @@ export function isOperatingCashEvent(
   );
 }
 
-export function unassignedAccountPlans(
-  snapshot: FinancialProjectionSnapshot,
-  accounts: readonly ForecastAccountDescriptor[],
-): UnassignedAccountPlan[] {
-  const rows: UnassignedAccountPlan[] = [];
+/** Coverage comes from effective canonical cash events, not every saved record. */
+export function buildForecastPlanCoverage(input: {
+  snapshot: FinancialProjectionSnapshot;
+  accounts: readonly ForecastAccountDescriptor[];
+  startDate: string;
+  endDate: string;
+  events: readonly FinancialEvent[];
+}): ForecastPlanCoverage {
+  const { snapshot, accounts, startDate, endDate } = input;
+  const records = {
+    bill: new Map(snapshot.bills.map((row) => [row.id, row])),
+    income: new Map(snapshot.incomes.map((row) => [row.id, row])),
+    goal: new Map(snapshot.goals.map((row) => [row.id, row])),
+    decision: new Map(snapshot.decisions.map((row) => [row.id, row])),
+    extra_payment: new Map(snapshot.extraPayments.map((row) => [row.id, row])),
+    transaction: new Map(snapshot.transactions.map((row) => [row.id, row])),
+  };
+  const plans = new Map<string, ForecastPlanItem>();
   const add = (
     type: ForecastRoutingEntity,
     id: string,
-    name: string,
-    refs: unknown[],
-    date?: string,
-    amount?: number,
+    date: string,
+    amount: number,
   ) => {
-    if (refs.some((ref) => !resolveForecastAccountReference(ref, accounts)))
-      rows.push({ type, id, name, date, amount });
+    const row: any = records[type].get(id);
+    if (
+      !row ||
+      (type === "decision" &&
+        row.scenario.type === "savings_contribution" &&
+        amount > 0)
+    )
+      return;
+    if (
+      type === "goal" &&
+      (row.goal_type !== "planned_expense" || row.closed_at || row.archived_at)
+    )
+      return;
+    if (
+      type === "transaction" &&
+      (row.source === "plaid" ||
+        row.import_hash ||
+        row.deleted_at ||
+        row.removed_at ||
+        row.transfer_group_id)
+    )
+      return;
+    const key = `${type}:${id}`,
+      previous = plans.get(key);
+    if (previous) {
+      previous.amount = money((previous.amount ?? 0) + Math.abs(amount));
+      if (date < (previous.date ?? date)) previous.date = date;
+      return;
+    }
+    const fields: ForecastPlanAccountField[] =
+      type === "income"
+        ? ["deposit_account_ref"]
+        : type === "transaction"
+          ? ["forecast_account_ref"]
+          : type === "decision" && row.scenario.type === "savings_contribution"
+            ? ["funding_account_ref", "deposit_account_ref"]
+            : type === "decision" && row.scenario.type === "income_change"
+              ? ["deposit_account_ref"]
+              : ["funding_account_ref"];
+    const readonly =
+      type === "transaction" &&
+      (row.linked_bill_id ||
+        row.linked_plan_id ||
+        row.linked_income_id ||
+        row.debt_applied_bill_id ||
+        row.review_allocations?.some(
+          (allocation: any) =>
+            !["category", "transfer"].includes(allocation.type),
+        ));
+    plans.set(key, {
+      type,
+      id,
+      name: row.name || row.note || row.category || "Planned activity",
+      date,
+      amount: Math.abs(amount),
+      detail:
+        type === "bill"
+          ? row.is_debt
+            ? "Debt payment"
+            : "Bill"
+          : type === "income"
+            ? "Income"
+            : type === "goal"
+              ? "Spending bucket"
+              : type === "decision"
+                ? "Calendar plan"
+                : type === "extra_payment"
+                  ? "Extra debt payment"
+                  : "Planned activity",
+      fields,
+      funding: row.funding_account_ref ?? null,
+      deposit: row.deposit_account_ref ?? null,
+      forecast: parseForecastAccountRef(row.forecast_account_ref),
+      accountId: row.account_id ?? null,
+      ...(readonly
+        ? {
+            readOnlyReason:
+              "Review this matched activity before changing its account.",
+          }
+        : {}),
+    });
   };
-  snapshot.bills
-    .filter((row) => row.is_recurring || row.is_debt)
-    .forEach((row) =>
+  const seenEvents = new Set<string>();
+  for (const event of input.events) {
+    if (
+      seenEvents.has(event.id) ||
+      !Number.isFinite(event.amount) ||
+      Math.abs(event.amount) <= 0.005 ||
+      event.date > endDate
+    )
+      continue;
+    seenEvents.add(event.id);
+    const reserve =
+      event.amount < 0 &&
+      ["planned", "scheduled", "pending"].includes(event.status) &&
+      (event.kind === "bill" ||
+        event.kind === "goal" ||
+        (event.kind === "debt_payment" &&
+          event.debtPlanAllocationKind === "required"));
+    if (event.date < startDate && !reserve) continue;
+    if (
+      event.sourceType !== "transaction" &&
+      !["planned", "scheduled", "pending"].includes(event.status)
+    )
+      continue;
+    if (event.debtPlanSource === "saved_extra")
+      add("extra_payment", event.sourceId, event.date, event.amount);
+    else if (event.debtTargetBillId)
       add(
         "bill",
-        row.id,
-        row.name,
-        [row.funding_account_ref],
-        row.next_payment_date,
-        row.amount,
-      ),
-    );
-  snapshot.incomes.forEach((row) =>
-    add(
-      "income",
-      row.id,
-      row.name,
-      [row.deposit_account_ref],
-      undefined,
-      row.amount,
-    ),
-  );
-  snapshot.goals
-    .filter((row) => !row.archived_at && row.goal_type === "planned_expense")
-    .forEach((row) =>
-      add(
+        event.debtPlanAllocationKind === "rollover" || event.debtPauseRedirect
+          ? (event.debtPauseRedirect?.fromBillId ?? event.sourceId)
+          : event.debtTargetBillId,
+        event.date,
+        event.amount,
+      );
+    else if (
+      [
+        "bill",
+        "income",
         "goal",
-        row.id,
-        row.name,
-        [row.funding_account_ref],
-        row.target_date,
-        row.target_amount,
-      ),
-    );
-  snapshot.decisions
-    .filter((row) => row.status === "planned" || row.status === "calendar")
-    .forEach((row) =>
-      add(
         "decision",
-        row.id,
-        row.name,
-        row.scenario.type === "income_change"
-          ? [row.deposit_account_ref]
-          : row.scenario.type === "savings_contribution"
-            ? [row.funding_account_ref, row.deposit_account_ref]
-            : [row.funding_account_ref],
+        "extra_payment",
+        "transaction",
+      ].includes(event.sourceType)
+    )
+      add(
+        event.sourceType as ForecastRoutingEntity,
+        event.sourceId,
+        event.date,
+        event.amount,
+      );
+  }
+  // Invalid explicit self-transfers have no cash event; keep their future correction visible.
+  for (const row of snapshot.decisions) {
+    if (
+      !["planned", "calendar"].includes(row.status) ||
+      row.scenario.type !== "savings_contribution" ||
+      !Number.isFinite(row.scenario.amount) ||
+      Math.abs(row.scenario.amount) <= 0.005
+    )
+      continue;
+    const from = resolveForecastAccountReference(
+        row.funding_account_ref,
+        accounts,
       ),
-    );
-  snapshot.decisions
-    .filter(
-      (row) =>
-        (row.status === "planned" || row.status === "calendar") &&
-        row.scenario.type === "savings_contribution",
-    )
-    .forEach((row) => {
-      const from = resolveForecastAccountReference(
-          row.funding_account_ref,
-          accounts,
-        ),
-        to = resolveForecastAccountReference(row.deposit_account_ref, accounts);
-      if (from && from === to)
-        rows.push({
-          type: "decision",
-          id: row.id,
-          name: `${row.name}: choose different source and destination accounts`,
-          date: row.scenario.date,
-          amount: row.scenario.amount,
-        });
-    });
-  snapshot.extraPayments.forEach((row) =>
-    add(
-      "extra_payment",
-      row.id,
-      "Extra debt payment",
-      [row.funding_account_ref],
-      row.payment_date,
-      row.amount,
-    ),
+      to = resolveForecastAccountReference(row.deposit_account_ref, accounts);
+    if (from && from === to) {
+      const date = scenarioDates(row.scenario, endDate).find(
+        (date) => date >= startDate,
+      );
+      if (date) add("decision", row.id, date, -Math.abs(row.scenario.amount));
+    }
+  }
+  const result = [...plans.values()].sort(
+    (a, b) =>
+      (a.date ?? "").localeCompare(b.date ?? "") ||
+      a.name.localeCompare(b.name),
   );
-  snapshot.transactions
+  const unassigned = result
     .filter(
-      (row) =>
-        row.source !== "plaid" &&
-        !row.import_hash &&
-        !row.transfer_group_id &&
-        !row.deleted_at &&
-        !row.removed_at,
+      (item) =>
+        item.fields.some(
+          (field) =>
+            !resolveForecastAccountReference(
+              field === "funding_account_ref"
+                ? item.funding
+                : field === "deposit_account_ref"
+                  ? item.deposit
+                  : records.transaction.get(item.id)
+                    ? transactionForecastAccountRef(
+                        records.transaction.get(item.id)!,
+                        accounts,
+                      )
+                    : item.forecast,
+              accounts,
+            ),
+        ) ||
+        (item.fields.length === 2 &&
+          resolveForecastAccountReference(item.funding, accounts) ===
+            resolveForecastAccountReference(item.deposit, accounts)),
     )
-    .filter((row) => !transactionForecastAccountRef(row, accounts))
-    .forEach((row) =>
-      rows.push({
-        type: "transaction",
-        id: row.id,
-        name: row.note || row.category,
-        date: row.date,
-        amount: row.amount,
-      }),
+    .map(({ type, id, name, date, amount, fields, funding, deposit }) => ({
+      type,
+      id,
+      name:
+        fields.length === 2 &&
+        resolveForecastAccountReference(funding, accounts) &&
+        resolveForecastAccountReference(funding, accounts) ===
+          resolveForecastAccountReference(deposit, accounts)
+          ? `${name}: choose different source and destination accounts`
+          : name,
+      date,
+      amount,
+    }));
+  return { startDate, endDate, plans: result, unassigned };
+}
+
+export function unassignedAccountPlans(
+  snapshot: FinancialProjectionSnapshot,
+  accounts: readonly ForecastAccountDescriptor[],
+  range: {
+    startDate: string;
+    endDate: string;
+    events: readonly FinancialEvent[];
+  },
+): UnassignedAccountPlan[] {
+  return buildForecastPlanCoverage({ snapshot, accounts, ...range }).unassigned;
+}
+
+export function adjustPendingForecastEvents(
+  snapshot: FinancialProjectionSnapshot,
+  events: readonly FinancialEvent[],
+): FinancialEvent[] {
+  const adjusted = events.map((event) => ({ ...event }));
+  const pending = snapshot.pendingBankTransactions.filter(
+    (row) => row.amount < 0 && Number.isFinite(row.amount),
+  );
+  for (const match of snapshot.pendingPlanMatches.filter(
+    (row) => row.status === "active",
+  )) {
+    const charge = pending.find(
+      (row) => row.plaid_transaction_id === match.pending_plaid_transaction_id,
     );
-  return rows;
+    if (
+      !charge ||
+      snapshot.pendingPlanMatches.filter(
+        (row) =>
+          row.status === "active" &&
+          row.pending_plaid_transaction_id === charge.plaid_transaction_id,
+      ).length !== 1
+    )
+      continue;
+    let covered = Math.min(
+      Math.abs(charge.amount),
+      Math.max(0, match.planned_amount),
+    );
+    for (const event of adjusted) {
+      if (
+        covered <= 0.005 ||
+        event.date !== match.occurrence_date ||
+        event.amount >= 0
+      )
+        continue;
+      const matches =
+        match.target_type === "manual"
+          ? event.sourceType === "transaction" &&
+            event.sourceId === match.target_id
+          : event.debtTargetBillId === match.target_id ||
+            (event.sourceType === "bill" && event.sourceId === match.target_id);
+      if (!matches) continue;
+      const amount = Math.min(covered, -event.amount);
+      event.amount += amount;
+      covered -= amount;
+    }
+  }
+  return adjusted;
+}
+
+export function forecastPlanCoverageForRange(input: {
+  snapshot: FinancialProjectionSnapshot;
+  accounts: readonly ForecastAccountDescriptor[];
+  startDate: string;
+  endDate: string;
+  getEvents: (
+    month: number,
+    year: number,
+    reservationAsOfDate?: string,
+  ) => readonly FinancialEvent[];
+}): ForecastPlanCoverage {
+  const empty = {
+    startDate: input.startDate,
+    endDate: input.endDate,
+    plans: [],
+    unassigned: [],
+  };
+  if (
+    !DATE.test(input.startDate) ||
+    !DATE.test(input.endDate) ||
+    input.endDate < input.startDate
+  )
+    return empty;
+  const [startYear, startMonth] = input.startDate.split("-").map(Number),
+    [endYear, endMonth] = input.endDate.split("-").map(Number);
+  if (endYear * 12 + endMonth - (startYear * 12 + startMonth) > 1200)
+    return empty;
+  const events: FinancialEvent[] = [];
+  for (
+    let index = startYear * 12 + startMonth - 1;
+    index <= endYear * 12 + endMonth - 1;
+    index++
+  )
+    events.push(
+      ...input.getEvents(index % 12, Math.floor(index / 12), input.startDate),
+    );
+  return buildForecastPlanCoverage({
+    ...input,
+    events: adjustPendingForecastEvents(input.snapshot, events),
+  });
 }
 
 /** Account forecasts start at that account's verified balance, never a household close. */
@@ -691,7 +929,7 @@ export function buildAccountForecast(input: {
 }): AccountForecastResult {
   const resolved = resolveForecastAccountReference(input.ref, input.accounts);
   const account = input.accounts.find((row) => row.ref === resolved) ?? null;
-  const unassigned = unassignedAccountPlans(input.snapshot, input.accounts);
+  let unassigned: UnassignedAccountPlan[] = [];
   const empty = (reason: string): AccountForecastResult => ({
     account,
     days: [],
@@ -741,57 +979,27 @@ export function buildAccountForecast(input: {
   const namedTransactions = new Map(
     input.snapshot.transactions.map((row) => [row.id, row]),
   );
-  const adjusted = all.map((event) => {
-    const transaction =
-      event.sourceType === "transaction"
-        ? namedTransactions.get(event.sourceId)
-        : undefined;
-    return {
-      ...event,
-      ...(transaction ? { name: transactionName(transaction) } : {}),
-    };
-  });
+  const adjusted = adjustPendingForecastEvents(
+    input.snapshot,
+    all.map((event) => {
+      const transaction =
+        event.sourceType === "transaction"
+          ? namedTransactions.get(event.sourceId)
+          : undefined;
+      return {
+        ...event,
+        ...(transaction ? { name: transactionName(transaction) } : {}),
+      };
+    }),
+  );
   const pending = input.snapshot.pendingBankTransactions.filter(
     (row) => row.amount < 0 && Number.isFinite(row.amount),
   );
-  for (const match of input.snapshot.pendingPlanMatches.filter(
-    (row) => row.status === "active",
-  )) {
-    const charge = pending.find(
-      (row) => row.plaid_transaction_id === match.pending_plaid_transaction_id,
-    );
-    if (
-      !charge ||
-      input.snapshot.pendingPlanMatches.filter(
-        (row) =>
-          row.status === "active" &&
-          row.pending_plaid_transaction_id === charge.plaid_transaction_id,
-      ).length !== 1
-    )
-      continue;
-    let covered = Math.min(
-      Math.abs(charge.amount),
-      Math.max(0, match.planned_amount),
-    );
-    for (const event of adjusted) {
-      if (
-        covered <= 0.005 ||
-        event.date !== match.occurrence_date ||
-        event.amount >= 0
-      )
-        continue;
-      const matches =
-        match.target_type === "manual"
-          ? event.sourceType === "transaction" &&
-            event.sourceId === match.target_id
-          : event.debtTargetBillId === match.target_id ||
-            (event.sourceType === "bill" && event.sourceId === match.target_id);
-      if (!matches) continue;
-      const amount = Math.min(covered, -event.amount);
-      event.amount += amount;
-      covered -= amount;
-    }
-  }
+  unassigned = unassignedAccountPlans(input.snapshot, input.accounts, {
+    startDate: account.asOfDate,
+    endDate: end,
+    events: adjusted,
+  });
   const resolveEvent = createEventForecastAccountResolver(
     input.snapshot,
     input.accounts,

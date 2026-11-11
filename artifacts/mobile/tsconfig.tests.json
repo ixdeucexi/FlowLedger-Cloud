@@ -13,6 +13,9 @@
   },
   "include": [
     "lib/accountForecasts.test.ts",
+    "lib/accountNameMetadata.test.ts",
+    "lib/accountNameFlow.test.ts",
+    "lib/forecastRoutingFlow.test.ts",
     "lib/accountForecastVisibility.test.ts",
     "lib/savingsInterest.test.ts",
     "lib/financialProjectionInput.test.ts",

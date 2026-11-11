@@ -129,9 +129,9 @@
       {
         "title": "Read the calendar",
         "items": [
-          { "title": "Choose an account", "body": "Use Forecast account to switch between Household and a checking, bills, cash, or savings account. Each account starts from its own dated balance; Savings stays out of Household spending money.", "icon": "layers" },
-          { "title": "Assign future plans", "body": "Choose a payment or deposit account in bill, income, bucket, and Activity editors. Use Needs account in Household for older plans. Unassigned plans remain in Household until you assign them.", "icon": "shuffle" },
-          { "title": "Show future forecasts", "body": "In Settings > Household, turn Show future forecast on or off for each account. This personal choice only changes your Forecast picker; balances, Activity, matching, and the plan stay included.", "icon": "eye" },
+          { "title": "Choose an account", "body": "Choose Household or an account, then a month. The large amount is that month’s projected ending balance. Current and Available stay tied to the recorded date.", "icon": "layers" },
+          { "title": "Assign future plans", "body": "Use Assign accounts to open upcoming plans. Filter or search, then choose Paid from or Deposited to. For several plans, select them, choose an account, review, then save together. Unassigned plans stay in Household.", "icon": "shuffle" },
+          { "title": "Show in Forecast menu", "body": "Open Settings > Household to show or hide an account in your Forecast menu. This personal preference changes the menu only; balances, Activity, matching, and plans stay included.", "icon": "eye" },
           { "title": "Open the day", "body": "Calendar cells show full whole-dollar amounts. Tap a date for exact cents and every item behind its closing balance.", "icon": "search" },
           { "title": "Verify status", "body": "When bank sync is available, matched pending payments should appear once with their current status.", "icon": "check-square" },
           { "title": "Sync is not cash activity", "body": "When bank sync is available, a refresh updates data but is not itself a calendar cash event.", "icon": "refresh-cw" }
@@ -163,7 +163,7 @@
         "items": [
           { "title": "Flip the full card", "body": "Tap Savings on Dashboard to switch from checking to savings.", "icon": "repeat" },
           { "title": "Review accounts separately", "body": "Open Settings > Household for each manual or connected account’s current balance, available balance, and last update.", "icon": "layers" },
-          { "title": "Name the purpose", "body": "Use names like Emergency Fund, Vacation, Taxes, or Car Repair.", "icon": "tag" },
+          { "title": "Rename your accounts", "body": "Choose Rename in Household or an account’s Forecast. Give checking, bills, cash, and savings accounts names you recognize.", "icon": "tag" },
           { "title": "Estimate savings interest", "body": "Open a Savings account’s forecast settings and enter its APY, then Save. The forecast adds estimated monthly interest. Leave APY blank if unknown. Estimates do not create Activity or change your bank balance; actual bank credits may differ.", "icon": "trending-up" }
         ]
       },
@@ -179,7 +179,7 @@
     ],
     "callout": {
       "title": "Naming stays inside FlowLedger",
-      "body": "Renaming a savings account here does not rename the account at your bank."
+      "body": "Renaming a connected account here does not rename it at your bank."
     }
   },
   {

@@ -17,6 +17,7 @@ import {
   AccountForecastPicker,
   accountForecastLabel,
 } from "@/components/AccountForecastPicker";
+import { AccountNameModal } from "@/components/AccountNameModal";
 import { useBudget, type Account } from "@/context/BudgetContext";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
@@ -25,7 +26,9 @@ import type {
   ForecastAccountRef,
   ForecastRoutingEntity,
   ForecastRoutingPatch,
+  ForecastRoutingChange,
 } from "@/lib/accountForecasts";
+import { resolveForecastAccountReference } from "@/lib/accountForecasts";
 import { safeLocalDateInTimeZone } from "@/lib/financialProjection";
 
 const money = (value: number | null) =>
@@ -48,6 +51,9 @@ interface RoutingItem {
     | "forecast_account_ref"
   )[];
   optional?: boolean;
+  readOnlyReason?: string;
+  date?: string;
+  amount?: number;
 }
 
 function AccountPlanningCard({
@@ -55,11 +61,13 @@ function AccountPlanningCard({
   initialOpen,
   onEditManualAccount,
   onReconcileManualAccount,
+  onNavigate,
 }: {
   account: ForecastAccountDescriptor;
   initialOpen: boolean;
   onEditManualAccount?: (account: Account) => void;
   onReconcileManualAccount?: (account: Account) => void;
+  onNavigate?: () => void;
 }) {
   const c = useColors();
   const router = useRouter();
@@ -78,6 +86,7 @@ function AccountPlanningCard({
     setAccountForecastVisible,
   } = useBudget();
   const [expanded, setExpanded] = useState(initialOpen);
+  const [renaming, setRenaming] = useState(false);
   const [apy, setApy] = useState("");
   const [floor, setFloor] = useState("");
   const [expectedRevision, setExpectedRevision] = useState<string | null>(null);
@@ -116,7 +125,9 @@ function AccountPlanningCard({
   const openEditor = () => {
     if (savingRef.current || !accountForecastReady) return;
     const preference = accountForecastPreferences.find(
-      (item) => item.account_ref === account.ref || account.aliases.includes(item.account_ref),
+      (item) =>
+        item.account_ref === account.ref ||
+        account.aliases.includes(item.account_ref),
     );
     setExpectedRevision(preference?.updated_at ?? null);
     setApy(account.savingsApy === null ? "" : String(account.savingsApy));
@@ -128,6 +139,7 @@ function AccountPlanningCard({
     setExpanded(false);
     setError(null);
     setVisibilityError(null);
+    setRenaming(false);
   }, [scope, account.ref]);
   useEffect(() => {
     if (initialOpen) openEditor();
@@ -262,21 +274,28 @@ function AccountPlanningCard({
       <View style={styles.sectionHeading}>
         <View style={styles.flex}>
           <Text style={[styles.fieldLabel, { color: c.foreground }]}>
-            Show future forecast
+            Show in Forecast menu
           </Text>
           <Text style={[styles.detail, { color: c.mutedForeground }]}>
             Show this account in your Forecast menu.
           </Text>
         </View>
         <Switch
-          accessibilityLabel={`Show future forecast for ${account.name}`}
+          accessibilityLabel={`Show ${account.name} in Forecast menu`}
           value={forecastVisible}
           disabled={visibilitySaving || !forecastVisibilityReady}
           onValueChange={(value) => void changeVisibility(value)}
           trackColor={{ false: c.border, true: c.primary }}
         />
       </View>
-      {forecastVisibilityError ? <Text accessibilityRole="alert" style={[styles.detail, { color: c.warning }]}>{forecastVisibilityError}</Text> : null}
+      {forecastVisibilityError ? (
+        <Text
+          accessibilityRole="alert"
+          style={[styles.detail, { color: c.warning }]}
+        >
+          {forecastVisibilityError}
+        </Text>
+      ) : null}
       {visibilityError ? (
         <Text
           accessibilityRole="alert"
@@ -291,6 +310,7 @@ function AccountPlanningCard({
           accessibilityLabel={`View forecast for ${account.name}`}
           disabled={!forecastVisible || Boolean(account.unavailableReason)}
           onPress={() => {
+            onNavigate?.();
             setSelectedForecastAccountRef(account.ref);
             router.push("/(tabs)/monthly");
           }}
@@ -307,6 +327,25 @@ function AccountPlanningCard({
             View forecast
           </Text>
         </Pressable>
+        {canEditHousehold ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Rename ${account.name}`}
+            disabled={
+              saving ||
+              !accountForecastReady ||
+              !account.active ||
+              Boolean(account.unavailableReason)
+            }
+            onPress={() => setRenaming(true)}
+            style={[styles.action, { borderColor: c.border }]}
+          >
+            <Feather name="edit-2" size={14} color={c.primary} />
+            <Text style={[styles.actionText, { color: c.primary }]}>
+              Rename
+            </Text>
+          </Pressable>
+        ) : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Planning settings for ${account.name}`}
@@ -437,13 +476,26 @@ function AccountPlanningCard({
           )}
         </View>
       ) : null}
+      <AccountNameModal
+        account={renaming ? account : null}
+        onClose={() => setRenaming(false)}
+      />
     </View>
   );
 }
 
-function RoutingRow({ item }: { item: RoutingItem }) {
+function RoutingRow({
+  item,
+  disabled = false,
+  onOpenActivity,
+}: {
+  item: RoutingItem;
+  disabled?: boolean;
+  onOpenActivity?: () => void;
+}) {
   const c = useColors();
   const { user } = useAuth();
+  const router = useRouter();
   const {
     activeHousehold,
     canEditHousehold,
@@ -508,6 +560,9 @@ function RoutingRow({ item }: { item: RoutingItem }) {
       savingRef.current ||
       currentScope.current !== scope ||
       !accessRef.current ||
+      disabled ||
+      !accountForecastReady ||
+      Boolean(item.readOnlyReason) ||
       !changed ||
       initializedScope.current !== scope
     )
@@ -571,9 +626,41 @@ function RoutingRow({ item }: { item: RoutingItem }) {
           onChange={(value) =>
             setDraft((previous) => ({ ...previous, [field]: value }))
           }
-          disabled={!canEditHousehold || saving || !accountForecastReady}
+          disabled={
+            !canEditHousehold ||
+            saving ||
+            disabled ||
+            !accountForecastReady ||
+            Boolean(item.readOnlyReason)
+          }
         />
       ))}
+      {item.readOnlyReason ? (
+        <Text style={[styles.detail, { color: c.warning }]}>
+          {item.readOnlyReason}
+        </Text>
+      ) : null}
+      {item.readOnlyReason && item.type === "transaction" ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            onOpenActivity?.();
+            router.push({
+              pathname: "/(tabs)/transactions",
+              params: {
+                activityId: item.id,
+                activityDate: item.date,
+                activityAt: String(Date.now()),
+              },
+            });
+          }}
+          style={styles.reload}
+        >
+          <Text style={[styles.actionText, { color: c.primary }]}>
+            Review in Activity
+          </Text>
+        </Pressable>
+      ) : null}
       {item.optional ? (
         <Text style={[styles.detail, { color: c.mutedForeground }]}>
           A savings goal tracks progress. Linking it doesn’t schedule a deposit
@@ -600,7 +687,7 @@ function RoutingRow({ item }: { item: RoutingItem }) {
           </Text>
         </Pressable>
       ) : null}
-      {changed && canEditHousehold ? (
+      {changed && canEditHousehold && !disabled && !item.readOnlyReason ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Save account for ${item.name}`}
@@ -624,182 +711,698 @@ function RoutingRow({ item }: { item: RoutingItem }) {
   );
 }
 
+type BatchSelection = { item: RoutingItem; expected: ForecastRoutingPatch };
+type BatchReview = {
+  scope: string;
+  ref: ForecastAccountRef;
+  name: string;
+  changes: ForecastRoutingChange[];
+  rows: RoutingItem[];
+};
+const planKey = (item: Pick<RoutingItem, "type" | "id">) =>
+  `${item.type}:${item.id}`;
+const sourceValue = (
+  item: RoutingItem,
+  field: RoutingItem["fields"][number],
+) =>
+  field === "funding_account_ref"
+    ? (item.funding ?? null)
+    : field === "deposit_account_ref"
+      ? (item.deposit ?? null)
+      : (item.forecast ?? null);
+const batchEligible = (item: RoutingItem) =>
+  item.type !== "transaction" &&
+  item.fields.length === 1 &&
+  item.fields[0] !== "forecast_account_ref" &&
+  !item.readOnlyReason;
+
 export function AccountForecastSettings({
   initialAccountRef,
+  initialSection = "accounts",
+  month,
+  year,
   onEditManualAccount,
   onReconcileManualAccount,
+  onNavigate,
 }: {
   initialAccountRef?: ForecastAccountRef;
+  initialSection?: "accounts" | "assignments";
+  month?: number;
+  year?: number;
   onEditManualAccount?: (account: Account) => void;
   onReconcileManualAccount?: (account: Account) => void;
+  onNavigate?: () => void;
 }) {
   const c = useColors();
+  const { user } = useAuth();
   const {
     forecastAccounts,
     accountForecastReady,
     accountForecastError,
     activeHousehold,
-    bills,
-    incomes,
-    goals,
-    decisions,
-    extraPayments,
-    transactions,
-    resolveTransactionAccountRef,
     canEditHousehold,
+    getForecastPlanCoverage,
+    setForecastAccountRoutingBatch,
+    settings,
     householdTimeZone,
+    retryBudgetLoad,
   } = useBudget();
-  const [showAssignments, setShowAssignments] = useState(false);
+  const today = safeLocalDateInTimeZone(new Date(), householdTimeZone);
+  const [currentYear, currentMonth] = today.split("-").map(Number);
+  const defaultEnd = new Date(
+    currentYear,
+    currentMonth - 1 + Math.max(12, settings.forecast_horizon_months) - 1,
+    1,
+  );
+  const coverageMonth = month ?? defaultEnd.getMonth(),
+    coverageYear = year ?? defaultEnd.getFullYear();
+  const coverage = useMemo(
+    () =>
+      getForecastPlanCoverage(
+        coverageMonth,
+        coverageYear,
+        initialAccountRef ?? null,
+      ),
+    [getForecastPlanCoverage, coverageMonth, coverageYear, initialAccountRef],
+  );
+  const items: RoutingItem[] = coverage.plans;
+  const missingKeys = new Set(coverage.unassigned.map((item) => planKey(item)));
+  const scope = `${user?.id ?? "demo"}:${activeHousehold?.householdId ?? "personal"}:${activeHousehold?.budgetId ?? "budget"}:${initialAccountRef ?? "household"}:${coverageYear}-${coverageMonth}`;
+  const accessRef = useRef({ scope, canEdit: canEditHousehold });
+  accessRef.current = { scope, canEdit: canEditHousehold };
+  const [showAssignments, setShowAssignments] = useState(
+    initialSection === "assignments",
+  );
+  const [showAccounts, setShowAccounts] = useState(
+    initialSection === "accounts",
+  );
+  const [showAllAccountCards, setShowAllAccountCards] =
+    useState(!initialAccountRef);
   const [search, setSearch] = useState("");
   const [onlyUnassigned, setOnlyUnassigned] = useState(true);
+  const [typeFilter, setTypeFilter] = useState<ForecastRoutingEntity | "all">(
+    "all",
+  );
+  const [selected, setSelected] = useState<Record<string, BatchSelection>>({});
+  const [destination, setDestination] = useState<ForecastAccountRef | null>(
+    null,
+  );
+  const [review, setReview] = useState<BatchReview | null>(null);
+  const [batchSaving, setBatchSaving] = useState(false);
+  const [batchError, setBatchError] = useState<string | null>(null);
+  const [batchSuccess, setBatchSuccess] = useState<string | null>(null);
+  const batchSavingRef = useRef(false);
   useEffect(() => {
-    setShowAssignments(false);
+    setShowAssignments(initialSection === "assignments");
+    setShowAccounts(initialSection === "accounts");
+    setShowAllAccountCards(!initialAccountRef);
     setSearch("");
     setOnlyUnassigned(true);
-  }, [activeHousehold?.householdId]);
-  const today = safeLocalDateInTimeZone(new Date(), householdTimeZone);
-  const items = useMemo<RoutingItem[]>(
-    () => [
-      ...bills
-        .filter(
-          (item) =>
-            (!item.end_date || item.end_date >= today) &&
-            (!item.is_debt || item.balance > 0.005),
-        )
-        .map((item) => ({
-          type: "bill" as const,
-          id: item.id,
-          name: item.name,
-          detail: item.is_debt ? "Debt payment" : "Bill",
-          funding: item.funding_account_ref,
-          fields: ["funding_account_ref" as const],
-        })),
-      ...incomes.map((item) => ({
-        type: "income" as const,
-        id: item.id,
-        name: item.name,
-        detail: "Income",
-        deposit: item.deposit_account_ref,
-        fields: ["deposit_account_ref" as const],
-      })),
-      ...goals
-        .filter((item) => !item.archived_at && !item.closed_at)
-        .map((item) => ({
-          type: "goal" as const,
-          id: item.id,
-          name: item.name,
-          detail:
-            item.goal_type === "savings"
-              ? "Savings goal · progress only"
-              : "Spending bucket",
-          funding: item.funding_account_ref,
-          deposit: item.deposit_account_ref,
-          optional: item.goal_type === "savings",
-          fields: [
-            item.goal_type === "savings"
-              ? ("deposit_account_ref" as const)
-              : ("funding_account_ref" as const),
-          ],
-        })),
-      ...decisions
-        .filter(
-          (item) => item.status === "planned" || item.status === "calendar",
-        )
-        .map((item) => ({
-          type: "decision" as const,
-          id: item.id,
-          name: item.name,
-          detail: "Calendar plan",
-          funding: item.funding_account_ref,
-          deposit: item.deposit_account_ref,
-          fields:
-            item.scenario.type === "savings_contribution"
-              ? ["funding_account_ref" as const, "deposit_account_ref" as const]
-              : [
-                  item.scenario.type === "income_change"
-                    ? ("deposit_account_ref" as const)
-                    : ("funding_account_ref" as const),
-                ],
-        })),
-      ...extraPayments.map((item) => ({
-        type: "extra_payment" as const,
-        id: item.id,
-        name: `Extra debt payment · ${item.month + 1}/${item.year}`,
-        detail: "Planned extra payment",
-        funding: item.funding_account_ref,
-        fields: ["funding_account_ref" as const],
-      })),
-      ...transactions
-        .filter(
-          (item) =>
-            item.source !== "plaid" &&
-            item.date >= today &&
-            !item.deleted_at &&
-            !item.removed_at &&
-            !item.transfer_group_id,
-        )
-        .map((item) => ({
-          type: "transaction" as const,
-          id: item.id,
-          name: item.note || item.category || "Activity",
-          detail: `${item.date} · Planned activity`,
-          forecast: resolveTransactionAccountRef(item),
-          accountId: item.account_id,
-          fields: ["forecast_account_ref" as const],
-        })),
-    ],
-    [
-      bills,
-      incomes,
-      goals,
-      decisions,
-      extraPayments,
-      transactions,
-      resolveTransactionAccountRef,
-      today,
-    ],
+    setTypeFilter("all");
+    setSelected({});
+    setDestination(null);
+    setReview(null);
+    setBatchError(null);
+    setBatchSuccess(null);
+    setBatchSaving(false);
+  }, [scope, initialSection, initialAccountRef, coverageMonth, coverageYear]);
+  const contextAccount = forecastAccounts.find(
+    (account) =>
+      account.ref === initialAccountRef ||
+      Boolean(initialAccountRef && account.aliases.includes(initialAccountRef)),
   );
-  const validAccount = (ref: string | null | undefined) =>
-    Boolean(
-      ref &&
-      forecastAccounts.some(
-        (account) =>
-          account.active &&
-          !account.unavailableReason &&
-          (account.ref === ref || account.aliases.includes(ref)),
-      ),
-    );
-  const missing = (item: RoutingItem) =>
-    !item.optional &&
-    item.fields.some(
-      (field) =>
-        !validAccount(
-          field === "funding_account_ref"
-            ? item.funding
-            : field === "deposit_account_ref"
-              ? item.deposit
-              : item.forecast,
-        ),
-    );
-  const count = items.filter(missing).length;
   const visible = items.filter(
     (item) =>
-      (!onlyUnassigned || missing(item)) &&
+      (!onlyUnassigned || missingKeys.has(planKey(item))) &&
+      (typeFilter === "all" || item.type === typeFilter) &&
       (!search.trim() ||
         `${item.name} ${item.detail}`
           .toLowerCase()
           .includes(search.trim().toLowerCase())),
   );
   const activeAccounts = forecastAccounts.filter((account) => account.active);
+  const count = coverage.unassigned.length;
+  const selectedRows = Object.values(selected);
+  const toggleRow = (item: RoutingItem) => {
+    if (
+      batchSavingRef.current ||
+      !canEditHousehold ||
+      !accountForecastReady ||
+      !batchEligible(item)
+    )
+      return;
+    setReview(null);
+    setBatchError(null);
+    setBatchSuccess(null);
+    setSelected((previous) => {
+      const key = planKey(item),
+        next = { ...previous };
+      if (next[key]) delete next[key];
+      else if (Object.keys(next).length < 100)
+        next[key] = {
+          item: { ...item },
+          expected: { [item.fields[0]]: sourceValue(item, item.fields[0]) },
+        };
+      return next;
+    });
+  };
+  const selectShown = () => {
+    if (batchSavingRef.current || !canEditHousehold || !accountForecastReady)
+      return;
+    setReview(null);
+    setBatchError(null);
+    setBatchSuccess(null);
+    setSelected((previous) => {
+      const next = { ...previous };
+      for (const item of visible.filter(batchEligible))
+        if (!next[planKey(item)] && Object.keys(next).length < 100)
+          next[planKey(item)] = {
+            item: { ...item },
+            expected: { [item.fields[0]]: sourceValue(item, item.fields[0]) },
+          };
+      return next;
+    });
+  };
+  const reviewSelection = () => {
+    if (
+      batchSavingRef.current ||
+      !canEditHousehold ||
+      !accountForecastReady ||
+      accessRef.current.scope !== scope ||
+      !selectedRows.length
+    )
+      return;
+    const ref = resolveForecastAccountReference(destination, forecastAccounts),
+      account = forecastAccounts.find((row) => row.ref === ref);
+    if (!ref || !account) {
+      setBatchError("Choose the account for these plans.");
+      return;
+    }
+    const rows = selectedRows.filter(
+      ({ item, expected }) =>
+        resolveForecastAccountReference(
+          expected[item.fields[0]],
+          forecastAccounts,
+        ) !== ref,
+    );
+    if (!rows.length) {
+      setBatchError("These plans are already assigned to that account.");
+      return;
+    }
+    const changes: ForecastRoutingChange[] = rows.map(({ item, expected }) => ({
+      entityType: item.type as ForecastRoutingChange["entityType"],
+      entityId: item.id,
+      expected,
+      patch: { [item.fields[0]]: ref },
+    }));
+    setReview({
+      scope,
+      ref,
+      name: accountForecastLabel(account),
+      changes,
+      rows: rows.map((row) => row.item),
+    });
+    setBatchError(null);
+  };
+  const saveBatch = async () => {
+    if (
+      !review ||
+      batchSavingRef.current ||
+      accessRef.current.scope !== review.scope ||
+      !accessRef.current.canEdit ||
+      !accountForecastReady ||
+      !resolveForecastAccountReference(review.ref, forecastAccounts)
+    )
+      return;
+    const intent = review;
+    batchSavingRef.current = true;
+    setBatchSaving(true);
+    setBatchError(null);
+    try {
+      await setForecastAccountRoutingBatch(intent.changes);
+      if (accessRef.current.scope === intent.scope) {
+        setSelected({});
+        setReview(null);
+        setDestination(null);
+        setBatchSuccess(
+          `Updated ${intent.changes.length} plan ${intent.changes.length === 1 ? "account" : "accounts"}.`,
+        );
+      }
+    } catch (caught) {
+      if (accessRef.current.scope === intent.scope)
+        setBatchError(
+          caught instanceof Error
+            ? caught.message
+            : "These account choices could not be saved.",
+        );
+    } finally {
+      batchSavingRef.current = false;
+      if (accessRef.current.scope === intent.scope) setBatchSaving(false);
+    }
+  };
+  const assignments = (
+    <View
+      style={[
+        styles.assignments,
+        { backgroundColor: c.card, borderColor: c.border },
+      ]}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Assign accounts to planned activity"
+        accessibilityState={{ expanded: showAssignments }}
+        aria-expanded={showAssignments}
+        onPress={() => setShowAssignments((value) => !value)}
+        style={styles.sectionHeading}
+      >
+        <View style={styles.flex}>
+          <Text style={[styles.subheading, { color: c.foreground }]}>
+            Plan accounts
+          </Text>
+          <Text style={[styles.detail, { color: c.mutedForeground }]}>
+            {count
+              ? `${count} ${count === 1 ? "item needs" : "items need"} an account`
+              : items.length
+                ? "Upcoming plans have an account"
+                : "No upcoming plans in this range"}
+          </Text>
+        </View>
+        <Feather
+          name={showAssignments ? "chevron-up" : "chevron-down"}
+          size={20}
+          color={c.primary}
+        />
+      </Pressable>
+      {showAssignments ? (
+        <>
+          <Text style={[styles.detail, { color: c.mutedForeground }]}>
+            {contextAccount
+              ? `Setting up ${accountForecastLabel(contextAccount)}. `
+              : ""}
+            Upcoming activity from {coverage.startDate} through{" "}
+            {coverage.endDate}. Unassigned plans stay in the Household plan
+            until saved.
+          </Text>
+          <View accessibilityRole="radiogroup" style={styles.filters}>
+            {[
+              { label: "Needs account", value: true },
+              { label: "All plans", value: false },
+            ].map((option) => (
+              <Pressable
+                key={option.label}
+                accessibilityRole="radio"
+                accessibilityState={{
+                  checked: onlyUnassigned === option.value,
+                }}
+                aria-checked={onlyUnassigned === option.value}
+                disabled={batchSaving}
+                onPress={() => setOnlyUnassigned(option.value)}
+                style={[
+                  styles.filter,
+                  {
+                    backgroundColor:
+                      onlyUnassigned === option.value
+                        ? c.primary
+                        : c.background,
+                    borderColor: c.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.actionText,
+                    {
+                      color:
+                        onlyUnassigned === option.value
+                          ? c.primaryForeground
+                          : c.foreground,
+                    },
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.typeFilters}
+          >
+            {(
+              [
+                { value: "all", label: "All types" },
+                { value: "bill", label: "Bills & debts" },
+                { value: "income", label: "Income" },
+                { value: "goal", label: "Buckets" },
+                { value: "decision", label: "Calendar plans" },
+                { value: "extra_payment", label: "Extra payments" },
+                { value: "transaction", label: "Activity" },
+              ] as const
+            ).map((option) => (
+              <Pressable
+                key={option.value}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: typeFilter === option.value }}
+                aria-checked={typeFilter === option.value}
+                disabled={batchSaving}
+                onPress={() => setTypeFilter(option.value)}
+                style={[
+                  styles.filter,
+                  {
+                    backgroundColor:
+                      typeFilter === option.value
+                        ? c.primary + "20"
+                        : c.background,
+                    borderColor:
+                      typeFilter === option.value ? c.primary : c.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.actionText,
+                    {
+                      color:
+                        typeFilter === option.value ? c.primary : c.foreground,
+                    },
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+          <TextInput
+            accessibilityLabel="Search planned account assignments"
+            value={search}
+            onChangeText={setSearch}
+            editable={!batchSaving}
+            placeholder="Search upcoming plans"
+            placeholderTextColor={c.mutedForeground}
+            style={[
+              styles.input,
+              {
+                color: c.foreground,
+                backgroundColor: c.background,
+                borderColor: c.border,
+              },
+            ]}
+          />
+          {!canEditHousehold ? (
+            <Text style={[styles.detail, { color: c.mutedForeground }]}>
+              View only. A household editor can assign accounts.
+            </Text>
+          ) : null}
+          {canEditHousehold &&
+          (visible.some(batchEligible) || selectedRows.length > 0) ? (
+            <View style={[styles.batchSetup, { borderColor: c.border }]}>
+              <Text style={[styles.fieldLabel, { color: c.foreground }]}>
+                Set up several plans
+              </Text>
+              <Text style={[styles.detail, { color: c.mutedForeground }]}>
+                Select plans, choose one account, then review before saving.
+                Transfers and Activity are handled individually.
+              </Text>
+              <View style={styles.actions}>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={batchSaving || !accountForecastReady}
+                  onPress={selectShown}
+                  style={[styles.action, { borderColor: c.border }]}
+                >
+                  <Text style={[styles.actionText, { color: c.primary }]}>
+                    Select shown · up to 100
+                  </Text>
+                </Pressable>
+                {selectedRows.length ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={batchSaving}
+                    onPress={() => {
+                      setSelected({});
+                      setReview(null);
+                      setBatchError(null);
+                    }}
+                    style={[styles.action, { borderColor: c.border }]}
+                  >
+                    <Text
+                      style={[styles.actionText, { color: c.mutedForeground }]}
+                    >
+                      Clear {selectedRows.length} selected
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+              {selectedRows.length ? (
+                <>
+                  <AccountForecastPicker
+                    label="Assign selected plans to"
+                    value={destination}
+                    onChange={(value) => {
+                      setDestination(value);
+                      setReview(null);
+                      setBatchError(null);
+                    }}
+                    includeHousehold={false}
+                    allowUnassigned={false}
+                    disabled={batchSaving}
+                  />
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={batchSaving || !destination}
+                    onPress={reviewSelection}
+                    style={[
+                      styles.save,
+                      {
+                        backgroundColor: c.primary,
+                        opacity: destination ? 1 : 0.5,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[styles.saveText, { color: c.primaryForeground }]}
+                    >
+                      Review {selectedRows.length} account choices
+                    </Text>
+                  </Pressable>
+                </>
+              ) : null}
+            </View>
+          ) : null}
+          {review ? (
+            <View
+              style={[
+                styles.batchReview,
+                { borderColor: c.primary, backgroundColor: c.primary + "0b" },
+              ]}
+            >
+              <Text style={[styles.subheading, { color: c.foreground }]}>
+                Review account choices
+              </Text>
+              <Text style={[styles.detail, { color: c.foreground }]}>
+                {review.changes.length}{" "}
+                {review.changes.length === 1 ? "plan" : "plans"} → {review.name}
+              </Text>
+              <Text style={[styles.detail, { color: c.mutedForeground }]}>
+                Only the payment or deposit account will change. Amounts and
+                dates stay the same.
+              </Text>
+              <ScrollView
+                style={{ maxHeight: 180 }}
+                contentContainerStyle={{ gap: 6 }}
+              >
+                {review.rows.map((item) => (
+                  <Text
+                    key={planKey(item)}
+                    style={[styles.detail, { color: c.foreground }]}
+                  >
+                    {item.name}
+                    {item.date ? ` · ${item.date}` : ""}
+                  </Text>
+                ))}
+              </ScrollView>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Save ${review.changes.length} reviewed account choices`}
+                disabled={batchSaving || !canEditHousehold}
+                onPress={() => void saveBatch()}
+                style={[
+                  styles.save,
+                  {
+                    backgroundColor: c.primary,
+                    opacity: batchSaving ? 0.6 : 1,
+                  },
+                ]}
+              >
+                {batchSaving ? (
+                  <ActivityIndicator color={c.primaryForeground} />
+                ) : (
+                  <Text
+                    style={[styles.saveText, { color: c.primaryForeground }]}
+                  >
+                    Save these account choices
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          ) : null}
+          {batchError ? (
+            <View>
+              <Text
+                accessibilityRole="alert"
+                style={[styles.error, { color: c.destructive }]}
+              >
+                {batchError}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                disabled={batchSaving}
+                onPress={() => {
+                  setSelected({});
+                  setReview(null);
+                  setBatchError(null);
+                  retryBudgetLoad();
+                }}
+                style={styles.reload}
+              >
+                <Text style={[styles.actionText, { color: c.primary }]}>
+                  Reload latest plans
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
+          {batchSuccess ? (
+            <Text
+              accessibilityLiveRegion="polite"
+              style={[styles.detail, { color: c.success }]}
+            >
+              {batchSuccess}
+            </Text>
+          ) : null}
+          {visible.map((item) => (
+            <View key={`${scope}:${planKey(item)}`} style={{ gap: 4 }}>
+              {canEditHousehold && batchEligible(item) ? (
+                <Pressable
+                  accessibilityRole="checkbox"
+                  accessibilityLabel={`Select ${item.name} for account setup`}
+                  accessibilityState={{
+                    checked: Boolean(selected[planKey(item)]),
+                    disabled: batchSaving,
+                  }}
+                  aria-checked={Boolean(selected[planKey(item)])}
+                  disabled={batchSaving || !accountForecastReady}
+                  onPress={() => toggleRow(item)}
+                  style={styles.selection}
+                >
+                  <Feather
+                    name={selected[planKey(item)] ? "check-square" : "square"}
+                    size={20}
+                    color={c.primary}
+                  />
+                  <Text
+                    style={[styles.actionText, { color: c.mutedForeground }]}
+                  >
+                    Select for setup
+                  </Text>
+                </Pressable>
+              ) : null}
+              <RoutingRow
+                item={item}
+                disabled={batchSaving}
+                onOpenActivity={onNavigate}
+              />
+            </View>
+          ))}
+          {!visible.length ? (
+            <Text style={[styles.detail, { color: c.mutedForeground }]}>
+              {onlyUnassigned
+                ? "No matching upcoming plans need an account."
+                : "No matching upcoming plans."}
+            </Text>
+          ) : null}
+        </>
+      ) : null}
+    </View>
+  );
+  const accountsSection = (
+    <View style={{ gap: 14 }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: showAccounts }}
+        aria-expanded={showAccounts}
+        onPress={() => setShowAccounts((value) => !value)}
+        style={styles.sectionHeading}
+      >
+        <View style={styles.flex}>
+          <Text style={[styles.subheading, { color: c.foreground }]}>
+            {contextAccount && !showAllAccountCards
+              ? `Settings for ${contextAccount.name}`
+              : "Your accounts"}
+          </Text>
+          <Text style={[styles.detail, { color: c.mutedForeground }]}>
+            Names, menu visibility, and planning settings
+          </Text>
+        </View>
+        <Feather
+          name={showAccounts ? "chevron-up" : "chevron-down"}
+          size={20}
+          color={c.primary}
+        />
+      </Pressable>
+      {showAccounts ? (
+        <>
+          {(contextAccount && !showAllAccountCards
+            ? [contextAccount]
+            : activeAccounts
+          ).map((account) => (
+            <AccountPlanningCard
+              key={`${scope}:${account.ref}`}
+              account={account}
+              initialOpen={
+                initialSection === "accounts" &&
+                initialAccountRef === account.ref
+              }
+              onEditManualAccount={onEditManualAccount}
+              onReconcileManualAccount={onReconcileManualAccount}
+              onNavigate={onNavigate}
+            />
+          ))}
+          {contextAccount && activeAccounts.length > 1 ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setShowAllAccountCards((value) => !value)}
+              style={[styles.action, { borderColor: c.border }]}
+            >
+              <Text style={[styles.actionText, { color: c.primary }]}>
+                {showAllAccountCards
+                  ? `Only ${contextAccount.name}`
+                  : "Show all accounts"}
+              </Text>
+            </Pressable>
+          ) : null}
+          {accountForecastReady && !activeAccounts.length ? (
+            <Text style={[styles.detail, { color: c.mutedForeground }]}>
+              Connect a bank or add a manual account to see its forecast.
+            </Text>
+          ) : null}
+        </>
+      ) : null}
+    </View>
+  );
   return (
     <View style={styles.container}>
       <View style={styles.sectionHeading}>
         <View style={styles.flex}>
           <Text style={[styles.heading, { color: c.foreground }]}>
-            Accounts & forecasts
+            {initialSection === "assignments"
+              ? "Assign plan accounts"
+              : "Accounts & forecasts"}
           </Text>
           <Text style={[styles.detail, { color: c.mutedForeground }]}>
-            See where your money is going, account by account.
+            {initialSection === "assignments"
+              ? "Choose where upcoming payments and deposits belong."
+              : "Name your accounts and see where your money is going."}
           </Text>
         </View>
         <Feather name="layers" size={22} color={c.primary} />
@@ -828,149 +1431,60 @@ export function AccountForecastSettings({
           </Text>
         </View>
       ) : null}
-      {activeAccounts.map((account) => (
-        <AccountPlanningCard
-          key={`${activeHousehold?.householdId}:${account.ref}`}
-          account={account}
-          initialOpen={initialAccountRef === account.ref}
-          onEditManualAccount={onEditManualAccount}
-          onReconcileManualAccount={onReconcileManualAccount}
-        />
-      ))}
-      {accountForecastReady && activeAccounts.length === 0 ? (
-        <Text style={[styles.detail, { color: c.mutedForeground }]}>
-          Connect a bank or add a manual account to see its forecast.
-        </Text>
-      ) : null}
-      <View
-        style={[
-          styles.assignments,
-          { backgroundColor: c.card, borderColor: c.border },
-        ]}
-      >
+      {initialSection === "accounts" && count > 0 && !showAssignments ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Assign accounts to planned activity"
-          accessibilityState={{ expanded: showAssignments }}
-          onPress={() => setShowAssignments((value) => !value)}
-          style={styles.sectionHeading}
+          onPress={() => {
+            setShowAssignments(true);
+            setShowAccounts(false);
+          }}
+          style={[
+            styles.notice,
+            {
+              backgroundColor: c.primary + "12",
+              borderColor: c.primary + "40",
+            },
+          ]}
         >
           <View style={styles.flex}>
-            <Text style={[styles.subheading, { color: c.foreground }]}>
-              Plan accounts
+            <Text style={[styles.fieldLabel, { color: c.foreground }]}>
+              {count} upcoming {count === 1 ? "plan needs" : "plans need"} an
+              account
             </Text>
             <Text style={[styles.detail, { color: c.mutedForeground }]}>
-              {count
-                ? `${count} ${count === 1 ? "item needs" : "items need"} an account`
-                : "Review the accounts for your planned activity"}
+              Set up payment and deposit accounts
             </Text>
           </View>
-          <Feather
-            name={showAssignments ? "chevron-up" : "chevron-down"}
-            size={20}
-            color={c.primary}
-          />
+          <Feather name="arrow-right" size={18} color={c.primary} />
         </Pressable>
-        {showAssignments ? (
-          <>
-            <Text style={[styles.detail, { color: c.mutedForeground }]}>
-              Choose where each payment comes from and where income arrives.
-              Unassigned plans stay in the household plan.
-            </Text>
-            <View style={styles.filters}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ selected: onlyUnassigned }}
-                onPress={() => setOnlyUnassigned(true)}
-                style={[
-                  styles.filter,
-                  {
-                    backgroundColor: onlyUnassigned ? c.primary : c.background,
-                    borderColor: c.border,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.actionText,
-                    {
-                      color: onlyUnassigned
-                        ? c.primaryForeground
-                        : c.foreground,
-                    },
-                  ]}
-                >
-                  Needs account
-                </Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ selected: !onlyUnassigned }}
-                onPress={() => setOnlyUnassigned(false)}
-                style={[
-                  styles.filter,
-                  {
-                    backgroundColor: !onlyUnassigned ? c.primary : c.background,
-                    borderColor: c.border,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.actionText,
-                    {
-                      color: !onlyUnassigned
-                        ? c.primaryForeground
-                        : c.foreground,
-                    },
-                  ]}
-                >
-                  All plans
-                </Text>
-              </Pressable>
-            </View>
-            <TextInput
-              accessibilityLabel="Search planned account assignments"
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Search plans"
-              placeholderTextColor={c.mutedForeground}
-              style={[
-                styles.input,
-                {
-                  color: c.foreground,
-                  backgroundColor: c.background,
-                  borderColor: c.border,
-                },
-              ]}
-            />
-            {!canEditHousehold ? (
-              <Text style={[styles.detail, { color: c.mutedForeground }]}>
-                View only. A household editor can assign accounts.
-              </Text>
-            ) : null}
-            {visible.map((item) => (
-              <RoutingRow
-                key={`${activeHousehold?.householdId}:${item.type}:${item.id}`}
-                item={item}
-              />
-            ))}
-            {visible.length === 0 ? (
-              <Text style={[styles.detail, { color: c.mutedForeground }]}>
-                {onlyUnassigned
-                  ? "No matching plans need an account."
-                  : "No matching plans."}
-              </Text>
-            ) : null}
-          </>
-        ) : null}
-      </View>
+      ) : null}
+      {initialSection === "assignments" ? (
+        <>
+          {assignments}
+          {accountsSection}
+        </>
+      ) : (
+        <>
+          {accountsSection}
+          {assignments}
+        </>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { gap: 14 },
+  typeFilters: { gap: 8, paddingVertical: 3 },
+  batchSetup: { borderWidth: 1, borderRadius: 14, padding: 12, gap: 10 },
+  batchReview: { borderWidth: 1, borderRadius: 14, padding: 14, gap: 10 },
+  selection: {
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  reload: { paddingVertical: 9 },
   flex: { flex: 1, minWidth: 0 },
   sectionHeading: { flexDirection: "row", alignItems: "center", gap: 10 },
   heading: { fontSize: 20, fontFamily: "Inter_700Bold" },

@@ -1,3 +1,4 @@
+import {mergeAccountNameRead} from "./accountNameMetadata";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -183,7 +184,7 @@ function hydrateActualCallback(cache: BudgetPlanCacheRecord, actor = cache.userI
     dataUpdatedAt: "",
   };
   const dependencies: Record<string, any> = {
-    ...projectionInput, canonicalConnectedAccounts, pendingPlaidActivityWithBalanceHolds, localDateInTimeZone, fallbackCategoryList,
+    ...projectionInput, mergeAccountNameRead, accountNameIntentsRef: {current: []}, canonicalConnectedAccounts, pendingPlaidActivityWithBalanceHolds, localDateInTimeZone, fallbackCategoryList,
     DEFAULT_SETTINGS: {}, canonicalDebtPaymentMethod: (value: unknown) => value,
     reorderDebtPriorities: (rows: unknown[]) => rows, normalizeDailyCheckingCloseRows: (rows: unknown[]) => rows,
     reuseStructurallyEqualFinancialValue: (_previous: unknown, next: unknown) => next, isValidExtraPaymentPlan: () => true,
