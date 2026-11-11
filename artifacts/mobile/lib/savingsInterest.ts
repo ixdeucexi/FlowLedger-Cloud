@@ -112,4 +112,3 @@ export function savingsInterestCredits(input: {
   }
   return credits;
 }
-
