@@ -1185,7 +1185,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
           </View>
 
           {!resolveTransactionAccountRef(current) ? <Text style={[styles.sectionCopy, { color: c.warning }]}>This bank account needs to be refreshed before matching.</Text> : null}
-          <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: showOtherAccounts }} onPress={() => setShowOtherAccounts(value => !value)} style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 12 }}>
+          <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: showOtherAccounts }} aria-checked={showOtherAccounts} onPress={() => setShowOtherAccounts(value => !value)} style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 12 }}>
             <Feather name={showOtherAccounts ? "check-square" : "square"} size={20} color={c.primary} />
             <Text style={{ color: c.foreground }}>Include plans from other accounts</Text>
           </Pressable>
