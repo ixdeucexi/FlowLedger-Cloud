@@ -25,6 +25,7 @@ export function BiometricLockSettings({
     timeoutMs,
     setAutoLockDelay,
   } = useBiometricLock();
+  const toggleDisabled = busy || (!supported && !enabled);
 
   const toggle = async () => {
     clearError();
@@ -55,18 +56,18 @@ export function BiometricLockSettings({
           accessibilityRole="switch"
           accessibilityLabel="App Lock"
           aria-checked={enabled}
-          aria-disabled={busy || !supported}
+          aria-disabled={toggleDisabled}
           accessibilityState={{
             checked: enabled,
-            disabled: busy || !supported,
+            disabled: toggleDisabled,
           }}
-          disabled={busy || !supported}
+          disabled={toggleDisabled}
           onPress={() => void toggle()}
           style={[
             styles.toggle,
             {
               backgroundColor: enabled ? colors.primary : colors.border,
-              opacity: busy || !supported ? 0.55 : 1,
+              opacity: toggleDisabled ? 0.55 : 1,
             },
           ]}
         >

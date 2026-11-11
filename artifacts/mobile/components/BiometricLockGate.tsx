@@ -15,7 +15,7 @@ export function BiometricLockGate() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { signOut } = useAuth();
-  const { locked, busy, error, unlock } = useBiometricLock();
+  const { locked, busy, error, initializationError, retryLoad, unlock } = useBiometricLock();
   const unlockRef = useRef(unlock);
   const autoUnlockStarted = useRef(false);
   const gateRef = useRef<View>(null);
@@ -37,6 +37,10 @@ export function BiometricLockGate() {
       setShowFallback(false);
       return;
     }
+    if (initializationError) {
+      setShowFallback(true);
+      return;
+    }
     if (autoUnlockStarted.current) return;
     autoUnlockStarted.current = true;
 
@@ -52,7 +56,7 @@ export function BiometricLockGate() {
       active = false;
       clearTimeout(timer);
     };
-  }, [locked]);
+  }, [initializationError, locked]);
 
   if (!locked) return null;
 
@@ -73,7 +77,7 @@ export function BiometricLockGate() {
         {...(Platform.OS === "web" ? { tabIndex: -1 } : {})}
         style={[styles.modalRoot, { backgroundColor: colors.background }]}
       >
-        {!showFallback ? (
+        {!showFallback && !initializationError ? (
           <View
             accessibilityLabel="Unlocking FlowLedger"
             accessibilityViewIsModal
@@ -107,20 +111,20 @@ export function BiometricLockGate() {
               style={styles.logo}
               resizeMode="contain"
             />
-            <Text style={[styles.title, { color: colors.foreground }]}>Unlock FlowLedger</Text>
+            <Text style={[styles.title, { color: colors.foreground }]}>{initializationError ? "Check App Lock" : "Unlock FlowLedger"}</Text>
             <Text style={[styles.description, { color: colors.mutedForeground }]}>Your bank and plan are hidden.</Text>
 
-            {error ? <Text accessibilityRole="alert" style={[styles.error, { color: colors.destructive }]}>{error}</Text> : null}
+            {initializationError || error ? <Text accessibilityRole="alert" style={[styles.error, { color: colors.destructive }]}>{initializationError || error}</Text> : null}
 
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Unlock FlowLedger with fingerprint, face, or device screen lock"
+              accessibilityLabel={initializationError ? "Try checking App Lock again" : "Unlock FlowLedger with fingerprint, face, or device screen lock"}
               disabled={busy}
-              onPress={() => void unlock()}
+              onPress={() => initializationError ? retryLoad() : void unlock()}
               style={({ pressed }) => [styles.unlock, { backgroundColor: colors.primary, opacity: pressed || busy ? 0.72 : 1 }]}
             >
-              {busy ? <ActivityIndicator color={colors.primaryForeground} /> : <Feather name="unlock" size={20} color={colors.primaryForeground} />}
-              <Text style={[styles.unlockText, { color: colors.primaryForeground }]}>{busy ? "Checking…" : "Unlock"}</Text>
+              {busy ? <ActivityIndicator color={colors.primaryForeground} /> : <Feather name={initializationError ? "refresh-cw" : "unlock"} size={20} color={colors.primaryForeground} />}
+              <Text style={[styles.unlockText, { color: colors.primaryForeground }]}>{busy ? "Checking…" : initializationError ? "Try again" : "Unlock"}</Text>
             </Pressable>
 
             <Pressable accessibilityRole="button" disabled={busy} onPress={() => void signOut()} style={styles.signOut}>

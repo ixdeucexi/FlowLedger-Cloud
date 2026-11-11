@@ -403,7 +403,7 @@ export function ActivityScreen() {
     getIncomeOccurrencesInMonth,
     getMonthlyBills,
     getBillOccurrencesInMonth,
-    getBillMonthlyTotal,
+    getBillOccurrenceAmount,
     getBillEffectiveMonthlyTotal,
     getDailyBalances,
     getPaidAmount,
@@ -1490,13 +1490,15 @@ export function ActivityScreen() {
     setEditTx(null);
   };
 
+  const billOccurrenceMatches = useMemo(() => matchedOccurrenceAllocations(transactions, "bill"), [transactions]);
   const billMatchOptions = useMemo(() => {
     if (!matchTx) return [];
     const candidates = adjacentBillMatchCandidates(
       matchTx.date,
       getMonthlyBills,
       getBillOccurrencesInMonth,
-      getBillMonthlyTotal,
+      getBillOccurrenceAmount,
+      (bill, date) => billOccurrenceMatches.get(occurrenceKey(bill.id, date)),
     );
     return rankBillMatches(
       {
@@ -1511,7 +1513,8 @@ export function ActivityScreen() {
     matchTx,
     getMonthlyBills,
     getBillOccurrencesInMonth,
-    getBillMonthlyTotal,
+    getBillOccurrenceAmount,
+    billOccurrenceMatches,
   ]);
   const pendingBillMatchOptions = useMemo(() => {
     if (!pendingMatchTx || isInferredPendingBankHold(pendingMatchTx) || pendingMatchTx.amount >= 0) return [];
@@ -1519,7 +1522,8 @@ export function ActivityScreen() {
       pendingMatchTx.transaction_date,
       getMonthlyBills,
       getBillOccurrencesInMonth,
-      getBillMonthlyTotal,
+      getBillOccurrenceAmount,
+      (bill, date) => billOccurrenceMatches.get(occurrenceKey(bill.id, date)),
     );
     return rankBillMatches(
       {
@@ -1537,7 +1541,8 @@ export function ActivityScreen() {
     pendingMatchTx,
     getMonthlyBills,
     getBillOccurrencesInMonth,
-    getBillMonthlyTotal,
+    getBillOccurrenceAmount,
+    billOccurrenceMatches,
   ]);
   const selectedPendingPlanMatch = useMemo(
     () =>

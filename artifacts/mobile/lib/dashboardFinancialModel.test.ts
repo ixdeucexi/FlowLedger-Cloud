@@ -1097,8 +1097,9 @@ test("the dashboard flip keeps Flow Score on the animated checking face", () => 
   assert.ok(scorePanel > checkingFace);
   assert.ok(scorePanel < savingsFace);
   assert.ok(savingsCard > savingsFace);
-  assert.match(mobileDashboard, /styles\.referenceCommandHeroBackFace/);
-  assert.match(mobileDashboard, /heroBackCardHeight/);
+  assert.match(mobileDashboard.slice(checkingFace, savingsFace), /flipped && styles\.referenceCommandHeroInactiveFace/);
+  assert.match(mobileDashboard.slice(savingsFace), /!flipped && styles\.referenceCommandHeroInactiveFace/);
+  assert.match(mobileDashboard, /referenceCommandHeroInactiveFace:\s*\{\s*\.\.\.StyleSheet\.absoluteFillObject/);
 });
 
 test("the dashboard and review center link to the existing spending bucket manager", () => {

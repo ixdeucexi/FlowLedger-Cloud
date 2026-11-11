@@ -39,6 +39,15 @@ function bankObligationFixture(anchorDate = "2026-10-02"): FinancialProjectionSn
   return snapshot;
 }
 
+test("saved monthly plans return to their original March date after February", () => {
+  const snapshot = bankObligationFixture("2027-01-01");
+  snapshot.bills = [];
+  snapshot.decisions = [{ id: "monthly-plan", name: "Monthly plan", decision_type: "recurring_bill", scenario: { type: "recurring_bill", name: "Monthly plan", amount: 50, date: "2027-01-31", frequency: "monthly" }, result: {} as any, status: "planned", created_at: "2027-01-01" }];
+  const projection = createFinancialProjection(snapshot, { now: new Date("2027-01-01T12:00:00Z"), timeZone: "UTC" });
+  const dates = [0, 1, 2, 3, 4].flatMap(month => projection.getDailyBalances(month, 2027).flatMap(day => (day.events ?? []).filter(event => event.sourceId === "monthly-plan").map(event => event.date)));
+  assert.deepEqual(dates, ["2027-01-31", "2027-02-28", "2027-03-31", "2027-04-30", "2027-05-31"]);
+});
+
 function debtPreviewFixture(): FinancialProjectionSnapshot {
   const snapshot = bankObligationFixture("2026-10-01");
   snapshot.settings.debtPayoffEnabled = true;

@@ -23,9 +23,18 @@ test("category budgets check connectivity before changing visible totals or cach
   const persistStart = screen.indexOf("const persistBudgets");
   const persistEnd = screen.indexOf("const saveDrafts", persistStart);
   const persist = screen.slice(persistStart, persistEnd);
-  assert.ok(persist.indexOf("assertFinancialMutationOnline()") < persist.indexOf("setCategoryBudgets(next)"));
+  const screenGate = persist.indexOf("assertFinancialMutationOnline()");
+  const save = persist.indexOf("await saveMonthlyCategoryBudgetChanges(");
+  const publish = persist.indexOf("setCategoryBudgets(result.budgets)");
+  assert.ok(screenGate >= 0 && screenGate < save && save < publish);
 
   const store = readFileSync("lib/categoryBudgetStore.ts", "utf8");
+  const monthlySaveStart = store.indexOf("export async function saveMonthlyCategoryBudgetChanges");
+  const monthlySaveEnd = store.indexOf("export async function saveCategoryBudgets", monthlySaveStart);
+  const monthlySave = store.slice(monthlySaveStart, monthlySaveEnd);
+  assert.ok(monthlySave.indexOf("assertFinancialMutationOnline()") >= 0);
+  assert.ok(monthlySave.indexOf("assertFinancialMutationOnline()") < monthlySave.indexOf('supabase.rpc('));
+  assert.ok(monthlySave.indexOf('supabase.rpc(') < monthlySave.indexOf("writeCategoryBudgetCache"));
   const saveStart = store.indexOf("export async function saveCategoryBudgets");
   const cacheWrite = store.indexOf("writeCategoryBudgetCache", saveStart);
   assert.ok(store.indexOf("assertFinancialMutationOnline()", saveStart) < cacheWrite);

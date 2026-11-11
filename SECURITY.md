@@ -1,6 +1,41 @@
 # Security maintenance
 
-## Deep scan security follow-up
+## November 11, 2026 scan
+
+Compatible scoped overrides now resolve `node-forge` **1.4.3**,
+`follow-redirects` **1.16.3**, and `qs` **6.16.1**. All three published patches
+exceed the existing 1,440-minute minimum release age. The former
+`GHSA-86w9-cpqp-85rv` exception is removed: the installed Forge version is
+outside its reported affected range and no longer appears in the unignored
+audit. The official record still has no named first-patched version; this
+does not change the verified installed version or audit result.
+
+Synthetic tests use the actual resolved consumers: Expo and EAS certificate
+signing, PEM and CSR conversion, EAS PKCS12 parsing and wrong-password rejection,
+Plaid's Axios redirect handling, and Express's `qs` parsing/stringifying. The
+redirect fixture reproduces the cross-realm custom-header leak before the patch
+and confirms that the patched redirect strips it. Tests use local servers and
+ephemeral test keys, with no bank calls or financial-record changes.
+
+The production dependency audit reports **zero critical, two ignored high,
+two visible moderate, and one low** findings. There are no unignored high or
+critical findings. The two visible moderate findings are Expo tooling's
+[`glob` 13.0.6](https://github.com/advisories/GHSA-3g3m-2fjr-6pw4) and
+[`minimatch` 9.0.9/10.2.5](https://github.com/advisories/GHSA-g3hv-75wg-m249).
+Their fixes require separately verified major upgrades to Glob 14 and
+Minimatch 11, outside the installed consumers' declared ranges. The bounded
+source review found these paths through local Expo/Metro build tooling, with
+no direct app, API, or Edge runtime imports. Build tooling does use the affected
+APIs; this is a compatibility follow-up, not a claim of unreachability. Both
+findings remain visible and unignored.
+
+The three existing exception identifiers for incompatible `image-size` fixes
+and the unpublished `braces` fix remain unchanged. Exception identifiers and
+audit findings have different counts. No exception was added and the package
+release-age rule was not bypassed. The following sections record historical
+audits; this section supersedes their version and count summaries.
+
+## Historical deep scan security follow-up
 
 Compatible scoped overrides now use `fast-uri` **3.1.9**, `moment` **2.31.0**
 and `fast-copy` **4.1.2**. Their published versions exceed the existing minimum

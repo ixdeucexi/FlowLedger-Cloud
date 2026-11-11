@@ -115,7 +115,11 @@ const enrollment = (userId: string, extra = {}) => ({ version: 2, enabled: true,
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
 
 /** Execute the real provider with isolated hooks, storage, clock and native API. */
-function providerHarness(seed: Record<string, unknown> = {}) {
+function providerHarness(seed: Record<string, unknown> = {}, faults: {
+  read?: (key: string) => Promise<string | null>;
+  hardware?: () => Promise<boolean>;
+  enrolled?: () => Promise<boolean>;
+} = {}) {
   const storage = new Map(Object.entries(seed).map(([id, value]) => [biometricLockStorageKey(id), JSON.stringify(value)]));
   const writes: Array<{ key: string; value: string }> = [], prompts: Record<string, unknown>[] = [];
   const listeners = new Set<(value: string) => void>(), slots: any[] = [];
@@ -124,6 +128,7 @@ function providerHarness(seed: Record<string, unknown> = {}) {
   let effects: Array<() => void> = [], result: any;
   let authenticate: () => Promise<NativeResult> = async () => ({ success: true });
   let writeGate: Promise<void> | null = null, failWrites = false;
+  let read = faults.read;
   const unchanged = (a: unknown[] | undefined, b: unknown[] | undefined) => a && b && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
   const react: any = {
     createContext: () => ({ Provider: "Provider" }),
@@ -144,8 +149,8 @@ function providerHarness(seed: Record<string, unknown> = {}) {
     if (name === "react-native") return { Platform: { OS: "android" }, AppState: { addEventListener: (_event: string, fn: (value: string) => void) => { listeners.add(fn); return { remove: () => listeners.delete(fn) }; } } };
     if (name === "@/context/AuthContext") return { useAuth: () => auth };
     if (name === "@/lib/biometricLock") return lockHelpers;
-    if (name === "expo-local-authentication") return { hasHardwareAsync: async () => true, isEnrolledAsync: async () => true, authenticateAsync: async (options: Record<string, unknown>) => { prompts.push(options); return authenticate(); } };
-    if (name === "@react-native-async-storage/async-storage") return { __esModule: true, default: { getItem: async (key: string) => storage.get(key) ?? null, setItem: async (key: string, value: string) => { await writeGate; if (failWrites) throw new Error("Fictional storage rejection"); storage.set(key, value); writes.push({ key, value }); } } };
+    if (name === "expo-local-authentication") return { hasHardwareAsync: faults.hardware ?? (async () => true), isEnrolledAsync: faults.enrolled ?? (async () => true), authenticateAsync: async (options: Record<string, unknown>) => { prompts.push(options); return authenticate(); } };
+    if (name === "@react-native-async-storage/async-storage") return { __esModule: true, default: { getItem: async (key: string) => read ? read(key) : storage.get(key) ?? null, setItem: async (key: string, value: string) => { await writeGate; if (failWrites) throw new Error("Fictional storage rejection"); storage.set(key, value); writes.push({ key, value }); } } };
     throw new Error(`Unexpected provider dependency ${name}`);
   };
   class FixtureDate extends Date { static now() { return now; } }
@@ -156,12 +161,76 @@ function providerHarness(seed: Record<string, unknown> = {}) {
   return {
     get value() { return result; }, storage, writes, prompts, flush,
     authenticateWith(fn: () => Promise<NativeResult>) { authenticate = fn; }, holdWrites(p: Promise<void> | null) { writeGate = p; }, failWrites(v: boolean) { failWrites = v; },
+    readWith(fn?: (key: string) => Promise<string | null>) { read = fn; },
     user(id: string) { auth = { user: { id, email: "device-fixture@example.test" }, demoMode: false }; render(); }, state(v: string) { for (const fn of [...listeners]) fn(v); }, advance(ms: number) { now += ms; },
     close() { slots.forEach(slot => slot?.cleanup?.()); mounted = false; assert.equal(listeners.size, 0); },
   };
 }
 
 describe("App Lock provider with fictional native authentication", () => {
+  it("keeps readable enabled enrollment locked when a native capability probe fails", async () => {
+    for (const capability of ["hardware", "enrolled"] as const) {
+      const h = providerHarness({ "user-a": enrollment("user-a") }, { [capability]: async () => { throw new Error("Fictional device probe failure"); } });
+      try {
+        await h.flush();
+        assert.equal(h.value.ready, true); assert.equal(h.value.supported, false);
+        assert.equal(h.value.enabled, true); assert.equal(h.value.locked, true);
+        assert.equal(h.value.initializationError, null); assert.deepEqual(h.writes, []);
+        h.authenticateWith(async () => ({ success: false, error: "user_cancel" }));
+        assert.equal(await h.value.unlock(), false); await h.flush(); assert.equal(h.value.locked, true);
+        h.authenticateWith(async () => ({ success: true }));
+        assert.equal(await h.value.unlock(), true); await h.flush(); assert.equal(h.value.locked, false);
+        assert.equal(h.prompts.length, 2); assert.deepEqual(h.writes, []);
+      } finally { h.close(); }
+    }
+  });
+  it("blocks unknown enrollment after a storage failure and retries without writes or authentication bypass", async () => {
+    for (const enabled of [false, true]) {
+      const h = providerHarness({ "user-a": enrollment("user-a", { enabled }) }, { read: async () => { throw new Error("Fictional storage failure"); } });
+      try {
+        await h.flush();
+        assert.equal(h.value.ready, true); assert.equal(h.value.locked, true);
+        assert.match(h.value.initializationError, /Try again or sign out/);
+        assert.equal(await h.value.unlock(), false); assert.equal(await h.value.disable(), false);
+        h.value.clearError(); await h.flush(); assert.equal(h.value.locked, true);
+        h.value.retryLoad(); await h.flush(); assert.equal(h.value.locked, true);
+        assert.deepEqual(h.writes, []); assert.deepEqual(h.prompts, []);
+        h.readWith(); h.value.retryLoad(); await h.flush();
+        assert.equal(h.value.initializationError, null); assert.equal(h.value.enabled, enabled); assert.equal(h.value.locked, enabled);
+        assert.deepEqual(h.writes, []); assert.deepEqual(h.prompts, []);
+      } finally { h.close(); }
+    }
+  });
+  it("ignores a previous user's delayed lock read failure after the next user loads", async () => {
+    let reject!: (error: Error) => void;
+    const pending = new Promise<string | null>((_resolve, fail) => { reject = fail; });
+    const h = providerHarness({ "user-b": enrollment("user-b") }, { read: () => pending });
+    try {
+      await h.flush(); h.readWith(); h.user("user-b"); await h.flush();
+      reject(new Error("Old user storage failure")); await h.flush();
+      assert.equal(h.value.enabled, true); assert.equal(h.value.locked, true);
+      assert.equal(h.value.initializationError, null); assert.deepEqual(h.writes, []);
+    } finally { h.close(); }
+  });
+  it("keeps the opaque lock gate ready and locked throughout a delayed retry", async () => {
+    const h = providerHarness({ "user-a": enrollment("user-a") }, { read: async () => { throw new Error("Fictional storage failure"); } });
+    try {
+      await h.flush(); const saved = h.storage.get(biometricLockStorageKey("user-a"))!;
+      for (const result of ["error", "success"] as const) {
+        let resolve!: (value: string | null) => void, reject!: (error: Error) => void;
+        const pending = new Promise<string | null>((yes, no) => { resolve = yes; reject = no; });
+        h.readWith(() => pending); h.value.retryLoad(); await h.flush();
+        assert.equal(h.value.ready, true, "the mounted modal must survive while navigation is already ready");
+        assert.equal(h.value.locked, true); assert.equal(h.value.busy, true);
+        assert.match(h.value.initializationError, /Try again or sign out/);
+        assert.equal(await h.value.unlock(), false);
+        if (result === "error") reject(new Error("Still unavailable")); else resolve(saved);
+        await h.flush(); assert.equal(h.value.ready, true); assert.equal(h.value.locked, true); assert.equal(h.value.busy, false);
+      }
+      assert.equal(h.value.initializationError, null); assert.equal(h.value.enabled, true);
+      assert.deepEqual(h.writes, []); assert.deepEqual(h.prompts, []);
+    } finally { h.close(); }
+  });
   it("stays Off without writes or prompts through mount, delay edits and background events", async () => {
     const h = providerHarness(); try {
       await h.flush(); assert.equal(h.value.ready, true); assert.equal(h.value.enabled, false); assert.equal(h.value.locked, false);
@@ -282,4 +351,56 @@ describe("App Lock provider with fictional native authentication", () => {
     h.close(); auth.resolve({ success: true }); assert.equal(await pending, false);
   });
 
+});
+
+function lockScreenHarness(component: "BiometricLockGate" | "BiometricLockSettings", state: Record<string, unknown>) {
+  const calls = { retry: 0, signOut: 0, enable: 0, disable: 0, unlock: 0 };
+  const value = {
+    locked: false, supported: false, enabled: false, busy: false, error: null, initializationError: null, timeoutMs: 120_000,
+    retryLoad() { calls.retry++; }, signOut: async () => { calls.signOut++; },
+    enable: async () => { calls.enable++; }, disable: async () => { calls.disable++; },
+    unlock: async () => { calls.unlock++; return false; }, clearError() {}, lockNow() {}, setAutoLockDelay() {}, ...state,
+  };
+  const react = { useRef: (initial: unknown) => ({ current: initial }), useState: () => [false, () => {}], useEffect() {}, useLayoutEffect() {} };
+  const output: any = {};
+  const source = transpileModule(readFileSync(`components/${component}.tsx`, "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, jsx: JsxEmit.ReactJSX, target: ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
+  new Function("exports", "require", source)(output, (name: string) => {
+    if (name === "react") return { __esModule: true, default: react, ...react };
+    if (name === "react/jsx-runtime") return { jsx: (type: unknown, props: unknown) => ({ type, props }), jsxs: (type: unknown, props: unknown) => ({ type, props }) };
+    if (name === "react-native") return { ActivityIndicator: "ActivityIndicator", Image: "Image", Modal: "Modal", Platform: { OS: "android" }, StyleSheet: { create: (styles: unknown) => styles, absoluteFillObject: {} } };
+    if (name.endsWith("PrivacyPrimitives")) return { PrivacyPressable: "Pressable", PrivacyText: "Text", PrivacyView: "View" };
+    if (name.endsWith("Feather")) return { __esModule: true, default: "Feather" };
+    if (name.endsWith("AuthContext")) return { useAuth: () => ({ signOut: value.signOut }) };
+    if (name.endsWith("BiometricLockContext")) return { useBiometricLock: () => value };
+    if (name.endsWith("useColors")) return { useColors: () => new Proxy({}, { get: () => "#000000" }) };
+    if (name.endsWith("biometricLock")) return lockHelpers;
+    if (name.endsWith("appLockWebIsolation")) return { isolateAppLockWebPortals() {} };
+    if (name === "react-native-safe-area-context") return { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) };
+    if (name.endsWith(".png")) return "logo";
+    throw new Error(`Unexpected lock screen dependency ${name}`);
+  });
+  const tree = output[component]({});
+  const flatten = (node: any): any[] => Array.isArray(node) ? node.flatMap(flatten) : node && typeof node === "object" ? [node, ...flatten(node.props?.children)] : [];
+  return { tree, nodes: flatten(tree), calls };
+}
+
+it("lock settings errors show a protected retry and sign-out screen instead of an unlock action", async () => {
+  const h = lockScreenHarness("BiometricLockGate", { locked: true, initializationError: "App Lock settings could not be checked. Try again or sign out." });
+  assert.equal(h.tree.type, "Modal"); assert.equal(h.tree.props.visible, true);
+  const retry = h.nodes.find(node => node.props.accessibilityLabel === "Try checking App Lock again");
+  assert.ok(retry); retry.props.onPress();
+  assert.equal(h.calls.retry, 1); assert.equal(h.calls.unlock, 0);
+  const signOut = h.nodes.find(node => node.type === "Pressable" && node !== retry);
+  await signOut.props.onPress(); assert.equal(h.calls.signOut, 1);
+  assert.equal(lockScreenHarness("BiometricLockGate", { locked: false }).tree, null);
+});
+
+it("a recovered enabled lock can be explicitly switched off after a failed capability probe", async () => {
+  const enabled = lockScreenHarness("BiometricLockSettings", { enabled: true, supported: false });
+  const toggle = enabled.nodes.find(node => node.props.accessibilityRole === "switch");
+  assert.equal(toggle.props.disabled, false); await toggle.props.onPress();
+  assert.equal(enabled.calls.disable, 1); assert.equal(enabled.calls.enable, 0);
+  const off = lockScreenHarness("BiometricLockSettings", { enabled: false, supported: false });
+  assert.equal(off.nodes.find(node => node.props.accessibilityRole === "switch").props.disabled, true);
+  assert.equal(off.calls.enable, 0);
 });

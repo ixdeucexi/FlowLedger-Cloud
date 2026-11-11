@@ -24,15 +24,16 @@ export interface DecisionResult {
 function addDays(date: string, days: number) {
   const value = new Date(`${date}T00:00:00Z`); value.setUTCDate(value.getUTCDate() + days); return value.toISOString().slice(0, 10);
 }
-function addMonth(date: string) {
-  const [y, m, d] = date.split("-").map(Number); const next = new Date(Date.UTC(y, m, 1));
-  return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(Math.min(d, new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate())).padStart(2, "0")}`;
+function addMonth(date: string, anchorDay: number) {
+  const [y, m] = date.split("-").map(Number); const next = new Date(Date.UTC(y, m, 1));
+  return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(Math.min(anchorDay, new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate())).padStart(2, "0")}`;
 }
 export function scenarioDates(scenario: DecisionScenario, endDate: string): string[] {
   if (scenario.type === "payment_date_change") return [scenario.date];
   const frequency = scenario.frequency ?? (scenario.type === "recurring_bill" || scenario.type === "income_change" ? "monthly" : "once");
   const dates: string[] = []; let date = scenario.date;
-  while (date <= endDate) { dates.push(date); if (frequency === "once") break; date = frequency === "weekly" ? addDays(date, 7) : frequency === "biweekly" ? addDays(date, 14) : addMonth(date); }
+  const anchorDay = Number(scenario.date.slice(8, 10));
+  while (date <= endDate) { dates.push(date); if (frequency === "once") break; date = frequency === "weekly" ? addDays(date, 7) : frequency === "biweekly" ? addDays(date, 14) : addMonth(date, anchorDay); }
   return dates;
 }
 export function evaluateDecision(days: DecisionBaselineDay[], scenario: DecisionScenario, safetyFloor: number): DecisionResult {

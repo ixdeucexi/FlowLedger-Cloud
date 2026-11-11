@@ -584,7 +584,9 @@ test("both calendar views use shared tones and retain text risk signals", () => 
     assert.match(source, /Calendar legend/);
     assert.match(source, /calendarHighlightText/);
   }
-  assert.match(mobile, /Build cushion/);
+  assert.match(mobile, /Below safety floor/);
+  assert.match(mobile, /Below your safety floor/);
+  assert.doesNotMatch(mobile, /Build cushion/);
   assert.match(mobile, /Overdue ·/);
   const controls = readFileSync(
     "components/CalendarAppearanceSettings.tsx",

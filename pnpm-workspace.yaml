@@ -39,9 +39,6 @@ auditConfig:
     # image-size 2.0.4 is patched but incompatible with this Metro integration; see SECURITY.md.
     - GHSA-5p2g-fcmc-qvqq
     - GHSA-w3rx-r6r6-pgpr
-    # No patched node-forge release exists yet. The affected verifier is reached
-    # only through Expo/EAS build tooling and is not bundled into the PWA runtime.
-    - GHSA-86w9-cpqp-85rv
     # No patched braces release exists; used only by Metro/Jest build tooling.
     # Production serves static Expo output. See SECURITY.md reachability review.
     - GHSA-vfj7-8cjw-p6xm
@@ -89,7 +86,8 @@ onlyBuiltDependencies:
 overrides:
   "zod@>=4.0.0 <4.6.6": "4.6.6"
   # Compatible security patches; preserve unrelated package major versions.
-  "node-forge@<1.4.0": "1.4.0"
+  "node-forge@<1.4.3": "1.4.3"
+  "follow-redirects@<1.16.3": "1.16.3"
   "minimatch@>=5.0.0 <5.1.8": "5.1.8"
   "joi@>=17.0.0 <17.13.8": "17.13.8"
   "ajv@>=8.0.0 <8.18.0": "8.18.0"
@@ -119,7 +117,7 @@ overrides:
   "path-to-regexp@>=8.0.0 <8.4.0": "8.4.2"
   "picomatch@<2.3.2": "2.3.2"
   "postcss@<8.5.23": "8.5.23"
-  "qs@>=6.11.1 <6.16.0": "6.16.0"
+  "qs@>=6.11.1 <6.16.1": "6.16.1"
   "proxy-addr@<2.0.8": "2.0.8"
   "shell-quote@<1.11.0": "1.11.0"
   "source-map-js@<1.2.2": "1.2.2"

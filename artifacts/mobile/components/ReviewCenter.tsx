@@ -22,8 +22,9 @@ import { UnplannedChargeModal } from "@/components/UnplannedChargeModal";
 import type { Bill, Goal, ReconcileTransactionInput, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
-import { manualActivityMatchCandidates, resolveMatchedBillBudget } from "@/lib/billMatching";
+import { manualActivityMatchCandidates } from "@/lib/billMatching";
 import { adjacentBillMatchCandidates } from "@/lib/billMatchCandidates";
+import { resolveBillOccurrencePayment } from "@/lib/billOccurrencePayment";
 import { nextPlannedDebtPayment, snowballTargetDebtId } from "@/lib/billSurplusRouting";
 import { confirmAction } from "@/lib/confirmAction";
 import { applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupReviewTargets, incomeReviewTargets, matchedIncomeOccurrenceAllocations, matchedOccurrenceAllocations, occurrenceKey, prioritizeReviewTransaction, prioritizeSavedBillTarget, rankReviewTargets, reviewQueueAfterSkips, scheduledSnowballReviewTargets, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
@@ -118,7 +119,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
   const handledCloseRequestRef = useRef<string | null>(null);
   const {
     activeHousehold, startupCoreReady, transactions, bills, incomes, goals, decisions, extraPayments, categories, canEditHousehold, settings, pendingPlanMatches,
-    getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getDailyBalances,
+    getMonthlyBills, getBillOccurrencesInMonth, getBillOccurrenceAmount, getDailyBalances,
     createSpendingBucketForTransaction, addGoal, updateGoal, deleteGoal, closeSpendingBucket, closeSpendingBucketAndRouteRemainder, reopenSpendingBucket,
     archiveSpendingBucket, restoreArchivedSpendingBucket,
     reconcileTransaction, undoTransactionReconciliation, refreshBankData, retryBudgetLoad,
@@ -219,7 +220,8 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
         current.date,
         getMonthlyBills,
         getBillOccurrencesInMonth,
-        getBillMonthlyTotal,
+        getBillOccurrenceAmount,
+        (bill, date) => billMatches.get(occurrenceKey(bill.id, date)),
       ).forEach((candidate) => {
         candidate.occurrenceDates
           .filter((occurrenceDate) => dateOnlyDistanceDays(occurrenceDate, current.date) <= 14)
@@ -232,25 +234,11 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
               (item) => item.id === candidate.billId,
             );
             if (!bill) return;
-            const days = getBillOccurrencesInMonth(
-              bill,
-              occurrenceMonth,
-              occurrenceYear,
-            );
-            const plannedAmount = resolveMatchedBillBudget(
-              days.length
-                ? getBillMonthlyTotal(bill, occurrenceMonth, occurrenceYear) /
-                    days.length
-                : bill.amount,
-              bill.amount,
-            );
+            const plannedAmount = getBillOccurrenceAmount(bill, occurrenceDate);
             const previous = billMatches.get(
               occurrenceKey(bill.id, occurrenceDate),
             );
-            const remaining = Math.max(
-              0,
-              plannedAmount - Number(previous?.amount || 0),
-            );
+            const remaining = resolveBillOccurrencePayment({ occurrenceDate, scheduledAmount: plannedAmount, frequency: bill.frequency, match: previous }).remainingAmount;
             if (remaining <= 0.005) return;
             candidates.push({
               type: "bill",
@@ -329,7 +317,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
       .find(Boolean);
     const linkedRanking = prioritizeSavedBillTarget(learnedRanking, savedBillId);
     return prioritizePendingPlanTarget(linkedRanking, current.id, pendingPlanMatches);
-  }, [bills, current, decisions, extraPayments, getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, goals, incomes, pendingPlanMatches, subscriptionBillLinks, transactions]);
+  }, [bills, current, decisions, extraPayments, getBillOccurrenceAmount, getBillOccurrencesInMonth, getMonthlyBills, goals, incomes, pendingPlanMatches, subscriptionBillLinks, transactions]);
   const groupedTargets = useMemo(() => groupReviewTargets(targets), [targets]);
   const filteredTargets = useMemo(() => reviewTargetsForKind(targets, targetKind), [targets, targetKind]);
   const suggestion = targets[0];

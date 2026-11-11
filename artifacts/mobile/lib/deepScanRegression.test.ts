@@ -18,11 +18,13 @@ function settingsHandlers() {
     deleteIncome: mutate, deleteCategory: mutate, addCategory: mutate, updateCategory: mutate,
     confirmAction: (options: any) => { state.confirmation = options; },
     newCategory: state.newCategory, renameValue: "Renamed", bills: [], transactions: [],
+    categoryScopeKey: "user:household:budget", categoryScopeKeyRef: { current: "user:household:budget" },
+    categoryMatches: (left: string, right: string) => left.toLocaleLowerCase() === right.toLocaleLowerCase(),
     categoryMutationInFlightRef: { current: false }, categoryDraftRef,
     setCategorySaveBusy: (busy: boolean) => { state.busy = busy; },
     setNewCategory: (next: (current: string) => string) => { state.newCategory = next(state.newCategory); },
     setRenamingCategory: (next: string | null) => { state.renaming = next; },
-    showFormError: (title: string) => { state.errors.push(title); },
+    privacyFormError: (title: string) => { state.errors.push(title); },
   });
   const source = readFileSync("app/(tabs)/more.tsx", "utf8");
   const body = source.slice(source.indexOf("  const handleDeleteIncome ="), source.indexOf("  const openAccount ="));
@@ -30,7 +32,7 @@ function settingsHandlers() {
   return { state, handlers, categoryDraftRef, resolve, reject };
 }
 
-test("Settings delete confirmations wait for persistence and propagate failures to the dialog", async () => {
+test("Settings delete confirmations await persistence and report failures without success feedback", async () => {
   for (const kind of ["income", "category"]) {
     const h = settingsHandlers();
     if (kind === "income") h.handlers.handleDeleteIncome({ id: "income", name: "Paycheck" });
@@ -38,9 +40,10 @@ test("Settings delete confirmations wait for persistence and propagate failures 
     const deletion = h.state.confirmation.onConfirm();
     assert.ok(deletion instanceof Promise);
     assert.equal(h.state.calls, 1); assert.equal(h.state.haptics, 0);
-    const rejected = assert.rejects(deletion, /Offline/);
-    h.reject(new Error("Offline")); await rejected;
+    const result = kind === "income" ? assert.rejects(deletion, /Offline/) : deletion;
+    h.reject(new Error("Offline")); await result;
     assert.equal(h.state.haptics, 0);
+    assert.equal(h.state.errors.length, kind === "category" ? 1 : 0);
     const success = settingsHandlers();
     if (kind === "income") success.handlers.handleDeleteIncome({ id: "income", name: "Paycheck" });
     else success.handlers.handleDeleteCategory("Old");

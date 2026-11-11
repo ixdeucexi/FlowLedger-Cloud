@@ -17,6 +17,7 @@ import * as competitiveTools from "./competitiveGrowth";
 import * as surplusRouting from "./billSurplusRouting";
 import * as snowballFunding from "./snowballFunding";
 import * as forecastDisplay from "./forecastDisplay";
+import * as billOccurrencePayment from "./billOccurrencePayment";
 
 function flatten(node: any): any[] {
   return Array.isArray(node) ? node.flatMap(flatten) : node && typeof node === "object" ? [node, ...flatten(node.props?.children)] : [];
@@ -37,7 +38,7 @@ function reviewHarness(goals: any[] = [open, closed, archived], canEdit = true) 
     activeHousehold: { householdId: "home", budgetId: "budget", role: canEdit ? "owner" : "viewer" }, canEditHousehold: canEdit,
     startupCoreReady: true, transactions: [pending], bills: [], incomes: [], goals, decisions: [], extraPayments: [], categories: [], pendingPlanMatches: [],
     settings: { debtPayoffEnabled: false, safety_floor: 200, forecast_horizon_months: 6 },
-    getMonthlyBills: () => [], getBillOccurrencesInMonth: () => [], getBillMonthlyTotal: () => 0,
+    getMonthlyBills: () => [], getBillOccurrencesInMonth: () => [], getBillOccurrenceAmount: () => 0,
     getExtraPayment: () => null, getRemainingDebtPlanForMonth: () => null,
     refreshBankData: async () => {}, previewDebtSnowball: () => ({ safeMaximum: 0, selectedExtra: 0, months: [], allocations: [] }),
     addGoal: async () => { added++; },
@@ -50,7 +51,7 @@ function reviewHarness(goals: any[] = [open, closed, archived], canEdit = true) 
     useMemo: (fn: () => any) => { cursor++; return fn(); },
     useEffect: (fn: () => void, deps: any[]) => { const index = cursor++; if (!states[index] || deps.some((value, i) => !Object.is(value, states[index][i]))) { states[index] = deps; effects.push(fn); } },
   };
-  const modules: Record<string, any> = { transactionNames, reviewCenter: reviewTools, matchTargetFilters: targetFilters, spendingBuckets: bucketTools, pendingPlanMatches: pendingTools, billMatching, billMatchCandidates: candidateTools, competitiveGrowth: competitiveTools, billSurplusRouting: surplusRouting, snowballFunding, forecastDisplay };
+  const modules: Record<string, any> = { transactionNames, reviewCenter: reviewTools, matchTargetFilters: targetFilters, spendingBuckets: bucketTools, pendingPlanMatches: pendingTools, billMatching, billMatchCandidates: candidateTools, billOccurrencePayment, competitiveGrowth: competitiveTools, billSurplusRouting: surplusRouting, snowballFunding, forecastDisplay };
   const js = transpileModule(readFileSync("components/ReviewCenter.tsx", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, jsx: JsxEmit.React, esModuleInterop: true } }).outputText;
   new Function("exports", "require", js)(exported, (name: string) => {
     const privacyModule = revealedPrivacyModule(name);
@@ -155,9 +156,31 @@ test("role downgrade closes bucket editing/remainder UI and rejects captured edi
 
 test("ordinary review retains its transaction queue and collapsed bucket manager", () => {
   const tree = reviewHarness([open]).render("review");
-  assert.match(text(tree), /Match the bank.*Bank charge/);
+  assert.match(text(tree), /Bank charge/);
+  assert.doesNotMatch(text(tree), /Founding Free Review Center|Match the bank to your plan/i);
   assert.equal(flatten(tree).some(node => node.props.accessibilityLabel === "Edit Holiday bucket"), false);
   assert.ok(flatten(tree).some(node => node.props.accessibilityLabel === "Show spending bucket management"));
+});
+
+test("Review Center displays exact edited occurrence amounts after partial payments", () => {
+  for (const [edited, reviewed, paid, settlement, remaining] of [
+    [25, 25, 10, "partial", 15], [100, 100, 10, "partial", 90],
+    [100, 100, 80, "full", 0], [100, 100, 80, "exact", 0], [100, 60, 25, "partial", 35],
+  ] as const) {
+    const h = reviewHarness([]), bill = { id: "weekly", name: "Weekly bill", category: "Bills", amount: 50, is_debt: false };
+    h.budget.bills = [bill]; h.budget.getMonthlyBills = () => [bill];
+    h.budget.getBillOccurrencesInMonth = (_bill: unknown, month: number, year: number) => year === 2026 && month === 9 ? [2, 9, 16, 23, 30] : [];
+    h.budget.getBillOccurrenceAmount = (_bill: unknown, date: string) => date === "2026-10-23" ? edited : 50;
+    h.budget.transactions = [{ ...pending, amount: -(remaining || 20), note: "Weekly bill" }, { id: "paid", source: "manual", date: "2026-10-23", amount: -paid, review_status: "matched", review_resolution: "bill", review_allocations: [{ type: "bill", targetId: bill.id, occurrenceDate: "2026-10-23", amount: paid, plannedAmount: reviewed, settlement }] }];
+    let tree = h.render("review");
+    flatten(tree).find(node => node.type === "MatchTypeFilters").props.onChange("bill");
+    tree = h.render("review");
+    const target = flatten(tree).find(node => node.props.accessibilityLabel === "Match Weekly bill to Weekly bill" && /Oct 23/.test(text(node)));
+    if (!remaining) { assert.equal(target, undefined, "a user-closed occurrence must not reopen"); continue; }
+    assert.ok(target, "edited dated target remains available");
+    assert.match(text(target), new RegExp(`\\$${remaining}\\.00`));
+    assert.match(text(target), /exact amount/i);
+  }
 });
 
 

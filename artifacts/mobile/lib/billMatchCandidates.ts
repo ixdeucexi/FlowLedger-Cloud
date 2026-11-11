@@ -1,10 +1,12 @@
-import { resolveMatchedBillBudget, type BillMatchCandidate } from "./billMatching";
+import type { BillMatchCandidate } from "./billMatching";
+import { resolveBillOccurrencePayment, type BillOccurrenceMatchLike } from "./billOccurrencePayment";
 
 type MatchableBill = {
   id: string;
   name: string;
   category: string;
   amount: number;
+  frequency?: string;
 };
 
 function utcDay(date: string): number | null {
@@ -26,7 +28,8 @@ export function adjacentBillMatchCandidates<T extends MatchableBill>(
   transactionDate: string,
   getMonthlyBills: (month: number, year: number) => T[],
   getOccurrenceDays: (bill: T, month: number, year: number) => number[],
-  getMonthlyTotal: (bill: T, month: number, year: number) => number,
+  getOccurrenceAmount: (bill: T, occurrenceDate: string) => number,
+  getMatchedOccurrence?: (bill: T, occurrenceDate: string) => BillOccurrenceMatchLike | undefined,
 ): BillMatchCandidate[] {
   const [referenceYear, referenceMonth] = transactionDate.slice(0, 10).split("-").map(Number);
   if (!Number.isFinite(referenceYear) || !Number.isFinite(referenceMonth)) return [];
@@ -44,15 +47,17 @@ export function adjacentBillMatchCandidates<T extends MatchableBill>(
     getMonthlyBills(month, year).forEach((bill) => {
       const days = getOccurrenceDays(bill, month, year);
       if (!days.length) return;
-      const plannedAmount = resolveMatchedBillBudget(
-        getMonthlyTotal(bill, month, year) / days.length,
-        bill.amount,
-      );
       const current = byBill.get(bill.id) ?? { bill, occurrences: [] };
-      days.forEach((day) => current.occurrences.push({
-        date: `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
-        plannedAmount,
-      }));
+      days.forEach((day) => {
+        const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        const plannedAmount = resolveBillOccurrencePayment({
+          occurrenceDate: date,
+          scheduledAmount: getOccurrenceAmount(bill, date),
+          frequency: bill.frequency ?? "monthly",
+          match: getMatchedOccurrence?.(bill, date),
+        }).remainingAmount;
+        if (plannedAmount > 0.005) current.occurrences.push({ date, plannedAmount });
+      });
       byBill.set(bill.id, current);
     });
   }

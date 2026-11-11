@@ -28,6 +28,8 @@ interface BiometricLockContextValue {
   locked: boolean;
   busy: boolean;
   error: string | null;
+  initializationError: string | null;
+  retryLoad: () => void;
   enable: () => Promise<boolean>;
   disable: () => Promise<boolean>;
   unlock: () => Promise<boolean>;
@@ -176,6 +178,8 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
   const [locked, setLocked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [initializationFailure, setInitializationFailure] = useState<{ userId: string; message: string } | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const backgroundedAt = useRef<number | null>(null);
   const currentLockRef = useRef<StoredBiometricLock | null>(null);
   const mountedRef = useRef(true);
@@ -191,6 +195,7 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
   }
   const ready = userId === null || loadedUserId === userId;
   const enabled = ready && storedLock?.userId === userId && storedLock.enabled;
+  const initializationError = initializationFailure?.userId === userId ? initializationFailure.message : null;
   const timeoutMs = biometricLockTimeout(storedLock?.userId === userId ? storedLock.timeoutMs : undefined);
   const isCurrentScope = useCallback((scope: BiometricLockScope) => (
     mountedRef.current && scopeRef.current === scope
@@ -206,7 +211,7 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
     currentLockRef.current = null;
     backgroundedAt.current = null;
     busyScopeRef.current = null;
-    setBusy(false);
+    setBusy(Boolean(userId));
     if (recentSuccessfulUnlock?.userId !== userId) recentSuccessfulUnlock = null;
     if (!userId) {
       setLoadedUserId(null);
@@ -214,15 +219,20 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
       setSupported(false);
       setLocked(false);
       setError(null);
+      setInitializationFailure(null);
       return () => { active = false; };
     }
 
-    setLoadedUserId(null);
+    // A retry for this user must keep the existing opaque error gate mounted
+    // until storage resolves. Root navigation may already be ready to reveal.
+    setLoadedUserId(loaded => loaded === userId ? loaded : null);
     setLocked(true);
     setError(null);
     void Promise.all([
       AsyncStorage.getItem(biometricLockStorageKey(userId)),
-      canUsePlatformPasskeys(),
+      // Device capability is not enrollment. A failed probe must not discard
+      // an enabled lock whose saved settings can still be read.
+      canUsePlatformPasskeys().catch(() => false),
     ]).then(([saved, deviceSupported]) => {
       if (!active || !isCurrentScope(scope)) return;
       const parsed = parseStoredBiometricLock(saved, userId);
@@ -231,17 +241,28 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
       setSupported(deviceSupported);
       const recentlyUnlocked = Boolean(parsed?.enabled && readRecentBrowserUnlock(userId, parsed.credentialId));
       setLocked(Boolean(parsed?.enabled && !recentlyUnlocked));
+      setInitializationFailure(null);
+      setBusy(false);
       setLoadedUserId(userId);
     }).catch(() => {
       if (!active || !isCurrentScope(scope)) return;
       currentLockRef.current = null;
       setStoredLock(null);
       setSupported(false);
-      setLocked(false);
+      setLocked(true);
+      setInitializationFailure({ userId, message: "App Lock settings could not be checked. Try again or sign out." });
+      setBusy(false);
       setLoadedUserId(userId);
     });
 
     return () => { active = false; };
+  }, [isCurrentScope, loadAttempt, userId]);
+
+  const retryLoad = useCallback(() => {
+    if (!userId || scopeRef.current.userId !== userId || !isCurrentScope(scopeRef.current)) return;
+    setLocked(true);
+    setBusy(true);
+    setLoadAttempt(attempt => attempt + 1);
   }, [isCurrentScope, userId]);
 
   const beginOperation = useCallback((scope: BiometricLockScope) => {
@@ -457,9 +478,11 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
     ready,
     supported,
     enabled,
-    locked: enabled && locked,
+    locked: ready && (Boolean(initializationError) || Boolean(enabled && locked)),
     busy,
     error,
+    initializationError,
+    retryLoad,
     enable,
     disable,
     unlock,
@@ -467,7 +490,7 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
     clearError,
     timeoutMs,
     setAutoLockDelay,
-  }), [busy, clearError, disable, enable, enabled, error, lockNow, locked, ready, setAutoLockDelay, supported, timeoutMs, unlock]);
+  }), [busy, clearError, disable, enable, enabled, error, initializationError, lockNow, locked, ready, retryLoad, setAutoLockDelay, supported, timeoutMs, unlock]);
 
   return <BiometricLockContext.Provider value={value}>{children}</BiometricLockContext.Provider>;
 }
