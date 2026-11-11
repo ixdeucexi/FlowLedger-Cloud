@@ -21,6 +21,7 @@ import Svg, {
 
 import { AddBillModal } from "@/components/AddBillModal";
 import { AppText } from "@/components/AppText";
+import { AccountBalancesCard } from "@/components/AccountBalancesCard";
 import { DashboardSections } from "@/components/DashboardSections";
 import { DashboardFavoriteActions } from "@/components/DashboardFavoriteActions";
 import { DashboardLayoutStatus } from "@/components/DashboardLayoutStatus";
@@ -773,7 +774,7 @@ function DesktopDashboardContent({
 
       {!customizerOpen ? <DashboardLayoutStatus {...dashboardPreferences} /> : null}
       <DashboardSections desktop layout={dashboardLayout} sections={{
-overview: (<SurfaceCard
+overview: (<View style={{ width: "100%", gap: 16 }}><SurfaceCard
             accent="blue"
             style={styles.accountCardWrap}
             accessibilityLabel={`${checkingBalanceAccessibilityLabel}. Flow Score ${algorithmSuite.flowScore.score}.`}
@@ -839,7 +840,7 @@ overview: (<SurfaceCard
                 </Pressable>
               </View>
             </View>
-          </SurfaceCard>),
+          </SurfaceCard><AccountBalancesCard /></View>),
 snapshot: (<View style={styles.metricGrid}>
         <MetricCard
           label="Available to Spend"

@@ -15,6 +15,7 @@ import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from "re
 
 import { AddBillModal } from "@/components/AddBillModal";
 import { AppText } from "@/components/AppText";
+import { AccountBalancesCard } from "@/components/AccountBalancesCard";
 import { DashboardSections, MOBILE_DASHBOARD_WIDGET_IDS } from "@/components/DashboardSections";
 import { DashboardFavoriteActions } from "@/components/DashboardFavoriteActions";
 import { DashboardLayoutStatus } from "@/components/DashboardLayoutStatus";
@@ -1095,7 +1096,7 @@ function MobileDashboardContent({
 
       {!customizerOpen ? <DashboardLayoutStatus {...dashboardPreferences} /> : null}
       <DashboardSections layout={dashboardLayout} sections={{
-overview: (<View style={styles.referenceCommandHeroFlipShell}>
+overview: (<View style={{ width: "100%", gap: 10 }}><View style={styles.referenceCommandHeroFlipShell}>
           <Animated.View
             pointerEvents={flipped ? "none" : "auto"}
             style={[
@@ -1294,7 +1295,7 @@ overview: (<View style={styles.referenceCommandHeroFlipShell}>
               </Pressable>
             )}
           </Animated.View>
-      </View>),
+      </View><AccountBalancesCard /></View>),
 snapshot: (<View style={[styles.dashboardSnapshotCard, { backgroundColor: c.card, borderColor: c.border }]}>
         <Pressable
           accessibilityRole="button"
