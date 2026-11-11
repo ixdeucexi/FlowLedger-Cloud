@@ -287,7 +287,7 @@ test("the actual household cache and bill normalization retain full pause histor
   const harness = pausePersistenceHarness([pause()]);
   await harness.render().pauseDebtPayments("card", newPause);
   const household = { householdId: "home-a", budgetId: "budget-a", name: "Home", isPersonal: true, role: "owner" };
-  const arrays = Object.fromEntries(["overrides", "billDateMoves", "transactions", "deletedTransactions", "pendingBankTransactions", "pendingPlanMatches", "incomes", "goals", "extraPayments", "categories", "accounts", "connectedBankAccounts", "dailyCheckingCloses", "transactionAccountIdentities", "decisions"].map(key => [key, []]));
+  const arrays = Object.fromEntries(["plannedAccountTransfers", "plannedTransferOccurrences", "overrides", "billDateMoves", "transactions", "deletedTransactions", "pendingBankTransactions", "pendingPlanMatches", "incomes", "goals", "extraPayments", "categories", "accounts", "connectedBankAccounts", "dailyCheckingCloses", "transactionAccountIdentities", "decisions"].map(key => [key, []]));
   const cached = parseBudgetPlanCache(JSON.stringify({
     version: 1, userId: "user-a", household, households: [household],
     savedAt: "2026-11-03T00:00:00Z", dataUpdatedAt: "2026-11-03T00:00:00Z",

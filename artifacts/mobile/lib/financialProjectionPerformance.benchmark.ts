@@ -124,6 +124,7 @@ function maximumPlanCacheFixture(): BudgetPlanCacheRecord {
     savedAt: "2026-08-28T02:00:00.000Z",
     dataUpdatedAt: "2026-08-28T01:59:59.000Z",
     data: {
+      plannedAccountTransfers: [], plannedTransferOccurrences: [],
       bills: [],
       overrides: [],
       billDateMoves: [],

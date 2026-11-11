@@ -1,3 +1,4 @@
+import { plannedTransferMonthProjection } from "./plannedAccountTransfers";
 import type {
   Account,
   ConnectedBankAccount,
@@ -972,6 +973,13 @@ export function buildAccountForecast(input: {
     all.push(...input.getEvents(n % 12, Math.floor(n / 12), account.asOfDate));
   // Explicit provisional matches replace the same planned dollars, before routing.
   // This also handles a deliberate match whose expected payer differs from the bank source.
+  for (let n = asOfYear * 12 + asOfMonth - 1; n <= input.year * 12 + input.month; n++) {
+    const issues = plannedTransferMonthProjection({ transfers: input.snapshot.plannedAccountTransfers ?? [],
+      occurrences: input.snapshot.plannedTransferOccurrences ?? [], accounts: input.accounts,
+      resolveAccount: ref => resolveForecastAccountReference(ref, input.accounts), month: n % 12, year: Math.floor(n / 12) }).issues;
+    const relevant = issues.find(issue => issue.accountRefs.some(ref => ref === input.ref || resolveForecastAccountReference(ref, input.accounts) === resolved));
+    if (relevant) return empty(relevant.message);
+  }
   const transactionName = createTransactionNameResolver(
     input.snapshot.bills,
     input.snapshot.incomes,
@@ -1129,11 +1137,11 @@ export function buildAccountForecast(input: {
         .reduce((sum, row) => sum + row.amount, 0);
       days.push({
         day: cursor.getUTCDate(),
-        income: inflow,
+        income: dayEvents.filter(row => !row.transfer).reduce((sum,row)=>sum+Math.max(0,row.amount),0),
         scheduledIncome: dayEvents
           .filter((row) => row.kind === "scheduled_income")
           .reduce((sum, row) => sum + row.amount, 0),
-        expense: outflow,
+        expense: dayEvents.filter(row => !row.transfer).reduce((sum,row)=>sum+Math.max(0,-row.amount),0),
         bills: dayEvents
           .filter((row) => row.kind === "bill" || row.kind === "debt_payment")
           .reduce((sum, row) => sum + Math.max(0, -row.amount), 0),

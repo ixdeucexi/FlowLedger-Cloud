@@ -4,6 +4,8 @@ export const evaluationHousehold = "fictional-flo-evaluation";
 export function createFloEvaluationClient() {
   const h = evaluationHousehold;
   const rows: Record<string, any[]> = {
+    budgets: [{id:"fictional-budget",household_id:h,is_default:true}],
+    planned_account_transfers:[],planned_account_transfer_occurrences:[],
     household_settings: [{household_id:h,time_zone:"America/Chicago",payment_method:"snowball",starting_balance:500,starting_balance_date:"2026-09-10",calendar_start_date:"2026-06-01",safety_floor:200,forecast_horizon_months:12,planning_mode:"standard",debt_payoff_enabled:true}],
     accounts: [
       {id:"checking",household_id:h,name:"Main Checking",account_type:"checking",is_active:true,current_balance:500,balance_as_of:"2026-09-10",created_at:"2026-06-01"},

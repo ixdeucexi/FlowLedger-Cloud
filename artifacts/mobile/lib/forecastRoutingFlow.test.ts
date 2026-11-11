@@ -18,7 +18,7 @@ const source = readFileSync(
   block = source.slice(
     source.indexOf("  const setForecastAccountRoutingBatch ="),
     source.indexOf(
-      "  // One shared read-only engine",
+      "  const plannedTransferMutation =",
       source.indexOf("  const setForecastAccountRoutingBatch ="),
     ),
   );

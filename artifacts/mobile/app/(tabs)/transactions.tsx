@@ -23,6 +23,8 @@ import React, {
 import { Modal, Platform, ScrollView, SectionList, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { PlannedTransferModal } from "@/components/PlannedTransferModal";
+import { PlannedTransferManagerModal } from "@/components/PlannedTransferManager";
 import { AddTransactionModal } from "@/components/AddTransactionModal";
 import {
   AddBillModal,
@@ -399,6 +401,8 @@ export function ActivityScreen() {
     transactionAccountIdentities,
     forecastAccounts,
     accountForecastReady,
+    startupCoreReady,
+    plannedTransfersReady,
     resolveTransactionAccountRef,
     canEditHousehold,
     householdTimeZone,
@@ -434,6 +438,8 @@ export function ActivityScreen() {
   } = useBudget();
 
   const [editModalVisible, setEditModalVisible] = useState(false);
+  const [plannedTransferOpen, setPlannedTransferOpen] = useState(false);
+  const [transferPlansOpen, setTransferPlansOpen] = useState(false);
   const [editTx, setEditTx] = useState<Transaction | null>(null);
   const [debtPaymentNotice, setDebtPaymentNotice] =
     useState<DebtPaymentAppliedDetail | null>(null);
@@ -523,14 +529,15 @@ export function ActivityScreen() {
   const addRequestRef = useRef("");
   useEffect(() => {
     const requested = Array.isArray(params.add) ? params.add[0] : params.add;
-    if (requested !== "1") return;
-    const token = `${requested}:${Date.now()}`;
+    if (requested !== "1") { addRequestRef.current = ""; return; }
+    if (!activeHousehold || !startupCoreReady || !accountForecastReady || !canEditHousehold) return;
+    const token = `${user?.id}:${activeHousehold.householdId}:${activeHousehold.budgetId}:${requested}`;
     if (addRequestRef.current === token) return;
     addRequestRef.current = token;
     setEditTx(null);
     setEditModalVisible(true);
     router.setParams({ add: "" } as never);
-  }, [params.add, router]);
+  }, [params.add, router, user?.id, activeHousehold?.householdId, activeHousehold?.budgetId, startupCoreReady, accountForecastReady, canEditHousehold]);
 
   useEffect(() => {
     if (!user || !activeHousehold || !activityPreferenceReadyRef.current)
@@ -627,6 +634,8 @@ export function ActivityScreen() {
     setDetailItem(null);
     setEditTx(null);
     setEditModalVisible(false);
+    setPlannedTransferOpen(false);
+    setTransferPlansOpen(false);
   }, [user?.id, activeHousehold?.householdId, activeHousehold?.budgetId, setMatchTx, setPendingMatchTx]);
   useBackDismiss(!!detailItem, () => setDetailItem(null));
   useBackDismiss(filterModalVisible, () => setFilterModalVisible(false));
@@ -3000,6 +3009,13 @@ export function ActivityScreen() {
     );
   };
 
+  const renderTransferPlanActions = () => (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+      {canEditHousehold ? <Pressable accessibilityRole="button" accessibilityLabel="Plan a transfer" accessibilityState={{ disabled: !activeHousehold || !startupCoreReady || !accountForecastReady || !plannedTransfersReady }} disabled={!activeHousehold || !startupCoreReady || !accountForecastReady || !plannedTransfersReady} onPress={() => setPlannedTransferOpen(true)} style={{ minHeight: 44, borderWidth: 1, borderColor: c.primary + "55", borderRadius: 12, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 7, opacity: !startupCoreReady || !plannedTransfersReady ? 0.5 : 1 }}><Feather name="repeat" size={16} color={c.primary} /><Text style={{ color: c.primary, fontSize: 12, fontFamily: "Inter_600SemiBold" }}>Plan transfer</Text></Pressable> : null}
+      <Pressable accessibilityRole="button" accessibilityLabel="Manage planned transfers" disabled={!activeHousehold || !startupCoreReady || !plannedTransfersReady} onPress={() => setTransferPlansOpen(true)} style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 5 }}><Text style={{ color: c.primary, fontSize: 12, fontFamily: "Inter_600SemiBold" }}>Transfer plans</Text><Feather name="chevron-right" size={14} color={c.primary} /></Pressable>
+    </View>
+  );
+
   const renderListHeader = () => (
     <>
       <View
@@ -3053,6 +3069,7 @@ export function ActivityScreen() {
         </View>
       </View>
       <DataFreshnessLabel inset compact />
+      <View style={{ marginHorizontal: 20, marginTop: 8, marginBottom: 10 }}>{renderTransferPlanActions()}</View>
 
       {activityReviewCount > 0 || pendingActivityCount > 0 ? (
         <View style={styles.attentionStack}>
@@ -3414,7 +3431,7 @@ export function ActivityScreen() {
             ),
             accountName: activityAccountLabel(item),
           }))}
-          accountFilterSlot={<View style={{ minWidth: 190, maxWidth: 280, flexGrow: 1 }}>{renderAccountFilter()}</View>}
+          accountFilterSlot={<View style={{ gap: 8, minWidth: 190, maxWidth: 340, flexGrow: 1 }}>{renderAccountFilter()}{renderTransferPlanActions()}</View>}
           summary={activitySummary}
           summaryIsPartial={activitySummaryIsPartial}
           dateRangeLabel={activeDateRange.label}
@@ -4874,6 +4891,8 @@ export function ActivityScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+      <PlannedTransferModal visible={plannedTransferOpen} onClose={() => setPlannedTransferOpen(false)} initialToAccountRef={accountFilter && accountFilter !== "unassigned" ? accountFilter : null} />
+      <PlannedTransferManagerModal visible={transferPlansOpen} onClose={() => setTransferPlansOpen(false)} accountRef={accountFilter && accountFilter !== "unassigned" ? accountFilter : null} />
       {/* ── Edit modal (manual transactions) ── */}
       <AddTransactionModal
         visible={editModalVisible}

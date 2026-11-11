@@ -5,6 +5,8 @@ const MAX_CACHE_BYTES = 4_500_000;
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 export interface BudgetPlanCacheData {
+  plannedAccountTransfers: unknown[];
+  plannedTransferOccurrences: unknown[];
   bills: unknown[];
   overrides: unknown[];
   billDateMoves: unknown[];
@@ -86,6 +88,8 @@ function validHousehold(value: unknown): value is CachedHouseholdMembership {
 }
 
 const ARRAY_FIELDS: Array<keyof BudgetPlanCacheData> = [
+  "plannedAccountTransfers",
+  "plannedTransferOccurrences",
   "bills",
   "overrides",
   "billDateMoves",

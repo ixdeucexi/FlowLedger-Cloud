@@ -19,11 +19,13 @@ export const analysisColumns: Record<string, string> = {
   goals: "id,household_id,funding_account_ref,deposit_account_ref,name,target_amount,target_date,current_amount,created_at,goal_type,closed_at,archived_at",
   extra_payments: "id,household_id,funding_account_ref,month,year,amount,allocations,payment_date,sources",
   decisions: "id,household_id,funding_account_ref,deposit_account_ref,name,decision_type,scenario,result,status,calendar_date,actual_amount,completed_at,next_due_date,applied_change,created_at,updated_at",
+  planned_account_transfers: "id,household_id,budget_id,name,amount,from_account_ref,to_account_ref,frequency,start_date,end_date,status,deleted_at,revision,created_at,updated_at,created_by",
+  planned_account_transfer_occurrences: "id,transfer_id,household_id,budget_id,occurrence_date,scheduled_date_snapshot,skipped,from_reflected,to_reflected,from_balance_as_of,to_balance_as_of,amount_snapshot,from_account_ref_snapshot,to_account_ref_snapshot,template_revision_snapshot,revision,created_at,updated_at",
   category_budgets: "id,household_id,category,month,year,amount,updated_at",
   household_daily_checking_closes: "household_id,balance_date,checking_balance,observed_at,account_count,source",
 };
 
-export const analysisProjectionSources = ["household_settings", "bills", "monthly_overrides", "bill_date_moves", "transactions", "accounts", "plaid_accounts", "plaid_transactions", "pending_plan_matches", "incomes", "goals", "extra_payments", "decisions"];
+export const analysisProjectionSources = ["household_settings", "bills", "monthly_overrides", "bill_date_moves", "transactions", "accounts", "plaid_accounts", "plaid_transactions", "pending_plan_matches", "incomes", "goals", "extra_payments", "decisions", "planned_account_transfers", "planned_account_transfer_occurrences"];
 const spendingSources = ["transactions", "plaid_transactions", "plaid_accounts", "accounts", "bills", "goals"];
 /** Dependencies include identity/classification reads, not just output tables.
  * Unknown routes retain full coverage rather than treating unloaded data as empty. */
@@ -52,17 +54,27 @@ const PAGE = 1000;
 export const ANALYSIS_MAX_ROWS = 20000;
 /** Exact household predicate is mandatory on every page; caller supplies its
  * authenticated RLS client, never the service client used for audit logging. */
-export async function readAnalysisSource(client: any, householdId: string, table: string): Promise<SourceRows> {
+const plannedSource = (table: string) => table === "planned_account_transfers" || table === "planned_account_transfer_occurrences";
+async function currentPlanningBudget(client: any, householdId: string): Promise<string | null> {
+  try {
+    const result = await client.from("budgets").select("id,household_id,is_default").eq("household_id",householdId).eq("is_default",true).maybeSingle();
+    return !result.error && result.data?.household_id === householdId && result.data?.is_default === true && typeof result.data?.id === "string" ? result.data.id : null;
+  } catch { return null; }
+}
+export async function readAnalysisSource(client: any, householdId: string, table: string, planningBudgetId?: string | null): Promise<SourceRows> {
+  const budgetId = plannedSource(table) ? planningBudgetId === undefined ? await currentPlanningBudget(client,householdId) : planningBudgetId : null;
+  if (plannedSource(table) && !budgetId) return { rows:[],complete:false,reason:"planning_budget_unavailable" };
   const rows: Record<string, any>[] = [];
   const order = table === "household_settings" ? "household_id" : table === "household_daily_checking_closes" ? "balance_date" : "id";
   let cursor: string | null = null;
   try {
     while (rows.length <= ANALYSIS_MAX_ROWS) {
       let query = client.from(table).select(analysisColumns[table]).eq("household_id", householdId).order(order, { ascending: true }).limit(PAGE);
+      if (plannedSource(table)) query = query.eq("budget_id",budgetId);
       if (cursor !== null) query = query.gt(order, cursor);
       const { data, error } = await query;
       if (error || !Array.isArray(data)) return { rows: [], complete: false, reason: "source_unavailable" };
-      if (data.some((r: any) => r.household_id !== householdId)) return { rows: [], complete: false, reason: "scope_mismatch" };
+      if (data.some((r: any) => r.household_id !== householdId || plannedSource(table) && r.budget_id !== budgetId)) return { rows: [], complete: false, reason: "scope_mismatch" };
       if (rows.length + data.length > ANALYSIS_MAX_ROWS) return { rows, complete: false, reason: "bounded_history_limit" };
       rows.push(...data);
       if (data.length < PAGE) return { rows, complete: true };
@@ -81,7 +93,8 @@ async function digest(value: unknown) {
 export async function loadAnalysisSnapshot(client: any, householdId: string, now: string, tables?: readonly string[]): Promise<AnalysisSnapshot> {
   const requested = [...new Set(["household_settings", ...(tables ?? Object.keys(analysisColumns))])];
   if (requested.some(table => !Object.hasOwn(analysisColumns, table))) throw new Error("Unknown financial analysis source");
-  const sources = Object.fromEntries(await Promise.all(requested.map(async table => [table, await readAnalysisSource(client, householdId, table)])));
+  const planningBudgetId = requested.some(plannedSource) ? await currentPlanningBudget(client,householdId) : null;
+  const sources = Object.fromEntries(await Promise.all(requested.map(async table => [table, await readAnalysisSource(client, householdId, table, planningBudgetId)])));
   let timeZone = sources.household_settings.rows[0]?.time_zone;
   try { if (!timeZone) throw new Error(); localDay(now, timeZone); } catch {
     timeZone = "UTC";
@@ -93,6 +106,7 @@ export async function loadAnalysisSnapshot(client: any, householdId: string, now
 }
 
 export async function verifyAnalysisSnapshot(client: any, snapshot: AnalysisSnapshot, tables: string[]): Promise<boolean> {
-  const second = await Promise.all(tables.map(async table => [table, await readAnalysisSource(client, snapshot.householdId, table)] as const));
+  const planningBudgetId = tables.some(plannedSource) ? await currentPlanningBudget(client,snapshot.householdId) : null;
+  const second = await Promise.all(tables.map(async table => [table, await readAnalysisSource(client, snapshot.householdId, table,planningBudgetId)] as const));
   return second.every(([table, source]) => source.complete && JSON.stringify(source) === JSON.stringify(snapshot.sources[table]));
 }

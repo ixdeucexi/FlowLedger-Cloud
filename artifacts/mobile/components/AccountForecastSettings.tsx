@@ -17,6 +17,7 @@ import {
   AccountForecastPicker,
   accountForecastLabel,
 } from "@/components/AccountForecastPicker";
+import { PlannedTransferManager } from "@/components/PlannedTransferManager";
 import { AccountNameModal } from "@/components/AccountNameModal";
 import { useBudget, type Account } from "@/context/BudgetContext";
 import { useAuth } from "@/context/AuthContext";
@@ -796,6 +797,8 @@ export function AccountForecastSettings({
   const [showAccounts, setShowAccounts] = useState(
     initialSection === "accounts",
   );
+  const [manualAccountsOpen, setManualAccountsOpen] = useState(false);
+  const [showTransfers, setShowTransfers] = useState(false);
   const [showAllAccountCards, setShowAllAccountCards] =
     useState(!initialAccountRef);
   const [search, setSearch] = useState("");
@@ -816,6 +819,8 @@ export function AccountForecastSettings({
     setShowAssignments(initialSection === "assignments");
     setShowAccounts(initialSection === "accounts");
     setShowAllAccountCards(!initialAccountRef);
+    setManualAccountsOpen(false);
+    setShowTransfers(false);
     setSearch("");
     setOnlyUnassigned(true);
     setTypeFilter("all");
@@ -1352,22 +1357,72 @@ export function AccountForecastSettings({
       </Pressable>
       {showAccounts ? (
         <>
-          {(contextAccount && !showAllAccountCards
-            ? [contextAccount]
-            : activeAccounts
-          ).map((account) => (
-            <AccountPlanningCard
-              key={`${scope}:${account.ref}`}
-              account={account}
-              initialOpen={
-                initialSection === "accounts" &&
-                initialAccountRef === account.ref
-              }
-              onEditManualAccount={onEditManualAccount}
-              onReconcileManualAccount={onReconcileManualAccount}
-              onNavigate={onNavigate}
-            />
-          ))}
+          {(["bank", "manual"] as const).map((source) => {
+            const rows = (
+              contextAccount && !showAllAccountCards
+                ? [contextAccount]
+                : activeAccounts
+            ).filter((account) => account.source === source);
+            if (!rows.length) return null;
+            const expanded =
+              source === "bank" ||
+              manualAccountsOpen ||
+              contextAccount?.source === "manual" ||
+              !activeAccounts.some((account) => account.source === "bank");
+            return (
+              <View key={source} style={{ gap: 12 }}>
+                {source === "manual" ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Manual accounts (${rows.length})`}
+                    accessibilityState={{ expanded }}
+                    aria-expanded={expanded}
+                    onPress={() => setManualAccountsOpen((value) => !value)}
+                    style={styles.sectionHeading}
+                  >
+                    <View style={styles.flex}>
+                      <Text
+                        style={[styles.fieldLabel, { color: c.foreground }]}
+                      >
+                        Manual accounts ({rows.length})
+                      </Text>
+                      <Text
+                        style={[styles.detail, { color: c.mutedForeground }]}
+                      >
+                        Added in FlowLedger · not bank connections
+                      </Text>
+                    </View>
+                    <Feather
+                      name={expanded ? "chevron-up" : "chevron-down"}
+                      size={18}
+                      color={c.primary}
+                    />
+                  </Pressable>
+                ) : (
+                  <Text
+                    style={[styles.fieldLabel, { color: c.mutedForeground }]}
+                  >
+                    Connected accounts ({rows.length})
+                  </Text>
+                )}
+                {expanded
+                  ? rows.map((account) => (
+                      <AccountPlanningCard
+                        key={`${scope}:${account.ref}`}
+                        account={account}
+                        initialOpen={
+                          initialSection === "accounts" &&
+                          initialAccountRef === account.ref
+                        }
+                        onEditManualAccount={onEditManualAccount}
+                        onReconcileManualAccount={onReconcileManualAccount}
+                        onNavigate={onNavigate}
+                      />
+                    ))
+                  : null}
+              </View>
+            );
+          })}
           {contextAccount && activeAccounts.length > 1 ? (
             <Pressable
               accessibilityRole="button"
@@ -1469,6 +1524,35 @@ export function AccountForecastSettings({
           {assignments}
         </>
       )}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Planned account transfers"
+        accessibilityState={{ expanded: showTransfers }}
+        aria-expanded={showTransfers}
+        onPress={() => setShowTransfers((value) => !value)}
+        style={styles.sectionHeading}
+      >
+        <View style={styles.flex}>
+          <Text style={[styles.subheading, { color: c.foreground }]}>
+            Planned account transfers
+          </Text>
+          <Text style={[styles.detail, { color: c.mutedForeground }]}>
+            Choose where money will move each month
+          </Text>
+        </View>
+        <Feather
+          name={showTransfers ? "chevron-up" : "chevron-down"}
+          size={20}
+          color={c.primary}
+        />
+      </Pressable>
+      {showTransfers ? (
+        <PlannedTransferManager
+          accountRef={initialAccountRef}
+          month={month}
+          year={year}
+        />
+      ) : null}
     </View>
   );
 }

@@ -1,3 +1,4 @@
+import { normalizePlannedTransfer, normalizePlannedTransferOccurrence } from "../../../artifacts/mobile/lib/plannedAccountTransfers.ts";
 import { createFinancialProjection } from "../../../artifacts/mobile/lib/financialProjection.ts";
 import { normalizeSettingsRow, normalizeBillRow, normalizeMonthlyOverrideRow, normalizeBillDateMoveRow, normalizeTransactionRow, normalizeAccountRow, normalizeConnectedBankRows, normalizePendingBankRows, normalizePendingPlanMatchRow, normalizeGoalRow, normalizeExtraPaymentRow, accountAwareTransactionCollections, checkingPendingBankRows } from "../../../artifacts/mobile/lib/financialProjectionInput.ts";
 import { canonicalConnectedAccounts, visiblePendingPlaidActivity, pendingPlaidActivityWithBalanceHolds } from "../../../artifacts/mobile/lib/plaidActivity.ts";
@@ -112,6 +113,8 @@ export function projectionInput(snapshot: AnalysisSnapshot): { input: FinancialP
   const manualSavings = accounts.filter(a => a.is_active && a.account_type === "savings");
   const savings = bankSavings.length ? (bankSavings.every(a => a.current_balance_available) ? sum(bankSavings.map(a => a.current_balance)) : null) : manualSavings.length ? sum(manualSavings.map(a => a.current_balance)) : null;
   const input: FinancialProjectionSnapshot = {
+    plannedAccountTransfers: rows("planned_account_transfers").map(normalizePlannedTransfer),
+    plannedTransferOccurrences: rows("planned_account_transfer_occurrences").map(normalizePlannedTransferOccurrence),
     settings: normalizeSettingsRow(rawSettings), bills: rows("bills").map(normalizeBillRow), overrides: rows("monthly_overrides").map(normalizeMonthlyOverrideRow), billDateMoves: rows("bill_date_moves").map(normalizeBillDateMoveRow), transactions: transactions.active.map(normalizeTransactionRow), deletedTransactions: transactions.deleted, incomes: rows("incomes").map(r => ({ ...r, amount: Number(r.amount), amount_history: r.amount_history ?? [], excluded_dates: r.excluded_dates ?? [] })) as any,
     goals: rows("goals").map(normalizeGoalRow), extraPayments: rows("extra_payments").map(normalizeExtraPaymentRow), decisions: rows("decisions") as any, accounts, connectedBankAccounts: connected, transactionAccountIdentities: identities, pendingBankTransactions: pendingPlaidActivityWithBalanceHolds(pending.included, identities, snapshot.today), pendingPlanMatches: rows("pending_plan_matches").filter(r => ["active", "ready_review"].includes(r.status)).map(normalizePendingPlanMatchRow),
   };
@@ -129,6 +132,8 @@ export function buildAnalysisForecast(snapshot: AnalysisSnapshot, endDate: strin
   if (endDate > horizonEnd) throw new Error(`The requested date is beyond the configured forecast ending ${horizonEnd}`);
   const days = [];
   for (let month = monthStart(snapshot.today); month <= endDate; month = shiftMonth(month, 1)) {
+    const issues = engine.getPlannedTransferIssues(Number(month.slice(5,7)) - 1,Number(month.slice(0,4)));
+    if (issues.length) throw new Error(issues[0].message);
     days.push(...engine.getDailyBalances(Number(month.slice(5,7)) - 1, Number(month.slice(0,4))).filter(d => d.balanceDate >= snapshot.today && d.balanceDate <= endDate));
   }
   const history = analyticTransactions(snapshot);

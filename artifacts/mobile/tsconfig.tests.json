@@ -12,6 +12,8 @@
     "outDir": ".test-dist"
   },
   "include": [
+    "lib/plannedTransferContext.test.ts",
+    "lib/plannedAccountTransfers.test.ts",
     "lib/accountForecasts.test.ts",
     "lib/accountNameMetadata.test.ts",
     "lib/accountNameFlow.test.ts",

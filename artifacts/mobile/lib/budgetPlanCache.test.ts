@@ -1,3 +1,4 @@
+import { normalizePlannedTransferData } from "./plannedAccountTransfers";
 import {mergeAccountNameRead} from "./accountNameMetadata";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -35,6 +36,7 @@ function record(overrides: Partial<BudgetPlanCacheRecord> = {}): BudgetPlanCache
     savedAt: "2026-08-28T02:00:00.000Z",
     dataUpdatedAt: "2026-08-28T01:59:59.000Z",
     data: {
+      plannedAccountTransfers: [], plannedTransferOccurrences: [],
       bills: [{ id: "bill-1" }],
       overrides: [],
       billDateMoves: [],
@@ -184,6 +186,7 @@ function hydrateActualCallback(cache: BudgetPlanCacheRecord, actor = cache.userI
     dataUpdatedAt: "",
   };
   const dependencies: Record<string, any> = {
+    normalizePlannedTransferData, publishPlannedTransferData: (data:unknown, scope:string) => state.calls.push({name:"plannedTransfers",value:{data,scope}}),
     ...projectionInput, mergeAccountNameRead, accountNameIntentsRef: {current: []}, canonicalConnectedAccounts, pendingPlaidActivityWithBalanceHolds, localDateInTimeZone, fallbackCategoryList,
     DEFAULT_SETTINGS: {}, canonicalDebtPaymentMethod: (value: unknown) => value,
     reorderDebtPriorities: (rows: unknown[]) => rows, normalizeDailyCheckingCloseRows: (rows: unknown[]) => rows,

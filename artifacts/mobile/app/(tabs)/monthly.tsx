@@ -19,6 +19,10 @@ import { DatePickerField } from "@/components/DatePickerField";
 import { DebtPaymentAppliedModal, type DebtPaymentAppliedDetail } from "@/components/DebtPaymentAppliedModal";
 import { DesktopCalendarPage } from "@/components/desktop/DesktopCalendarPage";
 import { AccountForecastPicker } from "@/components/AccountForecastPicker";
+import { PlannedTransferManagerModal } from "@/components/PlannedTransferManager";
+import { PlannedTransferModal } from "@/components/PlannedTransferModal";
+import { PlannedTransferOccurrenceModal } from "@/components/PlannedTransferOccurrenceModal";
+import type { PlannedAccountTransfer } from "@/lib/plannedAccountTransfers";
 import { AccountForecastPanel } from "@/components/AccountForecastPanel";
 import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import { EmptyState } from "@/components/EmptyState";
@@ -444,7 +448,7 @@ export default function MonthlyScreen() {
     getCashFlow, getMonthlyIncome, getDailyBalances, getCalendarDailyBalances, getIncomeOccurrencesInMonth,
     previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, finalizeBillPayment, getExtraPayment, getDebtMonthSettlements, getDebtPlanForMonth, getRemainingDebtPlanForMonth, setPlannedDebtAmount, canEditHousehold,
     updateDecision, deleteDecision, updateGoal, deleteGoal, activeHousehold, householdTimeZone, startupCoreReady,
-    selectedForecastAccountRef, setSelectedForecastAccountRef,
+    selectedForecastAccountRef, setSelectedForecastAccountRef, plannedTransfersReady, plannedTransfersError, retryBudgetLoad,
   } = useBudget();
   const householdAsOfDate = safeLocalDateInTimeZone(new Date(), householdTimeZone);
   const [householdCurrentYear, householdCurrentMonthNumber] = householdAsOfDate.split("-").map(Number);
@@ -461,6 +465,10 @@ export default function MonthlyScreen() {
   const [month, setMonth] = useState(householdCurrentMonth);
   const [activeTab] = useState<TabView>("calendar");
   const [txModalVisible, setTxModalVisible] = useState(false);
+  const [transferManagerOpen, setTransferManagerOpen] = useState(false);
+  const [plannedTransferEditor, setPlannedTransferEditor] = useState<PlannedAccountTransfer | null>(null);
+  const [plannedTransferDate, setPlannedTransferDate] = useState<{ id: string; date: string } | null>(null);
+  useEffect(() => { setTransferManagerOpen(false); setPlannedTransferEditor(null); setPlannedTransferDate(null); }, [user?.id, activeHousehold?.householdId, activeHousehold?.budgetId]);
   const [editTx, setEditTx] = useState<Transaction | null>(null);
   const [editingBucket, setEditingBucket] = useState<Goal | null>(null);
   const [transactionDefaultDate, setTransactionDefaultDate] = useState<string | undefined>();
@@ -1812,6 +1820,11 @@ export default function MonthlyScreen() {
 
   const openDesktopCalendarEvent = (event: FinancialEvent) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (event.sourceType === "planned_transfer") {
+      selectCalendarDate(null);
+      setPlannedTransferDate({ id: event.plannedTransferId ?? event.sourceId, date: event.transferOccurrenceDate ?? event.date });
+      return;
+    }
     if (event.sourceType === "transaction") {
       const transaction = transactions.find(item => item.id === event.sourceId);
       if (transaction) openEditTransaction(transaction);
@@ -1880,9 +1893,16 @@ export default function MonthlyScreen() {
           onToday={jumpToToday}
           onOpenEvent={openDesktopCalendarEvent}
         />
+      ) : !plannedTransfersReady || plannedTransfersError ? (
+        <View style={{ paddingTop: insets.top + 18, paddingHorizontal: 20, gap: 16 }}>
+          <Text style={[styles.calendarScreenLabel, { color: c.foreground }]}>Forecast</Text>
+          <AccountForecastPicker label="Forecast account" includeHousehold visibleOnly allowUnassigned={false} value={selectedForecastAccountRef} onChange={setSelectedForecastAccountRef} />
+          <Text accessibilityRole={plannedTransfersError ? "alert" : undefined} style={{ color: plannedTransfersError ? c.warning : c.mutedForeground, fontSize: 14, lineHeight: 21 }}>{plannedTransfersError || "Loading this household’s transfer plans before showing the forecast…"}</Text>
+          {plannedTransfersError ? <Pressable accessibilityRole="button" accessibilityLabel="Retry loading forecast" onPress={() => { void retryBudgetLoad(); }} style={{ minHeight: 44, justifyContent: "center" }}><Text style={{ color: c.primary, fontFamily: "Inter_600SemiBold" }}>Try again</Text></Pressable> : null}
+        </View>
       ) : isDesktop ? (
         <DesktopCalendarPage
-          headerAccessory={<AccountForecastPicker label="Forecast account" includeHousehold visibleOnly allowUnassigned={false} value={selectedForecastAccountRef} onChange={setSelectedForecastAccountRef} />}
+          headerAccessory={<View style={{ gap: 8 }}><AccountForecastPicker label="Forecast account" includeHousehold visibleOnly allowUnassigned={false} value={selectedForecastAccountRef} onChange={setSelectedForecastAccountRef} /><Pressable accessibilityRole="button" accessibilityLabel="Manage planned transfers" disabled={!activeHousehold || !startupCoreReady || !plannedTransfersReady} onPress={() => setTransferManagerOpen(true)} style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8 }}><Feather name="repeat" size={16} color={c.primary} /><Text style={{ color: c.primary, fontFamily: "Inter_600SemiBold" }}>Transfer plans</Text></Pressable></View>}
           month={month}
           year={selectedYear}
           resolveEventLabel={resolveDesktopEventLabel}
@@ -1967,6 +1987,7 @@ export default function MonthlyScreen() {
       </View>
       <View style={{ marginHorizontal: 20, marginBottom: 8 }}>
         <AccountForecastPicker label="Forecast account" includeHousehold visibleOnly allowUnassigned={false} value={selectedForecastAccountRef} onChange={setSelectedForecastAccountRef} />
+        <Pressable accessibilityRole="button" accessibilityLabel="Manage planned transfers" disabled={!activeHousehold || !startupCoreReady || !plannedTransfersReady} onPress={() => setTransferManagerOpen(true)} style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8 }}><Feather name="repeat" size={16} color={c.primary} /><Text style={{ color: c.primary, fontFamily: "Inter_600SemiBold" }}>Transfer plans</Text></Pressable>
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel="Safety floor days for the year" onPress={openSafetyYear} style={{ alignSelf: "flex-start", marginHorizontal: 20, paddingVertical: 10 }}>
         <Text style={{ color: c.primary, fontFamily: "Inter_600SemiBold" }}>Safety floor days</Text>
@@ -2846,6 +2867,18 @@ export default function MonthlyScreen() {
                       </View>
                     ) : null}
 
+                    {calendarVisibleForecastEvents(selectedForecastDay?.events).some(event => event.sourceType === "planned_transfer") ? (
+                      <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
+                        <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Planned transfers</Text>
+                        {calendarVisibleForecastEvents(selectedForecastDay?.events).filter(event => event.sourceType === "planned_transfer").map(event => (
+                          <Pressable key={event.id} accessibilityRole="button" accessibilityLabel={`Adjust ${event.name || "planned transfer"} for ${event.transferOccurrenceDate ?? event.date}`} onPress={() => openDesktopCalendarEvent(event)} style={[styles.dayOverlayRow, { gap: 12 }]}>
+                            <View style={{ flex: 1, minWidth: 0 }}><Text numberOfLines={2} style={[styles.dayOverlayRowName, { color: c.foreground }]}>{event.name || "Planned transfer"}</Text><Text style={{ fontSize: 12, color: c.mutedForeground }}>Planned only · adjust this date</Text></View>
+                            <Text sensitive style={[styles.dayOverlayAmount, { color: event.amount >= 0 ? c.success : c.foreground, flexShrink: 0 }]}>{event.amount >= 0 ? "+" : "−"}{Math.abs(event.amount).toLocaleString("en-US", { style: "currency", currency: "USD" })}</Text><Feather name="chevron-right" size={16} color={c.primary} />
+                          </Pressable>
+                        ))}
+                      </View>
+                    ) : null}
+
                     {displayedGoalsForSelectedDay.length > 0 || plansForSelectedDay.length > 0 ? (
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
                         <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Plans & goals</Text>
@@ -3303,6 +3336,9 @@ export default function MonthlyScreen() {
         </Pressable>
       </Modal>
 
+      <PlannedTransferManagerModal visible={transferManagerOpen} onClose={() => setTransferManagerOpen(false)} month={month} year={selectedYear} />
+      <PlannedTransferModal visible={Boolean(plannedTransferEditor)} transfer={plannedTransferEditor} onClose={() => setPlannedTransferEditor(null)} />
+      <PlannedTransferOccurrenceModal transferId={plannedTransferDate?.id ?? null} date={plannedTransferDate?.date ?? null} onClose={() => setPlannedTransferDate(null)} onEditSeries={setPlannedTransferEditor} />
       <AddTransactionModal
         visible={txModalVisible}
         onClose={() => { setTxModalVisible(false); setEditTx(null); setTransactionDefaultDate(undefined); }}

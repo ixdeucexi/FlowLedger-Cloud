@@ -129,7 +129,7 @@
       {
         "title": "Read the calendar",
         "items": [
-          { "title": "Choose an account", "body": "Choose Household or an account, then a month. The large amount is that month’s projected ending balance. Current and Available stay tied to the recorded date.", "icon": "layers" },
+          { "title": "Choose an account", "body": "Connected bank accounts and manual accounts are listed separately. Choose an account and month for its own calendar and projected month end. Open Account details & plans for the recorded balance and upcoming activity.", "icon": "layers" },
           { "title": "Assign future plans", "body": "Use Assign accounts to open upcoming plans. Filter or search, then choose Paid from or Deposited to. For several plans, select them, choose an account, review, then save together. Unassigned plans stay in Household.", "icon": "shuffle" },
           { "title": "Show in Forecast menu", "body": "Open Settings > Household to show or hide an account in your Forecast menu. This personal preference changes the menu only; balances, Activity, matching, and plans stay included.", "icon": "eye" },
           { "title": "Open the day", "body": "Calendar cells show full whole-dollar amounts. Tap a date for exact cents and every item behind its closing balance.", "icon": "search" },
@@ -138,11 +138,13 @@
         ]
       },
       {
-        "title": "Try a what-if",
+        "title": "Plans and what-ifs",
         "items": [
           { "title": "Open Simulator", "body": "Free includes one current what-if draft. Test income, expenses, debt payments, a pause with a resume date, or a hypothetical new debt without changing your real plan.", "icon": "sliders" },
           { "title": "Compare results", "body": "Use Calendar for daily balances and payments. Compare shows cash flow and payoff timing. Pauses may add interest and delay payoff. Pro and eligible Founders can save and compare scenarios.", "icon": "columns" },
-          { "title": "Leave safely", "body": "Exit the simulator to return to the unchanged Forecast.", "icon": "log-out" }
+          { "title": "Leave safely", "body": "Exit the simulator to return to the unchanged Forecast.", "icon": "log-out" },
+          { "title": "Plan account transfers", "body": "Choose Plan transfer in an account’s Forecast or Activity. Pick From and To accounts, amount, first date, Monthly or One time, and an optional last date. Review both sides, then save. No money moves and no Activity transactions are created.", "icon": "repeat" },
+          { "title": "Adjust a transfer date", "body": "Open its calendar date or Transfer plans to skip it or mark each side already included in its dated account balance. Pausing or deleting keeps a partly included date available. Reviewed dates keep their amount and accounts until you explicitly use the current plan.", "icon": "check-square" }
         ]
       }
     ],

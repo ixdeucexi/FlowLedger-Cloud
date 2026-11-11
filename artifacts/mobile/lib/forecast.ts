@@ -12,7 +12,7 @@ export type FinancialEventStatus = "planned" | "scheduled" | "pending" | "finali
 
 export interface FinancialEvent {
   id: string;
-  sourceType: "income" | "transaction" | "bill" | "goal" | "extra_payment" | "decision" | "reconciliation" | "account";
+  sourceType: "income" | "transaction" | "bill" | "goal" | "extra_payment" | "decision" | "reconciliation" | "account" | "planned_transfer";
   sourceId: string;
   date: string;
   kind: FinancialEventKind;
@@ -24,6 +24,9 @@ export interface FinancialEvent {
   fundingAccountRef?: string;
   estimated?: boolean;
   transfer?: boolean;
+  plannedTransferId?: string;
+  transferOccurrenceDate?: string;
+  transferLeg?: "from" | "to";
   /** Full configured occurrence total and already-settled component for simulator edits. */
   configuredOccurrenceAmount?: number;
   settledOccurrenceAmount?: number;

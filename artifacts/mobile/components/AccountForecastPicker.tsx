@@ -58,6 +58,7 @@ export function AccountForecastPicker({
   } = useBudget();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [manualExpanded, setManualExpanded] = useState(false);
   const accounts = suppliedAccounts ?? forecastAccounts;
   const current = accounts.find(
     (account) =>
@@ -72,11 +73,15 @@ export function AccountForecastPicker({
       ? accountForecastLabel(current)
       : "Unavailable account"
     : (nullLabel ?? (includeHousehold ? "Household plan" : "Unassigned"));
-  const blocked = disabled || !accountForecastReady || visibleOnly && !forecastVisibilityReady;
+  const blocked =
+    disabled ||
+    !accountForecastReady ||
+    (visibleOnly && !forecastVisibilityReady);
   useBackDismiss(open, () => setOpen(false));
   useEffect(() => {
     setOpen(false);
     setSearch("");
+    setManualExpanded(false);
   }, [user?.id, activeHousehold?.householdId, activeHousehold?.budgetId]);
   const needle = search.trim().toLowerCase();
   const choices = accounts.filter(
@@ -89,6 +94,61 @@ export function AccountForecastPicker({
           .toLowerCase()
           .includes(needle)),
   );
+  const connectedChoices = choices.filter(
+    (account) => account.source === "bank",
+  );
+  const manualChoices = choices.filter(
+    (account) => account.source === "manual",
+  );
+  const showManual =
+    !visibleOnly ||
+    !connectedChoices.length ||
+    manualExpanded ||
+    Boolean(needle) ||
+    current?.source === "manual";
+  const renderChoice = (account: ForecastAccountDescriptor) => (
+    <Pressable
+      key={account.ref}
+      accessibilityRole="button"
+      accessibilityLabel={`${accountForecastLabel(account)}, ${account.source === "bank" ? "connected" : "manual"} account`}
+      accessibilityState={{ selected: current?.ref === account.ref }}
+      onPress={() => {
+        onChange(account.ref);
+        setOpen(false);
+      }}
+      style={[
+        styles.option,
+        {
+          backgroundColor:
+            current?.ref === account.ref ? c.primary + "14" : "transparent",
+          borderColor: c.border,
+        },
+      ]}
+    >
+      <Feather
+        name={account.type === "savings" ? "heart" : "credit-card"}
+        size={19}
+        color={c.primary}
+      />
+      <View style={styles.optionCopy}>
+        <Text style={[styles.optionName, { color: c.foreground }]}>
+          {accountForecastLabel(account)}
+        </Text>
+        <Text style={[styles.hint, { color: c.mutedForeground }]}>
+          {account.source === "bank" ? "Connected" : "Manual"} ·{" "}
+          {account.type === "cash"
+            ? "Cash"
+            : account.type === "savings"
+              ? "Savings"
+              : "Checking"}
+          {account.currentBalance === null ? " · balance unavailable" : ""}
+        </Text>
+      </View>
+      {current?.ref === account.ref ? (
+        <Feather name="check" size={19} color={c.primary} />
+      ) : null}
+    </Pressable>
+  );
 
   return (
     <View style={styles.field}>
@@ -100,6 +160,7 @@ export function AccountForecastPicker({
         disabled={blocked}
         onPress={() => {
           setSearch("");
+          setManualExpanded(false);
           setOpen(true);
         }}
         style={[
@@ -170,7 +231,7 @@ export function AccountForecastPicker({
                 <Feather name="x" size={22} color={c.mutedForeground} />
               </Pressable>
             </View>
-            {accounts.length > 5 ? (
+            {accounts.length > 3 ? (
               <TextInput
                 accessibilityLabel="Search accounts"
                 value={search}
@@ -231,54 +292,60 @@ export function AccountForecastPicker({
                   ) : null}
                 </Pressable>
               ) : null}
-              {choices.map((account) => (
-                <Pressable
-                  key={account.ref}
-                  accessibilityRole="button"
-                  accessibilityLabel={accountForecastLabel(account)}
-                  accessibilityState={{
-                    selected: current?.ref === account.ref,
-                  }}
-                  onPress={() => {
-                    onChange(account.ref);
-                    setOpen(false);
-                  }}
-                  style={[
-                    styles.option,
-                    {
-                      backgroundColor:
-                        current?.ref === account.ref
-                          ? c.primary + "14"
-                          : "transparent",
-                      borderColor: c.border,
-                    },
-                  ]}
-                >
-                  <Feather
-                    name={account.type === "savings" ? "heart" : "credit-card"}
-                    size={19}
-                    color={c.primary}
-                  />
-                  <View style={styles.optionCopy}>
-                    <Text style={[styles.optionName, { color: c.foreground }]}>
-                      {accountForecastLabel(account)}
-                    </Text>
-                    <Text style={[styles.hint, { color: c.mutedForeground }]}>
-                      {account.type === "cash"
-                        ? "Cash"
-                        : account.type === "savings"
-                          ? "Savings"
-                          : "Checking"}
-                      {account.currentBalance === null
-                        ? " · balance unavailable"
-                        : ""}
-                    </Text>
-                  </View>
-                  {current?.ref === account.ref ? (
-                    <Feather name="check" size={19} color={c.primary} />
-                  ) : null}
-                </Pressable>
-              ))}
+              {connectedChoices.length ? (
+                <View>
+                  <Text
+                    style={[styles.groupLabel, { color: c.mutedForeground }]}
+                  >
+                    Connected accounts ({connectedChoices.length})
+                  </Text>
+                  {connectedChoices.map(renderChoice)}
+                </View>
+              ) : null}
+              {manualChoices.length ? (
+                <View>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Manual accounts (${manualChoices.length})`}
+                    accessibilityState={{ expanded: showManual }}
+                    aria-expanded={showManual}
+                    onPress={() => setManualExpanded((value) => !value)}
+                    disabled={
+                      !visibleOnly ||
+                      current?.source === "manual" ||
+                      Boolean(needle) ||
+                      !connectedChoices.length
+                    }
+                    style={styles.groupHeading}
+                  >
+                    <View style={styles.optionCopy}>
+                      <Text
+                        style={[
+                          styles.groupLabel,
+                          { color: c.mutedForeground },
+                        ]}
+                      >
+                        Manual accounts ({manualChoices.length})
+                      </Text>
+                      {!showManual ? (
+                        <Text
+                          style={[styles.hint, { color: c.mutedForeground }]}
+                        >
+                          Added in FlowLedger · not bank connections
+                        </Text>
+                      ) : null}
+                    </View>
+                    {visibleOnly && connectedChoices.length ? (
+                      <Feather
+                        name={showManual ? "chevron-up" : "chevron-down"}
+                        size={18}
+                        color={c.mutedForeground}
+                      />
+                    ) : null}
+                  </Pressable>
+                  {showManual ? manualChoices.map(renderChoice) : null}
+                </View>
+              ) : null}
               {choices.length === 0 ? (
                 <Text style={[styles.empty, { color: c.mutedForeground }]}>
                   {needle
@@ -295,6 +362,18 @@ export function AccountForecastPicker({
 }
 
 const styles = StyleSheet.create({
+  groupLabel: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "Inter_700Bold",
+    paddingVertical: 8,
+  },
+  groupHeading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    minHeight: 48,
+  },
   field: { minWidth: 0, gap: 7 },
   label: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   trigger: {

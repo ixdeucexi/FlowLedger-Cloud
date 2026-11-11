@@ -329,6 +329,8 @@ export interface DailyBalance {
 }
 
 export interface FinancialProjectionSnapshot {
+  plannedAccountTransfers?: import("./plannedAccountTransfers").PlannedAccountTransfer[];
+  plannedTransferOccurrences?: import("./plannedAccountTransfers").PlannedTransferOccurrence[];
   settings: Settings;
   bills: Bill[];
   overrides: MonthlyOverride[];

@@ -1,3 +1,4 @@
+import { plannedTransferMonthProjection } from "./plannedAccountTransfers";
 import {
   monthlyDebtAmount,
   orderDebts,
@@ -59,7 +60,7 @@ import { activeDebtPaymentPause, isDebtPaymentPaused } from "./debtPaymentPause"
 import { buildTransactionLedger, createDepositoryTransactionAccountKindClassifier, remainingPlannedAmount } from "./ledgerEngine";
 import { debtSourceCommitmentsForDebts } from "./pendingPlanMatches";
 import { pendingManualReplacementIds } from "./pendingManualReplacement";
-import { buildForecastAccountCatalog, eventForecastAccountRef, createEventForecastAccountResolver, pairedTransferEvents, transactionForecastAccountRef } from "./accountForecasts";
+import { resolveForecastAccountReference, buildForecastAccountCatalog, eventForecastAccountRef, createEventForecastAccountResolver, pairedTransferEvents, transactionForecastAccountRef } from "./accountForecasts";
 import {
   buildMatchedFinancialAllocationIndexes,
   financialProjectionMonthCacheKey,
@@ -205,7 +206,10 @@ export function createFinancialProjection(
     return !ref || accountTypes.get(ref) !== "savings";
   };
   const savingsAccountRefs = new Set(forecastAccounts.filter(row => row.type === "savings").map(row => row.ref));
-  const hasAccountRouting = [...bills, ...goals, ...extraPayments, ...decisions].some(row => Boolean(row.funding_account_ref))
+  const plannedTransferProjection = (month: number, year: number, carryNotBefore?: string) => plannedTransferMonthProjection({
+    transfers: snapshot.plannedAccountTransfers ?? [], occurrences: snapshot.plannedTransferOccurrences ?? [],
+    accounts: forecastAccounts, resolveAccount: ref => resolveForecastAccountReference(ref, forecastAccounts), month, year, carryNotBefore });
+  const hasAccountRouting = Boolean(snapshot.plannedAccountTransfers?.some(row=>row.status === "active" && !row.deleted_at) || snapshot.plannedTransferOccurrences?.some(row=>!row.skipped && row.from_reflected !== row.to_reflected)) || [...bills, ...goals, ...extraPayments, ...decisions].some(row => Boolean(row.funding_account_ref))
     || incomes.some(row => Boolean(row.deposit_account_ref))
     || decisions.some(row => Boolean(row.deposit_account_ref))
     || transactions.some(row => row.forecast_account_ref || savingsAccountRefs.size > 0
@@ -1783,6 +1787,7 @@ export function createFinancialProjection(
         id:`decision-deposit:${decision.id}:${date}`,sourceType:"decision",sourceId:decision.id,date,kind:"transaction_income",amount:Math.abs(decision.scenario.amount),
         status:"planned",name:decision.name,accountRef:to,transfer:true }));
     }
+    financialEvents.push(...plannedTransferProjection(month, year, reservationAsOfDate ?? bankAnchor?.date).events);
     const allDisplayEvents = suppressDebtBillPlanDuplicates(financialEvents);
     const displayEvents = hasAccountRouting || cashAccountLedger !== transactionLedger ? allDisplayEvents.filter(operating) : allDisplayEvents;
     let balanceEvents = [...allDisplayEvents];
@@ -1940,9 +1945,9 @@ export function createFinancialProjection(
       );
       result.push({
         day,
-        income: hasAccountRouting ? projectedInflow : incomeToday,
+        income: hasAccountRouting ? forecastDay.events.filter(event => !event.transfer).reduce((sum,event)=>sum+Math.max(0,event.amount),0) : incomeToday,
         scheduledIncome: hasAccountRouting ? forecastDay.events.filter(event => event.kind === "scheduled_income").reduce((sum,event)=>sum+event.amount,0) : scheduledIncome,
-        expense: hasAccountRouting ? forecastDay.events.filter(event => event.kind === "transaction_expense" || event.kind === "debt_payment").reduce((sum,event)=>sum+Math.max(0,-event.amount),0) : expenseToday,
+        expense: hasAccountRouting ? forecastDay.events.filter(event => !event.transfer && (event.kind === "transaction_expense" || event.kind === "debt_payment")).reduce((sum,event)=>sum+Math.max(0,-event.amount),0) : expenseToday,
         bills: hasAccountRouting ? forecastDay.events.filter(event => event.kind === "bill").reduce((sum,event)=>sum+Math.max(0,-event.amount),0) : billsToday,
         goalExpenses: hasAccountRouting ? dayGoals.filter(goal => displayEvents.some(event => event.sourceType === "goal" && event.sourceId === goal.id)) : dayGoals,
         net: forecastDay.net,
@@ -1994,6 +1999,7 @@ export function createFinancialProjection(
     getCashFlow,
     getDailyBalances,
     getUnanchoredCashEvents,
+    getPlannedTransferIssues: (month: number, year: number) => plannedTransferProjection(month, year).issues,
     transactionLedger,
     matchedAllocationIndexes,
     debtSourceCommitments,

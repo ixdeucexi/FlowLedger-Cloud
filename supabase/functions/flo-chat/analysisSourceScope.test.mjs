@@ -43,7 +43,8 @@ function clientFixture(s, unavailable = []) {
   return {reads,client:{from(table) {
     reads.push(table);
     const query = {
-      select() { return query; }, eq(key,value) { assert.equal(key,'household_id'); assert.equal(value,'test'); return query; },
+      select() { return query; }, eq(key,value) { if(key==='household_id') assert.equal(value,'test'); else if(key==='is_default') assert.equal(value,true); else if(key==='budget_id') assert.equal(value,'budget-test'); else assert.fail('Unexpected scope'); return query; },
+      maybeSingle() { return Promise.resolve({data:{id:'budget-test',household_id:'test',is_default:true},error:null}); },
       order() { return query; }, limit() { return query; }, gt() { return query; },
       then(resolve) { return Promise.resolve({data:unavailable.includes(table)?null:(s.sources[table]?.rows??[]).map(r=>({...r,household_id:'test'})),error:unavailable.includes(table)?new Error('unavailable'):null}).then(resolve); },
     };
@@ -64,7 +65,7 @@ test('targeted snapshots read only requested sources plus household date setting
 test('default snapshots preserve full coverage; unavailable selected sources never become empty success', async () => {
   const fixture = clientFixture(snapshot(),['accounts']);
   const result = await loadAnalysisSnapshot(fixture.client,'test','2026-09-10T15:00:00Z');
-  assert.deepEqual(fixture.reads.sort(),Object.keys(analysisColumns).sort());
+  assert.deepEqual(fixture.reads.sort(),[...Object.keys(analysisColumns),'budgets'].sort());
   assert.equal(result.sources.accounts.complete,false);
   assert.ok(currentBalanceAnalysis(result,request()).missing.length);
   assert.equal(await verifyAnalysisSnapshot(fixture.client,result,['accounts']),false);
