@@ -226,7 +226,7 @@ export function AccountForecastPanel({
             ]}
           >
             <View style={styles.accountHeading}>
-              <View style={styles.accountCopy}>
+              <View style={styles.accountHeaderCopy}>
                 <Text
                   numberOfLines={2}
                   accessibilityLabel={accountForecastLabel(account)}
@@ -467,7 +467,11 @@ export function AccountForecastPanel({
                 ]}
               >
                 <View style={styles.accountCopy}>
-                  <Text style={[styles.eventName, { color: c.foreground }]}>
+                  <Text
+                    numberOfLines={2}
+                    accessibilityLabel={event.name || "Planned activity"}
+                    style={[styles.eventName, { color: c.foreground }]}
+                  >
                     {event.name || "Planned activity"}
                   </Text>
                   <Text style={[styles.small, { color: c.mutedForeground }]}>
@@ -768,7 +772,8 @@ const styles = StyleSheet.create({
   },
   summary: { borderWidth: 1, borderRadius: 24, padding: 16, gap: 16 },
   accountHeading: { flexDirection: "column", alignItems: "stretch", gap: 8 },
-  accountCopy: { width: "100%", minWidth: 0 },
+  accountHeaderCopy: { width: "100%", minWidth: 0 },
+  accountCopy: { flex: 1, minWidth: 0 },
   accountActions: {
     flexDirection: "row",
     justifyContent: "flex-end",
