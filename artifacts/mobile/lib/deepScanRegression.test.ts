@@ -85,6 +85,7 @@ function incomeModal(clock: string, editItem?: any) {
   const hooks = { __esModule: true, default: react,
     useState(initial: any) { const index = cursor++; if (!(index in states)) states[index] = initial; return [states[index], (value: any) => { const next = typeof value === "function" ? value(states[index]) : value; if (states[index] !== next) { states[index] = next; dirty = true; } }]; },
     useEffect(fn: () => void, deps: any[]) { const index = cursor++; if (!states[index] || deps.some((value, i) => value !== states[index][i])) { states[index] = deps; effects.push(fn); } },
+    useRef(initial: any) { const index = cursor++; return states[index] ??= { current: initial }; },
   };
   const FixedDate = new Proxy(Date, { construct(target, args) { return Reflect.construct(target, args.length ? args : [clock]); } });
   const source = transpileModule(readFileSync("components/IncomeModal.tsx", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, jsx: JsxEmit.React, esModuleInterop: true } }).outputText;
@@ -92,6 +93,7 @@ function incomeModal(clock: string, editItem?: any) {
     const privacyModule = revealedPrivacyModule(name);
     if (privacyModule) return privacyModule;
     if (name === "react") return hooks;
+    if (name.endsWith("/BudgetContext")) return { useBudget: () => ({ forecastAccounts: [], accountForecastReady: true, selectedForecastAccountRef: null, activeHousehold: { householdId: "fictional-household", budgetId: "fictional-budget" }, canEditHousehold: true }) };
     if (name === "react-native") return { ...Object.fromEntries(["Modal", "Pressable", "ScrollView", "Text", "TextInput", "View", "KeyboardAvoidingView"].map(key => [key, key])), Platform: { OS: "web" }, StyleSheet: { create: (style: any) => style } };
     if (name.endsWith("/schedule")) return schedule;
     if (name.endsWith("/moneyFormInput")) return { parseMoneyInput };

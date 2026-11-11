@@ -29,6 +29,7 @@ function calendar(options: {
   scope?: [string, string] | null;
   route?: Route;
   runtimeScopes?: Set<string>;
+  forecastAccount?: string | null;
 } = {}) {
   const slots: any[] = [];
   const pendingEffects = new Map<number, () => void>();
@@ -103,6 +104,9 @@ function calendar(options: {
     user: scope ? { id: scope[0] } : null,
     activeHousehold: scope ? { householdId: scope[1] } : null,
     routeParams: route,
+    selectedForecastAccountRef: options.forecastAccount ?? null,
+    setSelectedForecastAccountRef(value: string | null) { environment.selectedForecastAccountRef = value; dirty = true; },
+    setSafetyYearOpenScope() {},
     householdCurrentMonth: 10,
     householdCurrentYear: 2026,
     householdAsOfDate: "2026-11-03",
@@ -153,6 +157,7 @@ function calendar(options: {
   return {
     reads, writes, runtimeScopes,
     get value() { return flush(); },
+    get forecastAccount() { return environment.selectedForecastAccountRef; },
     render,
     flushEffects,
     settle,
@@ -164,6 +169,13 @@ function calendar(options: {
 
 const saved: Preferences = { calendar: { month: 3, year: 2025, selectedDate: "2025-04-12" } };
 const snapshot = (value: any): Calendar => ({ month: value.month, year: value.selectedYear, ...(value.selectedDate ? { selectedDate: value.selectedDate } : {}) });
+
+test("explicit date links open the household day even when an account forecast was selected", () => {
+  const h = calendar({ warm: true, forecastAccount: "manual:bills", route: { openDate: "2027-01-12", openDateAt: "1" } });
+  assert.equal(h.forecastAccount, null);
+  assert.deepEqual(snapshot(h.value), { month: 0, year: 2027, selectedDate: "2027-01-12" });
+  h.unmount();
+});
 
 test("late cold and warm hydration preserve newer month navigation and day selection, then persist the latest choice", async () => {
   for (const warm of [false, true]) {

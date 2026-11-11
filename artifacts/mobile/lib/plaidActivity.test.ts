@@ -5,6 +5,7 @@ import {
   canonicalConnectedAccounts,
   isInferredPendingBankHold,
   pendingPlaidActivityWithBalanceHolds,
+  plaidAccountIdentity,
   summarizePendingCheckingActivity,
   unplannedPendingExpenses,
   visiblePendingPlaidActivity,
@@ -20,16 +21,44 @@ test("inferred balance holds are distinct from actual pending bank charges", () 
 });
 
 const duplicateAccounts = [
-  { id: "account-old", name: "Checking", mask: "1234", account_type: "depository", account_subtype: "checking", is_active: true, updated_at: "2026-07-14T00:00:00Z", current_balance: 2171.13 },
-  { id: "account-middle", name: "Checking", mask: "1234", account_type: "depository", account_subtype: "checking", is_active: true, updated_at: "2026-07-15T00:00:00Z", current_balance: 2171.13 },
-  { id: "account-new", name: "Checking", mask: "1234", account_type: "depository", account_subtype: "checking", is_active: true, updated_at: "2026-07-16T00:00:00Z", current_balance: 2171.13 },
+  { id: "account-old", persistent_account_id: "physical-checking", name: "Checking", mask: "1234", account_type: "depository", account_subtype: "checking", is_active: true, updated_at: "2026-07-14T00:00:00Z", current_balance: 2171.13 },
+  { id: "account-middle", persistent_account_id: "physical-checking", name: "Checking", mask: "1234", account_type: "depository", account_subtype: "checking", is_active: true, updated_at: "2026-07-15T00:00:00Z", current_balance: 2171.13 },
+  { id: "account-new", persistent_account_id: "physical-checking", name: "Checking", mask: "1234", account_type: "depository", account_subtype: "checking", is_active: true, updated_at: "2026-07-16T00:00:00Z", current_balance: 2171.13 },
 ];
 
-test("one real account linked three times contributes one balance", () => {
+test("one explicit persistent account identity linked three times contributes one balance", () => {
   const accounts = canonicalConnectedAccounts(duplicateAccounts);
   assert.equal(accounts.length, 1);
   assert.equal(accounts[0].id, "account-new");
   assert.equal(accounts.reduce((sum, account) => sum + account.current_balance, 0), 2171.13);
+});
+
+test("matching names and masks never merge separate accounts without a stored shared identity", () => {
+  const accounts = duplicateAccounts.map((account, index) => ({
+    ...account, persistent_account_id: undefined, plaid_account_id: `provider-${index}`, current_balance: [1000, 500, 2000][index],
+  }));
+  assert.deepEqual(canonicalConnectedAccounts(accounts).map(account => account.id), ["account-old", "account-middle", "account-new"]);
+  assert.equal(summarizePendingCheckingActivity([], accounts)?.currentBalance, 3500);
+  const pending = accounts.map((account, index) => ({
+    plaid_transaction_id: `pending-${index}`, plaid_account_id: account.id, transaction_date: "2026-07-16", amount: -50, name: "Same merchant",
+  }));
+  assert.equal(visiblePendingPlaidActivity(pending, accounts).length, 3);
+  assert.deepEqual(pendingPlaidActivityWithBalanceHolds(pending, accounts, "2026-07-16").map(row => row.plaid_account_id), accounts.map(account => account.id));
+});
+
+test("account identity falls back only to an exact provider ID or the distinct stored row ID", () => {
+  const first = { ...duplicateAccounts[0], persistent_account_id: " ", plaid_account_id: "Provider-Case" };
+  const sameProvider = { ...duplicateAccounts[2], persistent_account_id: undefined, plaid_account_id: "Provider-Case", name: "Renamed", mask: "9876" };
+  const differentProvider = { ...sameProvider, id: "different-provider", plaid_account_id: "provider-case" };
+  assert.equal(plaidAccountIdentity(first), "provider:Provider-Case");
+  assert.equal(canonicalConnectedAccounts([first, sameProvider]).length, 1);
+  assert.equal(canonicalConnectedAccounts([first, differentProvider]).length, 2);
+  const noProvider = [first, sameProvider].map(account => ({ ...account, plaid_account_id: undefined }));
+  assert.deepEqual(noProvider.map(plaidAccountIdentity), ["row:account-old", "row:account-new"]);
+  assert.equal(canonicalConnectedAccounts(noProvider).length, 2);
+  assert.equal(canonicalConnectedAccounts([
+    { ...first, persistent_account_id: "Physical-Case" }, { ...sameProvider, persistent_account_id: "physical-case" },
+  ]).length, 2, "persistent IDs are also case-sensitive opaque identities");
 });
 
 test("one pending charge from duplicate links is shown once", () => {
@@ -123,7 +152,7 @@ test("two identical charges from one real account remain two charges", () => {
 test("identical charges on two different real accounts remain separate", () => {
   const accounts = [
     duplicateAccounts[0],
-    { ...duplicateAccounts[0], id: "other-account", mask: "9876" },
+    { ...duplicateAccounts[0], id: "other-account", persistent_account_id: "other-physical-account", mask: "9876" },
   ];
   const pending = accounts.map((account, index) => ({
     plaid_transaction_id: `pending-${index}`,
@@ -261,6 +290,24 @@ const pendingFixture = (id: string, amount: number, accountId = "checking"): Pen
   plaid_transaction_id: id, plaid_account_id: accountId, transaction_date: "2026-07-31", amount, name: id,
 });
 
+test("checking holds require exact bank type metadata regardless of the displayed account name", () => {
+  for (const patch of [
+    { name: "Checking Bill Account", account_subtype: undefined },
+    { name: "Checking Bill Account", account_subtype: "money market" },
+    { name: "Checking Bill Account", account_subtype: "savings" },
+    { name: "Checking Bill Account", account_type: "credit" },
+    { name: "Checking Bill Account", account_type: undefined },
+  ]) {
+    const accounts = [checkingFixture(patch)];
+    assert.deepEqual(pendingPlaidActivityWithBalanceHolds([], accounts, "2026-07-31"), []);
+    assert.equal(summarizePendingCheckingActivity([], accounts), null);
+  }
+  const renamedChecking = [checkingFixture({ name: "Savings for bills", official_name: "My savings plan" })];
+  const pending = pendingPlaidActivityWithBalanceHolds([], renamedChecking, "2026-07-31");
+  assert.deepEqual(pending.map(row => row.amount), [-100]);
+  assert.equal(summarizePendingCheckingActivity(pending, renamedChecking)?.currentBalance, 1000);
+});
+
 test("several real pending charges cover one bank balance gap without an extra hold", () => {
   const raw = [pendingFixture("fuel", -40), pendingFixture("groceries", -60)];
   const before = JSON.stringify(raw);
@@ -344,6 +391,25 @@ test("each checking account derives missing availability from only its own signe
     assert.equal(summary?.pendingOutflow, 150);
     assert.equal(summary?.pendingInflow, refund);
   }
+});
+
+test("same-name checking and bills accounts retain their own gross pending debit gaps alongside savings", () => {
+  const accounts = [
+    checkingFixture({ id: "checking", plaid_account_id: "provider-checking", name: "Everyday", mask: "1111", current_balance: 1000, available_balance: 900 }),
+    checkingFixture({ id: "bills", plaid_account_id: "provider-bills", name: "Everyday", mask: "1111", current_balance: 500, available_balance: 450 }),
+    checkingFixture({ id: "savings", plaid_account_id: "provider-savings", name: "Everyday", mask: "1111", account_subtype: "savings", current_balance: 2000, available_balance: 1900 }),
+  ];
+  const pending = pendingPlaidActivityWithBalanceHolds([
+    pendingFixture("checking-charge", -40, "checking"), pendingFixture("bills-charge", -50, "bills"),
+    pendingFixture("savings-charge", -70, "savings"), pendingFixture("checking-refund", 25, "checking"),
+  ], accounts, "2026-07-31");
+  assert.deepEqual(pending.map(row => [row.plaid_transaction_id, row.plaid_account_id, row.amount]), [
+    ["checking-charge", "checking", -40], ["bills-charge", "bills", -50], ["savings-charge", "savings", -70],
+    ["checking-refund", "checking", 25], ["pending-hold:checking:60.00", "checking", -60],
+  ]);
+  assert.deepEqual(summarizePendingCheckingActivity(pending, accounts), {
+    currentBalance: 1500, availableBalance: 1350, pendingOutflow: 150, pendingInflow: 25, pendingCount: 4,
+  });
 });
 
 test("accountless pending activity covers a bank gap only for one canonical checking account", () => {

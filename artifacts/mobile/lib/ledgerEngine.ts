@@ -25,8 +25,11 @@ export interface LedgerTransactionLike {
 }
 
 export interface LedgerConnectedAccountLike {
+  currency_code?: string | null;
   id?: string | null;
   plaid_account_id?: string | null;
+  persistent_account_id?: string | null;
+  household_id?: string | null;
   account_type?: string | null;
   account_subtype?: string | null;
   is_active?: boolean | null;
@@ -39,11 +42,13 @@ export interface LedgerIssue {
 }
 
 export interface TransactionLedgerSnapshot<T extends LedgerTransactionLike> {
-  /** Posted checking activity that changes cash, including hidden posted bank history. */
+  /** Posted cash activity, including hidden posted bank history. Checking-only
+   * by default; includeSavings also retains eligible savings-account cash. */
   cashTransactions: T[];
   /** Active rows that may be shown in Activity and calendar detail. */
   visibleTransactions: T[];
-  /** Active checking rows used by day cards and activity summaries. */
+  /** Active cash rows used by day cards and summaries. Includes eligible savings
+   * only for callers that explicitly request the full depository ledger. */
   visibleCheckingTransactions: T[];
   cashTransactionsByMonth: ReadonlyMap<string, T[]>;
   visibleCheckingTransactionsByDate: ReadonlyMap<string, T[]>;
@@ -57,6 +62,82 @@ export interface AccountAwareTransactionSelection<T> {
   included: T[];
   excludedNonCash: T[];
   unknownPlaid: T[];
+}
+
+export type DepositoryTransactionAccountKind = "checking" | "savings" | "non_cash" | "unknown" | "not_plaid";
+export interface DepositoryTransactionAccountClassification {
+  accountKind: DepositoryTransactionAccountKind;
+  /** Exact stored identity, also shared by retained reconnect rows when Plaid
+   * supplies the same persistent identity. Never inferred from a name or mask. */
+  accountIdentity: string | null;
+}
+
+/** Classify both provider IDs (posted rows) and internal row IDs (pending rows).
+ * Retained inactive accounts still describe historical money movement. An alias
+ * claimed by different accounts, or inconsistent metadata for one identity,
+ * fails closed instead of depending on the order of the account list. */
+export function createDepositoryTransactionAccountClassifier(
+  connectedAccounts: readonly LedgerConnectedAccountLike[],
+): (transaction: Pick<LedgerTransactionLike, "source" | "plaid_account_id">) => DepositoryTransactionAccountClassification {
+  const byAlias = new Map<string, Set<string>>();
+  const kindsByIdentity = new Map<string, Set<Exclude<DepositoryTransactionAccountKind, "not_plaid">>>();
+  const metadataByIdentity = new Map<string, Set<string>>();
+  for (const account of connectedAccounts) {
+    const rowId = account.id || null;
+    const providerId = account.plaid_account_id || null;
+    if (!rowId && !providerId) continue;
+    const persistent = account.persistent_account_id?.trim();
+    const identity = JSON.stringify([account.household_id || null,
+      persistent ? "persistent" : rowId ? "row" : "provider", persistent || rowId || providerId]);
+    const type = String(account.account_type || "").trim().toLowerCase();
+    const subtype = String(account.account_subtype || "").trim().toLowerCase();
+    const unsupportedCurrency = account.currency_code != null && account.currency_code.trim().toUpperCase() !== "USD";
+    const kind = unsupportedCurrency ? "non_cash" : type === "depository" && (subtype === "checking" || subtype === "savings")
+      ? subtype : ["depository", "credit", "loan", "investment", "brokerage", "other"].includes(type) ? "non_cash" : "unknown";
+    const kinds = kindsByIdentity.get(identity) ?? new Set();
+    kinds.add(kind); kindsByIdentity.set(identity, kinds);
+    const metadata = metadataByIdentity.get(identity) ?? new Set();
+    metadata.add(JSON.stringify([type, subtype, unsupportedCurrency])); metadataByIdentity.set(identity, metadata);
+    for (const alias of [rowId, providerId]) {
+      if (!alias) continue;
+      const claims = byAlias.get(alias) ?? new Set();
+      claims.add(identity); byAlias.set(alias, claims);
+    }
+  }
+  return transaction => {
+    if (transaction.source !== "plaid") return { accountKind: "not_plaid", accountIdentity: null };
+    const claims = transaction.plaid_account_id ? byAlias.get(transaction.plaid_account_id) : undefined;
+    if (claims?.size !== 1) return { accountKind: "unknown", accountIdentity: null };
+    const identity = claims.values().next().value!;
+    const kinds = kindsByIdentity.get(identity)!;
+    if (kinds.size !== 1 || kinds.has("unknown") || metadataByIdentity.get(identity)!.size !== 1) {
+      return { accountKind: "unknown", accountIdentity: null };
+    }
+    return { accountKind: kinds.values().next().value!, accountIdentity: identity };
+  };
+}
+
+export function createDepositoryTransactionAccountKindClassifier(
+  connectedAccounts: readonly LedgerConnectedAccountLike[],
+): (transaction: Pick<LedgerTransactionLike, "source" | "plaid_account_id">) => DepositoryTransactionAccountKind {
+  const classify = createDepositoryTransactionAccountClassifier(connectedAccounts);
+  return transaction => classify(transaction).accountKind;
+}
+
+/** Account-aware Activity and account forecasts retain savings alongside
+ * checking, while credit, loans, and unresolved bank identities stay excluded. */
+export function selectDepositoryTransactions<T extends LedgerTransactionLike>(
+  transactions: readonly T[],
+  connectedAccounts: readonly LedgerConnectedAccountLike[],
+): AccountAwareTransactionSelection<T> {
+  const classify = createDepositoryTransactionAccountKindClassifier(connectedAccounts);
+  return transactions.reduce<AccountAwareTransactionSelection<T>>((result, transaction) => {
+    const kind = classify(transaction);
+    if (kind === "checking" || kind === "savings" || kind === "not_plaid") result.included.push(transaction);
+    else if (kind === "unknown") result.unknownPlaid.push(transaction);
+    else result.excludedNonCash.push(transaction);
+    return result;
+  }, { included: [], excludedNonCash: [], unknownPlaid: [] });
 }
 
 /** Shared Activity/Review selector. Plaid rows appear only when their retained
@@ -94,7 +175,7 @@ export function buildTransactionLedger<T extends LedgerTransactionLike>(
   allTransactions: readonly T[],
   visibleTransactions: readonly T[],
   connectedAccounts: readonly LedgerConnectedAccountLike[],
-  options?: { suppressedTransactionIds?: ReadonlySet<string> },
+  options?: { suppressedTransactionIds?: ReadonlySet<string>; includeSavings?: boolean },
 ): TransactionLedgerSnapshot<T> {
   const issues: LedgerIssue[] = [];
   const uniqueById = new Map<string, T>();
@@ -143,6 +224,9 @@ export function buildTransactionLedger<T extends LedgerTransactionLike>(
   const classifyAccountKind = createPlaidTransactionAccountKindClassifier(
     connectedAccounts,
   );
+  const classifyDepositoryKind = options?.includeSavings
+    ? createDepositoryTransactionAccountKindClassifier(connectedAccounts)
+    : null;
   const cashTransactions: T[] = [];
   const visible: T[] = [];
   const visibleChecking: T[] = [];
@@ -162,10 +246,13 @@ export function buildTransactionLedger<T extends LedgerTransactionLike>(
     // Callers may consolidate an explicitly linked provisional replacement.
     // Keep the original rows outside this view for review and settlement facts.
     if (options?.suppressedTransactionIds?.has(transaction.id)) return;
+    const accountKind = classifyDepositoryKind?.(transaction) ?? classifyAccountKind(transaction);
+    // Only the account eligibility changes. The existing ledger classifier
+    // remains authoritative for visibility, posted history and cash timing.
     const classification = classifyCheckingLedgerTransaction(
       transaction,
       connectedAccounts,
-      classifyAccountKind(transaction),
+      accountKind === "savings" ? "checking" : accountKind,
     );
     if (classification.accountKind === "unknown") {
       issues.push({
@@ -186,8 +273,8 @@ export function buildTransactionLedger<T extends LedgerTransactionLike>(
         (cashByDate.get(transaction.date) ?? 0) + Number(transaction.amount || 0),
       );
     }
-    const included = classification.accountKind === "checking"
-      || classification.accountKind === "not_plaid";
+    const included = accountKind === "checking" || accountKind === "savings"
+      || accountKind === "not_plaid";
     if (!included || !classification.active || !visibleIds.has(transaction.id)) return;
     visible.push(transaction);
     if (classification.checkingBalance) {

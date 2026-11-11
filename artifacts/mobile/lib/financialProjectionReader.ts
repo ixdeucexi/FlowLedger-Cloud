@@ -49,12 +49,14 @@ export function createFinancialProjectionReader(
     "getIncomeOccurrencesInMonth",
     "getCashFlow",
     "getDailyBalances",
+    "getUnanchoredCashEvents",
   ] as const;
   const dated = new Set<string>([
     "getDebtPlanForMonth",
     "getRemainingDebtPlanForMonth",
     "getCashFlow",
     "getDailyBalances",
+    "getUnanchoredCashEvents",
   ]);
   const reader = {} as FinancialProjection;
   for (const name of methods) {

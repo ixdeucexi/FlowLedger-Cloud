@@ -48,5 +48,10 @@ test("scope-unready unavailable and zero connected observations stay distinct an
   assert.match(text(render([{ ...account, current_balance: 0 }])), /\$0.00/);
   assert.match(text(render([{ ...account, current_balance: null }])), /Balance unavailable/);
   const source = readFileSync("components/ConnectedBalanceList.tsx", "utf8");assert.doesNotMatch(source, /Pressable|supabase|fetch\(|useEffect/);
-  const more = readFileSync("app/(tabs)/more.tsx", "utf8");assert.match(more, /ConnectedBalanceList accounts=\{connectedBankAccounts\} ready=\{startupCoreReady && !budgetLoading && !budgetLoadError\}/);
+  const more = readFileSync("app/(tabs)/more.tsx", "utf8");assert.match(more, /ConnectedBalanceList\s+accounts=\{connectedBankAccounts\}\s+ready=\{startupCoreReady && !budgetLoading && !budgetLoadError\}/);
+  assert.match(more, /<AccountForecastSettings/);
+  const planning = readFileSync("components/AccountForecastSettings.tsx", "utf8");
+  assert.doesNotMatch(planning, /supabase|fetch\(|current_balance\s*:/);
+  assert.match(planning, /money\(account\.currentBalance\)/);
+  assert.match(planning, /money\(account\.availableBalance\)/);
 });

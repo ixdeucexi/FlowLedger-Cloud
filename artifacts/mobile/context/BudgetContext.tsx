@@ -1,3 +1,5 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { buildAccountForecast, buildForecastAccountCatalog, normalizeAccountForecastPreference, parseForecastAccountRef, resolveForecastAccountReference, transactionForecastAccountRef, type ForecastAccountRef, type ForecastAccountDescriptor, type AccountForecastPreference, type AccountForecastResult, type ForecastRoutingEntity, type ForecastRoutingPatch } from "@/lib/accountForecasts";
 import { transferExpected, assertUnallocatedEdit, type TransferMutation } from "@/lib/transferMutation";
 import { previewBucketPurchase, previewBucketBudget } from "@/lib/bucketPurchasePreview";
 import { bucketPurchaseRpc } from "@/lib/bucketPurchaseApi";
@@ -54,7 +56,7 @@ import {
   normalizeExtraPaymentRow,
   normalizeTransactionRow,
   accountAwareTransactionCollections,
-  checkingPendingBankRows,
+  depositoryPendingBankRows,
   normalizePendingBankRows,
   normalizePendingPlanMatchRow,
   normalizeConnectedBankRows,
@@ -293,6 +295,20 @@ interface BudgetContextType {
   settings: Settings;
   accounts: Account[];
   connectedBankAccounts: ConnectedBankAccount[];
+  forecastAccounts: ForecastAccountDescriptor[];
+  accountForecastPreferences: AccountForecastPreference[];
+  accountForecastReady: boolean;
+  accountForecastError: string | null;
+  selectedForecastAccountRef: ForecastAccountRef | null;
+  setSelectedForecastAccountRef: (ref: ForecastAccountRef | null) => void;
+  hiddenForecastAccountRefs: ForecastAccountRef[];
+  forecastVisibilityReady: boolean;
+  forecastVisibilityError: string | null;
+  setAccountForecastVisible: (ref: ForecastAccountRef, visible: boolean) => Promise<void>;
+  getAccountForecast: (ref: ForecastAccountRef, month: number, year: number) => AccountForecastResult;
+  saveAccountForecastPreference: (ref: ForecastAccountRef, patch: { savings_apy?: number | null; safety_floor?: number | null }, expectedUpdatedAt?: string | null) => Promise<void>;
+  setForecastAccountRouting: (type: ForecastRoutingEntity, id: string, patch: ForecastRoutingPatch, expected: ForecastRoutingPatch) => Promise<void>;
+  resolveTransactionAccountRef: (row: { source?: string; account_id?: string | null; plaid_account_id?: string | null; forecast_account_ref?: string | null }) => ForecastAccountRef | null;
   /** Every retained Plaid account identity used to classify historical activity. */
   transactionAccountIdentities: ConnectedBankAccount[];
   householdTimeZone: string;
@@ -788,6 +804,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [categories,    setCategories,    categoriesRevision] = useRevisionedState<string[]>(DEFAULT_CATEGORIES);
   const [accounts,      setAccounts,      accountsRevision] = useRevisionedState<Account[]>([]);
   const [connectedBankAccounts, setConnectedBankAccounts, connectedBankAccountsRevision] = useRevisionedState<ConnectedBankAccount[]>([]);
+  const [accountForecastPreferences, setAccountForecastPreferences] = useState<AccountForecastPreference[]>([]);
+  const [accountForecastPreferenceScope, setAccountForecastPreferenceScope] = useState<string | null>(null);
+  const [accountForecastError, setAccountForecastError] = useState<string | null>(null);
+  const [selectedForecastAccountRef, setSelectedForecastAccountRef] = useState<ForecastAccountRef | null>(null);
+  const [storedHiddenForecastAccountRefs, setHiddenForecastAccountRefs] = useState<ForecastAccountRef[]>([]);
+  const [forecastVisibilityReadyScope, setForecastVisibilityReadyScope] = useState<string | null>(null);
+  const [forecastVisibilityError, setForecastVisibilityError] = useState<string | null>(null);
+  const forecastVisibilityWriteRef = useRef(Promise.resolve());
+  const forecastVisibilityStateRef = useRef<{ scope: string | null; version: number; refs: ForecastAccountRef[]; ready: boolean }>({ scope: null, version: 0, refs: [], ready: false });
   const [dailyCheckingCloses, setDailyCheckingCloses] = useState<DailyCheckingCloseSnapshot[]>([]);
   const [dailyCheckingCloseLoad, setDailyCheckingCloseLoad] = useState<DailyCheckingCloseLoadState>({
     scopeKey: null,
@@ -2105,7 +2130,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         // Version the positional result cache when its shape changes. This
         // prevents an in-memory pre-update array from shifting Decisions into
         // the removed daily-close slot during a web hot reload.
-        const coreQueryKey = ["budget-core", uid, scope?.householdId ?? "personal", scope?.budgetId ?? "default", "core-v4"] as const;
+        const coreQueryKey = ["budget-core", uid, scope?.householdId ?? "personal", scope?.budgetId ?? "default", "core-v5-account-forecasts"] as const;
         const coreLoad = await withLoadTimeout(
           queryClient.fetchQuery({
             queryKey: coreQueryKey,
@@ -2137,12 +2162,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
                   applyHouseholdSelect(supabase.from("extra_payments").select("*"), uid),
                   loadScopedSettings(uid, scope),
                   applyHouseholdSelect(supabase.from("accounts").select("*"), uid).order("created_at"),
-                  applyHouseholdSelect(
-                    supabase.from("plaid_accounts")
-                      .select("id,plaid_account_id,name,display_name,official_name,mask,persistent_account_id,account_type,account_subtype,current_balance,available_balance,minimum_payment_amount,next_payment_due_date,last_statement_balance,last_statement_issue_date,is_overdue,purchase_apr,liability_last_synced_at,is_active,updated_at")
-                      .order("name"),
-                    uid,
-                  ),
+                  supabase.rpc("get_household_forecast_accounts", { p_household_id: scope?.householdId }),
                   applyHouseholdSelect(supabase.from("decisions").select("*"), uid).order("created_at", { ascending: false }),
                 ]),
                 loadBillDateMoves(uid, scope),
@@ -2205,7 +2225,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         transactionAccountIdentitiesRef.current = rawConnectedAccounts;
         const canonicalBankAccounts = canonicalConnectedAccounts(rawConnectedAccounts);
         setConnectedBankAccounts(canonicalBankAccounts);
-        const pendingRows = checkingPendingBankRows(normalizePendingBankRows(pendingData ?? []), rawConnectedAccounts);
+        const pendingRows = depositoryPendingBankRows(normalizePendingBankRows(pendingData ?? []), rawConnectedAccounts);
         setPendingBankTransactions(pendingPlaidActivityWithBalanceHolds(
           pendingRows.included,
           rawConnectedAccounts,
@@ -2487,7 +2507,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       requestId === bankRefreshRequestRef.current
       && scope?.householdId === householdScopeRef.current?.householdId
     ));
-    const [billResult, transactionResult, pendingResult, pendingPlanResult, accountResult, connectedAccountResult, settingsResult] = await Promise.all([
+    const [billResult, transactionResult, pendingResult, pendingPlanResult, accountResult, connectedAccountResult, settingsResult, forecastPreferencesResult] = await Promise.all([
       applyHouseholdSelect(supabase.from("bills").select("*"), uid),
       loadAllTransactions(uid),
       applyHouseholdSelect(
@@ -2506,19 +2526,25 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         uid,
       ),
       applyHouseholdSelect(supabase.from("accounts").select("*"), uid).order("created_at"),
-      applyHouseholdSelect(
-        supabase.from("plaid_accounts")
-          .select("id,plaid_account_id,name,display_name,official_name,mask,persistent_account_id,account_type,account_subtype,current_balance,available_balance,minimum_payment_amount,next_payment_due_date,last_statement_balance,last_statement_issue_date,is_overdue,purchase_apr,liability_last_synced_at,is_active,updated_at")
-          .order("name"),
-        uid,
-      ),
+      supabase.rpc("get_household_forecast_accounts", { p_household_id: scope?.householdId }),
       loadScopedSettings(uid, scope),
+      supabase.from("account_forecast_preferences").select("household_id,account_ref,savings_apy,safety_floor,updated_at").eq("household_id", scope?.householdId),
     ]);
     if (
       requestId !== bankRefreshRequestRef.current
       || uid !== userScopeIdRef.current
       || scope?.householdId !== householdScopeRef.current?.householdId
     ) return;
+    if (forecastPreferencesResult.error) setAccountForecastError(`Load account forecast settings: ${forecastPreferencesResult.error.message}`);
+    else if (scope?.householdId && scope.budgetId) {
+      const next = (forecastPreferencesResult.data ?? []).map(normalizeAccountForecastPreference).filter((row): row is AccountForecastPreference => row !== null && row.household_id === scope.householdId);
+      setAccountForecastPreferences(previous => next.map(row => {
+        const existing = previous.find(item => item.account_ref === row.account_ref);
+        return existing && existing.updated_at > row.updated_at ? existing : row;
+      }));
+      setAccountForecastPreferenceScope(`${uid}:${scope.householdId}:${scope.budgetId}`);
+      setAccountForecastError(null);
+    }
     if (!billResult.error) {
       setBills(reorderDebtPriorities((billResult.data ?? []).map(normalizeBillRow)));
     }
@@ -2558,7 +2584,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const canonicalBankAccounts = canonicalConnectedAccounts(rawConnectedAccounts);
       setConnectedBankAccounts(canonicalBankAccounts);
       if (!pendingResult.error) {
-        const pendingRows = checkingPendingBankRows(normalizePendingBankRows(pendingResult.data ?? []), rawConnectedAccounts);
+        const pendingRows = depositoryPendingBankRows(normalizePendingBankRows(pendingResult.data ?? []), rawConnectedAccounts);
         const refreshTimeZone = !settingsResult.error && settingsResult.data
           ? String(settingsResult.data.time_zone || "UTC")
           : householdTimeZone;
@@ -3398,6 +3424,111 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const getBillById = useCallback((id: string) => bills.find(b => b.id === id), [bills]);
 
+  const accountForecastScopeKey = user?.id && activeHousehold?.householdId ? `${user.id}:${activeHousehold.householdId}:${activeHousehold.budgetId}` : null;
+  useEffect(() => {
+    let current = true;
+    const visibilityVersion = forecastVisibilityStateRef.current.version + 1;
+    forecastVisibilityStateRef.current = { scope: accountForecastScopeKey, version: visibilityVersion, refs: [], ready: false };
+    setForecastVisibilityReadyScope(null);
+    setForecastVisibilityError(null);
+    setSelectedForecastAccountRef(null);
+    setHiddenForecastAccountRefs([]);
+    setAccountForecastPreferences([]);
+    setAccountForecastPreferenceScope(null);
+    setAccountForecastError(null);
+    if (!accountForecastScopeKey || !activeHousehold?.householdId) return;
+    const householdId = activeHousehold.householdId;
+    void AsyncStorage.getItem(`flowledger:forecast-visibility:${accountForecastScopeKey}`).then(value => {
+      if (!current || forecastVisibilityStateRef.current.scope !== accountForecastScopeKey || forecastVisibilityStateRef.current.version !== visibilityVersion) return;
+      try {
+        const parsed: unknown = value === null ? [] : JSON.parse(value);
+        if (!Array.isArray(parsed)) throw new Error("Invalid display choices");
+        const refs = parsed.map(parseForecastAccountRef).filter((ref): ref is ForecastAccountRef => ref !== null);
+        forecastVisibilityStateRef.current = { scope: accountForecastScopeKey, version: visibilityVersion, refs, ready: true };
+        setHiddenForecastAccountRefs(refs);
+        setForecastVisibilityReadyScope(accountForecastScopeKey);
+      } catch { setForecastVisibilityError("Your account display choices could not be loaded. Reload the app to try again."); }
+    }).catch(() => {
+      if (current) setForecastVisibilityError("Your account display choices could not be loaded. Reload the app to try again.");
+    });
+    if (demoMode) { setAccountForecastPreferenceScope(accountForecastScopeKey); return () => { current = false; }; }
+    void supabase.from("account_forecast_preferences").select("household_id,account_ref,savings_apy,safety_floor,updated_at").eq("household_id", householdId).then(({ data, error }) => {
+      if (!current) return;
+      if (error) { setAccountForecastError(`Load account forecast settings: ${error.message}`); return; }
+      setAccountForecastPreferences((data ?? []).map(normalizeAccountForecastPreference).filter((row): row is AccountForecastPreference => row !== null && row.household_id === householdId));
+      setAccountForecastPreferenceScope(accountForecastScopeKey);
+    });
+    return () => { current = false; };
+  }, [accountForecastScopeKey, demoMode]);
+  const forecastAccounts = useMemo(() => buildForecastAccountCatalog({ accounts, bankAccounts: transactionAccountIdentities,
+    preferences: accountForecastPreferenceScope === accountForecastScopeKey ? accountForecastPreferences : [],
+    householdId: demoMode ? undefined : activeHousehold?.householdId, budgetId: activeHousehold?.budgetId, timeZone: householdTimeZone }),
+    [accounts, transactionAccountIdentities, accountForecastPreferences, accountForecastPreferenceScope, accountForecastScopeKey, activeHousehold?.householdId, activeHousehold?.budgetId, householdTimeZone, demoMode]);
+  const forecastVisibilityReady = Boolean(accountForecastScopeKey && forecastVisibilityReadyScope === accountForecastScopeKey);
+  const hiddenForecastAccountRefs = useMemo(() => [...new Set(storedHiddenForecastAccountRefs.map(ref => resolveForecastAccountReference(ref, forecastAccounts) ?? ref))], [storedHiddenForecastAccountRefs, forecastAccounts]);
+  const accountForecastReady = Boolean(accountForecastScopeKey && accountForecastPreferenceScope === accountForecastScopeKey && !loading && !loadError);
+  const resolveTransactionAccountRef = useCallback((row: { source?: string; account_id?: string | null; plaid_account_id?: string | null; forecast_account_ref?: string | null }) => transactionForecastAccountRef(row, forecastAccounts), [forecastAccounts]);
+  const setAccountForecastVisible = useCallback(async (ref: ForecastAccountRef, visible: boolean) => {
+    if (!accountForecastScopeKey || !resolveForecastAccountReference(ref, forecastAccounts)) throw new Error("Choose an active household account.");
+    const visibility = forecastVisibilityStateRef.current;
+    if (visibility.scope !== accountForecastScopeKey || !visibility.ready) throw new Error("Account display settings are loading. Try again.");
+    const canonical = resolveForecastAccountReference(ref, forecastAccounts)!;
+    const aliases = forecastAccounts.find(account => account.ref === canonical)?.aliases ?? [canonical];
+    const remaining = visibility.refs.filter(item => item !== canonical && !aliases.includes(item) && resolveForecastAccountReference(item, forecastAccounts) !== canonical);
+    const next = visible ? remaining : [...remaining, canonical];
+    forecastVisibilityStateRef.current = { scope: accountForecastScopeKey, version: visibility.version + 1, refs: next, ready: true };
+    setHiddenForecastAccountRefs(next);
+    if (!visible && resolveForecastAccountReference(selectedForecastAccountRef, forecastAccounts) === canonical) setSelectedForecastAccountRef(null);
+    const write = () => AsyncStorage.setItem(`flowledger:forecast-visibility:${accountForecastScopeKey}`, JSON.stringify(next));
+    const pending = forecastVisibilityWriteRef.current.catch(() => undefined).then(write);
+    forecastVisibilityWriteRef.current = pending;
+    await pending;
+  }, [accountForecastScopeKey, forecastAccounts, hiddenForecastAccountRefs, selectedForecastAccountRef]);
+  const saveAccountForecastPreference = useCallback(async (ref: ForecastAccountRef, patch: { savings_apy?: number | null; safety_floor?: number | null }, expectedUpdatedAt?: string | null) => {
+    assertCanEditHousehold("update account forecast settings");
+    const scope = householdScopeRef.current, generation = financialScopeGenerationRef.current;
+    if (!scope?.householdId || !resolveForecastAccountReference(ref, forecastAccounts)) throw new Error("Choose an active household account.");
+    let saved: AccountForecastPreference | null;
+    if (demoMode) saved = normalizeAccountForecastPreference({ ...accountForecastPreferences.find(row => row.account_ref === ref), ...patch, account_ref: ref, household_id: scope.householdId, updated_at: new Date().toISOString() });
+    else {
+      const { data, error } = await supabase.rpc("set_account_forecast_preferences", { p_household_id: scope.householdId, p_account_ref: ref, p_expected_updated_at: expectedUpdatedAt ?? null, p_patch: patch });
+      if (error) throw new Error(error.message);
+      saved = normalizeAccountForecastPreference(data);
+    }
+    if (!saved || saved.household_id !== scope.householdId || saved.account_ref !== ref) throw new Error("The account forecast settings could not be verified.");
+    if (generation !== financialScopeGenerationRef.current) throw new Error("The household changed. Reopen this account.");
+    const aliases = forecastAccounts.find(row => row.ref === ref)?.aliases ?? [ref];
+    setAccountForecastPreferences(previous => [...previous.filter(row => row.account_ref !== ref && !aliases.includes(row.account_ref)), saved!]);
+  }, [forecastAccounts, accountForecastPreferences, demoMode, assertCanEditHousehold]);
+  const setForecastAccountRouting = useCallback(async (entityType: ForecastRoutingEntity, entityId: string, patch: ForecastRoutingPatch, expected: ForecastRoutingPatch) => {
+    assertCanEditHousehold("assign an account");
+    const scope = householdScopeRef.current, generation = financialScopeGenerationRef.current;
+    if (!scope?.householdId || !scope.budgetId) throw new Error("Choose a household first.");
+    for (const [key, value] of Object.entries(patch)) if (key !== "account_id" && value !== null && !resolveForecastAccountReference(value, forecastAccounts)) throw new Error("Choose an active household account.");
+    const collections = { bill: bills, income: incomes, goal: goals, decision: decisions, extra_payment: extraPayments, transaction: transactions };
+    const existing = collections[entityType].find(row => row.id === entityId);
+    if (!existing) throw new Error("This plan is no longer available. Refresh and try again.");
+    let saved: any;
+    if (demoMode) {
+      for (const [key,value] of Object.entries(expected)) if (((existing as any)[key] ?? null) !== value) throw new Error("This account assignment changed. Refresh and try again.");
+      saved = { ...existing, ...patch };
+    } else {
+      const result = await supabase.rpc("set_forecast_account_routing", { p_household_id: scope.householdId, p_budget_id: scope.budgetId, p_entity_type: entityType, p_entity_id: entityId, p_expected: expected, p_patch: patch });
+      if (result.error) throw new Error(result.error.message);
+      saved = result.data?.row;
+    }
+    if (!saved || saved.id !== entityId) throw new Error("The account assignment could not be verified.");
+    if (generation !== financialScopeGenerationRef.current) throw new Error("The household changed. Reopen this plan.");
+    switch (entityType) {
+      case "bill": setBills(previous => previous.map(row => row.id === entityId ? normalizeBillRow(saved) : row)); break;
+      case "income": setIncomes(previous => previous.map(row => row.id === entityId ? { ...saved, amount: Number(saved.amount) } : row)); break;
+      case "goal": setGoals(previous => previous.map(row => row.id === entityId ? normalizeGoalRow(saved) : row)); break;
+      case "decision": setDecisions(previous => previous.map(row => row.id === entityId ? saved : row)); break;
+      case "extra_payment": setExtraPayments(previous => previous.map(row => row.id === entityId ? normalizeExtraPaymentRow(saved) : row)); break;
+      case "transaction": setTransactions(previous => previous.map(row => row.id === entityId ? normalizeTransactionRow(saved) : row)); break;
+    }
+  }, [bills, incomes, goals, decisions, extraPayments, transactions, forecastAccounts, demoMode, assertCanEditHousehold]);
+
   // One shared read-only engine per financial revision; dated reads refresh lazily.
   const financialProjectionSnapshot = useMemo(() => ({
           settings,
@@ -3437,6 +3568,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     () => createFinancialProjectionReader(financialProjectionSnapshot, { now: () => new Date(), timeZone: householdTimeZone }),
     [financialProjectionSnapshot, householdTimeZone],
   );
+  const getAccountForecast = useCallback((ref: ForecastAccountRef, month: number, year: number) =>
+    buildAccountForecast({ ref, month, year, snapshot: financialProjectionSnapshot, accounts: forecastAccounts, getEvents: financialProjection.getUnanchoredCashEvents }),
+    [financialProjectionSnapshot, forecastAccounts, financialProjection]);
   const previewTransactionSafetyStop = useCallback((transaction: Omit<Transaction, "id"> | Transaction, existingId?: string) => {
     const existing = existingId ? transactions.find(item => item.id === existingId) : undefined;
     if (existing?.linked_plan_type === "goal" && goals.some(goal => goal.id === existing.linked_plan_id && goal.goal_type === "planned_expense")) {
@@ -4189,8 +4323,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const addTransaction = useCallback(async (tx: Omit<Transaction, "id">) => {
     if (!user) throw new Error("Sign in to add a transaction");
     assertCanEditHousehold("add a transaction");
-    const defaultAccountId = accounts.find(account => account.is_active)?.id;
-    const nt: Transaction = { ...tx, account_id: tx.account_id ?? defaultAccountId, id: genId() };
+    const nt: Transaction = { ...tx, id: genId() };
     if (demoMode) {
       setTransactions(prev => [...prev, nt]);
       return nt.id;
@@ -4211,10 +4344,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     assertCanEditHousehold("update a transaction");
     const existing = transactions.find(item => item.id === tx.id);
+    if (existing && (existing.source === "plaid" || existing.plaid_account_id)
+      && ((tx.plaid_account_id ?? null) !== (existing.plaid_account_id ?? null) || (tx.forecast_account_ref ?? null) !== (existing.forecast_account_ref ?? null) || (tx.account_id ?? null) !== (existing.account_id ?? null)))
+      throw new Error("The account of a bank transaction cannot be changed.");
     const purchaseBucket = goals.find(goal => goal.id === existing?.linked_plan_id && existing?.linked_plan_type === "goal" && goal.goal_type === "planned_expense");
     if (existing && purchaseBucket) {
       if (tx.linked_bill_id || tx.transfer_group_id || tx.amount >= 0) throw new Error("Remove this purchase from its bucket before changing its transaction type");
-      const payload = { amount: tx.amount, date: tx.date, category: tx.category, note: tx.note, account_id: tx.account_id ?? null };
+      if ((tx.account_id ?? null) !== (existing.account_id ?? null) || (tx.forecast_account_ref ?? null) !== (existing.forecast_account_ref ?? null))
+        throw new Error("Remove this purchase from its bucket before changing its account.");
+      const payload = { amount: tx.amount, date: tx.date, category: tx.category, note: tx.note, account_id: tx.account_id ?? null, forecast_account_ref: tx.forecast_account_ref ?? null };
       if (demoMode) {
         const delta = Math.abs(tx.amount) - bucketPurchaseAllocation(existing, purchaseBucket.id);
         if (delta > spendingBucketSummary(purchaseBucket).remaining + 0.005) throw new Error("Adjust the bucket budget before increasing this purchase");
@@ -4587,6 +4725,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         category: transaction.category,
         note: transaction.note,
         accountId: transaction.account_id,
+        forecastAccountRef: transaction.forecast_account_ref ?? undefined,
       });
       const savedTransaction = normalizeTransactionRow(result.transaction);
       const savedMatch = normalizePendingPlanMatchRow(result.pendingMatch);
@@ -5137,8 +5276,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const persist: () => Promise<void> = () => runTrackedFinancialMutation(async () => {
       let rows: Transaction[];
       if (demoMode) {
-        rows = [{ id: input.fromId, amount: -input.amount, account_id: input.fromAccountId, note: input.fromNote },
-          { id: input.toId, amount: input.amount, account_id: input.toAccountId, note: input.toNote }].map(t => ({ ...t, date: input.date, category: "Transfer", source: "manual" as const, transfer_group_id: input.groupId, ...(action === "delete" ? { deleted_at: new Date().toISOString(), deleted_by: user.id } : {}) }));
+        rows = [{ id: input.fromId, amount: -input.amount, account_id: input.fromAccountId || undefined, forecast_account_ref: input.fromAccountRef, note: input.fromNote },
+          { id: input.toId, amount: input.amount, account_id: input.toAccountId || undefined, forecast_account_ref: input.toAccountRef, note: input.toNote }].map(t => ({ ...t, date: input.date, category: "Transfer", source: "manual" as const, transfer_group_id: input.groupId, ...(action === "delete" ? { deleted_at: new Date().toISOString(), deleted_by: user.id } : {}) }));
       } else {
         const { data, error } = await supabase.rpc("mutate_transfer", { p_household_id: scope?.householdId, p_budget_id: scope?.budgetId,
           p_group_id: input.groupId, p_from_id: input.fromId, p_to_id: input.toId, p_expected: input.expected, p_payload: input, p_action: action });
@@ -5157,9 +5296,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const saveTransfer = useCallback((input: TransferMutation) => mutateTransfer(input), [mutateTransfer]);
   const transferInputForPair = (pair: Transaction[]): TransferMutation => {
     const from = pair.find(t => t.amount < 0), to = pair.find(t => t.amount > 0);
-    if (pair.length !== 2 || !from || !to || !from.account_id || !to.account_id || !from.transfer_group_id) throw new Error("This transfer needs both sides. Refresh before continuing.");
+    if (pair.length !== 2 || !from || !to || (!from.account_id && !from.forecast_account_ref) || (!to.account_id && !to.forecast_account_ref) || !from.transfer_group_id) throw new Error("This transfer needs both sides. Refresh before continuing.");
     return { groupId: from.transfer_group_id, fromId: from.id, toId: to.id, amount: -from.amount, date: from.date,
-      fromAccountId: from.account_id, toAccountId: to.account_id, fromNote: from.note, toNote: to.note, expected: [transferExpected(from), transferExpected(to)] };
+      fromAccountId: from.account_id ?? "", toAccountId: to.account_id ?? "", fromAccountRef: parseForecastAccountRef(from.forecast_account_ref) ?? (from.account_id ? `manual:${from.account_id}` : undefined), toAccountRef: parseForecastAccountRef(to.forecast_account_ref) ?? (to.account_id ? `manual:${to.account_id}` : undefined), fromNote: from.note, toNote: to.note, expected: [transferExpected(from), transferExpected(to)] };
   };
   const deleteTransfer = useCallback(async (groupId: string) => {
     await mutateTransfer(transferInputForPair(transactions.filter(t => t.transfer_group_id === groupId)), "delete");
@@ -5420,8 +5559,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       if (demoMode) { setGoals(previous => previous.map(item => item.id === goal.id ? { ...goal, current_amount: item.current_amount } : item)); return; }
       const scope = householdScopeRef.current;
       const persist: () => Promise<void> = () => runTrackedFinancialMutation(async () => {
-        const { data, error } = await supabase.rpc("update_bucket_budget", { p_bucket_id: goal.id, p_name: goal.name, p_target_amount: goal.target_amount,
-          p_target_date: goal.target_date, p_expected: { name: existing.name, target_amount: existing.target_amount, target_date: existing.target_date } });
+        const { data, error } = await supabase.rpc("update_bucket_budget_with_account", { p_bucket_id: goal.id, p_name: goal.name, p_target_amount: goal.target_amount,
+          p_target_date: goal.target_date, p_expected: { name: existing.name, target_amount: existing.target_amount, target_date: existing.target_date,
+            funding_account_ref: existing.funding_account_ref ?? null, deposit_account_ref: existing.deposit_account_ref ?? null },
+          p_account_patch: { funding_account_ref: goal.funding_account_ref ?? null, deposit_account_ref: goal.deposit_account_ref ?? null } });
         if (error) throw new Error(error.message);
         if (!data?.goal || data.goal.id !== goal.id) throw new Error("The saved bucket budget could not be verified");
         if (userScopeIdRef.current === user.id && householdScopeRef.current?.householdId === scope?.householdId && householdScopeRef.current?.budgetId === scope?.budgetId)
@@ -6367,7 +6508,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const saveDecision = useCallback(async (scenario: DecisionScenario, result: DecisionResult, status: DecisionRecord["status"] = "saved") => {
     if (!user) throw new Error("Sign in to save a decision");
     assertCanEditHousehold("save a decision");
-    const decision: DecisionRecord = { id: genId(), name: scenario.name, decision_type: scenario.type, scenario, result, status, calendar_date: status === "calendar" || status === "planned" ? scenario.date : undefined, next_due_date: status === "planned" ? scenario.date : undefined, created_at: new Date().toISOString() };
+    const decision: DecisionRecord = { id: genId(), name: scenario.name, decision_type: scenario.type, scenario, result, status, funding_account_ref: scenario.funding_account_ref, deposit_account_ref: scenario.deposit_account_ref, calendar_date: status === "calendar" || status === "planned" ? scenario.date : undefined, next_due_date: status === "planned" ? scenario.date : undefined, created_at: new Date().toISOString() };
     if (demoMode) {
       setDecisions(previous => [decision, ...previous]);
       return decision;
@@ -6479,6 +6620,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   }, [dashboardDataRevision]);
   const budgetContextValue: BudgetContextType = {
       bills, overrides, billDateMoves, transactions, deletedTransactions, pendingBankTransactions, pendingPlanMatches, incomes, goals, extraPayments, categories, settings, accounts, connectedBankAccounts, transactionAccountIdentities, householdTimeZone, decisions,
+      forecastAccounts, accountForecastPreferences, accountForecastReady, accountForecastError, selectedForecastAccountRef, setSelectedForecastAccountRef,
+      hiddenForecastAccountRefs, forecastVisibilityReady, forecastVisibilityError, setAccountForecastVisible, getAccountForecast, saveAccountForecastPreference, setForecastAccountRouting, resolveTransactionAccountRef,
       households, householdMembers, householdActivity, householdDetailsReady, categoriesReady, activeHousehold, householdRole, canEditHousehold,
       refreshHouseholds, refreshHouseholdsForPrivacy, refreshHouseholdActivity, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
       updateHouseholdMemberRole, removeHouseholdMember, leaveActiveHousehold,

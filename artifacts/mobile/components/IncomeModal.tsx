@@ -2,13 +2,16 @@ import { usePrivacyAlerts } from "@/hooks/usePrivacyAlerts";
 import { parseMoneyInput } from "@/lib/moneyFormInput";
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "@/lib/haptics";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet } from "react-native";
 import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 
 import colors from "@/constants/colors";
 import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
 import type { IncomeAmountEntry, IncomeItem } from "@/context/BudgetContext";
+import { AccountForecastPicker } from "@/components/AccountForecastPicker";
+import { useBudget } from "@/context/BudgetContext";
+import type { ForecastAccountRef } from "@/lib/accountForecasts";
 import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
@@ -42,6 +45,16 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
   const c = useColors();
   const isDesktop = useDesktopExperience();
   useBackDismiss(visible, onClose);
+  const { forecastAccounts, accountForecastReady, selectedForecastAccountRef, activeHousehold, canEditHousehold } = useBudget();
+  const formScopeKey = `${activeHousehold?.householdId ?? "local"}:${activeHousehold?.budgetId ?? "local"}`;
+  const formScopeRef = useRef<string | null>(visible ? formScopeKey : null);
+  const formAccessRef = useRef({ scopeKey: formScopeKey, canEdit: canEditHousehold, visible });
+  formAccessRef.current = { scopeKey: formScopeKey, canEdit: canEditHousehold, visible };
+  const [depositAccountRef, setDepositAccountRef] = useState<ForecastAccountRef | null>(null);
+  useEffect(() => {
+    if (!visible) formScopeRef.current = null;
+    else if (formScopeRef.current === null) formScopeRef.current = formScopeKey;
+  }, [visible, formScopeKey]);
   const [name,            setName]            = useState("");
   const [amount,          setAmount]          = useState("");
   const [frequency,       setFrequency]       = useState<IncomeItem["frequency"]>("monthly");
@@ -73,13 +86,14 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
   };
 
   const handleDelete = () => {
-    if (!editItem || !onDelete || saving) return;
+    if (!editItem || !onDelete || saving || !formAccessRef.current.canEdit || !formAccessRef.current.visible || formScopeRef.current !== formAccessRef.current.scopeKey) return;
     setConfirmation({
       title: "Delete this income?",
       message: `Delete "${editItem.name}" from Income and Calendar?`,
       confirmText: "Delete",
       destructive: true,
       onConfirm: async () => {
+        if (!formAccessRef.current.canEdit || !formAccessRef.current.visible || formScopeRef.current !== formAccessRef.current.scopeKey) return;
         setSaving(true);
         try {
           await onDelete(editItem.id);
@@ -94,6 +108,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
   useEffect(() => {
     setConfirmation(null);
     if (editItem) {
+      setDepositAccountRef((editItem.deposit_account_ref ?? null) as ForecastAccountRef | null);
       setName(editItem.name);
       setBaselineAmount(editItem.amount);
       setAmount(getLatestRecordedIncomeAmount(editItem).toString());
@@ -103,6 +118,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
       setFirstPayDate(lastDay ? editItem.start_date ?? editItem.next_payment_date ?? "" : editItem.next_payment_date ?? editItem.start_date ?? "");
       setHistory(editItem.amount_history ?? []);
     } else {
+      setDepositAccountRef(selectedForecastAccountRef ?? null);
       setName(""); setAmount(""); setFrequency("monthly");
       setBaselineAmount(0);
       setFirstPayDate(""); setHistory([]);
@@ -116,6 +132,14 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
 
   const handleSave = async () => {
     if (saving) return;
+    if (!formAccessRef.current.canEdit || !formAccessRef.current.visible || formScopeRef.current !== formAccessRef.current.scopeKey) {
+      privacyAlerts.formError("Reopen this editor", "Your household or editing access changed. Close this editor and try again.");
+      return;
+    }
+    if (depositAccountRef && (!accountForecastReady || !forecastAccounts.some(account => account.ref === depositAccountRef && account.active && !account.unavailableReason))) {
+      privacyAlerts.formError("Choose a deposit account", "This account is unavailable. Choose an active account or leave it unassigned.");
+      return;
+    }
     const a = parseMoneyInput(amount);
     if (a === null || a <= 0) { privacyAlerts.formError("Check income amount", "Enter a positive amount with up to two decimal places, such as 1,200.50."); return; }
     if (!name.trim()) return;
@@ -139,6 +163,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
       next_payment_date: monthlyIncomeAnchorDate(payday, frequency === "monthly" && monthlyLastDay),
       amount_history: nextHistory.length > 0 ? nextHistory : undefined,
       excluded_dates: editItem ? normalizeIncomeExcludedDates(editItem.excluded_dates) : undefined,
+      deposit_account_ref: depositAccountRef,
     };
     setSaving(true);
     try {
@@ -242,6 +267,9 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
                 <Text style={[styles.equivText, { color: c.success }]}>≈ ${monthlyEquiv.toFixed(0)}/month</Text>
               </View>
             )}
+
+            <AccountForecastPicker label="Deposited to" value={depositAccountRef} onChange={setDepositAccountRef}
+              includeHousehold={false} allowUnassigned disabled={saving || !canEditHousehold} />
 
             <Text style={lbl}>Pay Frequency</Text>
             <View style={[styles.freqRow, { backgroundColor: c.muted, borderRadius: 10 }]}>
@@ -374,7 +402,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
             </View>
 
             <Pressable
-              disabled={saving}
+              disabled={saving || !canEditHousehold}
               onPress={handleSave}
               style={({ pressed }) => [styles.saveBtn, { backgroundColor: c.primary, borderRadius: colors.radius, opacity: saving ? 0.55 : pressed ? 0.85 : 1 }]}
             >
@@ -382,7 +410,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
             </Pressable>
             {editItem && onDelete ? (
               <Pressable
-                disabled={saving}
+                disabled={saving || !canEditHousehold}
                 onPress={handleDelete}
                 style={({ pressed }) => [styles.deleteBtn, { borderColor: c.destructive, opacity: saving ? 0.55 : pressed ? 0.78 : 1 }]}
               >

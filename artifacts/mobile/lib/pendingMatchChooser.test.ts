@@ -35,17 +35,25 @@ test("manual choices retain canonical same-month and eligibility exclusions", ()
 });
 const source = () => readFileSync("app/(tabs)/transactions.tsx", "utf8");
 function extract(start: string, end: string, bindings: Record<string, unknown>) {
-  bindings = revealedPrivacyBindings({ isInferredPendingBankHold, ...bindings });
+  bindings = revealedPrivacyBindings({
+    isInferredPendingBankHold, canEditHousehold: true,
+    pendingSourceAccountRef: "bank:11111111-1111-4111-8111-111111111111",
+    setShowOtherPendingAccounts: () => {},
+    ...bindings,
+  });
   const s = source(); const a = s.indexOf(`  const ${start} =`); const b = s.indexOf(`  const ${end} =`, a);
   return new Function(...Object.keys(bindings), `${transpileModule(s.slice(a,b), { compilerOptions: { module: ModuleKind.CommonJS } }).outputText}; return ${start};`)(...Object.values(bindings));
 }
 test("every open/close/different pending payment synchronously clears chooser type without persisting", () => {
-  let kind: unknown = "debt"; let pending: unknown;
+  let kind: unknown = "debt"; let pending: unknown; let includeOtherAccounts = true;
   const set = extract("setPendingMatchTx", "[pendingTransactionSource, setPendingTransactionSource]", {
     useCallback: (fn: unknown) => fn, setPendingMatchKind: (v: unknown) => { kind = v; }, setPendingMatchTxState: (v: unknown) => { pending = v; },
+    setShowOtherPendingAccounts: (value: boolean) => { includeOtherAccounts = value; },
   });
   for (const value of [{ plaid_transaction_id: "a" }, null, { plaid_transaction_id: "b" }]) {
-    kind = "manual"; set(value); assert.equal(kind, null); assert.equal(pending, value);
+    kind = "manual"; includeOtherAccounts = true;
+    set(value); assert.equal(kind, null); assert.equal(pending, value);
+    assert.equal(includeOtherAccounts, false, "cross-account intent cannot carry into another pending payment");
   }
 });
 test("debt and manual candidate clicks call their existing persistence handlers only on explicit action", async () => {
@@ -96,7 +104,7 @@ test("combined suggestion preserves canonical score, amount, distance and name o
   }
 });
 
-function renderSuggestion(suggestion: ReturnType<typeof strongestPendingMatch>, savingMatch = false) {
+function renderSuggestion(suggestion: ReturnType<typeof strongestPendingMatch>, savingMatch = false, canEditHousehold = true) {
   const s = source();
   const start = s.indexOf("{pendingMatchSuggestion ? (");
   const end = s.indexOf("What does this payment cover?", start);
@@ -106,7 +114,9 @@ function renderSuggestion(suggestion: ReturnType<typeof strongestPendingMatch>, 
     React: { createElement: (type: unknown, props: unknown, ...children: unknown[]) => ({ type, props, children }) },
     Pressable: "button", View: "view", Text: "text", Feather: "icon",
     pendingMatchSuggestion: suggestion, pendingMatchKindLabels: { bill: "Bill", debt: "Debt", manual: "Manual transaction" },
-    savingMatch, styles: {}, c: {},
+    savingMatch, canEditHousehold, styles: {}, c: {},
+    pendingSourceAccountRef: "bank:11111111-1111-4111-8111-111111111111",
+    matchingAccountCopy: () => "Bills account",
     handleMatchPendingManual: (id: string) => calls.push(["manual", id]),
     handleMatchPendingBill: (id: string) => calls.push(["bill", id]),
   });
@@ -128,6 +138,7 @@ test("unfiltered suggestion renders actual target kind and exact explicit action
     rendered.props.onPress();
     assert.deepEqual(calls, [[kind === "manual" ? "manual" : "bill", candidate.billId]]);
     assert.equal(renderSuggestion(suggestion, true).rendered.props.disabled, true);
+    assert.equal(renderSuggestion(suggestion, false, false).rendered.props.disabled, true, "viewers cannot apply a pending match");
   }
   assert.equal(renderSuggestion(null).rendered, null);
 });

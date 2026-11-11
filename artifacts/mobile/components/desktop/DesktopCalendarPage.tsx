@@ -48,6 +48,7 @@ const MONTHS = [
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 type DesktopCalendarPageProps = {
+  headerAccessory?: React.ReactNode;
   month: number;
   year: number;
   selectedDate: string | null;
@@ -588,6 +589,7 @@ export function DesktopCalendarPage(props: DesktopCalendarPageProps) {
             onOpenPlanSimulator={props.onOpenPlanSimulator}
             onAdd={() => props.onAddTransaction(props.selectedDate)}
           />
+          {props.headerAccessory}
           <View style={[styles.metrics, compact && styles.metricsCompact]}>
             <View style={[styles.metricItem, compact && styles.metricItemCompact]}>
               <SummaryMetricCard label="Total Income" value={money(summary.income)} detail={`${summary.incomeCount} income ${summary.incomeCount === 1 ? "item" : "items"}`} icon="arrow-up" tone="green" />

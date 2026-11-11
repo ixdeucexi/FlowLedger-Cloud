@@ -35,6 +35,8 @@ interface CalendarViewProps {
   safetyFloor?: number;
   startDate?: string;
   overdueBillOccurrenceKeys?: ReadonlySet<string>;
+  /** Account projections already supply the exact routed event collection. */
+  eventsOnly?: boolean;
 }
 
 function fmt(n: number) {
@@ -55,6 +57,7 @@ export function CalendarView({
   safetyFloor = 200,
   startDate,
   overdueBillOccurrenceKeys = EMPTY_OVERDUE_BILL_KEYS,
+  eventsOnly = false,
 }: CalendarViewProps) {
   const c = useColors();
   const calendarColors = useCalendarAppearance();
@@ -209,6 +212,16 @@ export function CalendarView({
           }));
           if (decisionAmount > 0) chips.push({ label: `Plan $${fmt(decisionAmount)}`, kind: "plan" });
 
+          if (eventsOnly) {
+            chips.length = 0;
+            displayEvents.forEach(event => {
+              const kind = String(event.kind);
+              if (kind === "bank_adjustment") return;
+              const chipKind: ChipKind = kind === "estimated_interest" || kind === "scheduled_income" || kind === "transaction_income"
+                ? "income" : event.transfer ? "plan" : kind === "bill" ? "bill" : kind === "debt_payment" ? "debt" : kind === "goal" || event.sourceType === "decision" ? "plan" : "expense";
+              chips.push({ label: kind === "estimated_interest" ? "Interest (est.)" : event.name || (event.amount >= 0 ? "Money in" : "Money out"), kind: chipKind });
+            });
+          }
           const visibleChips = chips.slice(0, 3);
           const hiddenCount = chips.length - visibleChips.length;
 

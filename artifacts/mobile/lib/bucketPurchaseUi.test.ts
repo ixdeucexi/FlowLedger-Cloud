@@ -7,6 +7,7 @@ import { JsxEmit, ModuleKind, transpileModule } from "typescript";
 import { bucketPurchaseCandidates, bucketPurchaseHistory } from "./bucketPurchases";
 import { spendingBucketSummary } from "./spendingBuckets";
 import { createTransactionNameResolver } from "./transactionNames";
+import { transactionForecastAccountRef } from "./accountForecasts";
 
 function flatten(node: any): any[] {
   return Array.isArray(node) ? node.flatMap(flatten) : node && typeof node === "object" ? [node, ...flatten(node.props?.children)] : [];
@@ -26,6 +27,8 @@ function harness(component = "BucketDetailModal", overrides: Record<string, any>
   const budget: any = { activeHousehold: { householdId: "home", budgetId: "budget", role: "owner" }, canEditHousehold: true,
     goals: [{ ...bucket }], transactions: [{ ...purchase }, { ...bank }, { ...manual }, { ...bank, id: "unknown", note: "Unknown account", plaid_account_id: "unknown" }],
     transactionAccountIdentities: [], categories: ["Other", "Shopping", "Debt"], bills: [{ id: "debt", is_debt: true, balance: 100, name: "Card" }], accounts: [], settings: { safety_floor: 100, forecast_horizon_months: 6 },
+    forecastAccounts: [{ ref: "bank:11111111-1111-4111-8111-111111111111", aliases: ["bank:11111111-1111-4111-8111-111111111111", "provider:checking"], source: "bank", name: "Checking", type: "checking", active: true }], accountForecastReady: true, selectedForecastAccountRef: null,
+    resolveTransactionAccountRef: (transaction: any) => transactionForecastAccountRef(transaction, budget.forecastAccounts),
     addBucketPurchase: async () => "recorded", removeBucketPurchase: async () => {}, updateGoal: async () => {}, getDailyBalances: () => [],
     previewBucketPurchaseSafetyStop: () => null, previewTransactionSafetyStop: () => null, previewBucketBudgetSafetyStop: () => null, ...overrides,
   };

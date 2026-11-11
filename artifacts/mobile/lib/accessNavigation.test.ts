@@ -18,6 +18,7 @@ import * as surplusRouting from "./billSurplusRouting";
 import * as snowballFunding from "./snowballFunding";
 import * as forecastDisplay from "./forecastDisplay";
 import * as billOccurrencePayment from "./billOccurrencePayment";
+import * as accountForecasts from "./accountForecasts";
 
 function flatten(node: any): any[] {
   return Array.isArray(node) ? node.flatMap(flatten) : node && typeof node === "object" ? [node, ...flatten(node.props?.children)] : [];
@@ -29,7 +30,7 @@ function text(node: any): string {
 const open = { id: "open", name: "Holiday", goal_type: "planned_expense", target_amount: 200, current_amount: 50, target_date: "2026-11-01" };
 const closed = { ...open, id: "closed", name: "Closed trip", closed_at: "2026-10-23" };
 const archived = { ...closed, id: "archived", name: "Archived trip", archived_at: "2026-10-23" };
-const pending = { id: "bank", source: "plaid", review_status: "needs_review", date: "2026-10-23", amount: -50, note: "Bank charge", category: "Other" };
+const pending = { id: "bank", source: "plaid", plaid_account_id: "fictional-provider-checking", review_status: "needs_review", date: "2026-10-23", amount: -50, note: "Bank charge", category: "Other" };
 
 function reviewHarness(goals: any[] = [open, closed, archived], canEdit = true) {
   const exported: any = {}, states: any[] = [], effects: Array<() => void> = [];
@@ -42,6 +43,9 @@ function reviewHarness(goals: any[] = [open, closed, archived], canEdit = true) 
     getExtraPayment: () => null, getRemainingDebtPlanForMonth: () => null,
     refreshBankData: async () => {}, previewDebtSnowball: () => ({ safeMaximum: 0, selectedExtra: 0, months: [], allocations: [] }),
     addGoal: async () => { added++; },
+    forecastAccounts: [{ ref: "bank:11111111-1111-4111-8111-111111111111", aliases: ["bank:11111111-1111-4111-8111-111111111111", "provider:fictional-provider-checking"], source: "bank", name: "Checking", type: "checking", active: true }],
+    accountForecastReady: true,
+    resolveTransactionAccountRef: (transaction: any) => accountForecasts.transactionForecastAccountRef(transaction, budget.forecastAccounts),
   };
   const React = { createElement: (type: any, props: any, ...children: any[]) => ({ type, props: { ...props, children } }) };
   const hooks = {
@@ -51,7 +55,7 @@ function reviewHarness(goals: any[] = [open, closed, archived], canEdit = true) 
     useMemo: (fn: () => any) => { cursor++; return fn(); },
     useEffect: (fn: () => void, deps: any[]) => { const index = cursor++; if (!states[index] || deps.some((value, i) => !Object.is(value, states[index][i]))) { states[index] = deps; effects.push(fn); } },
   };
-  const modules: Record<string, any> = { transactionNames, reviewCenter: reviewTools, matchTargetFilters: targetFilters, spendingBuckets: bucketTools, pendingPlanMatches: pendingTools, billMatching, billMatchCandidates: candidateTools, billOccurrencePayment, competitiveGrowth: competitiveTools, billSurplusRouting: surplusRouting, snowballFunding, forecastDisplay };
+  const modules: Record<string, any> = { accountForecasts, transactionNames, reviewCenter: reviewTools, matchTargetFilters: targetFilters, spendingBuckets: bucketTools, pendingPlanMatches: pendingTools, billMatching, billMatchCandidates: candidateTools, billOccurrencePayment, competitiveGrowth: competitiveTools, billSurplusRouting: surplusRouting, snowballFunding, forecastDisplay };
   const js = transpileModule(readFileSync("components/ReviewCenter.tsx", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, jsx: JsxEmit.React, esModuleInterop: true } }).outputText;
   new Function("exports", "require", js)(exported, (name: string) => {
     const privacyModule = revealedPrivacyModule(name);
@@ -60,6 +64,7 @@ function reviewHarness(goals: any[] = [open, closed, archived], canEdit = true) 
     if (name === "react-native") return { ...Object.fromEntries(["View", "Text", "Pressable", "Modal", "ScrollView"].map(value => [value, value])), Alert: { alert() {} }, StyleSheet: { create: (value: any) => value, hairlineWidth: 1 } };
     const leaf = name.split("/").at(-1)!;
     if (leaf === "BucketVisual") return { BucketThumbnail: "BucketThumbnail" };
+    if (leaf === "AccountForecastPicker") return { AccountForecastPicker: "AccountForecastPicker", accountForecastLabel: (account: any) => `${account.name}${account.mask ? ` · ••${account.mask}` : ""}` };
     if (name.includes("/components/")) return { [leaf]: leaf };
     if (leaf === "BudgetContext") return { useBudget: () => budget };
     if (leaf === "BucketPersonalizationContext") return { useBucketPersonalization: () => ({ available: true, unavailableReason: null, open() {} }) };

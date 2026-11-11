@@ -53,7 +53,7 @@ test("Activity reuses the complete account-aware ledger and keeps filtered weekl
   );
   assert.match(
     mobileActivity,
-    /selectFlowLedgerTransactions\(\s*transactions,\s*transactionAccountIdentities,\s*\)\.included/,
+    /selectDepositoryTransactions\(\s*transactions,\s*transactionAccountIdentities,\s*\)\.included/,
   );
   assert.match(mobileActivity, /const historyHasMore = false/);
   assert.doesNotMatch(

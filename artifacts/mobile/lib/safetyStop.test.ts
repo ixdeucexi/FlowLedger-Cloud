@@ -84,6 +84,9 @@ function goalSaveHarness(reject = false) {
   let finish!: () => void;
   const promise = new Promise<void>((resolve, rejectSave) => { finish = () => reject ? rejectSave(new Error("offline")) : resolve(); });
   const bindings = {
+    formScopeRef: { current: "fictional-household:fictional-budget" },
+    formAccessRef: { current: { scopeKey: "fictional-household:fictional-budget", canEdit: true, visible: true } },
+    accountForecastReady: true, forecastAccounts: [],
     editGoal: null,
     setSaveError: (value: string | null) => { state.saveError = value; if (value !== null) state.errors++; },
     savingRef: { get current() { return state.busy; }, set current(value: boolean) { state.busy = value; } },

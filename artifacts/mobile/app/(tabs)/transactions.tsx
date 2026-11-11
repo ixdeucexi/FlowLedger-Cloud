@@ -2,6 +2,8 @@ import { moneyPrivacySearchSensitive } from "@/lib/moneyPrivacy";
 import { usePrivacyAlerts } from "@/hooks/usePrivacyAlerts";
 import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import { createTransactionNameResolver } from "@/lib/transactionNames";
+import { AccountForecastPicker, accountForecastLabel } from "@/components/AccountForecastPicker";
+import { accountMatchEligibility, resolveForecastAccountReference, transactionForecastAccountRef, type ForecastAccountRef } from "@/lib/accountForecasts";
 import { pendingManualReplacementIds } from "@/lib/pendingManualReplacement";
 import { MatchTypeFilters } from "@/components/MatchTypeFilters";
 import { FloLogo } from "@/components/FloLogo";
@@ -82,7 +84,7 @@ import {
   summarizeActivityMonth,
 } from "@/lib/monthlySummary";
 import { isValidDateInMonth } from "@/lib/schedule";
-import { selectFlowLedgerTransactions } from "@/lib/ledgerEngine";
+import { selectDepositoryTransactions } from "@/lib/ledgerEngine";
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import {
   hasBucketRemainderFunding,
@@ -169,6 +171,8 @@ interface ActivityItem {
   detail?: string; // human-readable explanation shown in detail sheet
   pending?: boolean;
   rawPending?: PendingBankTransaction;
+  accountRef?: ForecastAccountRef | null;
+  accountUnavailable?: boolean;
   pendingMatchLabel?: string;
   debtName?: string;
 }
@@ -235,16 +239,10 @@ function ActivityRowMoney({
 
 function activityItemCountsInCashFlow(
   item: ActivityItem,
-  connectedAccounts: Parameters<typeof isCheckingBalanceTransaction>[1],
+  _connectedAccounts: Parameters<typeof isCheckingBalanceTransaction>[1],
 ) {
   if (item.source === "transfer") return false;
   if (item.rawTx && !isCashFlowTransaction(item.rawTx)) return false;
-  if (
-    item.rawTx &&
-    item.rawTx.amount > 0 &&
-    !isCheckingBalanceTransaction(item.rawTx, connectedAccounts)
-  )
-    return false;
   return true;
 }
 
@@ -399,6 +397,10 @@ export function ActivityScreen() {
     accounts,
     connectedBankAccounts,
     transactionAccountIdentities,
+    forecastAccounts,
+    accountForecastReady,
+    resolveTransactionAccountRef,
+    canEditHousehold,
     householdTimeZone,
     getIncomeOccurrencesInMonth,
     getMonthlyBills,
@@ -438,6 +440,13 @@ export function ActivityScreen() {
   const [detailItem, setDetailItem] = useState<ActivityItem | null>(null);
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
+  const [accountFilter, setAccountFilter] = useState<ForecastAccountRef | "unassigned" | null>(null);
+  const forecastAccountByRef = useMemo(() => new Map(forecastAccounts.map(account => [account.ref, account])), [forecastAccounts]);
+  const accountLabel = useCallback((ref: ForecastAccountRef | null | undefined) => {
+    const account = ref ? forecastAccountByRef.get(ref) : undefined;
+    return account ? accountForecastLabel(account) : ref ? "Account unavailable" : "Unassigned";
+  }, [forecastAccountByRef]);
+  const activityAccountLabel = useCallback((item: ActivityItem) => item.accountUnavailable ? "Account unavailable" : accountLabel(item.accountRef), [accountLabel]);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [rangeFilter, setRangeFilter] = useState<ActivityRangeId>("this_month");
@@ -555,9 +564,12 @@ export function ActivityScreen() {
   ]);
   const [weeklySummaryVisible, setWeeklySummaryVisible] = useState(false);
   const [matchTx, setMatchTxState] = useState<Transaction | null>(null);
+  const [showOtherMatchAccounts, setShowOtherMatchAccounts] = useState(false);
+  const [showOtherPendingAccounts, setShowOtherPendingAccounts] = useState(false);
   const [matchTargetSelection, setMatchTargetSelection] = useState<MatchTargetSelection>(null);
   const setMatchTx = useCallback((transaction: Transaction | null) => {
     setMatchTargetSelection(null);
+    setShowOtherMatchAccounts(false);
     setMatchTxState(transaction);
   }, []);
   const matchTargetScope = `${user?.id ?? "demo"}:${activeHousehold?.householdId ?? "personal"}:${matchTx?.id ?? ""}`;
@@ -571,6 +583,7 @@ export function ActivityScreen() {
     useState<PendingBankTransaction | null>(null);
   const setPendingMatchTx = useCallback((pending: PendingBankTransaction | null) => {
     setPendingMatchKind(null);
+    setShowOtherPendingAccounts(false);
     setPendingMatchTxState(pending && !isInferredPendingBankHold(pending) ? pending : null);
   }, []);
   const [pendingTransactionSource, setPendingTransactionSource] =
@@ -606,6 +619,15 @@ export function ActivityScreen() {
   const handledPendingRouteRef = useRef("");
   const handledActivityRouteRef = useRef("");
   const fullPaymentConfirmingRef = useRef("");
+  useEffect(() => {
+    setAccountFilter(null);
+    setMatchTx(null);
+    setPendingMatchTx(null);
+    setPendingTransactionSource(null);
+    setDetailItem(null);
+    setEditTx(null);
+    setEditModalVisible(false);
+  }, [user?.id, activeHousehold?.householdId, activeHousehold?.budgetId, setMatchTx, setPendingMatchTx]);
   useBackDismiss(!!detailItem, () => setDetailItem(null));
   useBackDismiss(filterModalVisible, () => setFilterModalVisible(false));
   useBackDismiss(weeklySummaryVisible, () => setWeeklySummaryVisible(false));
@@ -661,26 +683,12 @@ export function ActivityScreen() {
   // with keyset paging. Re-querying its first 100 rows here delayed Activity,
   // duplicated network/JSON work, and made totals look artificially partial.
   const activityTransactions = useMemo(() => {
-    return selectFlowLedgerTransactions(
+    return selectDepositoryTransactions(
       transactions,
       transactionAccountIdentities,
     ).included;
   }, [transactionAccountIdentities, transactions]);
 
-  const activityAccountIdentityById = useMemo(() => {
-    const byId = new Map<
-      string,
-      (typeof transactionAccountIdentities)[number]
-    >();
-    [...transactionAccountIdentities]
-      .sort((left, right) => Number(left.is_active) - Number(right.is_active))
-      .forEach((account) => {
-        byId.set(account.id, account);
-        if (account.plaid_account_id)
-          byId.set(account.plaid_account_id, account);
-      });
-    return byId;
-  }, [transactionAccountIdentities]);
 
   const historyHasMore = false;
 
@@ -721,7 +729,9 @@ export function ActivityScreen() {
         (match) =>
           match.pending_plaid_transaction_id === pending.plaid_transaction_id,
       );
+      const accountRef = transactionForecastAccountRef({ source: "plaid", plaid_account_id: pending.plaid_account_id }, forecastAccounts, true);
       items.push({
+        accountRef, accountUnavailable: !accountRef,
         id: `pending-${pending.plaid_transaction_id}`,
         date: pending.transaction_date,
         amount: pending.amount,
@@ -778,7 +788,9 @@ export function ActivityScreen() {
             : tx.source === "plaid"
               ? "bank_transaction"
               : "transaction";
+      const accountRef = transactionForecastAccountRef(tx, forecastAccounts, true);
       items.push({
+        accountRef, accountUnavailable: !accountRef && Boolean(tx.plaid_account_id || tx.account_id || tx.forecast_account_ref || tx.source === "plaid"),
         id: `tx-${tx.id}`,
         date: tx.date,
         amount: tx.amount,
@@ -830,7 +842,9 @@ export function ActivityScreen() {
       const date =
         override.paid_date ??
         `${override.year}-${String(override.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const accountRef = resolveForecastAccountReference(bill.funding_account_ref, forecastAccounts, true);
       items.push({
+        accountRef, accountUnavailable: Boolean(bill.funding_account_ref && !accountRef),
         id: `bill-${override.id}`,
         date,
         amount: -regularPaid,
@@ -866,7 +880,9 @@ export function ActivityScreen() {
                 )
               : 0;
           if (remaining <= 0.005) continue;
+          const accountRef = resolveForecastAccountReference(income.deposit_account_ref, forecastAccounts, true);
           items.push({
+            accountRef, accountUnavailable: Boolean(income.deposit_account_ref && !accountRef),
             id: `income-${income.id}-${date}`,
             date,
             amount: remaining,
@@ -921,7 +937,9 @@ export function ActivityScreen() {
         date,
         (ep.sources ?? []).some((source) => source.pendingBalanceApply),
       );
+      const accountRef = resolveForecastAccountReference(ep.funding_account_ref, forecastAccounts, true);
       items.push({
+        accountRef, accountUnavailable: Boolean(ep.funding_account_ref && !accountRef),
         id: `extra-${ep.id}`,
         date,
         amount: -remainingAmount,
@@ -945,6 +963,7 @@ export function ActivityScreen() {
     incomes,
     extraPayments,
     getIncomeOccurrencesInMonth,
+    forecastAccounts,
   ]);
 
   useEffect(() => {
@@ -973,6 +992,7 @@ export function ActivityScreen() {
     rangeFilter !== "this_month",
     typeFilter !== "all",
     sourceFilter !== "all",
+    accountFilter !== null,
     categoryFilter !== "all",
     sortOrder !== "desc",
   ].filter(Boolean).length;
@@ -985,6 +1005,7 @@ export function ActivityScreen() {
     setCustomEndDate("");
     setTypeFilter("all");
     setSourceFilter("all");
+    setAccountFilter(null);
     setCategoryFilter("all");
     setSortOrder("desc");
   };
@@ -1007,6 +1028,8 @@ export function ActivityScreen() {
       list = list.filter((t) => t.source === sourceFilter);
     if (categoryFilter !== "all")
       list = list.filter((t) => t.category === categoryFilter);
+    if (accountFilter === "unassigned") list = list.filter(item => !item.accountRef && !item.accountUnavailable);
+    else if (accountFilter) list = list.filter(item => item.accountRef === accountFilter);
 
     if (search.trim()) {
       const q = search.trim().toLowerCase();
@@ -1014,7 +1037,8 @@ export function ActivityScreen() {
         (t) =>
           t.label.toLowerCase().includes(q) ||
           t.category.toLowerCase().includes(q) ||
-          SOURCE_META[t.source].label.toLowerCase().includes(q),
+          SOURCE_META[t.source].label.toLowerCase().includes(q) ||
+          activityAccountLabel(t).toLowerCase().includes(q),
       );
     }
     list.sort((a, b) =>
@@ -1029,6 +1053,8 @@ export function ActivityScreen() {
     activeDateRange,
     typeFilter,
     sourceFilter,
+    accountFilter,
+    activityAccountLabel,
     categoryFilter,
     search,
     sortOrder,
@@ -1038,7 +1064,18 @@ export function ActivityScreen() {
 
   const runningBalanceById = useMemo(() => {
     const today = localDay;
-    if (historyHasMore) return new Map<string, number>();
+    if (historyHasMore || accountFilter === "unassigned") return new Map<string, number>();
+    if (accountFilter) {
+      const account = forecastAccountByRef.get(accountFilter);
+      if (!account || account.currentBalance === null || !account.asOfDate || account.unavailableReason
+        || (activeDateRange.startDate && activeDateRange.startDate > account.asOfDate)
+        || (activeDateRange.endDate && activeDateRange.endDate < today)) return new Map<string, number>();
+      const provisionalIds = pendingManualReplacementIds(activityTransactions, pendingPlanMatches, transactionAccountIdentities, bills);
+      const ledger = activityTransactions.filter(transaction => transaction.date <= today && !provisionalIds.has(transaction.id)
+        && transactionForecastAccountRef(transaction, forecastAccounts, true) === accountFilter)
+        .map(transaction => ({ id: `tx-${transaction.id}`, date: transaction.date, amount: transaction.amount }));
+      return activityRunningBalancesFromDatedAnchor({ balance: account.currentBalance, date: account.asOfDate }, ledger);
+    }
     const hasConnectedChecking = connectedBankAccounts.some(
       (account) => account.is_active && account.account_subtype === "checking",
     );
@@ -1107,6 +1144,9 @@ export function ActivityScreen() {
     transactionAccountIdentities,
     pendingPlanMatches,
     bills,
+    accountFilter,
+    forecastAccountByRef,
+    forecastAccounts,
   ]);
 
   const exportVisibleActivity = useCallback(() => {
@@ -1115,15 +1155,7 @@ export function ActivityScreen() {
         date: item.date,
         description: item.label,
         category: item.category,
-        account: item.rawTx?.account_id
-          ? accounts.find((account) => account.id === item.rawTx?.account_id)
-              ?.name
-          : item.rawTx?.plaid_account_id
-            ? (activityAccountIdentityById.get(item.rawTx.plaid_account_id)
-                ?.display_name ??
-              activityAccountIdentityById.get(item.rawTx.plaid_account_id)
-                ?.name)
-            : undefined,
+        account: activityAccountLabel(item),
         amount: item.amount,
         type: SOURCE_META[item.source].label,
         appliedDebt: item.debtName,
@@ -1136,7 +1168,7 @@ export function ActivityScreen() {
         "CSV export",
         "CSV export is available in the website and installed web app.",
       );
-  }, [accounts, activityAccountIdentityById, filtered, runningBalanceById]);
+  }, [activityAccountLabel, filtered, runningBalanceById]);
 
   const activityReviewCount = useMemo(
     () => buildReviewQueue(transactions, localDay).length,
@@ -1223,15 +1255,7 @@ export function ActivityScreen() {
           excludeFromCashFlow:
             (item.source === "bill_payment" && !item.rawTx) ||
             item.source === "transfer" ||
-            Boolean(item.rawTx && !isCashFlowTransaction(item.rawTx)) ||
-            Boolean(
-              item.rawTx &&
-              item.rawTx.amount > 0 &&
-              !isCheckingBalanceTransaction(
-                item.rawTx,
-                transactionAccountIdentities,
-              ),
-            ),
+            Boolean(item.rawTx && !isCashFlowTransaction(item.rawTx)),
         })),
         ...plannedBillEntries,
         ...plannedDebtEntries,
@@ -1267,6 +1291,7 @@ export function ActivityScreen() {
     (rangeFilter === "this_month" || rangeFilter === "last_month") &&
     typeFilter === "all" &&
     sourceFilter === "all" &&
+    accountFilter === null &&
     categoryFilter === "all" &&
     search.trim().length === 0;
   const activitySummaryIsPartial =
@@ -1349,6 +1374,12 @@ export function ActivityScreen() {
     }
     setPendingMatchTx(pending);
   };
+
+  const renderAccountFilter = () => <View style={{ minWidth: 0, gap: 7 }}>
+    <AccountForecastPicker label="Account" value={accountFilter === "unassigned" ? null : accountFilter}
+      onChange={setAccountFilter} includeHousehold nullLabel="All accounts" allowUnassigned={false} />
+    <Pressable accessibilityRole="checkbox" accessibilityLabel="Show unassigned Activity" accessibilityState={{ checked: accountFilter === "unassigned" }} onPress={() => setAccountFilter(accountFilter === "unassigned" ? null : "unassigned")} style={{ flexDirection: "row", alignItems: "center", gap: 6, minHeight: 32, alignSelf: "flex-start" }}><Feather name={accountFilter === "unassigned" ? "check-square" : "square"} size={15} color={accountFilter === "unassigned" ? c.primary : c.mutedForeground} /><Text style={{ color: c.mutedForeground, fontSize: 12 }}>Unassigned only</Text></Pressable>
+  </View>;
 
   const quickChips = [
     {
@@ -1490,6 +1521,33 @@ export function ActivityScreen() {
     setEditTx(null);
   };
 
+  const matchedSourceAccountRef = useMemo(() => accountForecastReady && matchTx ? transactionForecastAccountRef(matchTx, forecastAccounts) : null, [accountForecastReady, matchTx, forecastAccounts]);
+  const pendingSourceAccountRef = useMemo(() => accountForecastReady && pendingMatchTx ? transactionForecastAccountRef({ source: "plaid", plaid_account_id: pendingMatchTx.plaid_account_id }, forecastAccounts) : null, [accountForecastReady, pendingMatchTx, forecastAccounts]);
+  const matchingTargetAccount = useCallback((kind: "bill" | "manual" | "bucket", id: string) => {
+    if (kind === "manual") {
+      const row = transactions.find(transaction => transaction.id === id);
+      const ref = row ? transactionForecastAccountRef(row, forecastAccounts) : null;
+      return { ref, unavailable: !row || (!ref && (row.forecast_account_ref != null || Boolean(row.account_id || row.plaid_account_id || row.source === "plaid"))) };
+    }
+    const row = kind === "bill" ? bills.find(bill => bill.id === id) : goals.find(goal => goal.id === id);
+    const rawRef = row?.funding_account_ref;
+    const ref = resolveForecastAccountReference(rawRef, forecastAccounts);
+    return { ref, unavailable: !row || (rawRef != null && !ref) };
+  }, [bills, forecastAccounts, goals, transactions]);
+  const targetMatchesAccount = useCallback((source: ForecastAccountRef | null, kind: "bill" | "manual" | "bucket", id: string, allowOther: boolean) => {
+    const target = matchingTargetAccount(kind, id);
+    return Boolean(source) && !target.unavailable && accountMatchEligibility(source, target.ref, allowOther);
+  }, [matchingTargetAccount]);
+  const matchingAccountCopy = (source: ForecastAccountRef | null, kind: "bill" | "manual" | "bucket", id: string) => {
+    const target = matchingTargetAccount(kind, id);
+    return target.unavailable ? "Account unavailable" : target.ref && target.ref !== source ? `Other account: ${accountLabel(target.ref)}` : accountLabel(target.ref);
+  };
+  const renderMatchingAccountContext = (source: ForecastAccountRef | null, includeOther: boolean, setIncludeOther: (value: boolean) => void) => <View style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.card, borderRadius: 12, padding: 12, gap: 8, marginBottom: 12 }}>
+    <Text style={[styles.matchRowTitle, { color: c.foreground }]}>{source ? accountLabel(source) : "Account unavailable"}</Text>
+    <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>{source ? includeOther ? "Other accounts are included. The bank payment keeps its original account." : "Showing this account and Unassigned plans." : "This payment’s account could not be verified. Refresh your accounts before matching."}</Text>
+    {source ? <Pressable accessibilityRole="checkbox" accessibilityLabel="Show matches from other accounts" accessibilityState={{ checked: includeOther, disabled: savingMatch || !canEditHousehold }} disabled={savingMatch || !canEditHousehold} onPress={() => setIncludeOther(!includeOther)} style={{ flexDirection: "row", alignItems: "center", gap: 8, minHeight: 36 }}><Feather name={includeOther ? "check-square" : "square"} size={18} color={c.primary} /><Text style={{ color: c.foreground, fontSize: 13 }}>Show other accounts</Text></Pressable> : null}
+  </View>;
+
   const billOccurrenceMatches = useMemo(() => matchedOccurrenceAllocations(transactions, "bill"), [transactions]);
   const billMatchOptions = useMemo(() => {
     if (!matchTx) return [];
@@ -1508,13 +1566,16 @@ export function ActivityScreen() {
         category: matchTx.category,
       },
       candidates,
-    );
+    ).filter(option => targetMatchesAccount(matchedSourceAccountRef, "bill", option.billId, showOtherMatchAccounts));
   }, [
     matchTx,
     getMonthlyBills,
     getBillOccurrencesInMonth,
     getBillOccurrenceAmount,
     billOccurrenceMatches,
+    matchedSourceAccountRef,
+    showOtherMatchAccounts,
+    targetMatchesAccount,
   ]);
   const pendingBillMatchOptions = useMemo(() => {
     if (!pendingMatchTx || isInferredPendingBankHold(pendingMatchTx) || pendingMatchTx.amount >= 0) return [];
@@ -1536,13 +1597,16 @@ export function ActivityScreen() {
         category: pendingMatchTx.category,
       },
       candidates,
-    );
+    ).filter(option => targetMatchesAccount(pendingSourceAccountRef, "bill", option.billId, showOtherPendingAccounts));
   }, [
     pendingMatchTx,
     getMonthlyBills,
     getBillOccurrencesInMonth,
     getBillOccurrenceAmount,
     billOccurrenceMatches,
+    pendingSourceAccountRef,
+    showOtherPendingAccounts,
+    targetMatchesAccount,
   ]);
   const selectedPendingPlanMatch = useMemo(
     () =>
@@ -1577,8 +1641,8 @@ export function ActivityScreen() {
         category: matchTx.category,
       },
       candidates,
-    );
-  }, [matchTx, transactions, bills, pendingPlanMatches]);
+    ).filter(option => targetMatchesAccount(matchedSourceAccountRef, "manual", option.billId, showOtherMatchAccounts));
+  }, [matchTx, transactions, bills, pendingPlanMatches, matchedSourceAccountRef, showOtherMatchAccounts, targetMatchesAccount]);
   const pendingManualMatchOptions = useMemo(() => {
     if (!pendingMatchTx || isInferredPendingBankHold(pendingMatchTx) || pendingMatchTx.amount >= 0) return [];
     return rankBillMatches(
@@ -1597,8 +1661,8 @@ export function ActivityScreen() {
         undefined,
         bills,
       ),
-    );
-  }, [pendingMatchTx, transactions, bills]);
+    ).filter(option => targetMatchesAccount(pendingSourceAccountRef, "manual", option.billId, showOtherPendingAccounts));
+  }, [pendingMatchTx, transactions, bills, pendingSourceAccountRef, showOtherPendingAccounts, targetMatchesAccount]);
   const pendingMatchOptions = useMemo(
     () => pendingMatchesForKind(pendingMatchKind, pendingBillMatchOptions, pendingManualMatchOptions, bills),
     [pendingMatchKind, pendingBillMatchOptions, pendingManualMatchOptions, bills],
@@ -1626,8 +1690,8 @@ export function ActivityScreen() {
         category: matchTx.category,
       },
       candidates,
-    );
-  }, [goals, matchTx]);
+    ).filter(option => targetMatchesAccount(matchedSourceAccountRef, "bucket", option.billId, showOtherMatchAccounts));
+  }, [goals, matchTx, matchedSourceAccountRef, showOtherMatchAccounts, targetMatchesAccount]);
   const combinedMatchOptions = useMemo(
     () =>
       [
@@ -1691,11 +1755,12 @@ export function ActivityScreen() {
     const defaults = buildForgottenBillDefaults(unplannedChargeTx);
     return {
       ...defaults,
+      fundingAccountRef: resolveTransactionAccountRef(unplannedChargeTx),
       category: categories.includes(defaults.category)
         ? defaults.category
         : "Other",
     };
-  }, [categories, unplannedChargeTx]);
+  }, [categories, unplannedChargeTx, resolveTransactionAccountRef]);
 
   const surplusSnowballOffer = useMemo(() => {
     if (!surplusPrompt || !settings.debtPayoffEnabled) return null;
@@ -1778,10 +1843,11 @@ export function ActivityScreen() {
   ).padStart(2, "0");
 
   const handleMatchBill = async (billId: string) => {
-    if (!matchTx || savingMatch) return;
+    if (!matchTx || savingMatch || !canEditHousehold) return;
     const transaction = matchTx;
     const bill = bills.find((item) => item.id === billId);
     const option = billMatchOptions.find((item) => item.billId === billId);
+    if (!option || !canEditHousehold) return;
     const [year, monthNumber] = transaction.date.split("-").map(Number);
     const actual = Math.abs(transaction.amount);
     const occurrenceDate = option?.nearestOccurrenceDate ?? transaction.date;
@@ -1820,7 +1886,7 @@ export function ActivityScreen() {
   };
 
   const handleMatchPendingBill = async (billId: string) => {
-    if (!pendingMatchTx || isInferredPendingBankHold(pendingMatchTx) || savingMatch) return;
+    if (!pendingMatchTx || isInferredPendingBankHold(pendingMatchTx) || savingMatch || !canEditHousehold || !pendingSourceAccountRef) return;
     const option = pendingBillMatchOptions.find(
       (item) => item.billId === billId,
     );
@@ -1850,7 +1916,7 @@ export function ActivityScreen() {
   };
 
   const handleMatchPendingManual = async (transactionId: string) => {
-    if (!pendingMatchTx || isInferredPendingBankHold(pendingMatchTx) || savingMatch) return;
+    if (!pendingMatchTx || isInferredPendingBankHold(pendingMatchTx) || savingMatch || !canEditHousehold || !pendingSourceAccountRef) return;
     const option = pendingManualMatchOptions.find(
       (item) => item.billId === transactionId,
     );
@@ -1878,31 +1944,22 @@ export function ActivityScreen() {
   };
 
   const openPendingTransactionCreator = () => {
-    if (!pendingMatchTx || isInferredPendingBankHold(pendingMatchTx) || savingMatch) return;
+    if (!pendingMatchTx || isInferredPendingBankHold(pendingMatchTx) || savingMatch || !canEditHousehold || !pendingSourceAccountRef) return;
     setPendingTransactionSource(pendingMatchTx);
     setPendingMatchTx(null);
   };
 
   const pendingTransactionInitialValues = useMemo(() => {
     if (!pendingTransactionSource) return undefined;
-    const connectedIdentity = connectedBankAccounts.find(
-      account =>
-        account.plaid_account_id === pendingTransactionSource.plaid_account_id
-        || account.id === pendingTransactionSource.plaid_account_id,
-    );
-    const accountId = accounts.find(
-      account =>
-        account.is_active
-        && (
-          account.id === pendingTransactionSource.plaid_account_id
-          || account.id === connectedIdentity?.id
-        ),
-    )?.id;
+    const accountRef = transactionForecastAccountRef({ source: "plaid", plaid_account_id: pendingTransactionSource.plaid_account_id }, forecastAccounts);
     return {
       ...pendingChargeTransactionDraft(pendingTransactionSource, categories),
-      account_id: accountId,
+      forecast_account_ref: accountRef,
+      plaid_account_id: pendingTransactionSource.plaid_account_id,
+      account_id: accountRef?.startsWith("manual:") ? accountRef.slice(7) : undefined,
     };
-  }, [accounts, categories, connectedBankAccounts, pendingTransactionSource]);
+  }, [categories, forecastAccounts, pendingTransactionSource]);
+  const transactionInitialValues = useMemo(() => pendingTransactionInitialValues ?? { forecast_account_ref: accountFilter && accountFilter !== "unassigned" ? accountFilter : null }, [accountFilter, pendingTransactionInitialValues]);
 
   const handleRemovePendingMatch = async () => {
     if (!selectedPendingPlanMatch || savingMatch) return;
@@ -1921,7 +1978,7 @@ export function ActivityScreen() {
   };
 
   const handleMatchManual = async (transactionId: string) => {
-    if (!matchTx || savingMatch) return;
+    if (!matchTx || savingMatch || !canEditHousehold) return;
     const option = manualMatchOptions.find(
       (item) => item.billId === transactionId,
     );
@@ -1952,7 +2009,7 @@ export function ActivityScreen() {
   };
 
   const handleMatchBucket = async (goalId: string) => {
-    if (!matchTx || savingMatch) return;
+    if (!matchTx || savingMatch || !canEditHousehold) return;
     const option = bucketMatchOptions.find((item) => item.billId === goalId);
     if (!option) return;
     const actual = Math.abs(matchTx.amount);
@@ -2162,7 +2219,7 @@ export function ActivityScreen() {
   };
 
   const handleUnmatchBill = async () => {
-    if (!matchTx || savingMatch) return;
+    if (!matchTx || savingMatch || !canEditHousehold) return;
     setSavingMatch(true);
     try {
       if (
@@ -2718,6 +2775,11 @@ export function ActivityScreen() {
                   value: formatDateLong(detailItem.date),
                 },
                 {
+                  icon: "credit-card" as const,
+                  label: "Account",
+                  value: activityAccountLabel(detailItem),
+                },
+                {
                   icon: "tag" as const,
                   label: "Category",
                   value: detailItem.category,
@@ -3267,6 +3329,7 @@ export function ActivityScreen() {
         ))}
       </ScrollView>
 
+      <View style={{ marginBottom: 12 }}>{renderAccountFilter()}</View>
       <View style={[styles.searchWrap, { marginBottom: 8 }]}>
         <View
           style={[
@@ -3349,17 +3412,9 @@ export function ActivityScreen() {
               item,
               transactionAccountIdentities,
             ),
-            accountName: item.rawTx?.account_id
-              ? accounts.find(
-                  (account) => account.id === item.rawTx?.account_id,
-                )?.name
-              : item.rawTx?.plaid_account_id
-                ? (activityAccountIdentityById.get(item.rawTx.plaid_account_id)
-                    ?.display_name ??
-                  activityAccountIdentityById.get(item.rawTx.plaid_account_id)
-                    ?.name)
-                : undefined,
+            accountName: activityAccountLabel(item),
           }))}
+          accountFilterSlot={<View style={{ minWidth: 190, maxWidth: 280, flexGrow: 1 }}>{renderAccountFilter()}</View>}
           summary={activitySummary}
           summaryIsPartial={activitySummaryIsPartial}
           dateRangeLabel={activeDateRange.label}
@@ -3471,7 +3526,7 @@ export function ActivityScreen() {
             return (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`${item.label}, ${isExpense ? "outflow" : "inflow"} ${formatActivityMoney(item.amount)} dollars, ${sourceMeta.label}, ${item.category}, ${formatDate(item.date)}${statusLabel ? `, ${statusLabel}` : ""}${balanceLabel ? `, ${balanceLabel} dollars` : ""}`}
+                accessibilityLabel={`${item.label}, ${isExpense ? "outflow" : "inflow"} ${formatActivityMoney(item.amount)} dollars, ${sourceMeta.label}, ${item.category}, ${activityAccountLabel(item)}, ${formatDate(item.date)}${statusLabel ? `, ${statusLabel}` : ""}${balanceLabel ? `, ${balanceLabel} dollars` : ""}`}
                 accessibilityHint="Opens activity details"
                 onPress={() => openItem(item)}
                 style={({ pressed }) => [
@@ -3519,6 +3574,7 @@ export function ActivityScreen() {
                     {sourceMeta.label} · {item.category} ·{" "}
                     {formatDate(item.date)}
                   </Text>
+                  <View style={[styles.txStatus, { backgroundColor: c.muted, flexDirection: "row", alignItems: "center", gap: 4 }]}><Feather name="credit-card" size={10} color={c.mutedForeground} /><Text style={[styles.txStatusText, { color: c.mutedForeground, flexShrink: 1 }]} numberOfLines={1}>{activityAccountLabel(item)}</Text></View>
                   {statusLabel ? (
                     <View
                       style={[
@@ -3649,7 +3705,7 @@ export function ActivityScreen() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`Remove pending match to ${selectedPendingPlanMatch.target_name}`}
-                  disabled={savingMatch}
+                  disabled={savingMatch || !canEditHousehold}
                   onPress={() => void handleRemovePendingMatch()}
                   style={[
                     styles.unmatchButton,
@@ -3677,11 +3733,12 @@ export function ActivityScreen() {
                   Create a new Activity transaction for this charge, or link it
                   to a bill, debt, or manual transaction you already planned.
                 </Text>
+                {renderMatchingAccountContext(pendingSourceAccountRef, showOtherPendingAccounts, setShowOtherPendingAccounts)}
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Create transaction for pending charge"
                   accessibilityHint="Opens a prefilled transaction form"
-                  disabled={savingMatch}
+                  disabled={savingMatch || !canEditHousehold || !pendingSourceAccountRef}
                   onPress={openPendingTransactionCreator}
                   style={({ pressed }) => [
                     styles.pendingCreateTransactionButton,
@@ -3712,7 +3769,7 @@ export function ActivityScreen() {
                     accessibilityRole="button"
                     accessibilityLabel={`Use suggested ${pendingMatchKindLabels[pendingMatchSuggestion.kind].toLowerCase()} ${pendingMatchSuggestion.name}, $${pendingMatchSuggestion.plannedAmount.toFixed(2)}`}
                     accessibilityHint="Links this pending payment only when you choose it"
-                    disabled={savingMatch}
+                    disabled={savingMatch || !canEditHousehold}
                     onPress={() => void (pendingMatchSuggestion.targetType === "manual"
                       ? handleMatchPendingManual(pendingMatchSuggestion.billId)
                       : handleMatchPendingBill(pendingMatchSuggestion.billId))}
@@ -3731,6 +3788,7 @@ export function ActivityScreen() {
                       <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>
                         {pendingMatchKindLabels[pendingMatchSuggestion.kind]} · ${pendingMatchSuggestion.plannedAmount.toFixed(2)} · {pendingMatchSuggestion.nearestOccurrenceDate ?? "Date unavailable"}
                       </Text>
+                      <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>{matchingAccountCopy(pendingSourceAccountRef, pendingMatchSuggestion.targetType, pendingMatchSuggestion.billId)}</Text>
                       {pendingMatchSuggestion.reasons.length > 0 ? (
                         <Text style={[styles.matchReason, { color: c.success }]}>{pendingMatchSuggestion.reasons.slice(0, 2).join(" · ")}</Text>
                       ) : null}
@@ -3747,7 +3805,7 @@ export function ActivityScreen() {
                       accessibilityLabel={`Match pending payment to ${pendingMatchKindLabels[kind].toLowerCase()}`}
                       accessibilityState={{ selected: pendingMatchKind === kind, disabled: savingMatch }}
                       aria-pressed={pendingMatchKind === kind}
-                      disabled={savingMatch}
+                      disabled={savingMatch || !canEditHousehold}
                       onPress={() => setPendingMatchKind(kind)}
                       style={{ borderWidth: 1, borderRadius: 10, minHeight: 44, justifyContent: "center", paddingHorizontal: 12, paddingVertical: 10, maxWidth: "100%", borderColor: pendingMatchKind === kind ? c.primary : c.border, backgroundColor: pendingMatchKind === kind ? c.primary + "18" : c.card, opacity: savingMatch ? 0.55 : 1 }}
                     >
@@ -3762,7 +3820,7 @@ export function ActivityScreen() {
                         key={`${option.targetType}-${option.billId}-${option.nearestOccurrenceDate}`}
                         accessibilityRole="button"
                         accessibilityLabel={`Match pending payment to ${pendingMatchKind ? pendingMatchKindLabels[pendingMatchKind].toLowerCase() : "entry"} ${option.name}, $${option.plannedAmount.toFixed(2)}, ${option.nearestOccurrenceDate ?? "date unavailable"}`}
-                        disabled={savingMatch}
+                        disabled={savingMatch || !canEditHousehold}
                         onPress={() =>
                           void (option.targetType === "manual"
                             ? handleMatchPendingManual(option.billId)
@@ -3850,6 +3908,7 @@ export function ActivityScreen() {
                                 ? "1 day away"
                                 : `${option.daysApart ?? 0} days away`}
                           </Text>
+                          <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>{matchingAccountCopy(pendingSourceAccountRef, option.targetType, option.billId)}</Text>
                           {option.reasons.length > 0 ? (
                             <Text
                               style={[styles.matchReason, { color: c.success }]}
@@ -3979,7 +4038,7 @@ export function ActivityScreen() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`Undo match to ${matchedTargetName}`}
-                  disabled={savingMatch}
+                  disabled={savingMatch || !canEditHousehold}
                   onPress={() => void handleUnmatchBill()}
                   style={[
                     styles.unmatchButton,
@@ -4008,11 +4067,12 @@ export function ActivityScreen() {
                   <Text style={[styles.matchIntro, { color: c.mutedForeground }]}>
                     {matchSuggestion ? "Use Flo’s suggestion, or choose a type to browse other entries." : "Choose a match type, then select the entry this payment covered."}
                   </Text>
+                  {renderMatchingAccountContext(matchedSourceAccountRef, showOtherMatchAccounts, setShowOtherMatchAccounts)}
                   {matchSuggestion ? (
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Use suggested ${matchSuggestionKind ? matchTargetKindLabels[matchSuggestionKind].toLowerCase() : "entry"} ${matchSuggestion.name}`}
-                      disabled={savingMatch}
+                      disabled={savingMatch || !canEditHousehold}
                       onPress={() =>
                         void (matchSuggestion.targetType === "manual"
                           ? handleMatchManual(matchSuggestion.billId)
@@ -4033,6 +4093,7 @@ export function ActivityScreen() {
                         <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>
                           {matchSuggestionKind ? matchTargetKindLabels[matchSuggestionKind] : "Entry"} · ${matchSuggestion.plannedAmount.toFixed(2)} · {matchSuggestion.nearestOccurrenceDate ?? "Date unavailable"}
                         </Text>
+                        <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>{matchingAccountCopy(matchedSourceAccountRef, matchSuggestion.targetType, matchSuggestion.billId)}</Text>
                         {matchSuggestion.reasons.length > 0 ? (
                           <Text style={[styles.matchReason, { color: c.success }]}>{matchSuggestion.reasons.slice(0, 2).join(" · ")}</Text>
                         ) : null}
@@ -4042,7 +4103,7 @@ export function ActivityScreen() {
                   ) : null}
                   <MatchTypeFilters
                     selected={matchTargetKind}
-                    disabled={savingMatch}
+                    disabled={savingMatch || !canEditHousehold}
                     onChange={(kind: MatchTargetKind) => setMatchTargetSelection({ scope: matchTargetScope, kind })}
                   />
                   {filteredMatchOptions.length > 0 ? (
@@ -4051,7 +4112,7 @@ export function ActivityScreen() {
                         key={`${option.targetType}-${option.billId}`}
                         accessibilityRole="button"
                         accessibilityLabel={`Match transaction to ${option.name}, planned $${option.plannedAmount.toFixed(2)}`}
-                        disabled={savingMatch}
+                        disabled={savingMatch || !canEditHousehold}
                         onPress={() =>
                           void (option.targetType === "manual"
                             ? handleMatchManual(option.billId)
@@ -4150,6 +4211,7 @@ export function ActivityScreen() {
                                   ? `${option.daysApart} days away`
                                   : option.category}
                           </Text>
+                          <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>{matchingAccountCopy(matchedSourceAccountRef, option.targetType, option.billId)}</Text>
                           {option.reasons.length > 0 && (
                             <Text
                               style={[styles.matchReason, { color: c.success }]}
@@ -4198,7 +4260,7 @@ export function ActivityScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Create bucket and add transaction"
-                disabled={savingMatch}
+                disabled={savingMatch || !canEditHousehold}
                 onPress={() => {
                   const transaction = matchTx;
                   if (!transaction) return;
@@ -4250,7 +4312,7 @@ export function ActivityScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Save this as a one-time charge"
-                disabled={savingMatch}
+                disabled={savingMatch || !canEditHousehold}
                 onPress={() => {
                   const transaction = matchTx;
                   setMatchTx(null);
@@ -4430,6 +4492,7 @@ export function ActivityScreen() {
               showsVerticalScrollIndicator={isDesktop}
               style={styles.filterSheetScroll}
             >
+              <View style={{ marginBottom: 12 }}>{renderAccountFilter()}</View>
               <Text
                 style={[
                   styles.filterGroupLabel,
@@ -4823,7 +4886,7 @@ export function ActivityScreen() {
         onDelete={handleDelete}
         onDeleteTransfer={handleDeleteTransfer}
         editTx={editTx}
-        initialValues={pendingTransactionInitialValues}
+        initialValues={transactionInitialValues}
         creationContext={pendingTransactionSource ? "pending_charge" : undefined}
       />
       <DebtPaymentAppliedModal

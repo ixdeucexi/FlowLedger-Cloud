@@ -227,8 +227,8 @@ describe("anchorForecastToBankBalance", () => {
   it("keeps the unanchored canonical plan as the calendar display source", () => {
     const context = readFileSync("lib/financialProjection.ts", "utf8");
 
-    assert.match(context, /const displayEvents = suppressDebtBillPlanDuplicates\(financialEvents\);/);
-    assert.match(context, /let balanceEvents = \[\.\.\.displayEvents\];/);
+    assert.match(context, /const allDisplayEvents = suppressDebtBillPlanDuplicates\(financialEvents\);/);
+    assert.match(context, /let balanceEvents = \[\.\.\.allDisplayEvents\];/);
     assert.match(context, /displayEvents\.forEach\(\(?event\)? => \{[\s\S]*?visibleEventsByDate\.set/);
   });
 

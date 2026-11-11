@@ -9,6 +9,8 @@ export interface DecisionScenario {
   frequency?: "once" | "weekly" | "biweekly" | "monthly";
   sourceId?: string;
   oldDate?: string;
+  funding_account_ref?: string | null;
+  deposit_account_ref?: string | null;
 }
 export interface DecisionBaselineDay { date: string; balance: number }
 export interface DecisionResult {

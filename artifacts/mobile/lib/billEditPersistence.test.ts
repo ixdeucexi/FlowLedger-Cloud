@@ -39,6 +39,7 @@ function bill(overrides: Partial<EditableBill> = {}): EditableBill {
     smart_priority: "must",
     include_in_snowball: true,
     debt_payment_pauses: [],
+    funding_account_ref: null,
     ...overrides,
   };
 }
@@ -51,6 +52,15 @@ test("an editor reports only fields changed from its open-time baseline", () => 
     name: "Travel Card",
     due_day: 20,
   });
+});
+
+test("funding account changes use a sparse CAS patch and preserve explicit clearing", () => {
+  const baseline = bill({ funding_account_ref: "manual:checking" });
+  const submitted = bill({ funding_account_ref: null });
+  assert.deepEqual(changedBillEditableFields(baseline, submitted), ["funding_account_ref"]);
+  assert.deepEqual(billEditablePatch(baseline, ["funding_account_ref"]), { funding_account_ref: "manual:checking" });
+  assert.deepEqual(billEditableDbPatch(submitted, ["funding_account_ref"]), { funding_account_ref: null });
+  assert.deepEqual(changedBillEditableFields(bill({ funding_account_ref: undefined }), bill()), []);
 });
 
 const pause = (patch: Partial<DebtPaymentPause> = {}): DebtPaymentPause => ({

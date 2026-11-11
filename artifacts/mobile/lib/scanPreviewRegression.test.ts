@@ -30,6 +30,9 @@ test("income's actual save handler visibly reports missing payday and persistenc
     const source = readFileSync("components/IncomeModal.tsx", "utf8"), start = source.indexOf("  const handleSave =");
     const body = source.slice(start, source.indexOf("  const handleAddUpdate =", start));
     const bindings = revealedPrivacyBindings({
+      formScopeRef: { current: "fictional-household:fictional-budget" },
+      formAccessRef: { current: { scopeKey: "fictional-household:fictional-budget", canEdit: true, visible: true } },
+      depositAccountRef: null, accountForecastReady: true, forecastAccounts: [],
       saving: false, amount: "1,200.50", parseMoneyInput, name: "Income", firstPayDate: payday,
       showFormError: (title: string) => errors.push(title),
       Haptics: { impactAsync() {}, ImpactFeedbackStyle: { Medium: "medium" } },

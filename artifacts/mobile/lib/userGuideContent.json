@@ -116,7 +116,7 @@
     ],
     "callout": {
       "title": "Matched activity appears once",
-      "body": "When bank sync is available, a planned item matched to pending bank activity should show one Payment Pending item—not two charges."
+      "body": "Matching starts with the bank account’s plans and Unassigned items. Choose Include plans from other accounts when needed. The bank transaction keeps its original account."
     }
   },
   {
@@ -129,7 +129,9 @@
       {
         "title": "Read the calendar",
         "items": [
-          { "title": "Inflows and outflows", "body": "Calendar colors separate money coming in from bills and debts going out.", "icon": "shuffle" },
+          { "title": "Choose an account", "body": "Use Forecast account to switch between Household and a checking, bills, cash, or savings account. Each account starts from its own dated balance; Savings stays out of Household spending money.", "icon": "layers" },
+          { "title": "Assign future plans", "body": "Choose a payment or deposit account in bill, income, bucket, and Activity editors. Use Needs account in Household for older plans. Unassigned plans remain in Household until you assign them.", "icon": "shuffle" },
+          { "title": "Show future forecasts", "body": "In Settings > Household, turn Show future forecast on or off for each account. This personal choice only changes your Forecast picker; balances, Activity, matching, and the plan stay included.", "icon": "eye" },
           { "title": "Open the day", "body": "Calendar cells show full whole-dollar amounts. Tap a date for exact cents and every item behind its closing balance.", "icon": "search" },
           { "title": "Verify status", "body": "When bank sync is available, matched pending payments should appear once with their current status.", "icon": "check-square" },
           { "title": "Sync is not cash activity", "body": "When bank sync is available, a refresh updates data but is not itself a calendar cash event.", "icon": "refresh-cw" }
@@ -160,8 +162,9 @@
         "title": "Savings",
         "items": [
           { "title": "Flip the full card", "body": "Tap Savings on Dashboard to switch from checking to savings.", "icon": "repeat" },
-          { "title": "Review accounts separately", "body": "Review each manual savings account and its current recorded balance.", "icon": "layers" },
-          { "title": "Name the purpose", "body": "Use names like Emergency Fund, Vacation, Taxes, or Car Repair.", "icon": "tag" }
+          { "title": "Review accounts separately", "body": "Open Settings > Household for each manual or connected account’s current balance, available balance, and last update.", "icon": "layers" },
+          { "title": "Name the purpose", "body": "Use names like Emergency Fund, Vacation, Taxes, or Car Repair.", "icon": "tag" },
+          { "title": "Estimate savings interest", "body": "Open a Savings account’s forecast settings and enter its APY, then Save. The forecast adds estimated monthly interest. Leave APY blank if unknown. Estimates do not create Activity or change your bank balance; actual bank credits may differ.", "icon": "trending-up" }
         ]
       },
       {
@@ -219,7 +222,7 @@
       {
         "title": "Keep the workspace current",
         "items": [
-          { "title": "Household access", "body": "Open Settings > Household to create an invite or join with a code. Choose Can edit to help change a plan, or View only. Use the Dashboard people button to switch households; each keeps its own money and budgets.", "icon": "users" },
+          { "title": "Household access", "body": "Open Settings > Household to invite or join. Can edit changes plans; View only reads them. Use Dashboard’s people button to switch households. All members can view shared accounts.", "icon": "users" },
           { "title": "Bank connections", "body": "Open Settings > Bank connections to see linked accounts. New links request two months of history. Review subscription flags. Unlink disconnects all accounts at that bank and keeps past activity.", "icon": "credit-card" },
           { "title": "Categories and monthly budgets", "body": "Open Settings > Plan > Categories to set monthly limits or manage categories. Choose This month or Every month, then Save. Each category shows Spent and Left. Clear a limit to remove it; category changes keep linked activity together.", "icon": "tag" },
           { "title": "Setup & walkthrough", "body": "Run setup again after a major change or replay the Guided Tour from its first step.", "icon": "compass" },

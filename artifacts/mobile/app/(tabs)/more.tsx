@@ -33,6 +33,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ConnectedBalanceList } from "@/components/ConnectedBalanceList";
 import { BankConnectionManager } from "@/components/BankConnectionManager";
 import { AccountModal } from "@/components/AccountModal";
+import { AccountForecastSettings } from "@/components/AccountForecastSettings";
 import { AdminMembershipTools } from "@/components/AdminMembershipTools";
 import { BiometricLockSettings } from "@/components/BiometricLockSettings";
 import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
@@ -72,7 +73,7 @@ import { useLocalDay } from "@/hooks/useLocalDay";
 import { goalFundingCushion, parseGoalContribution, goalContributionSnapshotMatches, goalContributionStepReducer } from "@/lib/goalFundingReview";
 import { isCashFlowTransaction } from "@/lib/billMatching";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
-import { dateOnlyToLocalDate, localDateString } from "@/lib/dateLabels";
+import { localDateString } from "@/lib/dateLabels";
 import { householdActivityHeadline } from "@/lib/householdActivity";
 import { parseStatementCsv } from "@/lib/accounts";
 import { orderActiveDebtsForStrategy } from "@/lib/debtOrder";
@@ -3518,172 +3519,20 @@ export default function MoreScreen({
               )}
             </View>
 
-            <SLabel c={c} text="Accounts & Balances" />
-            <View
-              style={[
-                styles.card,
-                { backgroundColor: c.card, borderRadius: colors.radius },
-              ]}
+            <AccountForecastSettings
+              onEditManualAccount={account => openAccount("edit", account)}
+              onReconcileManualAccount={account => openAccount("reconcile", account)}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add manual account"
+              disabled={!canEditHousehold}
+              onPress={() => openAccount("add")}
+              style={[styles.addBtn, { backgroundColor: c.primary + "12", borderRadius: 10, opacity: canEditHousehold ? 1 : .5 }]}
             >
-              <View
-                style={[
-                  styles.confidenceBox,
-                  {
-                    backgroundColor:
-                      forecastConfidence.level === "high"
-                        ? c.success + "14"
-                        : forecastConfidence.level === "medium"
-                          ? "#f59e0b18"
-                          : c.destructive + "12",
-                  },
-                ]}
-              >
-                <Feather
-                  name={
-                    forecastConfidence.level === "high"
-                      ? "check-circle"
-                      : "alert-circle"
-                  }
-                  size={16}
-                  color={
-                    forecastConfidence.level === "high"
-                      ? c.success
-                      : forecastConfidence.level === "medium"
-                        ? "#d97706"
-                        : c.destructive
-                  }
-                />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.accountName, { color: c.foreground }]}>
-                    Forecast confidence: {forecastConfidence.label}
-                  </Text>
-                  <Text
-                    style={[styles.switchDesc, { color: c.mutedForeground }]}
-                  >
-                    {forecastConfidence.reasons[0]}
-                  </Text>
-                </View>
-              </View>
-              {accounts
-                .filter((account) => account.is_active)
-                .map((account, index) => {
-                  const reviewed =
-                    account.last_reconciled_at ?? account.balance_as_of;
-                  const age = Math.max(
-                    0,
-                    Math.floor(
-                      (Date.now() - new Date(reviewed).getTime()) / 86_400_000,
-                    ),
-                  );
-                  const balanceDate = dateOnlyToLocalDate(account.balance_as_of ?? "");
-                  return (
-                    <View
-                      key={account.id}
-                      style={[
-                        styles.accountRow,
-                        stackCompactAccountControls && styles.accountRowCompact,
-                        {
-                          borderTopWidth: index ? 1 : 0,
-                          borderTopColor: c.border,
-                        },
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.incomeIcon,
-                          { backgroundColor: c.primary + "16" },
-                        ]}
-                      >
-                        <Feather
-                          name={
-                            account.account_type === "savings"
-                              ? "heart"
-                              : "dollar-sign"
-                          }
-                          size={17}
-                          color={c.primary}
-                        />
-                      </View>
-                      <Pressable
-                        style={{ flex: 1 }}
-                        onPress={() => openAccount("edit", account)}
-                      >
-                        <Text
-                          style={[styles.accountName, { color: c.foreground }]}
-                        >
-                          {account.name}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.incomeFreq,
-                            {
-                              color:
-                                age > 30 ? c.destructive : c.mutedForeground,
-                            },
-                          ]}
-                        >
-                          {account.account_type.replace("_", " ")} ·{" "}
-                          {age === 0
-                            ? "reconciled today"
-                            : `${age} days since review`}
-                        </Text>
-                      </Pressable>
-                      <View
-                        style={[
-                          styles.accountRight,
-                          stackCompactAccountControls &&
-                            styles.accountRightCompact,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.incomeMonthly,
-                            { color: c.foreground },
-                          ]}
-                        >
-                          ${account.current_balance.toFixed(2)}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.reconcileText,
-                            { color: c.mutedForeground },
-                          ]}
-                        >
-                          {balanceDate ? `Balance as of ${balanceDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}` : "Balance date unknown"}
-                        </Text>
-                        <Pressable
-                          onPress={() => openAccount("reconcile", account)}
-                        >
-                          <Text
-                            style={[styles.reconcileText, { color: c.primary }]}
-                          >
-                            Reconcile
-                          </Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  );
-                })}
-              {!accounts.some((account) => account.is_active) && (
-                <Text style={[styles.emptyText, { color: c.mutedForeground }]}>
-                  Add your first account.
-                </Text>
-              )}
-              <Pressable
-                onPress={() => openAccount("add")}
-                style={[
-                  styles.addBtn,
-                  { backgroundColor: c.primary + "12", borderRadius: 10 },
-                ]}
-              >
-                <Feather name="plus" size={16} color={c.primary} />
-                <Text style={[styles.addBtnText, { color: c.primary }]}>
-                  Add Account
-                </Text>
-              </Pressable>
-            </View>
-
-            <ConnectedBalanceList accounts={connectedBankAccounts} ready={startupCoreReady && !budgetLoading && !budgetLoadError} timeZone={householdTimeZone} />
+              <Feather name="plus" size={16} color={c.primary} />
+              <Text style={[styles.addBtnText, { color: c.primary }]}>Add manual account</Text>
+            </Pressable>
             {/* ── Income Sources ── */}
           </>
         )}

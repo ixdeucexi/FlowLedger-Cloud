@@ -1,6 +1,6 @@
 import { isBucketLinkedManualPurchase } from "./bucketPurchases";
-import { createPlaidTransactionAccountKindClassifier, isActiveTransaction } from "./billMatching";
-import type { LedgerConnectedAccountLike, LedgerTransactionLike } from "./ledgerEngine";
+import { isActiveTransaction } from "./billMatching";
+import { createDepositoryTransactionAccountClassifier, type LedgerConnectedAccountLike, type LedgerTransactionLike } from "./ledgerEngine";
 import type { PendingPlanMatch } from "./pendingPlanMatches";
 
 type Scope = { household_id?: string | null; budget_id?: string | null };
@@ -42,17 +42,8 @@ export function pendingManualReplacementIds<T extends ReplacementTransaction>(
     if (transaction.plaid_transaction_id) byPlaidId.set(transaction.plaid_transaction_id,
       byPlaidId.has(transaction.plaid_transaction_id) ? null : transaction);
   }
-  const classifyAccount = createPlaidTransactionAccountKindClassifier(accounts);
+  const classifyAccount = createDepositoryTransactionAccountClassifier(accounts);
   const debtIds = new Set(bills.filter(bill => bill.is_debt).map(bill => bill.id));
-  const accountAliases = new Map<string, string | null>();
-  for (const account of accounts) {
-    const identity = account.plaid_account_id || account.id;
-    if (!identity) continue;
-    for (const alias of [account.id, account.plaid_account_id]) {
-      if (!alias) continue;
-      accountAliases.set(alias, accountAliases.has(alias) && accountAliases.get(alias) !== identity ? null : identity);
-    }
-  }
   const pairs: Array<{ manual: string; posted: string }> = [];
   const bankByManual = new Map<string, Set<string>>();
   const manualByBank = new Map<string, Set<string>>();
@@ -72,10 +63,12 @@ export function pendingManualReplacementIds<T extends ReplacementTransaction>(
     if (!validDate(manual.date) || !validDate(posted.date) || !validDate(match.pending_transaction_date) || manual.date !== match.occurrence_date || manual.date.slice(0, 7) !== match.pending_transaction_date.slice(0, 7)) continue;
     if (manual.source === "plaid" || manual.import_hash || manual.transfer_group_id || ((!isBucketLinkedManualPurchase(manual)) && (manual.linked_plan_id || manual.review_status === "matched")) || manual.category === "Transfer" || manual.review_status === "transfer") continue;
     if (manual.linked_bill_id && ((manual.source != null && manual.source !== "manual") || !debtIds.has(manual.linked_bill_id))) continue;
-    if (posted.source !== "plaid" || posted.review_status !== "needs_review" || classifyAccount(posted) !== "checking") continue;
-    if (match.pending_account_id && match.pending_account_id !== posted.plaid_account_id) {
-      const pendingAccount = accountAliases.get(match.pending_account_id);
-      if (!pendingAccount || pendingAccount !== accountAliases.get(posted.plaid_account_id || "")) continue;
+    const postedAccount = classifyAccount(posted);
+    if (posted.source !== "plaid" || posted.review_status !== "needs_review"
+      || (postedAccount.accountKind !== "checking" && postedAccount.accountKind !== "savings")) continue;
+    if (match.pending_account_id) {
+      const pendingAccount = classifyAccount({ source: "plaid", plaid_account_id: match.pending_account_id });
+      if (!pendingAccount.accountIdentity || pendingAccount.accountIdentity !== postedAccount.accountIdentity) continue;
     }
     if (!sameAvailableScope(manual, posted, match)) continue;
     pairs.push({ manual: manual.id, posted: posted.id });

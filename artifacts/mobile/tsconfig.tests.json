@@ -12,6 +12,10 @@
     "outDir": ".test-dist"
   },
   "include": [
+    "lib/accountForecasts.test.ts",
+    "lib/accountForecastVisibility.test.ts",
+    "lib/savingsInterest.test.ts",
+    "lib/financialProjectionInput.test.ts",
     "lib/subscriptionDetector.js",
     "lib/moneyPrivacy.test.ts",
     "lib/appearance.test.ts",

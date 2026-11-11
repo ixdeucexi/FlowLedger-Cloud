@@ -7,6 +7,7 @@ import { parseMoneyInput, parseDecimalInput } from "./moneyFormInput";
 import { dateOnlyToLocalDate } from "./dateLabels";
 import { normalizeBillRow } from "./financialProjectionInput";
 import { getBillOccurrenceDays } from "./schedule";
+import { parseForecastAccountRef } from "./accountForecasts";
 
 test("yearly bill form requires a real first date and saves a reloadable annual bill", async () => {
   const source = readFileSync("components/AddBillModal.tsx", "utf8");
@@ -41,6 +42,12 @@ test("yearly bill form requires a real first date and saves a reloadable annual 
 });
 
 function handler(file: string, start: string, end: string, bindings: Record<string, unknown>) {
+  if (/components\/(?:AddBill|AddTransaction|Income|Goal)Modal\.tsx$/.test(file)) {
+    const access = { current: { scopeKey: "fictional-household:fictional-budget", canEdit: true, visible: true } };
+    bindings = { formScopeRef: { current: access.current.scopeKey }, formAccessRef: access, pauseAccessRef: access,
+      fundingAccountRef: null, depositAccountRef: null, accountRef: null, sourceAccountLocked: false, accountForecastReady: true,
+      forecastAccounts: [], activeForecastAccounts: [], creationContext: undefined, initialValues: undefined, ...bindings };
+  }
   bindings = revealedPrivacyBindings(bindings);
   const source = readFileSync(file, "utf8");
   const body = source.slice(source.indexOf(`  const ${start} =`), source.indexOf(`  const ${end} =`, source.indexOf(`  const ${start} =`)));
@@ -79,6 +86,41 @@ test("valid grouped transaction amount persists exactly rather than its numeric 
   await save();
   assert.equal(saved.length, 1);
   assert.equal(saved[0].amount, -1200.5);
+});
+
+test("historical bank edits preserve their immutable account and never put a bank UUID in the local FK", async () => {
+  const bank = parseForecastAccountRef("bank:11111111-1111-4111-8111-111111111111")!;
+  const other = parseForecastAccountRef("bank:22222222-2222-4222-8222-222222222222")!;
+  const saved: any[] = [];
+  const editTx = { id: "fictional-posted", source: "plaid", plaid_account_id: "fictional-provider-bills", forecast_account_ref: bank, amount: -25, date: "2026-10-01", category: "Other", note: "Original" };
+  const save = handler("components/AddTransactionModal.tsx", "handleSave", "handleDelete", {
+    saving: false, savingRef: { current: false }, amount: "25", parseMoneyInput, bucketPurchase: false, isTransfer: false, isExpense: true,
+    category: "Other", note: "Saved name", date: editTx.date, linkedBillId: undefined, editTx,
+    sourceAccountLocked: true, accountRef: other, accountForecastReady: false, activeForecastAccounts: [],
+    Haptics: { impactAsync() {}, ImpactFeedbackStyle: {} }, previewSafetyStop: () => null,
+    saveStandardTransaction: (payload: unknown) => saved.push(payload),
+  });
+  await save();
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].plaid_account_id, editTx.plaid_account_id);
+  assert.equal(saved[0].forecast_account_ref, bank);
+  assert.equal(saved[0].account_id, undefined);
+  assert.equal(saved[0].note, "Saved name");
+});
+
+test("transaction editors refuse unavailable account choices, viewers and stale household drafts before persistence", async () => {
+  const ref = parseForecastAccountRef("manual:fictional-checking")!;
+  for (const reason of ["unavailable", "viewer", "household"] as const) {
+    let saves = 0; const errors: string[] = [];
+    const save = handler("components/AddTransactionModal.tsx", "handleSave", "handleDelete", {
+      saving: false, savingRef: { current: false }, amount: "25", parseMoneyInput,
+      formScopeRef: { current: "household-a:budget-a" },
+      formAccessRef: { current: { scopeKey: reason === "household" ? "household-b:budget-b" : "household-a:budget-a", canEdit: reason !== "viewer", visible: true } },
+      accountRef: ref, accountForecastReady: true, activeForecastAccounts: reason === "unavailable" ? [] : [{ ref, active: true }],
+      setSaveError: (error: string) => errors.push(error), saveStandardTransaction: () => saves++,
+    });
+    await save(); assert.equal(saves, 0, reason); assert.equal(errors.length, 1, reason);
+  }
 });
 
 test("OAuth deletion verification recovers from storage, provider and session throws and rejects a different identity", async () => {

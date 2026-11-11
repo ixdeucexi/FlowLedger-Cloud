@@ -33,6 +33,7 @@ export interface Bill {
   snowball_minimum_boost?: number;
   last_reviewed_at?: string;
   debt_payment_pauses?: DebtPaymentPause[];
+  funding_account_ref?: string | null;
 }
 
 export interface MonthlyOverride {
@@ -69,6 +70,7 @@ export interface Transaction {
   note: string;
   linked_bill_id?: string;
   account_id?: string;
+  forecast_account_ref?: string | null;
   import_hash?: string;
   transfer_group_id?: string;
   debt_applied_amount?: number;
@@ -144,6 +146,8 @@ export interface ReviewAllocation {
 
 export interface Account {
   id: string;
+  household_id?: string;
+  budget_id?: string;
   name: string;
   account_type: AccountType;
   current_balance: number;
@@ -154,7 +158,11 @@ export interface Account {
 }
 
 export interface ConnectedBankAccount {
+  currency_code?: string | null;
   id: string;
+  household_id?: string;
+  account_id?: string;
+  flowledger_account_id?: string;
   plaid_account_id?: string;
   name: string;
   display_name?: string;
@@ -192,6 +200,7 @@ export interface IncomeItem {
   amount_history?: IncomeAmountEntry[];
   excluded_dates?: string[];
   last_reviewed_at?: string;
+  deposit_account_ref?: string | null;
 }
 
 export interface Goal {
@@ -207,6 +216,8 @@ export interface Goal {
   closed_by?: string;
   archived_at?: string;
   archived_by?: string;
+  funding_account_ref?: string | null;
+  deposit_account_ref?: string | null;
 }
 
 export interface DecisionRecord {
@@ -230,6 +241,8 @@ export interface DecisionRecord {
   next_due_date?: string;
   completed_at?: string;
   created_at: string;
+  funding_account_ref?: string | null;
+  deposit_account_ref?: string | null;
 }
 
 export interface SnowballAllocation {
@@ -243,6 +256,7 @@ export interface SnowballAllocation {
 }
 
 export interface SnowballFundingSource {
+  accountRef?: string | null;
   type: "manual" | "bill_surplus" | "bucket_remainder";
   amount: number;
   billId?: string;
@@ -262,6 +276,7 @@ export interface ExtraPayment {
   allocations: SnowballAllocation[];
   payment_date?: string;
   sources?: SnowballFundingSource[];
+  funding_account_ref?: string | null;
 }
 
 export interface Settings {
@@ -329,6 +344,9 @@ export interface FinancialProjectionSnapshot {
   transactionAccountIdentities: ConnectedBankAccount[];
   pendingBankTransactions: PendingBankTransaction[];
   pendingPlanMatches: PendingPlanMatch[];
+  /** Full scoped depository rows retained before legacy checking-only selection. */
+  rawTransactions?: Transaction[];
+  rawPendingBankTransactions?: PendingBankTransaction[];
 }
 export interface FinancialProjectionOptions {
   now: Date;

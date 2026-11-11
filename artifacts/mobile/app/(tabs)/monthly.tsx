@@ -18,6 +18,8 @@ import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
 import { DatePickerField } from "@/components/DatePickerField";
 import { DebtPaymentAppliedModal, type DebtPaymentAppliedDetail } from "@/components/DebtPaymentAppliedModal";
 import { DesktopCalendarPage } from "@/components/desktop/DesktopCalendarPage";
+import { AccountForecastPicker } from "@/components/AccountForecastPicker";
+import { AccountForecastPanel } from "@/components/AccountForecastPanel";
 import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import { EmptyState } from "@/components/EmptyState";
 import { FullPaymentPromptModal } from "@/components/FullPaymentPromptModal";
@@ -442,6 +444,7 @@ export default function MonthlyScreen() {
     getCashFlow, getMonthlyIncome, getDailyBalances, getCalendarDailyBalances, getIncomeOccurrencesInMonth,
     previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, finalizeBillPayment, getExtraPayment, getDebtMonthSettlements, getDebtPlanForMonth, getRemainingDebtPlanForMonth, setPlannedDebtAmount, canEditHousehold,
     updateDecision, deleteDecision, updateGoal, deleteGoal, activeHousehold, householdTimeZone, startupCoreReady,
+    selectedForecastAccountRef, setSelectedForecastAccountRef,
   } = useBudget();
   const householdAsOfDate = safeLocalDateInTimeZone(new Date(), householdTimeZone);
   const [householdCurrentYear, householdCurrentMonthNumber] = householdAsOfDate.split("-").map(Number);
@@ -479,6 +482,12 @@ export default function MonthlyScreen() {
     markCalendarInteraction();
     setSelectedDate(date);
   }, [markCalendarInteraction]);
+  useEffect(() => {
+    if (selectedForecastAccountRef) {
+      setSelectedDate(null);
+      setSafetyYearOpenScope(null);
+    }
+  }, [selectedForecastAccountRef]);
   const [editingAmounts, setEditingAmounts] = useState<Record<string, string>>({});
   const [editingPaid, setEditingPaid] = useState<Record<string, string>>({});
   const editingPaidRef = useRef<Record<string, string>>({});
@@ -493,6 +502,7 @@ export default function MonthlyScreen() {
     const parsed = new Date(year, monthNumber - 1, day, 12);
     if (parsed.getFullYear() !== year || parsed.getMonth() !== monthNumber - 1 || parsed.getDate() !== day) return;
     handledOpenDateRef.current = token;
+    setSelectedForecastAccountRef(null);
     setSelectedYear(year);
     setMonth(monthNumber - 1);
     setSelectedDate(openDate);
@@ -1860,8 +1870,19 @@ export default function MonthlyScreen() {
           selectCalendarDate(date);
         }}
       /> : null}
-      {isDesktop ? (
+      {selectedForecastAccountRef ? (
+        <AccountForecastPanel
+          accountRef={selectedForecastAccountRef}
+          month={month}
+          year={selectedYear}
+          onPreviousMonth={() => changeMonth(-1)}
+          onNextMonth={() => changeMonth(1)}
+          onToday={jumpToToday}
+          onOpenEvent={openDesktopCalendarEvent}
+        />
+      ) : isDesktop ? (
         <DesktopCalendarPage
+          headerAccessory={<AccountForecastPicker label="Forecast account" includeHousehold visibleOnly allowUnassigned={false} value={selectedForecastAccountRef} onChange={setSelectedForecastAccountRef} />}
           month={month}
           year={selectedYear}
           resolveEventLabel={resolveDesktopEventLabel}
@@ -1943,6 +1964,9 @@ export default function MonthlyScreen() {
             </Text>
           </Pressable>
         </View>
+      </View>
+      <View style={{ marginHorizontal: 20, marginBottom: 8 }}>
+        <AccountForecastPicker label="Forecast account" includeHousehold visibleOnly allowUnassigned={false} value={selectedForecastAccountRef} onChange={setSelectedForecastAccountRef} />
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel="Safety floor days for the year" onPress={openSafetyYear} style={{ alignSelf: "flex-start", marginHorizontal: 20, paddingVertical: 10 }}>
         <Text style={{ color: c.primary, fontFamily: "Inter_600SemiBold" }}>Safety floor days</Text>

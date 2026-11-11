@@ -56,9 +56,10 @@ import { resolveBillOccurrencePayment } from "./billOccurrencePayment";
 import { spendingBucketSummary } from "./spendingBuckets";
 import { isBillEligibleForUpcomingPlan } from "./billEligibility";
 import { activeDebtPaymentPause, isDebtPaymentPaused } from "./debtPaymentPause";
-import { buildTransactionLedger, remainingPlannedAmount } from "./ledgerEngine";
+import { buildTransactionLedger, createDepositoryTransactionAccountKindClassifier, remainingPlannedAmount } from "./ledgerEngine";
 import { debtSourceCommitmentsForDebts } from "./pendingPlanMatches";
 import { pendingManualReplacementIds } from "./pendingManualReplacement";
+import { buildForecastAccountCatalog, eventForecastAccountRef, createEventForecastAccountResolver, pairedTransferEvents, transactionForecastAccountRef } from "./accountForecasts";
 import {
   buildMatchedFinancialAllocationIndexes,
   financialProjectionMonthCacheKey,
@@ -188,6 +189,28 @@ export function createFinancialProjection(
     pendingBankTransactions,
     pendingPlanMatches,
   } = snapshot;
+  const forecastAccounts = buildForecastAccountCatalog({ accounts, bankAccounts: transactionAccountIdentities, timeZone: options.timeZone });
+  const resolveEventAccount = createEventForecastAccountResolver(snapshot, forecastAccounts);
+  const accountTypes = new Map(forecastAccounts.map(row => [row.ref, row.type]));
+  let transactionById: Map<string, typeof transactions[number]> | undefined;
+  const getTransaction = (id: string) => {
+    transactionById ??= new Map([...transactions, ...deletedTransactions].map(row => [row.id, row]));
+    return transactionById.get(id);
+  };
+  const classifyCashAccount = createDepositoryTransactionAccountKindClassifier(transactionAccountIdentities);
+  const operating = (event: FinancialEvent) => {
+    const row = event.sourceType === "transaction" ? getTransaction(event.sourceId) : undefined;
+    if (row?.source === "plaid") return classifyCashAccount(row) === "checking";
+    const ref = resolveEventAccount(event);
+    return !ref || accountTypes.get(ref) !== "savings";
+  };
+  const savingsAccountRefs = new Set(forecastAccounts.filter(row => row.type === "savings").map(row => row.ref));
+  const hasAccountRouting = [...bills, ...goals, ...extraPayments, ...decisions].some(row => Boolean(row.funding_account_ref))
+    || incomes.some(row => Boolean(row.deposit_account_ref))
+    || decisions.some(row => Boolean(row.deposit_account_ref))
+    || transactions.some(row => row.forecast_account_ref || savingsAccountRefs.size > 0
+      && savingsAccountRefs.has(transactionForecastAccountRef(row, forecastAccounts)!));
+  const unanchoredCashEvents = new Map<string, FinancialEvent[]>();
   const now = new Date(options.now.getTime());
   const householdTimeZone = options.timeZone;
   if (!Number.isFinite(now.getTime()))
@@ -925,6 +948,7 @@ export function createFinancialProjection(
 
   const getMonthlyIncome = (month?: number, year?: number) =>
     incomes
+      .filter(i => operating({id:i.id,sourceType:"income",sourceId:i.id,date:"",kind:"scheduled_income",amount:i.amount,status:"scheduled"}))
       .filter((i) =>
         month !== undefined && year !== undefined
           ? isIncomeActiveForMonth(i, month, year)
@@ -959,6 +983,10 @@ export function createFinancialProjection(
       { suppressedTransactionIds: pendingManualReplacementIds(transactions, pendingPlanMatches, transactionAccountIdentities, bills) },
     ))();
 
+  const cashAccountLedger = transactionAccountIdentities.some(row => row.account_type === "depository" && row.account_subtype === "savings")
+    ? buildTransactionLedger([...transactions, ...deletedTransactions], transactions, transactionAccountIdentities,
+      { includeSavings: true, suppressedTransactionIds: pendingManualReplacementIds(transactions, pendingPlanMatches, transactionAccountIdentities, bills) })
+    : transactionLedger;
   const forecastTransactionsByMonth = transactionLedger.cashTransactionsByMonth;
 
   const visibleCheckingTransactionsByDate =
@@ -1082,6 +1110,17 @@ export function createFinancialProjection(
         ? sum + getGoalRemainingAmount(goal)
         : sum;
     }, 0);
+    if (hasAccountRouting) {
+      const events = getUnanchoredCashEvents(month, year).filter(operating);
+      return {
+        monthlyIncome: events.filter(row => row.kind === "scheduled_income").reduce((sum,row)=>sum+Math.max(0,row.amount),0),
+        totalBillsDue: events.filter(row => row.kind === "bill" || row.kind === "debt_payment").reduce((sum,row)=>sum+Math.max(0,-row.amount),0),
+        totalPaid,
+        netTransactions: events.filter(row => row.sourceType === "transaction").reduce((sum,row)=>sum+row.amount,0),
+        goalAllocations: events.filter(row => row.kind === "goal").reduce((sum,row)=>sum+Math.max(0,-row.amount),0),
+        remaining: events.reduce((sum,row)=>sum+row.amount,0),
+      };
+    }
     return {
       monthlyIncome,
       totalBillsDue,
@@ -1120,7 +1159,7 @@ export function createFinancialProjection(
     daily: new Map<string, DailyBalance[]>(),
   }))();
 
-  const buildDailyBalances = (month: number, year: number): DailyBalance[] => {
+  const buildDailyBalances = (month: number, year: number, rawOnly = false, reservationAsOfDate?: string): DailyBalance[] => {
     const projectionAsOfDate = safeLocalDateInTimeZone(now, householdTimeZone);
     const requestedDebtPlan = getRemainingDebtPlanForMonth(month, year);
     const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -1148,6 +1187,11 @@ export function createFinancialProjection(
           !planStartDate.startsWith(monthPrefix) ||
           date >= planStartDate) &&
         (!startExclusive || date > startExclusive);
+      if (hasAccountRouting) {
+        const net = getUnanchoredCashEvents(m, y).filter(event => includeDate(event.date) && operating(event)).reduce((sum,event)=>sum+event.amount,0);
+        if (!startExclusive) balanceComputationCache.monthNet.set(key, net);
+        return net;
+      }
       const billMatches = matchedAllocationIndexes.bill;
       const incomeMatches = matchedAllocationIndexes.income;
       const snowballMatches = matchedAllocationIndexes.snowball;
@@ -1392,7 +1436,7 @@ export function createFinancialProjection(
       balanceComputationCache.carryover.set(key, running);
       return running;
     };
-    const carryover = computeCarryover(month, year);
+    const carryover = rawOnly ? 0 : computeCarryover(month, year);
     const financialEvents: FinancialEvent[] = [];
     const billMatches = matchedAllocationIndexes.bill;
     const incomeMatches = matchedAllocationIndexes.income;
@@ -1426,6 +1470,7 @@ export function createFinancialProjection(
         `${year}-${String(month + 1).padStart(2, "0")}`,
       ) ?? [];
     monthTxs.forEach((t) => {
+      if (t.transfer_group_id) return;
       const isBankActivity =
         t.source === "plaid" ||
         t.source === "statement" ||
@@ -1601,6 +1646,8 @@ export function createFinancialProjection(
             allocation.kind === "extra" ? "saved_extra" : "canonical",
           debtPlanAllocationKind: allocation.kind,
           debtTargetBillId: allocation.targetBillId,
+          ...((allocation.kind === "rollover" || allocation.pauseRedirect) ? { fundingAccountRef: bills.find(bill => bill.id === (allocation.pauseRedirect?.fromBillId ?? allocation.sourceBillId))?.funding_account_ref ?? undefined }
+            : allocation.kind === "extra" && savedExtra?.funding_account_ref ? { fundingAccountRef: savedExtra.funding_account_ref } : {}),
           ...(allocation.pauseRedirect ? { debtPauseRedirect: allocation.pauseRedirect } : {}),
         });
       });
@@ -1687,6 +1734,11 @@ export function createFinancialProjection(
     decisions
       .filter((d) => d.status === "planned" || d.status === "calendar")
       .forEach((decision) => {
+        if (decision.scenario.type === "savings_contribution") {
+          const from = resolveEventAccount({ id:decision.id,sourceType:"decision",sourceId:decision.id,date:"",kind:"transaction_expense",amount:-1,status:"planned" });
+          const to = resolveEventAccount({ id:decision.id,sourceType:"decision",sourceId:decision.id,date:"",kind:"transaction_income",amount:1,status:"planned" });
+          if (from && to && from === to) return;
+        }
         scenarioDates(decision.scenario, rangeEnd)
           .filter((date) =>
             date.startsWith(`${year}-${String(month + 1).padStart(2, "0")}`),
@@ -1715,9 +1767,26 @@ export function createFinancialProjection(
     let openingBalance = carryover;
     // Keep original dates for calendar/history while unresolved obligations
     // reserve cash on the bank observation date in the balance projection.
-    const displayEvents = suppressDebtBillPlanDuplicates(financialEvents);
-    let balanceEvents = [...displayEvents];
-    if (bankAnchor?.date.startsWith(currentMonthPrefix)) {
+    const fullMonthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+    const existingTransactionIds = new Set(financialEvents.filter(row => row.sourceType === "transaction").map(row => row.sourceId));
+    for (const transaction of cashAccountLedger.cashTransactionsByMonth.get(fullMonthPrefix) ?? []) {
+      if (existingTransactionIds.has(transaction.id) || transaction.transfer_group_id) continue;
+      financialEvents.push({ id: `transaction:${transaction.id}`, sourceType: "transaction", sourceId: transaction.id, date: transaction.date,
+        kind: transaction.amount >= 0 ? "transaction_income" : "transaction_expense", amount: transaction.amount, status: "actual", name: transaction.note || transaction.category });
+    }
+    financialEvents.push(...pairedTransferEvents(snapshot, forecastAccounts, fullMonthPrefix));
+    for (const decision of decisions.filter(row => (row.status === "planned" || row.status === "calendar") && row.scenario.type === "savings_contribution")) {
+      const from = eventForecastAccountRef({ id:decision.id,sourceType:"decision",sourceId:decision.id,date:"",kind:"transaction_expense",amount:-1,status:"planned" },snapshot,forecastAccounts);
+      const to = eventForecastAccountRef({ id:decision.id,sourceType:"decision",sourceId:decision.id,date:"",kind:"transaction_income",amount:1,status:"planned" },snapshot,forecastAccounts);
+      if (!from || !to || from === to) continue;
+      scenarioDates(decision.scenario, rangeEnd).filter(date => date.startsWith(fullMonthPrefix)).forEach(date => financialEvents.push({
+        id:`decision-deposit:${decision.id}:${date}`,sourceType:"decision",sourceId:decision.id,date,kind:"transaction_income",amount:Math.abs(decision.scenario.amount),
+        status:"planned",name:decision.name,accountRef:to,transfer:true }));
+    }
+    const allDisplayEvents = suppressDebtBillPlanDuplicates(financialEvents);
+    const displayEvents = hasAccountRouting || cashAccountLedger !== transactionLedger ? allDisplayEvents.filter(operating) : allDisplayEvents;
+    let balanceEvents = [...allDisplayEvents];
+    if ((reservationAsOfDate ?? bankAnchor?.date)?.startsWith(currentMonthPrefix)) {
       // A fresh bank observation still contains cash owed on older annual
       // bills. Find their actual occurrence months, including moved dates,
       // even when the next anniversary is beyond the forecast horizon.
@@ -1785,6 +1854,9 @@ export function createFinancialProjection(
         });
       });
     }
+    unanchoredCashEvents.set(reservationAsOfDate ? `${currentMonthPrefix}:${reservationAsOfDate}` : currentMonthPrefix, balanceEvents.map(event => ({ ...event })));
+    if (rawOnly) return [];
+    if (hasAccountRouting || cashAccountLedger !== transactionLedger) balanceEvents = balanceEvents.filter(operating);
     if (connectedBankAnchor?.date.startsWith(currentMonthPrefix)) {
       const settledTransactionEventIds = new Set(
         monthTxs
@@ -1868,11 +1940,11 @@ export function createFinancialProjection(
       );
       result.push({
         day,
-        income: incomeToday,
-        scheduledIncome,
-        expense: expenseToday,
-        bills: billsToday,
-        goalExpenses: dayGoals,
+        income: hasAccountRouting ? projectedInflow : incomeToday,
+        scheduledIncome: hasAccountRouting ? forecastDay.events.filter(event => event.kind === "scheduled_income").reduce((sum,event)=>sum+event.amount,0) : scheduledIncome,
+        expense: hasAccountRouting ? forecastDay.events.filter(event => event.kind === "transaction_expense" || event.kind === "debt_payment").reduce((sum,event)=>sum+Math.max(0,-event.amount),0) : expenseToday,
+        bills: hasAccountRouting ? forecastDay.events.filter(event => event.kind === "bill").reduce((sum,event)=>sum+Math.max(0,-event.amount),0) : billsToday,
+        goalExpenses: hasAccountRouting ? dayGoals.filter(goal => displayEvents.some(event => event.sourceType === "goal" && event.sourceId === goal.id)) : dayGoals,
         net: forecastDay.net,
         balance: forecastDay.balance,
         balanceSource: "projected",
@@ -1886,6 +1958,12 @@ export function createFinancialProjection(
     return result;
   };
 
+  const getUnanchoredCashEvents = (month: number, year: number, reservationAsOfDate?: string): FinancialEvent[] => {
+    const prefix = `${year}-${String(month + 1).padStart(2,"0")}`;
+    const key = reservationAsOfDate ? `${prefix}:${reservationAsOfDate}` : prefix;
+    if (!unanchoredCashEvents.has(key)) buildDailyBalances(month, year, true, reservationAsOfDate);
+    return (unanchoredCashEvents.get(key) ?? []).map(event => ({ ...event }));
+  };
   const getDailyBalances = (month: number, year: number): DailyBalance[] =>
     getOrComputeRevisionValue(
       balanceComputationCache.daily,
@@ -1915,6 +1993,7 @@ export function createFinancialProjection(
     getIncomeOccurrencesInMonth,
     getCashFlow,
     getDailyBalances,
+    getUnanchoredCashEvents,
     transactionLedger,
     matchedAllocationIndexes,
     debtSourceCommitments,

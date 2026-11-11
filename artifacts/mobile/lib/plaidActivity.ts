@@ -47,13 +47,12 @@ export function isInferredPendingBankHold(row: {
 }
 
 export function plaidAccountIdentity(account: PlaidAccountIdentityRow): string {
-  const persistentId = normalizedText(account.persistent_account_id);
+  // Provider identifiers are opaque and case-sensitive. Display names and the
+  // last four digits can match across real accounts and cannot prove identity.
+  const persistentId = account.persistent_account_id?.trim();
   if (persistentId) return `persistent:${persistentId}`;
-
-  const mask = normalizedText(account.mask);
-  if (!mask) return `row:${account.id}`;
-  const name = normalizedText(account.official_name || account.name);
-  return ["fallback", mask, normalizedText(account.account_type), normalizedText(account.account_subtype), name].join(":");
+  if (account.plaid_account_id?.trim()) return `provider:${account.plaid_account_id}`;
+  return `row:${account.id}`;
 }
 
 function isNewerAccount(candidate: PlaidAccountIdentityRow, current: PlaidAccountIdentityRow): boolean {
@@ -101,9 +100,7 @@ function roundCurrency(value: number): number {
 function isCheckingAccount(account: PlaidAccountIdentityRow): boolean {
   const type = normalizedText(account.account_type);
   const subtype = normalizedText(account.account_subtype);
-  const name = normalizedText(`${account.name || ""} ${account.official_name || ""}`);
-  if (subtype === "savings" || name.includes("savings")) return false;
-  return type === "depository" && (subtype === "checking" || name.includes("checking") || name.includes("bill account"));
+  return type === "depository" && subtype === "checking";
 }
 
 function pendingRowsForCheckingAccount<T extends PendingPlaidActivityRow>(

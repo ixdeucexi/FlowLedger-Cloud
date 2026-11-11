@@ -280,6 +280,7 @@ export function isCashFlowTransaction(transaction: {
 export interface ConnectedTransactionAccount {
   id?: string | null;
   plaid_account_id?: string | null;
+  currency_code?: string | null;
   account_type?: string | null;
   account_subtype?: string | null;
   is_active?: boolean | null;
@@ -307,7 +308,7 @@ function connectedTransactionAccount(
 }
 
 function isCheckingConnectedAccount(sourceAccount?: ConnectedTransactionAccount): boolean {
-  if (!sourceAccount) return false;
+  if (!sourceAccount || (sourceAccount.currency_code != null && sourceAccount.currency_code.trim().toUpperCase() !== "USD")) return false;
   const type = String(sourceAccount.account_type || "").trim().toLowerCase();
   const subtype = String(sourceAccount.account_subtype || "").trim().toLowerCase();
   return type === "depository" && subtype === "checking";

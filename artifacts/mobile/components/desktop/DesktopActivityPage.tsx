@@ -118,6 +118,7 @@ export function DesktopActivityPage({
   onDateRangePress,
   search: controlledSearch,
   onSearchChange,
+  accountFilterSlot,
   categoryFilter,
   onCategoryPress,
   typeFilter,
@@ -138,6 +139,7 @@ export function DesktopActivityPage({
   onDateRangePress: () => void;
   search: string;
   onSearchChange: (value: string) => void;
+  accountFilterSlot?: React.ReactNode;
   categoryFilter: string;
   onCategoryPress: () => void;
   typeFilter: string;
@@ -187,7 +189,7 @@ export function DesktopActivityPage({
             (tab === "Adjustments" && row.source === "extra_payment");
           return (
             tabMatch &&
-            (account === "All Accounts" || row.accountName === account)
+            (accountFilterSlot !== undefined || account === "All Accounts" || row.accountName === account)
           );
         })
         .sort((left, right) => {
@@ -220,14 +222,14 @@ export function DesktopActivityPage({
             ? (leftValue - rightValue) * direction
             : String(leftValue).localeCompare(String(rightValue)) * direction;
         }),
-    [account, rows, sortBy, sortDirection, tab],
+    [account, accountFilterSlot, rows, sortBy, sortDirection, tab],
   );
   const groupedActivity = useMemo(
     () => groupDisplayedActivityByDate(filtered, sortBy === "date"),
     [filtered, sortBy],
   );
   const hasLocalDisplayFilters =
-    tab !== "All Activity" || account !== "All Accounts";
+    tab !== "All Activity" || (accountFilterSlot === undefined && account !== "All Accounts");
 
   const visibleSummary = useMemo(
     () =>
@@ -499,13 +501,13 @@ export function DesktopActivityPage({
                 onPress={onDateRangePress}
                 active={dateRangeLabel !== "This Month"}
               />
-              <FilterButton
+              {accountFilterSlot !== undefined ? accountFilterSlot : <FilterButton
                 label={account}
                 onPress={() =>
                   cycle(account, ["All Accounts", ...accounts], setAccount)
                 }
                 active={account !== "All Accounts"}
-              />
+              />}
               <FilterButton
                 label={
                   categoryFilter === "all" ? "All Categories" : categoryFilter

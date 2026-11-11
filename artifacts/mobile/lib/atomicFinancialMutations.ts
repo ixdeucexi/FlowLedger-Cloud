@@ -151,6 +151,7 @@ export type FundGoalIntent = {
 };
 
 export type CreatePendingActivityTransactionIntent = {
+  forecastAccountRef?: string | null;
   pendingPlaidTransactionId: string;
   transactionId: string;
   householdId: string;
@@ -183,7 +184,7 @@ export async function createPendingActivityTransactionAtomically(
     throw new Error("Choose a transaction category.");
   }
   const { data, error } = await supabase.rpc(
-    "create_pending_activity_transaction",
+    "create_pending_activity_transaction_with_account",
     {
       p_pending_plaid_transaction_id: intent.pendingPlaidTransactionId,
       p_transaction_id: intent.transactionId,
@@ -194,6 +195,7 @@ export async function createPendingActivityTransactionAtomically(
       p_category: intent.category.trim(),
       p_note: intent.note.trim(),
       p_account_id: intent.accountId ?? null,
+      p_forecast_account_ref: intent.forecastAccountRef ?? null,
     },
   );
   if (error) throw new Error(error.message);

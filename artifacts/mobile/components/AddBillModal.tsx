@@ -8,6 +8,8 @@ import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as
 
 import colors from "@/constants/colors";
 import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
+import { AccountForecastPicker } from "@/components/AccountForecastPicker";
+import type { ForecastAccountRef } from "@/lib/accountForecasts";
 import { BillFrequencyPicker } from "@/components/BillFrequencyPicker";
 import { BillPaymentHistoryPanel } from "@/components/BillPaymentHistoryPanel";
 import { DebtPaymentPauseModal, type DebtPaymentPauseDateField, type DebtPaymentPauseInput, type DebtPaymentPauseStep } from "@/components/DebtPaymentPauseModal";
@@ -43,6 +45,7 @@ export interface AddBillInitialValues {
   isRecurring?: boolean;
   frequency?: Bill["frequency"];
   smartPriority?: BillImportance;
+  fundingAccountRef?: ForecastAccountRef | null;
 }
 
 interface AddBillModalProps {
@@ -68,7 +71,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   const privacyAlerts = usePrivacyAlerts();
   const c = useColors();
   const isDesktop = useDesktopExperience();
-  const { bills, categories, settings, activeHousehold, canEditHousehold, householdTimeZone, pauseDebtPayments, editDebtPaymentPause, resumeDebtPayments } = useBudget();
+  const { bills, categories, settings, activeHousehold, canEditHousehold, householdTimeZone, pauseDebtPayments, editDebtPaymentPause, resumeDebtPayments, forecastAccounts, accountForecastReady, selectedForecastAccountRef } = useBudget();
   useLocalDay();
   const today = localDateInTimeZone(new Date(), householdTimeZone);
   const currentDebt = editBill?.is_debt ? bills.find(bill => bill.id === editBill.id && bill.is_debt) : undefined;
@@ -86,6 +89,12 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   const [isDebt,        setIsDebt]        = useState(false);
   const [balance,       setBalance]       = useState("");
   const [interestRate,  setInterestRate]  = useState("");
+  const [fundingAccountRef, setFundingAccountRef] = useState<ForecastAccountRef | null>(null);
+  const formScopeRef = useRef<string | null>(visible ? pauseScopeKey : null);
+  useEffect(() => {
+    if (!visible) formScopeRef.current = null;
+    else if (formScopeRef.current === null) formScopeRef.current = pauseScopeKey;
+  }, [visible, pauseScopeKey]);
   const [includeInSnowball, setIncludeInSnowball] = useState(true);
   const [smartPriority, setSmartPriority] = useState<BillImportance>("must");
   const [dueDay,        setDueDay]        = useState("1");
@@ -233,6 +242,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       setIsDebt(editBill.is_debt);
       setBalance(editBill.balance > 0 ? editBill.balance.toString() : "");
       setInterestRate(editBill.interest_rate > 0 ? editBill.interest_rate.toString() : "");
+      setFundingAccountRef((editBill.funding_account_ref ?? null) as ForecastAccountRef | null);
       setIncludeInSnowball(editBill.include_in_snowball !== false);
       setSmartPriority(normalizeBillImportance(editBill.smart_priority, editBill.is_debt));
       setDueDay(editBill.due_day.toString());
@@ -243,6 +253,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       setBillStartDate(editBill.start_date ?? "");
       setBillEndDate(editBill.end_date ?? "");
     } else {
+      setFundingAccountRef(initialValues?.fundingAccountRef !== undefined ? initialValues.fundingAccountRef : selectedForecastAccountRef ?? null);
       const paymentDate = initialValues?.nextPaymentDate ?? "";
       const [year, month, day] = paymentDate.split("-").map(Number);
       const hasValidPaymentDate = [year, month, day].every(Number.isFinite);
@@ -269,6 +280,14 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
 
   const handleSave = async () => {
     if (saving || pausePendingRef.current) return;
+    if (!pauseAccessRef.current.canEdit || !pauseAccessRef.current.visible || formScopeRef.current !== pauseAccessRef.current.scopeKey) {
+      privacyAlerts.formError("Reopen this editor", "Your household or editing access changed. Close this editor and try again.");
+      return;
+    }
+    if (fundingAccountRef && (!accountForecastReady || !forecastAccounts.some(account => account.ref === fundingAccountRef && account.active && !account.unavailableReason))) {
+      privacyAlerts.formError("Choose a payment account", "This account is unavailable. Choose an active account or leave it unassigned.");
+      return;
+    }
     const parsedAmount = parseMoneyInput(amount);
     const parsedBalance = balance.trim() ? parseMoneyInput(balance) : 0;
     const parsedRate = interestRate.trim() ? parseDecimalInput(interestRate, 4) : 0;
@@ -301,6 +320,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       frequency,
       smart_priority: normalizeBillImportance(smartPriority, isDebt),
       include_in_snowball: isDebt ? includeInSnowball : false,
+      funding_account_ref: fundingAccountRef,
       ...(editBill ? { debt_payment_pauses: currentDebt?.debt_payment_pauses ?? editBill.debt_payment_pauses } : {}),
     };
     setSaving(true);
@@ -322,7 +342,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   const handleDelete = () => {
     if (!editBill || !onDelete) return;
     const doDelete = async () => {
-      if (saving) return;
+      if (saving || !pauseAccessRef.current.canEdit || !pauseAccessRef.current.visible || formScopeRef.current !== pauseAccessRef.current.scopeKey) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setSaving(true);
       try {
@@ -349,7 +369,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
     const stopFuture = onStopFuture ?? onDeleteMistake;
     if (!stopFuture) return;
     const doStopFuture = async () => {
-      if (saving) return;
+      if (saving || !pauseAccessRef.current.canEdit || !pauseAccessRef.current.visible || formScopeRef.current !== pauseAccessRef.current.scopeKey) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setSaving(true);
       try {
@@ -374,7 +394,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   const handleResume = () => {
     if (!editBill || !onResume) return;
     const doResume = async () => {
-      if (saving) return;
+      if (saving || !pauseAccessRef.current.canEdit || !pauseAccessRef.current.visible || formScopeRef.current !== pauseAccessRef.current.scopeKey) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setSaving(true);
       try {
@@ -649,6 +669,9 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
             <TextInput sensitive style={inp} value={amount} onChangeText={setAmount}
               accessibilityLabel={isDebt ? "Required minimum payment" : "Payment amount"}
               placeholder="0.00" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
+
+            <AccountForecastPicker label="Paid from" value={fundingAccountRef} onChange={setFundingAccountRef}
+              includeHousehold={false} allowUnassigned disabled={saving || pauseActionSaving || !canEditHousehold} />
 
             {/* Frequency */}
             <Text style={lbl}>Frequency</Text>
@@ -930,7 +953,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
             )}
 
             {/* Save */}
-            <Pressable disabled={saving || pauseActionSaving} onPress={handleSave}
+            <Pressable disabled={saving || pauseActionSaving || !canEditHousehold} onPress={handleSave}
               style={({ pressed }) => [styles.saveBtn, { backgroundColor: c.primary, borderRadius: colors.radius, opacity: saving || pauseActionSaving ? 0.55 : pressed ? 0.85 : 1 }]}
             >
               <Text style={[styles.saveBtnText, { color: c.primaryForeground }]}>

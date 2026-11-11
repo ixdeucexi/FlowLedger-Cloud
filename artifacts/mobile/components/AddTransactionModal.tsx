@@ -9,6 +9,8 @@ import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as
 
 import colors from "@/constants/colors";
 import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
+import { AccountForecastPicker } from "@/components/AccountForecastPicker";
+import type { ForecastAccountRef } from "@/lib/accountForecasts";
 import { DatePickerField } from "@/components/DatePickerField";
 import { FloSafetyStopModal } from "@/components/FloSafetyStopModal";
 import type { Transaction } from "@/context/BudgetContext";
@@ -40,7 +42,17 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
   const privacyAlerts = usePrivacyAlerts();
   const c = useColors();
   const isDesktop = useDesktopExperience();
-  const { categories, accounts, bills, transactions, goals, previewTransactionSafetyStop, previewBucketPurchaseSafetyStop, saveTransfer } = useBudget();
+  const { categories, bills, transactions, goals, previewTransactionSafetyStop, previewBucketPurchaseSafetyStop, saveTransfer, forecastAccounts, accountForecastReady, selectedForecastAccountRef, resolveTransactionAccountRef, activeHousehold, canEditHousehold } = useBudget();
+  const formScopeKey = `${activeHousehold?.householdId ?? "local"}:${activeHousehold?.budgetId ?? "local"}`;
+  const formScopeRef = useRef<string | null>(visible ? formScopeKey : null);
+  const formAccessRef = useRef({ scopeKey: formScopeKey, canEdit: canEditHousehold, visible });
+  formAccessRef.current = { scopeKey: formScopeKey, canEdit: canEditHousehold, visible };
+  useEffect(() => {
+    if (!visible) formScopeRef.current = null;
+    else if (formScopeRef.current === null) formScopeRef.current = formScopeKey;
+  }, [visible, formScopeKey]);
+  const sourceAccountLocked = creationContext === "pending_charge" || Boolean(editTx?.plaid_account_id || editTx?.source === "plaid" || editTx?.source === "plaid_sync");
+  const activeForecastAccounts = forecastAccounts.filter(account => account.active && !account.unavailableReason);
   const bucketPurchase = creationContext === "bucket_purchase";
   const bucket = bucketPurchase ? goals?.find(goal => goal.id === bucketId) : undefined;
   const bucketName = bucket?.name;
@@ -51,8 +63,8 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
   const [date, setDate] = useState(defaultDate ?? localDateString());
   const [isExpense, setIsExpense] = useState(true);
   const [isTransfer, setIsTransfer] = useState(false);
-  const [accountId, setAccountId] = useState<string | undefined>();
-  const [transferToAccountId, setTransferToAccountId] = useState<string | undefined>();
+  const [accountRef, setAccountRef] = useState<ForecastAccountRef | null>(null);
+  const [transferToAccountRef, setTransferToAccountRef] = useState<ForecastAccountRef | null>(null);
   const [linkedBillId, setLinkedBillId] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -94,8 +106,8 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
       setDate(editTx.date);
       setIsExpense(editTx.amount < 0);
       setIsTransfer(Boolean(editTx.transfer_group_id));
-      setAccountId(editTx.amount < 0 ? editTx.account_id : transferMate?.account_id);
-      setTransferToAccountId(editTx.amount < 0 ? transferMate?.account_id : editTx.account_id);
+      setAccountRef(resolveTransactionAccountRef(editTx.amount < 0 || !editTx.transfer_group_id ? editTx : transferMate ?? {}));
+      setTransferToAccountRef(editTx.transfer_group_id ? resolveTransactionAccountRef(editTx.amount < 0 ? transferMate ?? {} : editTx) : null);
       setLinkedBillId(editDebtId);
     } else {
       const initialAmount = Number(initialValues?.amount);
@@ -107,16 +119,12 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
       setDate(init);
       setIsExpense(creationContext === "pending_charge" || bucketPurchase || !hasInitialAmount || initialAmount < 0);
       setIsTransfer(false);
-      setAccountId(
-        initialValues?.account_id ??
-          (creationContext === "pending_charge"
-            ? undefined
-            : accounts.find(account => account.is_active)?.id),
-      );
-      setTransferToAccountId(accounts.filter(account => account.is_active)[1]?.id);
+      const hasInitialAccount = initialValues?.forecast_account_ref !== undefined || Boolean(initialValues?.account_id || initialValues?.plaid_account_id);
+      setAccountRef(hasInitialAccount ? resolveTransactionAccountRef(initialValues ?? {}) : creationContext === "pending_charge" ? null : selectedForecastAccountRef ?? null);
+      setTransferToAccountRef(null);
       setLinkedBillId(undefined);
     }
-  }, [editTx, visible, defaultDate, accounts, transferMate, editDebtId, initialValues?.amount, initialValues?.category, initialValues?.note, initialValues?.date, initialValues?.account_id, creationContext, bucketPurchase]);
+  }, [editTx, visible, defaultDate, transferMate, editDebtId, initialValues?.amount, initialValues?.category, initialValues?.note, initialValues?.date, initialValues?.account_id, initialValues?.forecast_account_ref, initialValues?.plaid_account_id, creationContext, bucketPurchase]);
 
   useEffect(() => { transferIntentRef.current = null; }, [visible, editTx?.id]);
 
@@ -125,6 +133,9 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
 
   const saveStandardTransaction = async (payload: Omit<Transaction, "id"> | Transaction) => {
     if (savingRef.current) return;
+    if (!formAccessRef.current.canEdit || !formAccessRef.current.visible || formScopeRef.current !== formAccessRef.current.scopeKey) { setSaveError("Your household or editing access changed. Close this editor and try again."); return; }
+    const payloadAccountRef = payload.forecast_account_ref;
+    if (!sourceAccountLocked && payloadAccountRef && (!accountForecastReady || !activeForecastAccounts.some(account => account.ref === payloadAccountRef))) { setSaveError("This account is unavailable. Choose an active account or leave it unassigned."); return; }
     savingRef.current = true;
     setSaving(true);
     setSaveError(null);
@@ -143,20 +154,25 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
 
   const handleSave = async () => {
     if (savingRef.current || saving) return;
+    if (!formAccessRef.current.canEdit || !formAccessRef.current.visible || formScopeRef.current !== formAccessRef.current.scopeKey) { setSaveError("Your household or editing access changed. Close this editor and try again."); return; }
+    if ((!sourceAccountLocked || creationContext === "pending_charge") && accountRef && (!accountForecastReady || !activeForecastAccounts.some(account => account.ref === accountRef))) { setSaveError("This account is unavailable. Choose an active account or leave it unassigned."); return; }
+    if (creationContext === "pending_charge" && !accountRef) { setSaveError("The bank account for this payment is unavailable. Refresh and try again."); return; }
     const parsed = parseMoneyInput(amount);
     if (parsed === null || parsed <= 0) { privacyAlerts.formError("Check amount", "Enter a positive amount with up to two decimal places. Use commas only for thousands, such as 1,200.50."); return; }
     if (bucketPurchase && (!bucket || bucket.closed_at || bucket.archived_at || parsed > bucketRemaining + 0.005)) {
       setSaveError(!bucket || bucket.closed_at || bucket.archived_at ? "Reopen this bucket before adding a purchase." : "This purchase is more than the money left. Adjust the bucket budget first.");
       return;
     }
-    if (isTransfer && (!accountId || !transferToAccountId || accountId === transferToAccountId)) {
+    if (isTransfer && (!accountForecastReady || !accountRef || !transferToAccountRef || accountRef === transferToAccountRef
+      || !activeForecastAccounts.some(account => account.ref === accountRef)
+      || !activeForecastAccounts.some(account => account.ref === transferToAccountRef))) {
       setSaveError("Pick two different active accounts for this transfer.");
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (isTransfer) {
-      const fromName = accounts.find(account => account.id === accountId)?.name ?? "account";
-      const toName = accounts.find(account => account.id === transferToAccountId)?.name ?? "account";
+      const fromName = forecastAccounts.find(account => account.ref === accountRef)?.name ?? "account";
+      const toName = forecastAccounts.find(account => account.ref === transferToAccountRef)?.name ?? "account";
       const fromTx = editTx && editTx.amount < 0 ? editTx : transferMate;
       const toTx = editTx && editTx.amount >= 0 ? editTx : transferMate;
       if (editTx && (!fromTx || !toTx)) { setSaveError("Both sides of this transfer are required. Refresh and try again."); return; }
@@ -165,7 +181,9 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
         toId: toTx?.id ?? `transfer_to_${Date.now()}_${Math.random().toString(36).slice(2)}` };
       savingRef.current = true; setSaving(true); setSaveError(null);
       try {
-        await saveTransfer({ ...intent, amount: parsed, date, fromAccountId: accountId!, toAccountId: transferToAccountId!,
+        await saveTransfer({ ...intent, amount: parsed, date, fromAccountRef: accountRef!, toAccountRef: transferToAccountRef!,
+          fromAccountId: accountRef!.startsWith("manual:") ? accountRef!.slice(7) : "",
+          toAccountId: transferToAccountRef!.startsWith("manual:") ? transferToAccountRef!.slice(7) : "",
           fromNote: note.trim() || `Transfer to ${toName}`, toNote: note.trim() || `Transfer from ${fromName}`,
           expected: fromTx && toTx ? [transferExpected(fromTx), transferExpected(toTx)] : null });
         transferIntentRef.current = null; onClose();
@@ -179,7 +197,8 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
       category: isExpense ? category : "Income",
       note: note.trim(),
       date,
-      account_id: accountId,
+      account_id: sourceAccountLocked ? editTx?.account_id ?? initialValues?.account_id : accountRef?.startsWith("manual:") ? accountRef.slice(7) : undefined,
+      forecast_account_ref: sourceAccountLocked && editTx ? editTx.forecast_account_ref ?? null : accountRef,
       linked_bill_id: !bucketPurchase && isExpense ? linkedBillId : undefined,
     };
     const payload = editTx ? { ...editTx, ...data, id: editTx.id } : data;
@@ -194,9 +213,10 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
   };
 
   const handleDelete = async () => {
-    if (!editTx || !onDelete || saving) return;
+    if (!editTx || !onDelete || saving || !formAccessRef.current.canEdit || !formAccessRef.current.visible || formScopeRef.current !== formAccessRef.current.scopeKey) return;
     const isEditingTransfer = Boolean(editTx.transfer_group_id);
     const runDelete = async () => {
+      if (!formAccessRef.current.canEdit || !formAccessRef.current.visible || formScopeRef.current !== formAccessRef.current.scopeKey) { setSaveError("Your household or editing access changed. Close this editor and try again."); return; }
       setSaving(true);
       try {
         if (isEditingTransfer && editTx.transfer_group_id && onDeleteTransfer) await onDeleteTransfer(editTx.transfer_group_id);
@@ -258,7 +278,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
               >
                 <Text style={[styles.typeBtnText, { color: !isTransfer && !isExpense ? "#fff" : c.mutedForeground }]}>Income</Text>
               </Pressable>
-              {(!editTx || editTx.transfer_group_id) && accounts.filter(account => account.is_active).length >= 2 && (
+              {(!editTx || editTx.transfer_group_id) && activeForecastAccounts.length >= 2 && (
                 <Pressable
                   onPress={() => { setIsTransfer(true); setLinkedBillId(undefined); setCategory("Transfer"); }}
                   style={[styles.typeBtn, { backgroundColor: isTransfer ? c.primary : "transparent", borderRadius: 8 }]}
@@ -332,25 +352,22 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
               ) : null}
             </>}
 
-            {accounts.some(account => account.is_active) && <>
-              <Text style={labelStyle}>{isTransfer ? "From account" : "Account"}</Text>
-              <View style={styles.categoryGrid}>
-                {accounts.filter(account => account.is_active).map(account => <Pressable key={account.id} onPress={() => setAccountId(account.id)} style={[styles.chip, { backgroundColor: accountId === account.id ? c.primary : c.muted, borderRadius: 8 }]}><Text style={[styles.chipText, { color: accountId === account.id ? c.primaryForeground : c.mutedForeground }]}>{account.name}</Text></Pressable>)}
-              </View>
-            </>}
+            <View style={{ marginTop: 14 }}>
+              <AccountForecastPicker label={isTransfer ? "From account" : "Account"} value={accountRef} onChange={setAccountRef}
+                includeHousehold={false} allowUnassigned={!isTransfer} disabled={saving || !canEditHousehold || sourceAccountLocked} />
+              {sourceAccountLocked ? <Text style={[styles.helpText, { color: c.mutedForeground, marginTop: 6 }]}>This account comes from the bank connection.</Text> : null}
+            </View>
 
-            {isTransfer && accounts.some(account => account.is_active) && <>
-              <Text style={labelStyle}>To account</Text>
-              <View style={styles.categoryGrid}>
-                {accounts.filter(account => account.is_active).map(account => <Pressable key={account.id} onPress={() => setTransferToAccountId(account.id)} style={[styles.chip, { backgroundColor: transferToAccountId === account.id ? c.primary : c.muted, borderRadius: 8 }]}><Text style={[styles.chipText, { color: transferToAccountId === account.id ? c.primaryForeground : c.mutedForeground }]}>{account.name}</Text></Pressable>)}
-              </View>
-            </>}
+            {isTransfer ? <View style={{ marginTop: 14 }}>
+              <AccountForecastPicker label="To account" value={transferToAccountRef} onChange={setTransferToAccountRef}
+                includeHousehold={false} allowUnassigned={false} disabled={saving || !canEditHousehold} />
+            </View> : null}
 
             {saveError ? <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={[styles.helpText, { color: c.destructive, marginTop: 14 }]}>{saveError}</Text> : null}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={bucketPurchase ? "Save bucket purchase" : undefined}
-              disabled={saving}
+              disabled={saving || !canEditHousehold}
               onPress={handleSave}
               style={({ pressed }) => [styles.saveBtn, { backgroundColor: c.primary, borderRadius: colors.radius, opacity: saving ? 0.55 : pressed ? 0.85 : 1 }]}
             >
@@ -360,6 +377,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
             {editTx && onDelete && (
               <Pressable
                 onPress={handleDelete}
+                disabled={saving || !canEditHousehold}
                 style={({ pressed }) => [styles.deleteBtn, { borderColor: c.destructive, opacity: pressed ? 0.8 : 1 }]}
               >
                 <Feather name="trash-2" size={15} color={c.destructive} />

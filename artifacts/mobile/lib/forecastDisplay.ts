@@ -58,6 +58,7 @@ const KIND_LABELS: Record<FinancialEventKind, string> = {
   goal: "Goal",
   debt_payment: "Debt payment",
   bank_adjustment: "Bank balance update",
+  estimated_interest: "Estimated savings interest",
 };
 
 const DEBT_STATUS_PRIORITY: Record<FinancialEventStatus, number> = {

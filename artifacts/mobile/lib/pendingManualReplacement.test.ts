@@ -94,7 +94,7 @@ test("manual debt audit and the existing settled minimum survive provisional cas
   }
 });
 
-test("invalid, stale, removed, wrong-scope or non-checking links cannot hide manual cash", () => {
+test("invalid, stale, removed, wrong-scope or non-depository links cannot hide manual cash", () => {
   const variants: Array<(snapshot: FinancialProjectionSnapshot) => void> = [
     snapshot => { snapshot.pendingPlanMatches[0].status = "cancelled"; },
     snapshot => { snapshot.pendingPlanMatches[0].status = "expired"; },
@@ -111,11 +111,40 @@ test("invalid, stale, removed, wrong-scope or non-checking links cannot hide man
     snapshot => { snapshot.transactions[1].review_status = "matched"; },
     snapshot => { snapshot.transactions[1].amount = Number.NaN; },
     snapshot => { snapshot.transactions[1].plaid_account_id = "unknown"; },
-    snapshot => { snapshot.transactionAccountIdentities[0].account_subtype = "savings"; },
+    snapshot => { snapshot.transactionAccountIdentities[0].account_type = "credit"; },
     snapshot => { Object.assign(snapshot.transactions[0], { household_id: "home-a" }); Object.assign(snapshot.transactions[1], { household_id: "home-b" }); },
     snapshot => { Object.assign(snapshot.transactions[0], { budget_id: "budget-a" }); Object.assign(snapshot.transactions[1], { budget_id: "budget-b" }); },
   ];
   for (const change of variants) { const snapshot = fixture(); change(snapshot); assert.deepEqual([...ids(snapshot)], []); }
+});
+
+test("a savings manual replacement consolidates one posted cash event while leaving household operating cash unchanged", () => {
+  const snapshot = fixture();
+  snapshot.transactionAccountIdentities[0].account_subtype = "savings";
+  const suppressedTransactionIds = ids(snapshot);
+  assert.deepEqual([...suppressedTransactionIds], ["manual"]);
+  const full = buildTransactionLedger(snapshot.transactions, snapshot.transactions, snapshot.transactionAccountIdentities, { includeSavings: true, suppressedTransactionIds });
+  assert.deepEqual(full.cashTransactions.map(row => row.id), ["posted"]);
+  assert.equal(full.cashByDate.get("2026-10-22"), -50);
+  const operating = buildTransactionLedger(snapshot.transactions, snapshot.transactions, snapshot.transactionAccountIdentities, { suppressedTransactionIds });
+  assert.deepEqual(operating.cashTransactions, []);
+});
+
+test("pending replacement accepts a reconnected persistent identity but rejects aliases with conflicting account claims", () => {
+  const snapshot = fixture();
+  Object.assign(snapshot.transactionAccountIdentities[0], { persistent_account_id: "same-physical", is_active: false, account_subtype: "savings" });
+  snapshot.transactionAccountIdentities.push({ ...snapshot.transactionAccountIdentities[0], id: "new-row", plaid_account_id: "new-provider", is_active: true });
+  snapshot.transactions[1].plaid_account_id = "new-provider";
+  assert.deepEqual([...ids(snapshot)], ["manual"]);
+  snapshot.transactionAccountIdentities[1].persistent_account_id = undefined;
+  assert.deepEqual([...ids(snapshot)], []);
+  snapshot.transactionAccountIdentities[1].persistent_account_id = "same-physical";
+  snapshot.transactionAccountIdentities[1].account_subtype = "checking";
+  assert.deepEqual([...ids(snapshot)], []);
+
+  const collision = fixture();
+  collision.transactionAccountIdentities.push({ ...collision.transactionAccountIdentities[0], id: "different-row" });
+  assert.deepEqual([...ids(collision)], []);
 });
 
 test("ambiguous explicit links fail closed and duplicate records of the same pair suppress only once", () => {

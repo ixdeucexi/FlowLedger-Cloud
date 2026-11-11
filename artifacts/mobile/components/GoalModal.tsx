@@ -13,6 +13,8 @@ import colors from "@/constants/colors";
 import { FloSafetyStopModal } from "@/components/FloSafetyStopModal";
 import { buildBucketSafetyStop, type SafetyStopWarning } from "@/lib/safetyStop";
 import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
+import { AccountForecastPicker } from "@/components/AccountForecastPicker";
+import type { ForecastAccountRef } from "@/lib/accountForecasts";
 import { DatePickerField } from "@/components/DatePickerField";
 import { useBudget, type Goal } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
@@ -54,10 +56,20 @@ export function GoalModal({
   const privacyAlerts = usePrivacyAlerts();
   const c = useColors();
   const isDesktop = useDesktopExperience();
-  const { getDailyBalances, settings, goals, canEditHousehold, activeHousehold, previewBucketBudgetSafetyStop } = useBudget();
+  const { getDailyBalances, settings, goals, canEditHousehold, activeHousehold, previewBucketBudgetSafetyStop, forecastAccounts, accountForecastReady, selectedForecastAccountRef } = useBudget();
   const router = useRouter();
   const { user } = useAuth();
   const closeNavigationRef = useRef(false);
+  const formScopeKey = `${activeHousehold?.householdId ?? "local"}:${activeHousehold?.budgetId ?? "local"}`;
+  const formScopeRef = useRef<string | null>(visible ? formScopeKey : null);
+  const formAccessRef = useRef({ scopeKey: formScopeKey, canEdit: canEditHousehold, visible });
+  formAccessRef.current = { scopeKey: formScopeKey, canEdit: canEditHousehold, visible };
+  const [fundingAccountRef, setFundingAccountRef] = useState<ForecastAccountRef | null>(null);
+  const [depositAccountRef, setDepositAccountRef] = useState<ForecastAccountRef | null>(null);
+  useEffect(() => {
+    if (!visible) formScopeRef.current = null;
+    else if (formScopeRef.current === null) formScopeRef.current = formScopeKey;
+  }, [visible, formScopeKey]);
   const currentBucket = editGoal ? goals.find(goal => goal.id === editGoal.id && goal.goal_type === "planned_expense") : undefined;
   const canCloseBucket = canEditHousehold && currentBucket && !currentBucket.closed_at && !currentBucket.archived_at;
   const openCloseBucket = () => {
@@ -104,12 +116,16 @@ export function GoalModal({
     setPendingGoal(null);
     setSafetyStop(null);
     if (editGoal) {
+      setFundingAccountRef((editGoal.funding_account_ref ?? null) as ForecastAccountRef | null);
+      setDepositAccountRef((editGoal.deposit_account_ref ?? null) as ForecastAccountRef | null);
       setName(editGoal.name);
       setTarget(editGoal.target_amount.toString());
       setCurrent(editGoal.current_amount > 0 ? editGoal.current_amount.toString() : "");
       setGoalMode(editGoal.goal_type === "planned_expense" ? "budget" : "savings");
       setTargetDate(editGoal.target_date.split("T")[0]);
     } else {
+      setFundingAccountRef(selectedForecastAccountRef ?? null);
+      setDepositAccountRef(selectedForecastAccountRef ?? null);
       setName(initialName);
       setTarget(initialTargetAmount !== undefined ? initialTargetAmount.toFixed(2) : "");
       setCurrent("");
@@ -122,6 +138,9 @@ export function GoalModal({
 
   const saveGoal = async (payload: Omit<Goal, "id" | "created_at"> | Goal) => {
     if (savingRef.current) return;
+    if (!formAccessRef.current.canEdit || !formAccessRef.current.visible || formScopeRef.current !== formAccessRef.current.scopeKey) { setSaveError("Your household or editing access changed. Close this editor and try again."); return; }
+    const payloadAccountRef = payload.goal_type === "planned_expense" ? payload.funding_account_ref : payload.deposit_account_ref;
+    if (payloadAccountRef && (!accountForecastReady || !forecastAccounts.some(account => account.ref === payloadAccountRef && account.active && !account.unavailableReason))) { setSaveError("This account is unavailable. Choose an active account or leave it unassigned."); return; }
     savingRef.current = true;
     setSaving(true);
     setSaveError(null);
@@ -140,6 +159,9 @@ export function GoalModal({
 
   const handleSave = async () => {
     if (savingRef.current || pendingGoal) return;
+    if (!formAccessRef.current.canEdit || !formAccessRef.current.visible || formScopeRef.current !== formAccessRef.current.scopeKey) { setSaveError("Your household or editing access changed. Close this editor and try again."); return; }
+    const selectedAccountRef = goalMode === "budget" ? fundingAccountRef : depositAccountRef;
+    if (selectedAccountRef && (!accountForecastReady || !forecastAccounts.some(account => account.ref === selectedAccountRef && account.active && !account.unavailableReason))) { setSaveError("This account is unavailable. Choose an active account or leave it unassigned."); return; }
     const t = parseMoneyInput(target);
     const savedAmount = current.trim() ? parseMoneyInput(current) : 0;
     if (t === null || t <= 0 || (goalMode === "savings" && savedAmount === null)) { privacyAlerts.formError("Check amounts", "Enter a positive target and a nonnegative saved amount with up to two decimal places."); return; }
@@ -160,6 +182,8 @@ export function GoalModal({
         : (savedAmount ?? 0),
       target_date: targetDate, // stored as YYYY-MM-DD
       goal_type: goalMode === "budget" ? "planned_expense" : "savings",
+      funding_account_ref: goalMode === "budget" ? fundingAccountRef : null,
+      deposit_account_ref: goalMode === "savings" ? depositAccountRef : null,
       closed_at: goalMode === "budget" ? editGoal?.closed_at : undefined,
       closed_by: goalMode === "budget" ? editGoal?.closed_by : undefined,
     };
@@ -183,7 +207,7 @@ export function GoalModal({
   };
 
   const handleDelete = () => {
-    if (!editGoal || !onDelete) return;
+    if (!editGoal || !onDelete || !formAccessRef.current.canEdit || !formAccessRef.current.visible || formScopeRef.current !== formAccessRef.current.scopeKey) return;
     const deletingBucket = editGoal.goal_type === "planned_expense";
     const deleteLabel = deletingBucket ? "bucket" : "goal";
     setConfirmation({
@@ -192,6 +216,7 @@ export function GoalModal({
       confirmText: `Delete ${deleteLabel}`,
       destructive: true,
       onConfirm: async () => {
+        if (!formAccessRef.current.canEdit || !formAccessRef.current.visible || formScopeRef.current !== formAccessRef.current.scopeKey) { setSaveError("Your household or editing access changed. Close this editor and try again."); return; }
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         await onDelete(editGoal.id);
         onClose();
@@ -290,6 +315,12 @@ export function GoalModal({
               </>
             )}
 
+            <AccountForecastPicker label={goalMode === "budget" ? "Paid from" : "Held in"}
+              value={goalMode === "budget" ? fundingAccountRef : depositAccountRef}
+              onChange={goalMode === "budget" ? setFundingAccountRef : setDepositAccountRef}
+              includeHousehold={false} allowUnassigned disabled={saving || !canEditHousehold} />
+            {goalMode === "savings" ? <Text style={[styles.modeHint, { color: c.mutedForeground }]}>Links this goal to an account without scheduling a deposit.</Text> : null}
+
             {/* ── Target date ── */}
             <DatePickerField
               label="Target Date"
@@ -312,7 +343,7 @@ export function GoalModal({
             {/* ── Save ── */}
             {saveError ? <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={{ color: c.destructive, fontFamily: "Inter_600SemiBold", fontSize: 13, lineHeight: 19, marginTop: 14 }}>{saveError}</Text> : null}
             <Pressable
-              disabled={saving}
+              disabled={saving || !canEditHousehold}
               onPress={handleSave}
               style={({ pressed }) => [
                 styles.saveBtn,

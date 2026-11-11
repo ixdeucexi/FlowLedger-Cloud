@@ -4,7 +4,7 @@ import { parseAccountBalance, parseCategoryAssignments, reportIncomeUsage } from
 import { buildCategoryPlan } from "./categoryPlanning";
 import { readFileSync } from "node:fs";
 import { transpileModule, JsxEmit } from "typescript";
-import { dateOnlyToLocalDate } from "./dateLabels";
+import { revealedPrivacyModule } from "./privacyTestHarness";
 
 test("account balance preserves overdrafts and explicit zero but rejects missing or invalid values", () => {
   assert.equal(parseAccountBalance("-125.67"), -125.67);
@@ -28,25 +28,35 @@ test("reports display overspending percentage without overflowing its bar", () =
 test("Accounts renders authoritative dated balances, never adding already-reconciled activity", () => {
   const source = readFileSync("app/(tabs)/more.tsx", "utf8");
   assert.doesNotMatch(source, /accountMonthDeltas|current_balance\s*\+\s*monthDelta/);
-  const start = source.indexOf("{accounts\n", source.indexOf("Forecast confidence:"));
-  // Preserve CRLF checkouts too.
-  const expressionStart = start >= 0 ? start : source.indexOf("{accounts\r\n", source.indexOf("Forecast confidence:"));
-  assert.ok(expressionStart >= 0);
-  const end = source.indexOf("{!accounts.some", expressionStart);
-  const wrapped = source.slice(expressionStart, end).trim();
-  const expression = wrapped.slice(1, -1);
-  const js = transpileModule(`return (${expression});`, { compilerOptions: { jsx: JsxEmit.React } }).outputText;
-  const render = new Function("accounts", "transactions", "React", "styles", "c", "stackCompactAccountControls", "View", "Text", "Pressable", "Feather", "openAccount", "dateOnlyToLocalDate", js);
-  const createElement = (_type: unknown, _props: unknown, ...children: unknown[]) => children;
-  const account = { id: "checking", name: "Checking", is_active: true, account_type: "checking", current_balance: 1000, balance_as_of: "2026-09-09" };
-  const paint = (value: typeof account) => JSON.stringify(render([value], [{ account_id: "checking", date: "2026-09-03", amount: -200 }], { createElement }, {}, {}, false, "View", "Text", "Pressable", "Feather", () => {}, dateOnlyToLocalDate));
-  const text = paint(account);
-  assert.match(text, /1000\.00/);
+  assert.match(source, /<AccountForecastSettings/);
+  const exported: any = {};
+  const React = { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props: { ...props, children } }) };
+  let manual: any;
+  const js = transpileModule(readFileSync("components/AccountForecastSettings.tsx", "utf8") + "\nexport { AccountPlanningCard };", { compilerOptions: { jsx: JsxEmit.React, module: 1, esModuleInterop: true } }).outputText;
+  new Function("exports", "require", js)(exported, (name: string) => {
+    const privacy = revealedPrivacyModule(name); if (privacy) return privacy;
+    if (name === "react") return { __esModule: true, default: React, useState: (value: any) => [typeof value === "function" ? value() : value, () => {}], useEffect() {}, useRef: (current: unknown) => ({ current }) };
+    if (name === "react-native") return { ScrollView: "ScrollView", Switch: "Switch", StyleSheet: { create: (value: unknown) => value } };
+    if (name === "expo-router") return { useRouter: () => ({ push() {} }) };
+    if (name.endsWith("BudgetContext")) return { useBudget: () => ({ accounts: [manual], transactions: [{ account_id: "checking", date: "2026-09-03", amount: -200 }], accountForecastPreferences: [], hiddenForecastAccountRefs: [], canEditHousehold: true, activeHousehold: { householdId: "fictional-household", budgetId: "fictional-budget" } }) };
+    if (name.endsWith("AuthContext")) return { useAuth: () => ({ user: { id: "fictional-user" } }) };
+    if (name.endsWith("useColors")) return { useColors: () => new Proxy({}, { get: () => "#000000" }) };
+    if (name.endsWith("AccountForecastPicker")) return { accountForecastLabel: (account: any) => account.name };
+    return { __esModule: true, default: "Icon" };
+  });
+  const paint = (currentBalance: number, asOfDate: string | null = "2026-09-09") => {
+    manual = { id: "checking", name: "Checking", account_type: "checking", is_active: true, current_balance: currentBalance, balance_as_of: asOfDate };
+    return JSON.stringify(exported.AccountPlanningCard({ account: { ref: "manual:checking", name: "Checking", type: "checking", source: "manual", active: true, aliases: ["manual:checking"], manualAccountId: "checking", currentBalance, availableBalance: null, asOfDate, savingsApy: null, safetyFloor: null }, initialOpen: false, onReconcileManualAccount() {} }));
+  };
+  const text = paint(1000);
+  assert.match(text, /1,000\.00/);
   assert.doesNotMatch(text, /800\.00|Proj /);
   assert.match(text, /Balance as of.*2026/);
   assert.match(text, /Reconcile/);
-  assert.match(paint({ ...account, current_balance: -125, balance_as_of: "" }), /-125\.00/);
-  assert.match(paint({ ...account, balance_as_of: "" }), /Balance date unknown/);
+  assert.match(paint(-125, null), /-\$125\.00/);
+  assert.match(paint(0, null), /\$0\.00/);
+  assert.match(paint(1000, null), /Balance date unavailable/);
+
 });
 
 import { parseMoneyInput, parseDecimalInput } from "./moneyFormInput";

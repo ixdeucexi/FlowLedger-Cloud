@@ -4,21 +4,21 @@ import { localDay, type AnalysisRequest, type AnalysisSnapshot, type SourceRows 
 // household data out of both the calculator and the model context.
 export const analysisColumns: Record<string, string> = {
   household_settings: "household_id,starting_balance,starting_balance_date,calendar_start_date,safety_floor,forecast_horizon_months,payment_method,time_zone,planning_mode,zero_based_budget_enabled,debt_payoff_enabled,onboarding_completed",
-  bills: "id,household_id,name,amount,category,priority,is_debt,balance,interest_rate,due_day,day_of_week,next_payment_date,start_date,end_date,is_recurring,frequency,created_at,smart_priority,include_in_snowball,snowball_minimum_boost,debt_payment_pauses,last_reviewed_at",
+  bills: "id,household_id,funding_account_ref,name,amount,category,priority,is_debt,balance,interest_rate,due_day,day_of_week,next_payment_date,start_date,end_date,is_recurring,frequency,created_at,smart_priority,include_in_snowball,snowball_minimum_boost,debt_payment_pauses,last_reviewed_at",
   monthly_overrides: "id,household_id,bill_id,month,year,custom_amount,planned_debt_amount,required_debt_amount,custom_due_day,paid_amount,actual_amount,paid_date",
   bill_date_moves: "id,household_id,bill_id,from_date,to_date,custom_amount,is_skipped,move_reason,created_at,updated_at",
-  transactions: "id,household_id,date,amount,category,note,linked_bill_id,account_id,import_hash,transfer_group_id,debt_applied_amount,debt_applied_bill_id,source,plaid_transaction_id,plaid_account_id,merchant_name,pending,removed_at,deleted_at,match_confidence,match_reason,review_status,review_resolution,review_allocations,reviewed_at,user_edited_at,linked_income_id,linked_plan_id,linked_plan_type,matched_occurrence_date",
+  transactions: "id,household_id,forecast_account_ref,date,amount,category,note,linked_bill_id,account_id,import_hash,transfer_group_id,debt_applied_amount,debt_applied_bill_id,source,plaid_transaction_id,plaid_account_id,merchant_name,pending,removed_at,deleted_at,match_confidence,match_reason,review_status,review_resolution,review_allocations,reviewed_at,user_edited_at,linked_income_id,linked_plan_id,linked_plan_type,matched_occurrence_date",
   accounts: "id,household_id,name,account_type,current_balance,balance_as_of,last_reconciled_at,is_active,created_at",
   // Optional historical source: calculators that do not use account history
   // must not add this table to their required projection inputs.
   account_balances: "id,household_id,account_id,balance,as_of_date,source,created_at",
-  plaid_accounts: "id,household_id,plaid_account_id,name,display_name,official_name,mask,persistent_account_id,account_type,account_subtype,current_balance,available_balance,credit_limit,minimum_payment_amount,next_payment_due_date,last_statement_balance,last_statement_issue_date,is_overdue,purchase_apr,liability_last_synced_at,is_active,updated_at",
+  plaid_accounts: "id,household_id,flowledger_account_id,account_id,currency_code,plaid_account_id,name,display_name,official_name,mask,persistent_account_id,account_type,account_subtype,current_balance,available_balance,credit_limit,minimum_payment_amount,next_payment_due_date,last_statement_balance,last_statement_issue_date,is_overdue,purchase_apr,liability_last_synced_at,is_active,updated_at",
   plaid_transactions: "id,household_id,plaid_account_id,flowledger_transaction_id,plaid_transaction_id,transaction_date,authorized_date,amount,name,merchant_name,category,pending,removed_at,updated_at,primary_category:raw->personal_finance_category->>primary,detailed_category:raw->personal_finance_category->>detailed",
   pending_plan_matches: "id,household_id,pending_plaid_transaction_id,pending_account_id,target_type,target_id,target_name,occurrence_date,planned_amount,pending_amount,pending_transaction_date,status,posted_transaction_id,posted_plaid_transaction_id,posted_amount,created_at,updated_at",
-  incomes: "id,household_id,name,amount,frequency,start_date,next_payment_date,amount_history,excluded_dates,last_reviewed_at",
-  goals: "id,household_id,name,target_amount,target_date,current_amount,created_at,goal_type,closed_at,archived_at",
-  extra_payments: "id,household_id,month,year,amount,allocations,payment_date,sources",
-  decisions: "id,household_id,name,decision_type,scenario,result,status,calendar_date,actual_amount,completed_at,next_due_date,applied_change,created_at,updated_at",
+  incomes: "id,household_id,deposit_account_ref,name,amount,frequency,start_date,next_payment_date,amount_history,excluded_dates,last_reviewed_at",
+  goals: "id,household_id,funding_account_ref,deposit_account_ref,name,target_amount,target_date,current_amount,created_at,goal_type,closed_at,archived_at",
+  extra_payments: "id,household_id,funding_account_ref,month,year,amount,allocations,payment_date,sources",
+  decisions: "id,household_id,funding_account_ref,deposit_account_ref,name,decision_type,scenario,result,status,calendar_date,actual_amount,completed_at,next_due_date,applied_change,created_at,updated_at",
   category_budgets: "id,household_id,category,month,year,amount,updated_at",
   household_daily_checking_closes: "household_id,balance_date,checking_balance,observed_at,account_count,source",
 };

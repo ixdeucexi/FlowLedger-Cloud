@@ -5,13 +5,14 @@ export type FinancialEventKind =
   | "bill"
   | "goal"
   | "debt_payment"
-  | "bank_adjustment";
+  | "bank_adjustment"
+  | "estimated_interest";
 
 export type FinancialEventStatus = "planned" | "scheduled" | "pending" | "finalized" | "actual" | "applied";
 
 export interface FinancialEvent {
   id: string;
-  sourceType: "income" | "transaction" | "bill" | "goal" | "extra_payment" | "decision" | "reconciliation";
+  sourceType: "income" | "transaction" | "bill" | "goal" | "extra_payment" | "decision" | "reconciliation" | "account";
   sourceId: string;
   date: string;
   kind: FinancialEventKind;
@@ -19,6 +20,10 @@ export interface FinancialEvent {
   amount: number;
   status: FinancialEventStatus;
   name?: string;
+  accountRef?: string;
+  fundingAccountRef?: string;
+  estimated?: boolean;
+  transfer?: boolean;
   /** Full configured occurrence total and already-settled component for simulator edits. */
   configuredOccurrenceAmount?: number;
   settledOccurrenceAmount?: number;

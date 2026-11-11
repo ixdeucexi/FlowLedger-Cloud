@@ -4,7 +4,13 @@ import { readFileSync } from "node:fs";
 import { transpileModule, ModuleKind } from "typescript";
 import { assertUnallocatedEdit, transferExpected } from "./transferMutation";
 import type { Transaction } from "./financialProjectionTypes";
-function extract(file:string,start:string,end:string,name:string,bindings:Record<string,unknown>){const s=readFileSync(file,"utf8"),a=s.indexOf(start),b=s.indexOf(end,a);assert.ok(a>=0&&b>a);const js=transpileModule(s.slice(a,b),{compilerOptions:{module:ModuleKind.CommonJS}}).outputText;return new Function(...Object.keys(bindings),js+`;return ${name}`)(...Object.values(bindings));}
+import { parseForecastAccountRef } from "./accountForecasts";
+function extract(file:string,start:string,end:string,name:string,bindings:Record<string,unknown>){
+ if(file==="components/AddTransactionModal.tsx") {
+  const forecastAccounts=[{ref:parseForecastAccountRef("manual:a"),name:"A",active:true},{ref:parseForecastAccountRef("manual:b"),name:"B",active:true}];
+  bindings={formScopeRef:{current:"fictional-household:fictional-budget"},formAccessRef:{current:{scopeKey:"fictional-household:fictional-budget",canEdit:true,visible:true}},accountRef:forecastAccounts[0].ref,transferToAccountRef:forecastAccounts[1].ref,accountForecastReady:true,sourceAccountLocked:false,creationContext:undefined,forecastAccounts,activeForecastAccounts:forecastAccounts,...bindings};
+ }
+ const s=readFileSync(file,"utf8"),a=s.indexOf(start),b=s.indexOf(end,a);assert.ok(a>=0&&b>a);const js=transpileModule(s.slice(a,b),{compilerOptions:{module:ModuleKind.CommonJS}}).outputText;return new Function(...Object.keys(bindings),js+`;return ${name}`)(...Object.values(bindings));}
 function deferred(){let resolve!:(value:any)=>void;const promise=new Promise<any>(r=>resolve=r);return {promise,resolve};}
 function refreshHarness(){
  const userScopeIdRef={current:"actor"},householdScopeRef={current:{householdId:"A",budgetId:"budgetA"}},financialScopeGenerationRef={current:1},debtRefreshRequestRef={current:0};

@@ -6,7 +6,7 @@ import {
 import { canonicalDebtPaymentMethod } from "./debtOrder";
 import { normalizeBillImportance } from "./billImportance";
 import { normalizeDebtPaymentPauses } from "./debtPaymentPause";
-import { selectFlowLedgerTransactions } from "./ledgerEngine";
+import { createDepositoryTransactionAccountKindClassifier, selectDepositoryTransactions } from "./ledgerEngine";
 import { type PendingPlanMatch } from "./pendingPlanMatches";
 import type {
   Bill,
@@ -190,11 +190,11 @@ export function accountAwareTransactionCollections(
   unknownPlaid: Transaction[];
 } {
   const collections = splitTransactionRows(rows);
-  const active = selectFlowLedgerTransactions(
+  const active = selectDepositoryTransactions(
     collections.active,
     accountIdentities,
   );
-  const deleted = selectFlowLedgerTransactions(
+  const deleted = selectDepositoryTransactions(
     collections.deleted,
     accountIdentities,
   );
@@ -219,6 +219,23 @@ export function checkingPendingBankRows(
     if (kind === "checking") included.push(row);
     else if (kind === "unknown") unknownCount += 1;
   });
+  return { included, unknownCount };
+}
+
+/** Full cash-account collection for account forecasts and matching. The legacy
+ * checking-only selector above remains available for household operating cash. */
+export function depositoryPendingBankRows(
+  rows: PendingBankTransaction[],
+  accountIdentities: readonly ConnectedBankAccount[],
+): { included: PendingBankTransaction[]; unknownCount: number } {
+  const classify = createDepositoryTransactionAccountKindClassifier(accountIdentities);
+  const included: PendingBankTransaction[] = [];
+  let unknownCount = 0;
+  for (const row of rows) {
+    const kind = classify({ source: "plaid", plaid_account_id: row.plaid_account_id });
+    if (kind === "checking" || kind === "savings") included.push(row);
+    else if (kind === "unknown") unknownCount += 1;
+  }
   return { included, unknownCount };
 }
 
@@ -264,7 +281,7 @@ export function normalizeConnectedBankRows(
   return rows.map((account) => {
     const currentBalance = Number(account.current_balance);
     const currentBalanceAvailable =
-      account.current_balance_available !== false && account.current_balance != null && Number.isFinite(currentBalance);
+      account.current_balance_available !== false && (account.currency_code == null || String(account.currency_code).trim().toUpperCase() === "USD") && account.current_balance != null && Number.isFinite(currentBalance);
     return {
       ...account,
       // Existing account presentation expects a number, but forecasting must

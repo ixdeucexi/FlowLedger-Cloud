@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildTransactionLedger, remainingPlannedAmount, selectFlowLedgerTransactions } from "./ledgerEngine";
+import {
+  buildTransactionLedger,
+  createDepositoryTransactionAccountClassifier,
+  createDepositoryTransactionAccountKindClassifier,
+  remainingPlannedAmount,
+  selectDepositoryTransactions,
+  selectFlowLedgerTransactions,
+  type LedgerConnectedAccountLike,
+} from "./ledgerEngine";
 
 const checking = [{
   plaid_account_id: "checking-1",
@@ -231,4 +239,91 @@ test("the fused ledger pass preserves mixed cash, visibility, and diagnostic ord
     [...ledger.cashByDate.values()].reduce((sum, amount) => sum + amount, 0),
     -47,
   );
+});
+
+test("the depository selector retains checking and savings identities without changing the operating selector", () => {
+  const accounts = [
+    { id: "checking-row", plaid_account_id: "checking-provider", account_type: "depository", account_subtype: "checking", is_active: true },
+    { id: "savings-row", plaid_account_id: "savings-provider", account_type: "depository", account_subtype: "savings", is_active: false },
+    { id: "credit-row", plaid_account_id: "credit-provider", account_type: "credit", account_subtype: "credit card" },
+    { id: "loan-row", plaid_account_id: "loan-provider", account_type: "loan", account_subtype: "checking" },
+    { id: "untyped-row", plaid_account_id: "untyped-provider", account_subtype: "savings" },
+  ];
+  const rows = ["checking-provider", "savings-provider", "savings-row", "credit-provider", "loan-provider", "untyped-provider", "unknown"].map(id =>
+    ({ id, date: "2026-11-01", amount: -10, source: "plaid", plaid_account_id: id }));
+  rows.push({ id: "manual", date: "2026-11-01", amount: -10, source: "manual", plaid_account_id: "" });
+  const selection = selectDepositoryTransactions(rows, accounts);
+  assert.deepEqual(selection.included.map(row => row.id), ["checking-provider", "savings-provider", "savings-row", "manual"]);
+  assert.deepEqual(selection.excludedNonCash.map(row => row.id), ["credit-provider", "loan-provider"]);
+  assert.deepEqual(selection.unknownPlaid.map(row => row.id), ["untyped-provider", "unknown"]);
+  assert.deepEqual(selectFlowLedgerTransactions(rows, accounts).included.map(row => row.id), ["checking-provider", "manual"]);
+});
+
+test("depository aliases fail closed for collisions, conflicting retained metadata and household mismatches", () => {
+  const base: LedgerConnectedAccountLike = { id: "first-row", plaid_account_id: "provider", account_type: "depository", account_subtype: "savings", household_id: "one" };
+  for (const other of [
+    { ...base, id: "different-row" },
+    { ...base, account_subtype: "checking" },
+    { ...base, account_type: "credit", account_subtype: "credit card" },
+    { ...base, id: "different-row", household_id: "two", persistent_account_id: "same-physical" },
+  ]) {
+    const accounts = [other, { ...base, ...(other.persistent_account_id ? { persistent_account_id: "same-physical" } : {}) }];
+    for (const order of [accounts, [...accounts].reverse()]) {
+      const classify = createDepositoryTransactionAccountKindClassifier(order);
+      assert.equal(classify({ source: "plaid", plaid_account_id: "provider" }), "unknown");
+    }
+  }
+  const crossNamespace = createDepositoryTransactionAccountKindClassifier([
+    base, { ...base, id: "provider", plaid_account_id: "other-provider" },
+  ]);
+  assert.equal(crossNamespace({ source: "plaid", plaid_account_id: "provider" }), "unknown");
+});
+
+test("only an explicit persistent identity joins reconnected depository account aliases", () => {
+  const accounts = [
+    { id: "old-row", plaid_account_id: "old-provider", persistent_account_id: "physical", household_id: "home", account_type: "depository", account_subtype: "savings", is_active: false },
+    { id: "new-row", plaid_account_id: "new-provider", persistent_account_id: "physical", household_id: "home", account_type: "depository", account_subtype: "savings", is_active: true },
+  ];
+  const classify = createDepositoryTransactionAccountClassifier(accounts);
+  const expected = classify({ source: "plaid", plaid_account_id: "old-row" });
+  assert.equal(expected.accountKind, "savings");
+  assert.ok(expected.accountIdentity);
+  for (const alias of ["old-provider", "new-row", "new-provider"]) {
+    assert.deepEqual(classify({ source: "plaid", plaid_account_id: alias }), expected);
+  }
+  const conflicting = createDepositoryTransactionAccountKindClassifier([accounts[0], { ...accounts[1], account_subtype: "checking" }]);
+  assert.equal(conflicting({ source: "plaid", plaid_account_id: "old-provider" }), "unknown");
+  assert.equal(conflicting({ source: "plaid", plaid_account_id: "new-row" }), "unknown");
+});
+
+test("the full cash ledger counts both sides of a checking-savings transfer exactly once and preserves posted history", () => {
+  const accounts = [...checking, { id: "savings-row", plaid_account_id: "savings-provider", account_type: "depository", account_subtype: "savings", is_active: false }];
+  const rows = [
+    { id: "checking-out", date: "2026-11-01", amount: -200, source: "plaid", plaid_account_id: "checking-1", review_status: "transfer" },
+    { id: "savings-in", date: "2026-11-01", amount: 200, source: "plaid", plaid_account_id: "savings-provider", review_status: "transfer" },
+    { id: "savings-hidden", date: "2026-11-02", amount: -25, source: "plaid", plaid_account_id: "savings-provider", deleted_at: "2026-11-03" },
+    { id: "savings-pending", date: "2026-11-02", amount: -30, source: "plaid", plaid_account_id: "savings-provider", pending: true },
+    { id: "savings-removed", date: "2026-11-02", amount: -40, source: "plaid", plaid_account_id: "savings-provider", removed_at: "2026-11-03" },
+    { id: "manual-transfer", date: "2026-11-02", amount: -50, review_status: "transfer" },
+  ];
+  const operating = buildTransactionLedger(rows, rows, accounts);
+  const full = buildTransactionLedger(rows, rows, accounts, { includeSavings: true });
+  assert.deepEqual(operating.cashTransactions.map(row => row.id), ["checking-out"]);
+  assert.equal(operating.cashByDate.get("2026-11-01"), -200);
+  assert.deepEqual(full.cashTransactions.map(row => row.id), ["checking-out", "savings-in", "savings-hidden"]);
+  assert.equal(full.cashByDate.get("2026-11-01"), 0);
+  assert.equal(full.cashByDate.get("2026-11-02"), -25);
+  assert.deepEqual(full.visibleTransactions.map(row => row.id), ["checking-out", "savings-in", "manual-transfer"]);
+  assert.deepEqual(full.visibleCheckingTransactions.map(row => row.id), ["checking-out", "savings-in"]);
+  const suppressed = buildTransactionLedger(rows, rows, accounts, { includeSavings: true, suppressedTransactionIds: new Set(["savings-hidden"]) });
+  assert.equal(suppressed.cashByDate.has("2026-11-02"), false);
+});
+
+test("the full cash ledger reports ambiguous account aliases instead of counting them as cash", () => {
+  const rows = [{ id: "ambiguous", date: "2026-11-01", amount: -200, source: "plaid", plaid_account_id: "duplicated-provider" }];
+  const accounts = ["one", "two"].map(id => ({ id, plaid_account_id: "duplicated-provider", account_type: "depository", account_subtype: "checking" }));
+  const full = buildTransactionLedger(rows, rows, accounts, { includeSavings: true });
+  assert.deepEqual(full.cashTransactions, []);
+  assert.deepEqual(full.visibleTransactions, []);
+  assert.deepEqual(full.issues.map(issue => issue.code), ["unknown_plaid_account"]);
 });

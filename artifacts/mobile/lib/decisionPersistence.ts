@@ -2,6 +2,8 @@ export type PersistableDecisionStatus = "saved" | "planned" | "completed" | "can
 
 export interface PersistableDecision {
   name: string;
+  funding_account_ref?: string | null;
+  deposit_account_ref?: string | null;
   decision_type: string;
   scenario: unknown;
   result: unknown;
@@ -23,6 +25,8 @@ function dbStatus(status: PersistableDecisionStatus): Exclude<PersistableDecisio
 export function decisionDbPayload(decision: PersistableDecision) {
   return {
     name: decision.name,
+    funding_account_ref: decision.funding_account_ref ?? null,
+    deposit_account_ref: decision.deposit_account_ref ?? null,
     decision_type: decision.decision_type,
     scenario: decision.scenario,
     result: decision.result,

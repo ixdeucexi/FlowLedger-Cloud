@@ -1,3 +1,5 @@
+import { AccountForecastPicker, accountForecastLabel } from "@/components/AccountForecastPicker";
+import { accountMatchEligibility, resolveForecastAccountReference, type ForecastAccountRef } from "@/lib/accountForecasts";
 import { usePrivacyAlerts } from "@/hooks/usePrivacyAlerts";
 import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import { BucketThumbnail } from "@/components/BucketVisual";
@@ -118,7 +120,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
   const { user } = useAuth();
   const handledCloseRequestRef = useRef<string | null>(null);
   const {
-    activeHousehold, startupCoreReady, transactions, bills, incomes, goals, decisions, extraPayments, categories, canEditHousehold, settings, pendingPlanMatches,
+    activeHousehold, startupCoreReady, forecastAccounts, resolveTransactionAccountRef, transactions, bills, incomes, goals, decisions, extraPayments, categories, canEditHousehold, settings, pendingPlanMatches,
     getMonthlyBills, getBillOccurrencesInMonth, getBillOccurrenceAmount, getDailyBalances,
     createSpendingBucketForTransaction, addGoal, updateGoal, deleteGoal, closeSpendingBucket, closeSpendingBucketAndRouteRemainder, reopenSpendingBucket,
     archiveSpendingBucket, restoreArchivedSpendingBucket,
@@ -145,10 +147,14 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
     () => bucketsOnly ? [] : buildReviewQueue(transactions, localDay, focusTransactionId),
     [bucketsOnly, focusTransactionId, transactions, localDay],
   );
+  const [reviewAccountRef, setReviewAccountRef] = useState<ForecastAccountRef | null>(null);
+  const [showOtherAccounts, setShowOtherAccounts] = useState(false);
+  useEffect(() => { setReviewAccountRef(null); setShowOtherAccounts(false); }, [bucketMutationScope]);
   const [reviewFilter, setReviewFilter] = useState<"all" | "expense" | "income">(initialFilter);
   const queue = useMemo(() => prioritizeReviewTransaction(fullQueue.filter(transaction =>
-    reviewFilter === "all" || (reviewFilter === "income" ? transaction.amount > 0 : transaction.amount < 0)
-  ), focusTransactionId), [focusTransactionId, fullQueue, reviewFilter]);
+    (!reviewAccountRef || resolveTransactionAccountRef(transaction) === reviewAccountRef)
+    && (reviewFilter === "all" || (reviewFilter === "income" ? transaction.amount > 0 : transaction.amount < 0))
+  ), focusTransactionId), [focusTransactionId, fullQueue, reviewFilter, reviewAccountRef, resolveTransactionAccountRef]);
   const [saving, setSaving] = useState(false);
   const [variance, setVariance] = useState<VarianceChoice | null>(null);
   const [splitCategory, setSplitCategory] = useState<string | null>(null);
@@ -186,6 +192,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
   const bucketManagerExpanded = bucketsOnly || (bucketManagerSelection?.scope === targetFilterScope ? bucketManagerSelection.expanded : !current);
   useEffect(() => {
     setTargetSelection(null);
+    setShowOtherAccounts(false);
     setBucketManagerSelection(null);
   }, [targetFilterScope]);
   useEffect(() => {
@@ -199,13 +206,30 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
   const forgottenBillDefaults = useMemo<AddBillInitialValues | undefined>(() => {
     if (!current) return undefined;
     const defaults = buildForgottenBillDefaults(current);
-    return { ...defaults, category: categories.includes(defaults.category) ? defaults.category : "Other" };
-  }, [categories, current]);
+    return { ...defaults, fundingAccountRef: resolveTransactionAccountRef(current), category: categories.includes(defaults.category) ? defaults.category : "Other" };
+  }, [categories, current, resolveTransactionAccountRef]);
   const initialTotal = useRef(0);
   useEffect(() => {
     initialTotal.current = Math.max(initialTotal.current, queue.length + completedThisVisit);
   }, [completedThisVisit, queue.length]);
 
+  const targetAccount = (target: ReviewTarget): { ref: ForecastAccountRef | null; assigned: boolean } => {
+    if (target.type === "manual") {
+      const transaction = transactions.find(row => row.id === target.id);
+      return { ref: transaction ? resolveTransactionAccountRef(transaction) : null, assigned: Boolean(transaction?.forecast_account_ref || transaction?.account_id) };
+    }
+    let raw: string | null | undefined;
+    if (target.type === "bill") raw = bills.find(row => row.id === target.id)?.funding_account_ref;
+    else if (target.type === "income") raw = incomes.find(row => row.id === target.id)?.deposit_account_ref;
+    else if (target.type === "goal") raw = goals.find(row => row.id === target.id)?.funding_account_ref;
+    else if (target.type === "decision") raw = decisions.find(row => row.id === target.id)?.funding_account_ref;
+    else if (target.type === "snowball") {
+      const payment = extraPayments.find(row => row.allocations.some(allocation => allocation.billId === target.id)
+        && (row.payment_date ?? `${row.year}-${String(row.month + 1).padStart(2,"0")}-01`) === target.occurrenceDate);
+      raw = payment?.funding_account_ref;
+    }
+    return { ref: resolveForecastAccountReference(raw, forecastAccounts), assigned: Boolean(raw) };
+  };
   const targets = useMemo(() => {
     if (!current) return [];
     const [year, monthNumber] = current.date.split("-").map(Number);
@@ -311,13 +335,18 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
     } else {
       candidates.push(...incomeReviewTargets(incomes, current.date, incomeMatches));
     }
-    const learnedRanking = applyMatchMemory(current, rankReviewTargets(current, candidates), transactions);
+    const source = resolveTransactionAccountRef(current);
+    const eligibleCandidates = candidates.filter(target => {
+      const account = targetAccount(target);
+      return !(account.assigned && !account.ref) && accountMatchEligibility(source, account.ref, showOtherAccounts);
+    });
+    const learnedRanking = applyMatchMemory(current, rankReviewTargets(current, eligibleCandidates), transactions);
     const savedBillId = subscriptionLinkKeys(current)
       .map(key => subscriptionBillLinks[key])
       .find(Boolean);
     const linkedRanking = prioritizeSavedBillTarget(learnedRanking, savedBillId);
     return prioritizePendingPlanTarget(linkedRanking, current.id, pendingPlanMatches);
-  }, [bills, current, decisions, extraPayments, getBillOccurrenceAmount, getBillOccurrencesInMonth, getMonthlyBills, goals, incomes, pendingPlanMatches, subscriptionBillLinks, transactions]);
+  }, [bills, current, decisions, extraPayments, getBillOccurrenceAmount, getBillOccurrencesInMonth, getMonthlyBills, goals, incomes, pendingPlanMatches, subscriptionBillLinks, transactions, forecastAccounts, resolveTransactionAccountRef, showOtherAccounts]);
   const groupedTargets = useMemo(() => groupReviewTargets(targets), [targets]);
   const filteredTargets = useMemo(() => reviewTargetsForKind(targets, targetKind), [targets, targetKind]);
   const suggestion = targets[0];
@@ -895,6 +924,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
       </View>
       <View style={{ flex: 1 }}>
         <View style={styles.targetHeading}><Text style={[styles.targetName, { color: c.foreground }]} numberOfLines={2}>{target.name}</Text>{index === 0 && target.score >= 48 ? <Text style={[styles.suggested, { color: c.success }]}>SUGGESTED</Text> : null}</View>
+        <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>{targetAccount(target).ref ? `${targetAccount(target).ref !== (current ? resolveTransactionAccountRef(current) : null) ? "Other account: " : ""}${accountForecastLabel(forecastAccounts.find(row => row.ref === targetAccount(target).ref) ?? { name: "Unavailable account" })}` : "Unassigned account"}</Text>
         <Text style={[styles.targetMeta, { color: c.mutedForeground }]}>
           {target.type === "income" ? "Expected income" : target.type === "bill" ? "Bill" : target.type === "snowball" ? "Snowball plan" : target.type === "manual" ? "Manual Activity" : target.type === "decision" ? "Calendar plan" : "Set-aside bucket"}: {money(target.plannedAmount)} · {displayDate(target.occurrenceDate)}
         </Text>
@@ -914,6 +944,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
 
   return (
     <>
+      {!bucketsOnly ? <AccountForecastPicker value={reviewAccountRef} onChange={setReviewAccountRef} includeHousehold label="Review account" /> : null}
       {!bucketsOnly ? <>
       <View style={styles.filterRow}>
         {([
@@ -1148,10 +1179,16 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
             <View style={styles.transactionCopy}>
               <Text style={[styles.transactionName, { color: c.foreground }]} numberOfLines={2}>{transactionName(current)}</Text>
               <Text style={[styles.transactionMeta, { color: c.mutedForeground }]}>{displayDate(current.date)} · Posted</Text>
+              <Text style={[styles.transactionMeta, { color: c.primary }]}>{accountForecastLabel(forecastAccounts.find(row => row.ref === resolveTransactionAccountRef(current)) ?? { name: "Account unavailable" })}</Text>
             </View>
             <Text style={[styles.transactionAmount, { color: current.amount < 0 ? c.destructive : c.success }]}>{current.amount < 0 ? "−" : "+"}{money(current.amount)}</Text>
           </View>
 
+          {!resolveTransactionAccountRef(current) ? <Text style={[styles.sectionCopy, { color: c.warning }]}>This bank account needs to be refreshed before matching.</Text> : null}
+          <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: showOtherAccounts }} onPress={() => setShowOtherAccounts(value => !value)} style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 12 }}>
+            <Feather name={showOtherAccounts ? "check-square" : "square"} size={20} color={c.primary} />
+            <Text style={{ color: c.foreground }}>Include plans from other accounts</Text>
+          </Pressable>
           {suggestion && suggestion.score >= 78 ? (
             <Pressable
               accessibilityRole="button"

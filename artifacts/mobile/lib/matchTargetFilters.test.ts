@@ -65,7 +65,7 @@ function activitySuggestion(options: any[], kind: MatchTargetKind | null) {
   });
 }
 
-function suggestionCard(surface: "review" | "activity", candidate: any, saving = false, kind = "bill") {
+function suggestionCard(surface: "review" | "activity", candidate: any, saving = false, kind = "bill", canEditHousehold = true) {
   const s = surface === "review" ? reviewSource() : activitySource();
   const marker = surface === "review" ? "{suggestion && suggestion.score >= 78 ? (" : "{matchSuggestion ? (";
   const start = s.indexOf(marker);
@@ -78,7 +78,9 @@ function suggestionCard(surface: "review" | "activity", candidate: any, saving =
   const card = execute(`const card = (${expression}); return card;`, {
     React, Pressable: "button", Text: "text", View: "view", FloLogo: "flo", styles: {}, c: {},
     suggestion: candidate, matchSuggestion: candidate, matchSuggestionKind: kind, matchTargetKindLabels,
-    saving, savingMatch: saving,
+    saving, savingMatch: saving, canEditHousehold,
+    matchedSourceAccountRef: "bank:11111111-1111-4111-8111-111111111111",
+    matchingAccountCopy: () => "Bills account",
     chooseTarget: (target: unknown) => calls.push(["review", target]),
     handleMatchBill: (id: string) => calls.push(["bill", id]),
     handleMatchManual: (id: string) => calls.push(["manual", id]),
@@ -139,6 +141,7 @@ test("Activity's visible suggestion invokes the existing handler only when used,
     card.props.onPress();
     assert.deepEqual(calls, [[targetType, candidate.billId]]);
     assert.equal(suggestionCard("activity", candidate, true, kind).card.props.disabled, true);
+    assert.equal(suggestionCard("activity", candidate, false, kind, false).card.props.disabled, true, "viewers cannot apply a suggestion");
   }
   assert.equal(suggestionCard("activity", null).card, null);
 });
@@ -195,13 +198,16 @@ test("Activity opening another transaction or closing clears its selected match 
   const javascript = transpileModule(source.slice(start, end), {}).outputText;
   let selected: unknown = { scope: "old", kind: "bucket" };
   let transaction: unknown;
-  const set = new Function("useCallback", "setMatchTargetSelection", "setMatchTxState", `${javascript}; return setMatchTx;`)(
-    (callback: unknown) => callback, (value: unknown) => { selected = value; }, (value: unknown) => { transaction = value; },
+  let includeOtherAccounts = true;
+  const set = new Function("useCallback", "setMatchTargetSelection", "setMatchTxState", "setShowOtherMatchAccounts", `${javascript}; return setMatchTx;`)(
+    (callback: unknown) => callback, (value: unknown) => { selected = value; }, (value: unknown) => { transaction = value; }, (value: boolean) => { includeOtherAccounts = value; },
   );
   for (const value of [{ id: "a" }, null, { id: "b" }]) {
     selected = { scope: "old", kind: "debt" };
+    includeOtherAccounts = true;
     set(value);
     assert.equal(selected, null);
     assert.equal(transaction, value);
+    assert.equal(includeOtherAccounts, false, "cross-account intent resets for every open and close");
   }
 });
