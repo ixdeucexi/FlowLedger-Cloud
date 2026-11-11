@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Fake records in fresh, network-isolated PostgreSQL17; no hosted access.
 set -euo pipefail
+mode=${1:-full}
+if [[ "$mode" != full && "$mode" != --catalog-only ]]; then echo "Usage: $0 [--catalog-only]" >&2; exit 2; fi
 fixture_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repo_dir=$(cd -- "$fixture_dir/../../.." && pwd)
 container_name="flowledger-planned-transfer-tests-$$"
@@ -20,7 +22,15 @@ pg=("${docker_local[@]}" exec -i "$container_name" psql -U postgres -v ON_ERROR_
 python3 "$repo_dir/tests/sql/account-flow-repair/expand-fixture.py" "$fixture_dir/fixture.sql" > "$logs_dir/expanded-fixture.sql"
 if ! "${pg[@]}" < "$logs_dir/expanded-fixture.sql" > "$logs_dir/fixture.log" 2>&1 \
  || ! "${pg[@]}" < "$repo_dir/supabase/migrations/20261111194401_planned_account_transfers.sql" > "$logs_dir/migration.log" 2>&1 \
- || ! "${pg[@]}" < "$fixture_dir/test.sql" > "$logs_dir/test.log" 2>&1; then
+ || ! "${pg[@]}" < "$repo_dir/supabase/migrations/20261111203004_planned_transfer_occurrence_scope_index.sql" > "$logs_dir/scope-index-migration.log" 2>&1 \
+ || ! "${pg[@]}" < "$fixture_dir/catalog.sql" > "$logs_dir/catalog.log" 2>&1; then
+ echo "Planned transfer SQL tests failed: $logs_dir" >&2; exit 1
+fi
+if [[ "$mode" == --catalog-only ]]; then
+ echo "Planned transfer catalog checks passed (3 focused FK/index checks). Logs: $logs_dir"
+ exit 0
+fi
+if ! "${pg[@]}" < "$fixture_dir/test.sql" > "$logs_dir/test.log" 2>&1; then
  echo "Planned transfer SQL tests failed: $logs_dir" >&2; exit 1
 fi
 python3 "$fixture_dir/concurrency.py" "$container_name" "$logs_dir"

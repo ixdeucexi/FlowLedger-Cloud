@@ -18,6 +18,8 @@ The account resolver canonicalizes explicit valid aliases and rejects foreign, c
 
 No save, read, pause, deletion, skip or reflected declaration creates a real transaction, changes a goal, moves money, matches bank evidence, or alters a balance observation. A reflected flag is a user planning declaration, not verified settlement.
 
+For index-only verification, run `./tests/sql/account-planned-transfers/run.sh --catalog-only`. This installs both additive migrations and checks ten intended indexes, the exact ordered composite parent-scope index and full leading-column coverage for every new foreign key, without rerunning financial behavior tests.
+
 The SQL matrix verifies roles/RLS/grants, scope, numeric/date validation, canonical identity, retries/CAS, monthly clipping/leap years, immutable snapshots and original-date editing, reset, cancellation with inactive endpoints, soft-deleted partial management, and unchanged financial records/observations. Real parallel sessions verify competing creates/edits/states, template-vs-occurrence races, snapshot preservation, atomic reads during an uncommitted combined edit, deletion races, revocation and role downgrade while waiting.
 
 The migration is additive. Rolling back app code does not require dropping these tables or deleting saved planning records; older code simply does not read them.
