@@ -55,6 +55,9 @@ export function AccountBalancesCard() {
   const connected = accounts.filter(account => account.source === "bank");
   const manual = accounts.filter(account => account.source === "manual");
   const showManual = !connected.length || manualExpandedScope === scope;
+  const sharedBankDate = connected.length > 0 && validDate(connected[0].asOfDate)
+    && connected.every(account => account.asOfDate === connected[0].asOfDate)
+    ? connected[0].asOfDate : null;
 
   const row = (account: ForecastAccountDescriptor, index: number) => {
     const current = amount(account.currentBalance);
@@ -89,7 +92,8 @@ export function AccountBalancesCard() {
             <AppText style={[styles.detail, { color: c.mutedForeground }]}>
               {account.source === "manual" ? "Manual · " : ""}{account.type === "savings" ? "Savings" : account.type === "cash" ? "Cash" : "Checking"}{account.mask ? ` · ••${account.mask}` : ""}
             </AppText>
-            <AppText style={[styles.date, { color: c.mutedForeground }]}>{date}</AppText>
+            {account.source !== "bank" || !sharedBankDate
+              ? <AppText style={[styles.date, { color: c.mutedForeground }]}>{date}</AppText> : null}
             {forecastStatus ? <AppText style={[styles.date, { color: c.mutedForeground }]}>{forecastStatus}</AppText> : null}
           </View>
           <View style={[styles.values, large && styles.largeValues]}>
@@ -113,13 +117,16 @@ export function AccountBalancesCard() {
     <View accessibilityLabel="Account balances" style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
       <View style={styles.header}>
         <AppText tone="title" style={[styles.title, { color: c.foreground }]}>Accounts</AppText>
-        <AppText style={[styles.columnLabel, { color: c.mutedForeground }]}>Current balance</AppText>
+        <AppText style={[styles.columnLabel, { color: c.mutedForeground }]}>Current balances</AppText>
       </View>
       {loadError ? <AppText accessibilityRole="alert" style={[styles.message, { color: c.mutedForeground }]}>Account balances couldn't be loaded. Try refreshing.</AppText>
         : !ready ? <AppText style={[styles.message, { color: c.mutedForeground }]}>Loading account balances…</AppText>
           : !accounts.length ? <AppText style={[styles.message, { color: c.mutedForeground }]}>No checking or savings accounts yet.</AppText>
             : <>
               {connected.map(row)}
+              {sharedBankDate ? <AppText style={[styles.bankDate, { color: c.mutedForeground }]}>
+                {`Bank balances as of ${compactDateOnly(sharedBankDate)}, ${sharedBankDate.slice(0, 4)}`}
+              </AppText> : null}
               {connected.length > 0 && manual.length > 0 ? (
                 <Pressable accessibilityRole="button" accessibilityLabel={`Manual accounts (${manual.length})`}
                   aria-expanded={showManual}
@@ -141,17 +148,18 @@ export function AccountBalancesCard() {
 
 const styles = StyleSheet.create({
   card: { width: "100%", minWidth: 0, borderWidth: 1, borderRadius: 22, paddingHorizontal: 16 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingTop: 15, paddingBottom: 3 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingTop: 14, paddingBottom: 6 },
   title: { fontSize: 17, fontWeight: "700" },
   columnLabel: { fontSize: 11 },
-  row: { width: "100%", minWidth: 0, minHeight: 76, paddingVertical: 13, flexDirection: "row", alignItems: "center", gap: 9 },
-  icon: { width: 30, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  rowContent: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 10 },
+  row: { width: "100%", minWidth: 0, minHeight: 60, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 9 },
+  icon: { width: 30, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  rowContent: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "flex-start", gap: 10 },
   largeRow: { flexDirection: "column", alignItems: "stretch", gap: 5 },
   identity: { flex: 1, minWidth: 0 },
-  name: { fontSize: 13, fontWeight: "600", flexShrink: 1 },
-  detail: { fontSize: 11, marginTop: 3 },
+  name: { fontSize: 14, fontWeight: "600", flexShrink: 1 },
+  detail: { fontSize: 11, marginTop: 2 },
   date: { fontSize: 10, marginTop: 2 },
+  bankDate: { fontSize: 10, paddingLeft: 39, paddingBottom: 10 },
   values: { alignItems: "flex-end", flexShrink: 0, maxWidth: "63%" },
   largeValues: { alignSelf: "flex-end", maxWidth: "100%" },
   balance: { fontSize: 18, fontWeight: "700", fontVariant: ["tabular-nums"] },

@@ -124,7 +124,16 @@ test("Dashboard balances show saved current observations and a distinct availabl
   assert.match(h.text(), /Current balance/i);
   assert.match(h.text(), /Available/i);
   assert.match(h.text(), /Nov 11|2026-11-11/);
+  assert.match(h.text(), /Bank balances as of Nov 11, 2026/);
+  assert.equal((h.text().match(/Nov 11, 2026/g) ?? []).length, 1, "equal bank dates have one clearly scoped visible summary");
   assert.equal(h.nodes().filter(node => node.props.accessibilityRole === "button" && /View forecast for/.test(node.props.accessibilityLabel ?? "")).length, 3);
+  assert.equal(h.nodes().filter(node => /View forecast for/.test(node.props.accessibilityLabel ?? "") && /As of Nov 11, 2026/.test(node.props.accessibilityLabel ?? "")).length, 3, "each account's accessible label retains its observation date");
+  const different = harness([account(1), account(2, { asOfDate: "2026-11-10" })]);
+  assert.doesNotMatch(different.text(), /Bank balances as of/);
+  assert.match(different.text(), /As of Nov 11, 2026/); assert.match(different.text(), /As of Nov 10, 2026/);
+  const missing = harness([account(1), account(2, { asOfDate: null })]);
+  assert.doesNotMatch(missing.text(), /Bank balances as of/);
+  assert.match(missing.text(), /As of Nov 11, 2026/); assert.match(missing.text(), /Balance date unavailable/);
 });
 
 test("zero and negative current amounts remain exact while missing observations stay unavailable", () => {
@@ -137,7 +146,7 @@ test("zero and negative current amounts remain exact while missing observations 
 });
 
 test("manual accounts remain discoverable separately and expansion cannot survive a household change", () => {
-  const manual = account(4, { ref: "manual:cash", source: "manual", name: "Manual holiday", aliases: ["manual:cash"] });
+  const manual = account(4, { ref: "manual:cash", source: "manual", name: "Manual holiday", aliases: ["manual:cash"], asOfDate: "2026-11-09" });
   const h = harness([account(1), manual, account(9, { active: false, name: "Closed account" })]);
   assert.doesNotMatch(h.text(), /Manual holiday|Closed account/);
   const toggle = h.nodes().find(node => /Manual accounts/i.test(node.props.accessibilityLabel ?? ""));
@@ -145,6 +154,8 @@ test("manual accounts remain discoverable separately and expansion cannot surviv
   assert.equal(toggle?.props.accessibilityState?.expanded, false);
   assert.ok(toggle?.props.onPress); toggle.props.onPress(); h.render();
   assert.match(h.text(), /Manual holiday/);
+  assert.match(h.text(), /Bank balances as of Nov 11, 2026/);
+  assert.match(h.text(), /As of Nov 9, 2026/, "a shared bank date never replaces the manual account's own date");
   const expandedToggle = h.nodes().find(node => /Manual accounts/i.test(node.props.accessibilityLabel ?? ""));
   assert.equal(expandedToggle?.props["aria-expanded"], true);
   assert.equal(expandedToggle?.props.accessibilityState?.expanded, true);
