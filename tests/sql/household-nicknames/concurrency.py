@@ -1,4 +1,4 @@
-import os, pathlib, subprocess, sys, time
+import os, pathlib, subprocess, sys, time, json
 container, directory = sys.argv[1:]
 out = pathlib.Path(directory)
 env = {k: v for k, v in os.environ.items() if k not in ['DOCKER_HOST','DOCKER_CONTEXT','DOCKER_TLS','DOCKER_TLS_VERIFY','DOCKER_CERT_PATH']}
@@ -48,5 +48,35 @@ result=run(f"delete from public.household_members where household_id='{home}' an
 assert result.returncode==0,result.stderr
 finish(process,log)
 assert checked(f"select count(*) from public.household_nicknames where household_id='{home}' and user_id='{manager}'")=='0'
-(out/'concurrency-summary.json').write_text('{"status":"PASS","cases":3,"hostedDatabaseAccess":false}\n')
-print('PASS 3 concurrent nickname CAS and membership cascade cases')
+# Precise absent-read/direct-REST INSERT/conditional-clear interleaving. SHARE
+# permits the RPC's SELECT FOR UPDATE but blocks DELETE's RowExclusiveLock.
+race_user = '00000000-0000-4000-8000-000000000014'
+checked(f"insert into public.household_members(household_id,user_id,role) values('{home}','{race_user}','viewer')")
+a = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+a.stdin.write("begin;lock table public.household_nicknames in share mode;select 'locked';\n")
+a.stdin.flush()
+assert [a.stdout.readline().strip() for _ in range(3)] == ['BEGIN', 'LOCK TABLE', 'locked']
+b = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+b.stdin.write("\\set VERBOSITY verbose\nset application_name='nickname-clear-direct-race';" + actor_call(race_user,None,None) + "\n")
+b.stdin.close()
+deadline = time.monotonic() + 5
+waiting = False
+while time.monotonic() < deadline:
+ waiting = checked("select exists(select 1 from pg_locks l join pg_stat_activity a on a.pid=l.pid where a.application_name='nickname-clear-direct-race' and l.relation='public.household_nicknames'::regclass and l.mode='RowExclusiveLock' and not l.granted)") == 't'
+ if waiting: break
+ time.sleep(.03)
+assert waiting, 'Clear RPC did not reach the conditional DELETE relation lock'
+a.stdin.write(f"set role authenticated;select set_config('request.jwt.claim.sub','{race_user}',false);insert into public.household_nicknames(user_id,household_id,nickname) values('{race_user}','{home}','Concurrent direct REST');commit;\n")
+a.stdin.close()
+assert a.wait(timeout=5) == 0, a.stderr.read()
+a_output, a_error = a.stdout.read(), a.stderr.read()
+assert b.wait(timeout=5) != 0
+b_output, b_error = b.stdout.read(), b.stderr.read()
+assert '40001' in b_error and 'household_nickname_conflict' in b_error, b_error
+stored = checked(f"select nickname from public.household_nicknames where user_id='{race_user}' and household_id='{home}'")
+assert stored == 'Concurrent direct REST'
+(out/'clear-direct-race-a.log').write_text(a_output+a_error)
+(out/'clear-direct-race-b.log').write_text(b_output+b_error)
+(out/'clear-direct-race-proof.json').write_text(json.dumps({'status':'PASS','rpcExitCode':b.returncode,'conflictSQLSTATE':'40001','storedNickname':stored,'falseClearAcknowledgement':False,'exactAbsentReadInsertClearInterleaving':True,'network':'none','realRecords':False},indent=2)+'\n')
+(out/'concurrency-summary.json').write_text('{"status":"PASS","cases":4,"hostedDatabaseAccess":false}\n')
+print('PASS 4 concurrent nickname CAS, membership cascade and direct REST clear cases')

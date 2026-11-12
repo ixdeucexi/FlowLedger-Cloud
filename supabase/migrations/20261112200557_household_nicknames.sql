@@ -68,6 +68,11 @@ begin
   if v_name is null then
     delete from public.household_nicknames where user_id=v_actor and household_id=p_household_id
       and nickname is not distinct from p_expected_nickname;
+    -- A direct own-row INSERT can commit after the absent pre-read. Do not
+    -- acknowledge a clear unless the row is actually absent after DELETE.
+    if exists(select 1 from public.household_nicknames where user_id=v_actor and household_id=p_household_id) then
+      raise exception 'household_nickname_conflict' using errcode='40001';
+    end if;
   else
     insert into public.household_nicknames(user_id,household_id,nickname)
     values(v_actor,p_household_id,v_name)
