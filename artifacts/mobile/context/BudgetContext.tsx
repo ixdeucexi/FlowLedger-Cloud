@@ -1,4 +1,5 @@
 import { plannedTransferScheduledDate, normalizePlannedTransferData, normalizePlannedTransfer, normalizePlannedTransferOccurrence, mergePlannedTransferRows, type PlannedAccountTransfer, type PlannedTransferOccurrence, type PlannedTransferPatch, type PlannedTransferOccurrencePatch, type PlannedTransferIssue } from "@/lib/plannedAccountTransfers";
+import { acknowledgeHouseholdNameRead, mergeHouseholdNameRead, normalizeHouseholdName, type HouseholdNameIntent } from "@/lib/householdNames";
 import { billTransferCutoff, billTransferExpected, mergeConvertedBill, verifyBillTransferConversion } from "@/lib/billTransferConversion";
 import { mergeAccountNameRead, acknowledgeAccountNameRead, verifiedRoutingMetadataPatch, mergeRoutingMetadata, normalizeAccountDisplayName, type AccountNameIntent } from "@/lib/accountNameMetadata";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -129,6 +130,7 @@ import {
   loadHouseholdMembers,
   loadRemoteActiveHouseholdId,
   removeHouseholdMember as removeHouseholdMemberRecord,
+  renameHousehold as renameHouseholdRecord,
   readStoredActiveHouseholdId,
   saveActiveHouseholdId,
   updateHouseholdMemberRole as updateHouseholdMemberRoleRecord,
@@ -355,6 +357,7 @@ interface BudgetContextType {
   retryLastSave: () => Promise<void>;
   clearSaveError: () => void;
   refreshHouseholds: () => Promise<void>;
+  renameActiveHousehold: (name: string, expectedName: string) => Promise<void>;
   refreshHouseholdsForPrivacy: () => Promise<void>;
   refreshHouseholdActivity: () => Promise<void>;
   switchHousehold: (householdId: string) => Promise<void>;
@@ -875,6 +878,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const connectedBankAccountsRef = useRef<ConnectedBankAccount[]>([]);
   const transactionAccountIdentitiesRef = useRef<ConnectedBankAccount[]>([]);
   const householdsRef = useRef<HouseholdMembership[]>([]);
+  const householdNameVersionRef = useRef(0);
+  const householdNameIntentsRef = useRef<HouseholdNameIntent[]>([]);
+  const householdRenameInFlightRef = useRef(new Set<string>());
   const retrySaveRef = useRef<null | (() => Promise<void>)>(null);
   const retrySavePromiseRef = useRef<Promise<void> | null>(null);
   const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1089,7 +1095,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     authoritativeHousehold?: HouseholdMembership,
     authoritativeHouseholds?: HouseholdMembership[],
   ) => {
-    const nextHousehold = authoritativeHousehold ?? cache.household;
+    const sourceHousehold = authoritativeHousehold ?? cache.household;
+    const nextHousehold = mergeHouseholdNameRead([sourceHousehold], cache.userId, 0, householdNameIntentsRef.current)[0];
     if (
       cache.userId !== financialDataUserIdRef.current
       || cache.household.householdId !== nextHousehold.householdId
@@ -1130,7 +1137,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     } as Settings;
     const cachedCategories = fallbackCategoryList(cache.data.categories);
     const cachedCloses = normalizeDailyCheckingCloseRows(cache.data.dailyCheckingCloses);
-    const nextHouseholds = authoritativeHouseholds ?? cache.households;
+    const nextHouseholds = mergeHouseholdNameRead(authoritativeHouseholds ?? cache.households, cache.userId, 0, householdNameIntentsRef.current);
     planCacheHydrationWriteSkipRef.current = {
       scopeKey: `${cache.userId}:${nextHousehold.householdId}`,
       dataUpdatedAt: cache.dataUpdatedAt,
@@ -1573,6 +1580,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const resolveHouseholds = useCallback(async (uid: string, loadDetails = true) => {
     const resolutionRequestId = ++householdResolutionRequestRef.current;
+    const nameReadVersion = householdNameVersionRef.current;
     const resolution = await loadResolvedHouseholdSelection({
       loadHouseholds: () => loadHouseholdMemberships(uid),
       readStoredHouseholdId: () => readStoredActiveHouseholdId(uid),
@@ -1589,8 +1597,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     ) {
       throw new Error("Household resolution was superseded by a newer session or request");
     }
-    const memberships = resolution.households;
-    const next = resolution.activeHousehold;
+    const memberships = mergeHouseholdNameRead(resolution.households, uid, nameReadVersion, householdNameIntentsRef.current);
+    householdNameIntentsRef.current = acknowledgeHouseholdNameRead(memberships, uid, nameReadVersion, householdNameIntentsRef.current);
+    const next = memberships.find(row => row.householdId === resolution.activeHousehold?.householdId) ?? null;
     const nextHouseholdId = next?.householdId ?? null;
     // Compare at commit time. The exact cached scope may have hydrated while
     // household discovery was in flight; treating the pre-request null as the
@@ -1891,6 +1900,45 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     await coreReady;
   }, [userId, demoMode, queryClient, resolveHouseholds, waitForScopeCoreLoad]);
 
+  const renameActiveHousehold = useCallback(async (name: string, expectedName: string) => {
+    const uid = user?.id;
+    const scope = householdScopeRef.current;
+    const generation = financialScopeGenerationRef.current;
+    if (!uid || demoMode) throw new Error("Sign in to rename a household.");
+    if (!scope || activeHousehold?.householdId !== scope.householdId
+      || userScopeIdRef.current !== uid || financialDataUserIdRef.current !== uid) {
+      throw new Error("The household changed. Reopen the name editor.");
+    }
+    if (!canManageHouseholdMembers(scope.role)) throw new Error("Only household owners or managers can rename this household.");
+    if (startupCoreReadyScopeKeyRef.current !== `${uid}:${scope.householdId}`) {
+      throw new Error("Wait for your household to finish loading.");
+    }
+    const normalized = normalizeHouseholdName(name);
+    if (normalized === expectedName) return;
+    const key = `${uid}:${scope.householdId}`;
+    if (householdRenameInFlightRef.current.has(key)) throw new Error("This household name is already saving.");
+    householdRenameInFlightRef.current.add(key);
+    try {
+      const saved = await renameHouseholdRecord(scope.householdId, normalized, expectedName);
+      if (generation !== financialScopeGenerationRef.current || userScopeIdRef.current !== uid
+        || financialDataUserIdRef.current !== uid || householdScopeRef.current?.householdId !== scope.householdId
+        || !canManageHouseholdMembers(householdScopeRef.current?.role)) {
+        throw new Error("The household or your access changed. Refresh households to see its current name.");
+      }
+      const version = ++householdNameVersionRef.current;
+      householdNameIntentsRef.current = householdNameIntentsRef.current
+        .filter(row => row.userId !== uid || row.householdId !== scope.householdId)
+        .concat({ userId: uid, householdId: saved.householdId, name: saved.name, version });
+      const applyName = (rows: HouseholdMembership[]) => rows.map(row => row.householdId === saved.householdId
+        ? { ...row, name: saved.name } : row);
+      householdsRef.current = applyName(householdsRef.current);
+      householdScopeRef.current = { ...householdScopeRef.current, name: saved.name };
+      setHouseholds(current => userScopeIdRef.current === uid ? applyName(current) : current);
+    } finally {
+      householdRenameInFlightRef.current.delete(key);
+    }
+  }, [activeHousehold?.householdId, demoMode, user]);
+
   const refreshHouseholdsForPrivacy = useCallback(async () => {
     if (!userId || demoMode) return;
     const priorScope = householdScopeRef.current;
@@ -1971,7 +2019,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         setHouseholdTimeZone(detectedTimeZone);
       }
     })();
-  }, [loading, user, demoMode, activeHousehold]);
+  }, [loading, user, demoMode, activeHousehold?.householdId, activeHousehold?.role]);
 
   const switchHousehold = useCallback(async (householdId: string) => {
     if (!user || demoMode) return;
@@ -6917,7 +6965,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       renameForecastAccount, getForecastPlanCoverage, setForecastAccountRoutingBatch,
       hiddenForecastAccountRefs, forecastVisibilityReady, forecastVisibilityError, setAccountForecastVisible, getAccountForecast, saveAccountForecastPreference, setForecastAccountRouting, resolveTransactionAccountRef,
       households, householdMembers, householdActivity, householdDetailsReady, categoriesReady, activeHousehold, householdRole, canEditHousehold,
-      refreshHouseholds, refreshHouseholdsForPrivacy, refreshHouseholdActivity, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
+      refreshHouseholds, renameActiveHousehold, refreshHouseholdsForPrivacy, refreshHouseholdActivity, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
       updateHouseholdMemberRole, removeHouseholdMember, leaveActiveHousehold,
       forecastConfidence, loading, startupCoreReady, loadError, dataUpdatedAt, retryBudgetLoad, refreshBankData, demoMode,
       saveStatus, saveError, retryLastSave, clearSaveError,

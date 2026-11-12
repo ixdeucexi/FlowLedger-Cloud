@@ -42,6 +42,7 @@ import { FeedbackManageModal } from "@/components/FeedbackManageModal";
 import { IncomeModal } from "@/components/IncomeModal";
 import { GoalModal } from "@/components/GoalModal";
 import { HouseholdMemberActionsModal } from "@/components/HouseholdMemberActionsModal";
+import { HouseholdNameModal, type HouseholdNameEditorTarget } from "@/components/HouseholdNameModal";
 import { MembershipPanel } from "@/components/MembershipPanel";
 import { FOUNDING_FREE_LAUNCH, FOUNDING_FREE_NAME, hasAdminProAccess } from "@/lib/launchMode";
 import { isStoreCaptureMode } from "@/lib/demoMode";
@@ -91,6 +92,7 @@ import {
   type HouseholdInviteRole,
   type HouseholdRole,
   canLeaveHousehold,
+  canManageHouseholdMembers,
   canRemoveHouseholdMember,
   householdAssignableRolesFor,
   householdInviteRolesFor,
@@ -612,6 +614,7 @@ export default function MoreScreen({
   const [householdInviteCode, setHouseholdInviteCode] = useState("");
   const [householdJoinCode, setHouseholdJoinCode] = useState("");
   const [householdBusy, setHouseholdBusy] = useState(false);
+  const [householdNameEditor, setHouseholdNameEditor] = useState<HouseholdNameEditorTarget | null>(null);
   const [householdMessage, setHouseholdMessage] = useState<string | null>(null);
   const [managedHouseholdMember, setManagedHouseholdMember] = useState<{
     userId: string;
@@ -2930,7 +2933,7 @@ export default function MoreScreen({
                 >
                   <Feather name="users" size={20} color={c.primary} />
                 </View>
-                <View style={{ flex: 1 }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={[styles.accountName, { color: c.foreground }]}>
                     {activeHousehold?.name ?? "Personal household"}
                   </Text>
@@ -2943,7 +2946,19 @@ export default function MoreScreen({
                     {canEditHousehold ? " • editing allowed" : " • view only"}
                   </Text>
                 </View>
+                {user && activeHousehold && !budgetDemoMode && canManageHouseholdMembers(householdRole) ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Rename household"
+                    disabled={householdBusy || !startupCoreReady}
+                    onPress={() => setHouseholdNameEditor({ userId: user.id, householdId: activeHousehold.householdId, name: activeHousehold.name })}
+                    style={({ pressed }) => [styles.householdRenameButton, { backgroundColor: c.primary + "16", borderColor: c.primary + "30", opacity: pressed || householdBusy || !startupCoreReady ? 0.55 : 1 }]}
+                  >
+                    <Feather name="edit-2" size={17} color={c.primary} />
+                  </Pressable>
+                ) : null}
               </View>
+              <HouseholdNameModal target={householdNameEditor} onClose={() => setHouseholdNameEditor(null)} />
 
               {households.length > 1 && (
                 <View style={styles.householdChipWrap}>
@@ -2991,7 +3006,7 @@ export default function MoreScreen({
                             },
                           ]}
                         >
-                          {household.isPersonal ? "Personal" : household.name}
+                          {household.name}
                         </Text>
                       </Pressable>
                     );
@@ -6311,6 +6326,7 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 12,
   },
+  householdRenameButton: { minWidth: 44, minHeight: 44, borderWidth: 1, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   householdChipWrap: {
     flexDirection: "row",
     flexWrap: "wrap",

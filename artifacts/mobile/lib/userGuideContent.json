@@ -101,7 +101,7 @@
         "items": [
           { "title": "Keep the schedule current", "body": "Edit amount, next date, and frequency when they change.", "icon": "edit-3" },
           { "title": "Record manual payments", "body": "Mark a bill paid after you pay it outside FlowLedger.", "icon": "check" },
-          { "title": "Transfer between accounts", "body": "Choose Transfer when adding a bill, then pick From and To accounts, amount and schedule. Manage it under Transfers. For a monthly or one-time bill, Change to transfer preserves past history and replaces its future schedule after you confirm. Resolve any conflicting bill activity first.", "icon": "repeat" },
+          { "title": "Transfer between accounts", "body": "Choose Transfer when adding a bill, then pick From and To accounts, amount and schedule. Open the Transfers row in Bills to manage plans on their own page. For a monthly or one-time bill, Change to transfer preserves past history and replaces its future schedule after you confirm. Resolve any conflicting bill activity first.", "icon": "repeat" },
           { "title": "Close finished items", "body": "Inactive bills should stop creating reminders and occurrences.", "icon": "x-circle" }
         ]
       },
@@ -144,8 +144,8 @@
           { "title": "Open Simulator", "body": "Free includes one current what-if draft. Test income, expenses, debt payments, a pause with a resume date, or a hypothetical new debt without changing your real plan.", "icon": "sliders" },
           { "title": "Compare results", "body": "Use Calendar for daily balances and payments. Compare shows cash flow and payoff timing. Pauses may add interest and delay payoff. Pro and eligible Founders can save and compare scenarios.", "icon": "columns" },
           { "title": "Leave safely", "body": "Exit the simulator to return to the unchanged Forecast.", "icon": "log-out" },
-          { "title": "Plan account transfers", "body": "Choose Transfer in Bills, or Plan transfer in an account’s Forecast or Activity. Pick From and To accounts, amount, first date, Monthly or One time, and an optional last date. Review both sides, then save. No money moves and no Activity transactions are created.", "icon": "repeat" },
-          { "title": "Adjust a transfer date", "body": "Open its calendar date or Transfer plans to skip it or mark each side already included in its dated account balance. Pausing or deleting keeps a partly included date available. Reviewed dates keep their amount and accounts until you explicitly use the current plan.", "icon": "check-square" }
+          { "title": "Plan account transfers", "body": "Open Bills > Transfers, then Plan transfer. Pick From and To accounts, amount, first date, Monthly or One time, and an optional last date. Review both sides, then save. No money moves and no Activity transactions are created.", "icon": "repeat" },
+          { "title": "Adjust a transfer date", "body": "Open its calendar date or Bills > Transfers to skip it or mark each side already included in its dated account balance. Pausing or deleting keeps a partly included date available. Reviewed dates keep their amount and accounts until you explicitly use the current plan.", "icon": "check-square" }
         ]
       }
     ],
@@ -225,7 +225,7 @@
       {
         "title": "Keep the workspace current",
         "items": [
-          { "title": "Household access", "body": "Open Settings > Household to invite or join. Can edit changes plans; View only reads them. Use Dashboard’s people button to switch households. All members can view shared accounts.", "icon": "users" },
+          { "title": "Household access", "body": "Open Settings > Household to invite or join. Owners and managers can use the name’s pencil to rename. Can edit changes plans; View only reads them. Dashboard’s people button switches households. All members can view shared accounts.", "icon": "users" },
           { "title": "Bank connections", "body": "Open Settings > Bank connections to see linked accounts. New links request two months of history. Review subscription flags. Unlink disconnects all accounts at that bank and keeps past activity.", "icon": "credit-card" },
           { "title": "Categories and monthly budgets", "body": "Open Settings > Plan > Categories to set monthly limits or manage categories. Choose This month or Every month, then Save. Each category shows Spent and Left. Clear a limit to remove it; category changes keep linked activity together.", "icon": "tag" },
           { "title": "Setup & walkthrough", "body": "Run setup again after a major change or replay the Guided Tour from its first step.", "icon": "compass" },

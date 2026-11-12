@@ -19,7 +19,6 @@ import { DatePickerField } from "@/components/DatePickerField";
 import { DebtPaymentAppliedModal, type DebtPaymentAppliedDetail } from "@/components/DebtPaymentAppliedModal";
 import { DesktopCalendarPage } from "@/components/desktop/DesktopCalendarPage";
 import { AccountForecastPicker } from "@/components/AccountForecastPicker";
-import { PlannedTransferManagerModal } from "@/components/PlannedTransferManager";
 import { PlannedTransferModal } from "@/components/PlannedTransferModal";
 import { PlannedTransferOccurrenceModal } from "@/components/PlannedTransferOccurrenceModal";
 import type { PlannedAccountTransfer } from "@/lib/plannedAccountTransfers";
@@ -465,10 +464,9 @@ export default function MonthlyScreen() {
   const [month, setMonth] = useState(householdCurrentMonth);
   const [activeTab] = useState<TabView>("calendar");
   const [txModalVisible, setTxModalVisible] = useState(false);
-  const [transferManagerOpen, setTransferManagerOpen] = useState(false);
   const [plannedTransferEditor, setPlannedTransferEditor] = useState<PlannedAccountTransfer | null>(null);
   const [plannedTransferDate, setPlannedTransferDate] = useState<{ id: string; date: string } | null>(null);
-  useEffect(() => { setTransferManagerOpen(false); setPlannedTransferEditor(null); setPlannedTransferDate(null); }, [user?.id, activeHousehold?.householdId, activeHousehold?.budgetId]);
+  useEffect(() => { setPlannedTransferEditor(null); setPlannedTransferDate(null); }, [user?.id, activeHousehold?.householdId, activeHousehold?.budgetId]);
   const [editTx, setEditTx] = useState<Transaction | null>(null);
   const [editingBucket, setEditingBucket] = useState<Goal | null>(null);
   const [transactionDefaultDate, setTransactionDefaultDate] = useState<string | undefined>();
@@ -1902,7 +1900,7 @@ export default function MonthlyScreen() {
         </View>
       ) : isDesktop ? (
         <DesktopCalendarPage
-          headerAccessory={<View style={{ gap: 8 }}><AccountForecastPicker label="Forecast account" includeHousehold visibleOnly allowUnassigned={false} value={selectedForecastAccountRef} onChange={setSelectedForecastAccountRef} /><Pressable accessibilityRole="button" accessibilityLabel="Manage planned transfers" disabled={!activeHousehold || !startupCoreReady || !plannedTransfersReady} onPress={() => setTransferManagerOpen(true)} style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8 }}><Feather name="repeat" size={16} color={c.primary} /><Text style={{ color: c.primary, fontFamily: "Inter_600SemiBold" }}>Transfer plans</Text></Pressable></View>}
+          headerAccessory={<View style={styles.desktopForecastAccount}><AccountForecastPicker label="Forecast account" compact includeHousehold visibleOnly allowUnassigned={false} value={selectedForecastAccountRef} onChange={setSelectedForecastAccountRef} /></View>}
           month={month}
           year={selectedYear}
           resolveEventLabel={resolveDesktopEventLabel}
@@ -1985,13 +1983,20 @@ export default function MonthlyScreen() {
           </Pressable>
         </View>
       </View>
-      <View style={{ marginHorizontal: 20, marginBottom: 8 }}>
-        <AccountForecastPicker label="Forecast account" includeHousehold visibleOnly allowUnassigned={false} value={selectedForecastAccountRef} onChange={setSelectedForecastAccountRef} />
-        <Pressable accessibilityRole="button" accessibilityLabel="Manage planned transfers" disabled={!activeHousehold || !startupCoreReady || !plannedTransfersReady} onPress={() => setTransferManagerOpen(true)} style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8 }}><Feather name="repeat" size={16} color={c.primary} /><Text style={{ color: c.primary, fontFamily: "Inter_600SemiBold" }}>Transfer plans</Text></Pressable>
+      <View style={[styles.forecastControls, isNarrowForecastLayout && styles.narrowForecastControls]}>
+        <View style={styles.forecastAccount}>
+          <AccountForecastPicker label="Forecast account" compact includeHousehold visibleOnly allowUnassigned={false} value={selectedForecastAccountRef} onChange={setSelectedForecastAccountRef} />
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Safety floor days for the year"
+          onPress={openSafetyYear}
+          style={({ pressed }) => [styles.safetyDaysButton, { borderColor: c.border, backgroundColor: c.card, opacity: pressed ? 0.72 : 1 }]}
+        >
+          <Feather name="shield" size={17} color={c.primary} />
+          <Text style={[styles.safetyDaysText, { color: c.foreground }]}>Safety floor</Text>
+        </Pressable>
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel="Safety floor days for the year" onPress={openSafetyYear} style={{ alignSelf: "flex-start", marginHorizontal: 20, paddingVertical: 10 }}>
-        <Text style={{ color: c.primary, fontFamily: "Inter_600SemiBold" }}>Safety floor days</Text>
-      </Pressable>
       <DataFreshnessLabel inset compact />
 
       <View
@@ -3336,7 +3341,6 @@ export default function MonthlyScreen() {
         </Pressable>
       </Modal>
 
-      <PlannedTransferManagerModal visible={transferManagerOpen} onClose={() => setTransferManagerOpen(false)} month={month} year={selectedYear} />
       <PlannedTransferModal visible={Boolean(plannedTransferEditor)} transfer={plannedTransferEditor} onClose={() => setPlannedTransferEditor(null)} />
       <PlannedTransferOccurrenceModal transferId={plannedTransferDate?.id ?? null} date={plannedTransferDate?.date ?? null} onClose={() => setPlannedTransferDate(null)} onEditSeries={setPlannedTransferEditor} />
       <AddTransactionModal
@@ -3541,7 +3545,13 @@ const styles = StyleSheet.create({
   todayChip: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", borderWidth: 2 },
   narrowTodayChip: { width: 44, height: 44, borderRadius: 14 },
   todayChipText: { fontSize: 17, fontFamily: "Inter_800ExtraBold", lineHeight: 20 },
-  calendarMonthBar: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginHorizontal: 20, marginTop: 0, marginBottom: 14, paddingVertical: 4, gap: 10 },
+  forecastControls: { flexDirection: "row", alignItems: "stretch", gap: 8, marginHorizontal: 20, marginBottom: 8 },
+  narrowForecastControls: { marginHorizontal: 14 },
+  forecastAccount: { flex: 1, minWidth: 0 },
+  desktopForecastAccount: { maxWidth: 460, marginBottom: 14 },
+  safetyDaysButton: { minWidth: 86, maxWidth: 104, minHeight: 60, borderWidth: 1, borderRadius: 14, paddingHorizontal: 9, paddingVertical: 8, alignItems: "center", justifyContent: "center", gap: 5 },
+  safetyDaysText: { textAlign: "center", fontSize: 10, lineHeight: 14, fontFamily: "Inter_600SemiBold" },
+  calendarMonthBar: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginHorizontal: 20, marginTop: 0, marginBottom: 10, paddingVertical: 2, gap: 10 },
   desktopMonthBar: { width: "96%", maxWidth: 1440, alignSelf: "center", marginHorizontal: 0 },
   monthArrowBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 22, borderWidth: 1 },
   monthCenterLabel: { flex: 1, minWidth: 0, minHeight: 44, alignItems: "center", justifyContent: "center" },

@@ -27,6 +27,18 @@ test("rejects blocked, unknown, and privileged restoration targets", () => {
   assert.equal(normalizeRestorableRoute("/more?section=admin"), "/more");
 });
 
+test("Transfers is an exact restorable route without incoming account or action parameters", () => {
+  assert.equal(normalizeRestorableRoute("/transfers"), "/transfers");
+  assert.equal(normalizeRestorableRoute("/(tabs)/transfers?account=private&delete=1&returnTo=https://elsewhere.example"), "/transfers");
+  assert.equal(normalizeRestorableRoute("/transfers/elsewhere"), null);
+  const runtime = createAppRouteMemory();
+  runtime.remember("a", "one", "/transfers?edit=private");
+  assert.equal(runtime.read("a", "one"), "/transfers");
+  assert.equal(runtime.read("a", "two"), null);
+  assert.equal(runtime.read("b", "one"), null);
+  assert.equal(createAppRouteMemory().read("a", "one"), null);
+});
+
 test("treats the How FlowLedger works guide as a transient route", () => {
   assert.equal(normalizeRestorableRoute("/how-flowledger-works?section=stability"), "/(tabs)");
   assert.equal(normalizeRestorableRoute("/(tabs)/how-flowledger-works?protectedDays=42"), "/(tabs)");

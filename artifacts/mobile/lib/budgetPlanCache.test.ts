@@ -1,5 +1,6 @@
 import { normalizePlannedTransferData } from "./plannedAccountTransfers";
 import {mergeAccountNameRead} from "./accountNameMetadata";
+import { mergeHouseholdNameRead } from "./householdNames";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -187,7 +188,7 @@ function hydrateActualCallback(cache: BudgetPlanCacheRecord, actor = cache.userI
   };
   const dependencies: Record<string, any> = {
     normalizePlannedTransferData, publishPlannedTransferData: (data:unknown, scope:string) => state.calls.push({name:"plannedTransfers",value:{data,scope}}),
-    ...projectionInput, mergeAccountNameRead, accountNameIntentsRef: {current: []}, canonicalConnectedAccounts, pendingPlaidActivityWithBalanceHolds, localDateInTimeZone, fallbackCategoryList,
+    ...projectionInput, mergeAccountNameRead, accountNameIntentsRef: {current: []}, mergeHouseholdNameRead, householdNameIntentsRef: {current: []}, canonicalConnectedAccounts, pendingPlaidActivityWithBalanceHolds, localDateInTimeZone, fallbackCategoryList,
     DEFAULT_SETTINGS: {}, canonicalDebtPaymentMethod: (value: unknown) => value,
     reorderDebtPriorities: (rows: unknown[]) => rows, normalizeDailyCheckingCloseRows: (rows: unknown[]) => rows,
     reuseStructurallyEqualFinancialValue: (_previous: unknown, next: unknown) => next, isValidExtraPaymentPlan: () => true,

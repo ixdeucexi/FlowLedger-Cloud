@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet } from "react-native";
 
 import { AddBillModal } from "@/components/AddBillModal";
-import { PlannedTransferManager } from "@/components/PlannedTransferManager";
+import { TransferPlansShortcut } from "@/components/TransferPlansShortcut";
 import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import {
   CardHeader,
@@ -429,9 +429,9 @@ export function DesktopBillsDebtsPage() {
                 icon="pie-chart"
               />
             </View>
-            <DesktopCard style={styles.transfersCard}>
-              <PlannedTransferManager title="Transfers between accounts" />
-            </DesktopCard>
+            <View style={styles.transfersCard}>
+              <TransferPlansShortcut />
+            </View>
             {billTab === "Overview" ||
             billTab === "Upcoming" ||
             billTab === "Calendar" ? (

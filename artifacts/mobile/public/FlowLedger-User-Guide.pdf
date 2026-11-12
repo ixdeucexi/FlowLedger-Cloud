@@ -132,7 +132,7 @@ endobj
 endobj
 16 0 obj
 <<
-/Author (FlowLedger) /CreationDate (D:20261112150151+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:970c0b296cf1dd149319ea880b88ef35a915038893f4c8c5a919c44b1f2e2f5e) /ModDate (D:20261112150151+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+/Author (FlowLedger) /CreationDate (D:20261112191523+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:0ed9eb3eb1fc74d12d4f53c8871862fd296fb76726d8e0ec0c05876de7404915) /ModDate (D:20261112191523+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
   /Subject (Current Dashboard, Activity, Bills, Forecast, payoff, Flo, and Settings guidance) /Title (FlowLedger User Guide) /Trapped /False
 >>
 endobj
@@ -954,7 +954,7 @@ endstream
 endobj
 22 0 obj
 <<
-/Length 8872
+/Length 8944
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -1060,15 +1060,15 @@ BT 1 0 0 1 56 507 Tm (Mark a bill paid after you pay it outside FlowLedger.) Tj 
 .160784 .207843 .321569 RG
 .8 w
 n
-58 393 m
-283 393 l
-291.8448 393 299 400.1552 299 409 c
+58 382 m
+283 382 l
+291.8448 382 299 389.1552 299 398 c
 299 465 l
 299 473.8448 291.8448 481 283 481 c
 58 481 l
 49.1552 481 42 473.8448 42 465 c
-42 409 l
-42 400.1552 49.1552 393 58 393 c
+42 398 l
+42 389.1552 49.1552 382 58 382 c
 h
 B*
 .960784 .721569 .180392 rg
@@ -1085,40 +1085,41 @@ BT 1 0 0 1 67 466 Tm (Transfer between accounts) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
 BT 1 0 0 1 56 451 Tm (Choose Transfer when adding a bill, then pick From and To) Tj T* ET
-BT 1 0 0 1 56 440 Tm (accounts, amount and schedule. Manage it under) Tj T* ET
-BT 1 0 0 1 56 429 Tm (Transfers. For a monthly or one-time bill, Change to transfer) Tj T* ET
-BT 1 0 0 1 56 418 Tm (preserves past history and replaces its future schedule after) Tj T* ET
-BT 1 0 0 1 56 407 Tm (you confirm. Resolve any conflicting bill activity first.) Tj T* ET
+BT 1 0 0 1 56 440 Tm (accounts, amount and schedule. Open the Transfers row in) Tj T* ET
+BT 1 0 0 1 56 429 Tm (Bills to manage plans on their own page. For a monthly or) Tj T* ET
+BT 1 0 0 1 56 418 Tm (one-time bill, Change to transfer preserves past history and) Tj T* ET
+BT 1 0 0 1 56 407 Tm (replaces its future schedule after you confirm. Resolve any) Tj T* ET
+BT 1 0 0 1 56 396 Tm (conflicting bill activity first.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-58 331 m
-283 331 l
-291.8448 331 299 338.1552 299 347 c
-299 370 l
-299 378.8448 291.8448 386 283 386 c
-58 386 l
-49.1552 386 42 378.8448 42 370 c
-42 347 l
-42 338.1552 49.1552 331 58 331 c
+58 320 m
+283 320 l
+291.8448 320 299 327.1552 299 336 c
+299 359 l
+299 367.8448 291.8448 375 283 375 c
+58 375 l
+49.1552 375 42 367.8448 42 359 c
+42 336 l
+42 327.1552 49.1552 320 58 320 c
 h
 B*
 .960784 .721569 .180392 rg
 n
-60 369 m
-60 371.2091 58.20914 373 56 373 c
-53.79086 373 52 371.2091 52 369 c
-52 366.7909 53.79086 365 56 365 c
-58.20914 365 60 366.7909 60 369 c
+60 358 m
+60 360.2091 58.20914 362 56 362 c
+53.79086 362 52 360.2091 52 358 c
+52 355.7909 53.79086 354 56 354 c
+58.20914 354 60 355.7909 60 358 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 67 371 Tm (Close finished items) Tj T* ET
+BT 1 0 0 1 67 360 Tm (Close finished items) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 356 Tm (Inactive bills should stop creating reminders and) Tj T* ET
-BT 1 0 0 1 56 345 Tm (occurrences.) Tj T* ET
+BT 1 0 0 1 56 345 Tm (Inactive bills should stop creating reminders and) Tj T* ET
+BT 1 0 0 1 56 334 Tm (occurrences.) Tj T* ET
 .960784 .721569 .180392 rg
 BT /F2 9 Tf 10.8 TL ET
 BT 1 0 0 1 313 611 Tm (DEBT PAYOFF PLANNER) Tj T* ET
@@ -1278,7 +1279,7 @@ endstream
 endobj
 23 0 obj
 <<
-/Length 11054
+/Length 10987
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -1606,15 +1607,15 @@ BT 1 0 0 1 327 420 Tm (Exit the simulator to return to the unchanged Forecast.) 
 .160784 .207843 .321569 RG
 .8 w
 n
-329 306 m
-554 306 l
-562.8448 306 570 313.1552 570 322 c
+329 317 m
+554 317 l
+562.8448 317 570 324.1552 570 333 c
 570 378 l
 570 386.8448 562.8448 394 554 394 c
 329 394 l
 320.1552 394 313 386.8448 313 378 c
-313 322 l
-313 313.1552 320.1552 306 329 306 c
+313 333 l
+313 324.1552 320.1552 317 329 317 c
 h
 B*
 .360784 .65098 1 rg
@@ -1630,44 +1631,43 @@ BT /F2 9.5 Tf 11.4 TL ET
 BT 1 0 0 1 338 379 Tm (Plan account transfers) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 327 364 Tm (Choose Transfer in Bills, or Plan transfer in an account's) Tj T* ET
-BT 1 0 0 1 327 353 Tm (Forecast or Activity. Pick From and To accounts, amount,) Tj T* ET
-BT 1 0 0 1 327 342 Tm (first date, Monthly or One time, and an optional last date.) Tj T* ET
-BT 1 0 0 1 327 331 Tm (Review both sides, then save. No money moves and no) Tj T* ET
-BT 1 0 0 1 327 320 Tm (Activity transactions are created.) Tj T* ET
+BT 1 0 0 1 327 364 Tm (Open Bills > Transfers, then Plan transfer. Pick From and) Tj T* ET
+BT 1 0 0 1 327 353 Tm (To accounts, amount, first date, Monthly or One time, and) Tj T* ET
+BT 1 0 0 1 327 342 Tm (an optional last date. Review both sides, then save. No) Tj T* ET
+BT 1 0 0 1 327 331 Tm (money moves and no Activity transactions are created.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-329 211 m
-554 211 l
-562.8448 211 570 218.1552 570 227 c
-570 283 l
-570 291.8448 562.8448 299 554 299 c
-329 299 l
-320.1552 299 313 291.8448 313 283 c
-313 227 l
-313 218.1552 320.1552 211 329 211 c
+329 222 m
+554 222 l
+562.8448 222 570 229.1552 570 238 c
+570 294 l
+570 302.8448 562.8448 310 554 310 c
+329 310 l
+320.1552 310 313 302.8448 313 294 c
+313 238 l
+313 229.1552 320.1552 222 329 222 c
 h
 B*
 .360784 .65098 1 rg
 n
-331 282 m
-331 284.2091 329.2091 286 327 286 c
-324.7909 286 323 284.2091 323 282 c
-323 279.7909 324.7909 278 327 278 c
-329.2091 278 331 279.7909 331 282 c
+331 293 m
+331 295.2091 329.2091 297 327 297 c
+324.7909 297 323 295.2091 323 293 c
+323 290.7909 324.7909 289 327 289 c
+329.2091 289 331 290.7909 331 293 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 338 284 Tm (Adjust a transfer date) Tj T* ET
+BT 1 0 0 1 338 295 Tm (Adjust a transfer date) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 327 269 Tm (Open its calendar date or Transfer plans to skip it or mark) Tj T* ET
-BT 1 0 0 1 327 258 Tm (each side already included in its dated account balance.) Tj T* ET
-BT 1 0 0 1 327 247 Tm (Pausing or deleting keeps a partly included date available.) Tj T* ET
-BT 1 0 0 1 327 236 Tm (Reviewed dates keep their amount and accounts until you) Tj T* ET
-BT 1 0 0 1 327 225 Tm (explicitly use the current plan.) Tj T* ET
+BT 1 0 0 1 327 280 Tm (Open its calendar date or Bills > Transfers to skip it or mark) Tj T* ET
+BT 1 0 0 1 327 269 Tm (each side already included in its dated account balance.) Tj T* ET
+BT 1 0 0 1 327 258 Tm (Pausing or deleting keeps a partly included date available.) Tj T* ET
+BT 1 0 0 1 327 247 Tm (Reviewed dates keep their amount and accounts until you) Tj T* ET
+BT 1 0 0 1 327 236 Tm (explicitly use the current plan.) Tj T* ET
 .062745 .094118 .168627 rg
 .360784 .65098 1 RG
 .8 w
@@ -2293,7 +2293,7 @@ endstream
 endobj
 26 0 obj
 <<
-/Length 10244
+/Length 10328
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -2341,15 +2341,15 @@ BT 1 0 0 1 42 611 Tm (KEEP THE WORKSPACE CURRENT) Tj T* ET
 .160784 .207843 .321569 RG
 .8 w
 n
-58 516 m
-283 516 l
-291.8448 516 299 523.1552 299 532 c
+58 505 m
+283 505 l
+291.8448 505 299 512.1552 299 521 c
 299 577 l
 299 585.8448 291.8448 593 283 593 c
 58 593 l
 49.1552 593 42 585.8448 42 577 c
-42 532 l
-42 523.1552 49.1552 516 58 516 c
+42 521 l
+42 512.1552 49.1552 505 58 505 c
 h
 B*
 .654902 .545098 .980392 rg
@@ -2365,167 +2365,168 @@ BT /F2 9.5 Tf 11.4 TL ET
 BT 1 0 0 1 67 578 Tm (Household access) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 563 Tm (Open Settings > Household to invite or join. Can edit) Tj T* ET
-BT 1 0 0 1 56 552 Tm (changes plans; View only reads them. Use Dashboard's) Tj T* ET
-BT 1 0 0 1 56 541 Tm (people button to switch households. All members can view) Tj T* ET
-BT 1 0 0 1 56 530 Tm (shared accounts.) Tj T* ET
+BT 1 0 0 1 56 563 Tm (Open Settings > Household to invite or join. Owners and) Tj T* ET
+BT 1 0 0 1 56 552 Tm (managers can use the name's pencil to rename. Can edit) Tj T* ET
+BT 1 0 0 1 56 541 Tm (changes plans; View only reads them. Dashboard's people) Tj T* ET
+BT 1 0 0 1 56 530 Tm (button switches households. All members can view shared) Tj T* ET
+BT 1 0 0 1 56 519 Tm (accounts.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-58 432 m
-283 432 l
-291.8448 432 299 439.1552 299 448 c
-299 493 l
-299 501.8448 291.8448 509 283 509 c
-58 509 l
-49.1552 509 42 501.8448 42 493 c
-42 448 l
-42 439.1552 49.1552 432 58 432 c
+58 421 m
+283 421 l
+291.8448 421 299 428.1552 299 437 c
+299 482 l
+299 490.8448 291.8448 498 283 498 c
+58 498 l
+49.1552 498 42 490.8448 42 482 c
+42 437 l
+42 428.1552 49.1552 421 58 421 c
 h
 B*
 .654902 .545098 .980392 rg
 n
-60 492 m
-60 494.2091 58.20914 496 56 496 c
-53.79086 496 52 494.2091 52 492 c
-52 489.7909 53.79086 488 56 488 c
-58.20914 488 60 489.7909 60 492 c
+60 481 m
+60 483.2091 58.20914 485 56 485 c
+53.79086 485 52 483.2091 52 481 c
+52 478.7909 53.79086 477 56 477 c
+58.20914 477 60 478.7909 60 481 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 67 494 Tm (Bank connections) Tj T* ET
+BT 1 0 0 1 67 483 Tm (Bank connections) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 479 Tm (Open Settings > Bank connections to see linked accounts.) Tj T* ET
-BT 1 0 0 1 56 468 Tm (New links request two months of history. Review) Tj T* ET
-BT 1 0 0 1 56 457 Tm (subscription flags. Unlink disconnects all accounts at that) Tj T* ET
-BT 1 0 0 1 56 446 Tm (bank and keeps past activity.) Tj T* ET
+BT 1 0 0 1 56 468 Tm (Open Settings > Bank connections to see linked accounts.) Tj T* ET
+BT 1 0 0 1 56 457 Tm (New links request two months of history. Review) Tj T* ET
+BT 1 0 0 1 56 446 Tm (subscription flags. Unlink disconnects all accounts at that) Tj T* ET
+BT 1 0 0 1 56 435 Tm (bank and keeps past activity.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-58 337 m
-283 337 l
-291.8448 337 299 344.1552 299 353 c
-299 409 l
-299 417.8448 291.8448 425 283 425 c
-58 425 l
-49.1552 425 42 417.8448 42 409 c
-42 353 l
-42 344.1552 49.1552 337 58 337 c
+58 326 m
+283 326 l
+291.8448 326 299 333.1552 299 342 c
+299 398 l
+299 406.8448 291.8448 414 283 414 c
+58 414 l
+49.1552 414 42 406.8448 42 398 c
+42 342 l
+42 333.1552 49.1552 326 58 326 c
 h
 B*
 .654902 .545098 .980392 rg
 n
-60 408 m
-60 410.2091 58.20914 412 56 412 c
-53.79086 412 52 410.2091 52 408 c
-52 405.7909 53.79086 404 56 404 c
-58.20914 404 60 405.7909 60 408 c
+60 397 m
+60 399.2091 58.20914 401 56 401 c
+53.79086 401 52 399.2091 52 397 c
+52 394.7909 53.79086 393 56 393 c
+58.20914 393 60 394.7909 60 397 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 67 410 Tm (Categories and monthly budgets) Tj T* ET
+BT 1 0 0 1 67 399 Tm (Categories and monthly budgets) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 395 Tm (Open Settings > Plan > Categories to set monthly limits or) Tj T* ET
-BT 1 0 0 1 56 384 Tm (manage categories. Choose This month or Every month,) Tj T* ET
-BT 1 0 0 1 56 373 Tm (then Save. Each category shows Spent and Left. Clear a) Tj T* ET
-BT 1 0 0 1 56 362 Tm (limit to remove it; category changes keep linked activity) Tj T* ET
-BT 1 0 0 1 56 351 Tm (together.) Tj T* ET
+BT 1 0 0 1 56 384 Tm (Open Settings > Plan > Categories to set monthly limits or) Tj T* ET
+BT 1 0 0 1 56 373 Tm (manage categories. Choose This month or Every month,) Tj T* ET
+BT 1 0 0 1 56 362 Tm (then Save. Each category shows Spent and Left. Clear a) Tj T* ET
+BT 1 0 0 1 56 351 Tm (limit to remove it; category changes keep linked activity) Tj T* ET
+BT 1 0 0 1 56 340 Tm (together.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-58 275 m
-283 275 l
-291.8448 275 299 282.1552 299 291 c
-299 314 l
-299 322.8448 291.8448 330 283 330 c
-58 330 l
-49.1552 330 42 322.8448 42 314 c
-42 291 l
-42 282.1552 49.1552 275 58 275 c
+58 264 m
+283 264 l
+291.8448 264 299 271.1552 299 280 c
+299 303 l
+299 311.8448 291.8448 319 283 319 c
+58 319 l
+49.1552 319 42 311.8448 42 303 c
+42 280 l
+42 271.1552 49.1552 264 58 264 c
 h
 B*
 .654902 .545098 .980392 rg
 n
-60 313 m
-60 315.2091 58.20914 317 56 317 c
-53.79086 317 52 315.2091 52 313 c
-52 310.7909 53.79086 309 56 309 c
-58.20914 309 60 310.7909 60 313 c
+60 302 m
+60 304.2091 58.20914 306 56 306 c
+53.79086 306 52 304.2091 52 302 c
+52 299.7909 53.79086 298 56 298 c
+58.20914 298 60 299.7909 60 302 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 67 315 Tm (Setup & walkthrough) Tj T* ET
+BT 1 0 0 1 67 304 Tm (Setup & walkthrough) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 300 Tm (Run setup again after a major change or replay the Guided) Tj T* ET
-BT 1 0 0 1 56 289 Tm (Tour from its first step.) Tj T* ET
+BT 1 0 0 1 56 289 Tm (Run setup again after a major change or replay the Guided) Tj T* ET
+BT 1 0 0 1 56 278 Tm (Tour from its first step.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-58 191 m
-283 191 l
-291.8448 191 299 198.1552 299 207 c
-299 252 l
-299 260.8448 291.8448 268 283 268 c
-58 268 l
-49.1552 268 42 260.8448 42 252 c
-42 207 l
-42 198.1552 49.1552 191 58 191 c
+58 180 m
+283 180 l
+291.8448 180 299 187.1552 299 196 c
+299 241 l
+299 249.8448 291.8448 257 283 257 c
+58 257 l
+49.1552 257 42 249.8448 42 241 c
+42 196 l
+42 187.1552 49.1552 180 58 180 c
 h
 B*
 .654902 .545098 .980392 rg
 n
-60 251 m
-60 253.2091 58.20914 255 56 255 c
-53.79086 255 52 253.2091 52 251 c
-52 248.7909 53.79086 247 56 247 c
-58.20914 247 60 248.7909 60 251 c
+60 240 m
+60 242.2091 58.20914 244 56 244 c
+53.79086 244 52 242.2091 52 240 c
+52 237.7909 53.79086 236 56 236 c
+58.20914 236 60 237.7909 60 240 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 67 253 Tm (Notifications and App Lock) Tj T* ET
+BT 1 0 0 1 67 242 Tm (Notifications and App Lock) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 238 Tm (Choose reminders in Settings. App Lock starts Off. In) Tj T* ET
-BT 1 0 0 1 56 227 Tm (Security, you can enable fingerprint or face unlock with) Tj T* ET
-BT 1 0 0 1 56 216 Tm (device PIN/passcode backup, choose a delay, and use) Tj T* ET
-BT 1 0 0 1 56 205 Tm (Lock now.) Tj T* ET
+BT 1 0 0 1 56 227 Tm (Choose reminders in Settings. App Lock starts Off. In) Tj T* ET
+BT 1 0 0 1 56 216 Tm (Security, you can enable fingerprint or face unlock with) Tj T* ET
+BT 1 0 0 1 56 205 Tm (device PIN/passcode backup, choose a delay, and use) Tj T* ET
+BT 1 0 0 1 56 194 Tm (Lock now.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-58 129 m
-283 129 l
-291.8448 129 299 136.1552 299 145 c
-299 168 l
-299 176.8448 291.8448 184 283 184 c
-58 184 l
-49.1552 184 42 176.8448 42 168 c
-42 145 l
-42 136.1552 49.1552 129 58 129 c
+58 118 m
+283 118 l
+291.8448 118 299 125.1552 299 134 c
+299 157 l
+299 165.8448 291.8448 173 283 173 c
+58 173 l
+49.1552 173 42 165.8448 42 157 c
+42 134 l
+42 125.1552 49.1552 118 58 118 c
 h
 B*
 .654902 .545098 .980392 rg
 n
-60 167 m
-60 169.2091 58.20914 171 56 171 c
-53.79086 171 52 169.2091 52 167 c
-52 164.7909 53.79086 163 56 163 c
-58.20914 163 60 164.7909 60 167 c
+60 156 m
+60 158.2091 58.20914 160 56 160 c
+53.79086 160 52 158.2091 52 156 c
+52 153.7909 53.79086 152 56 152 c
+58.20914 152 60 153.7909 60 156 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 67 169 Tm (Help & user guide) Tj T* ET
+BT 1 0 0 1 67 158 Tm (Help & user guide) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 154 Tm (Open this guide again or use Support when an account or) Tj T* ET
-BT 1 0 0 1 56 143 Tm (plan needs help.) Tj T* ET
+BT 1 0 0 1 56 143 Tm (Open this guide again or use Support when an account or) Tj T* ET
+BT 1 0 0 1 56 132 Tm (plan needs help.) Tj T* ET
 .654902 .545098 .980392 rg
 BT /F2 9 Tf 10.8 TL ET
 BT 1 0 0 1 313 611 Tm (CHOOSE YOUR HOUSEHOLD PLAN) Tj T* ET
@@ -3333,16 +3334,16 @@ xref
 0000013136 00000 n 
 0000017696 00000 n 
 0000022682 00000 n 
-0000031606 00000 n 
-0000042713 00000 n 
-0000050954 00000 n 
-0000057587 00000 n 
-0000067884 00000 n 
-0000074429 00000 n 
+0000031678 00000 n 
+0000042718 00000 n 
+0000050959 00000 n 
+0000057592 00000 n 
+0000067973 00000 n 
+0000074518 00000 n 
 trailer
 <<
 /ID 
-[<abf41ff5a0a76bd656062376b62118ad><abf41ff5a0a76bd656062376b62118ad>]
+[<8c42a6579263606b25b3abf2da913098><8c42a6579263606b25b3abf2da913098>]
 % ReportLab generated PDF document -- digest (opensource)
 
 /Info 16 0 R
@@ -3350,5 +3351,5 @@ trailer
 /Size 29
 >>
 startxref
-83882
+83971
 %%EOF

@@ -37,8 +37,10 @@ export function PlannedTransferManager({
   month,
   year,
   title = "Planned transfers",
+  presentation = "section",
 }: {
   title?: string;
+  presentation?: "section" | "page";
   accountRef?: ForecastAccountRef | null;
   month?: number;
   year?: number;
@@ -55,6 +57,7 @@ export function PlannedTransferManager({
     plannedTransferOccurrences,
     plannedTransfersReady,
     plannedTransfersError,
+    retryBudgetLoad,
     savePlannedAccountTransfer,
     deletePlannedAccountTransfer,
   } = useBudget();
@@ -189,7 +192,7 @@ export function PlannedTransferManager({
     <View style={styles.section}>
       <View style={styles.heading}>
         <View style={styles.flex}>
-          <Text style={[styles.title, { color: c.foreground }]}>
+          <Text accessibilityRole={presentation === "page" ? "header" : undefined} style={[styles.title, presentation === "page" && styles.pageTitle, { color: c.foreground }]}>
             {title}
           </Text>
           <Text style={[styles.help, { color: c.mutedForeground }]}>
@@ -213,13 +216,14 @@ export function PlannedTransferManager({
             ]}
           >
             <Feather name="plus" size={18} color={c.primary} />
-            <Text style={[styles.actionText, { color: c.primary }]}>Plan</Text>
+            <Text style={[styles.actionText, { color: c.primary }]}>{presentation === "page" ? "Plan transfer" : "Plan"}</Text>
           </Pressable>
         ) : null}
       </View>
       <Text style={[styles.help, { color: c.mutedForeground }]}>
-        Planned only. FlowLedger does not move money. Open a date to skip it or
-        mark a side already included in its account balance.
+        {presentation === "page"
+          ? "Plans only. Move the money in your bank app."
+          : "Planned only. FlowLedger does not move money. Open a date to skip it or mark a side already included in its account balance."}
       </Text>
       {!plannedTransfersReady ? (
         <Text style={[styles.help, { color: c.mutedForeground }]}>
@@ -227,12 +231,19 @@ export function PlannedTransferManager({
         </Text>
       ) : null}
       {plannedTransfersError ? (
-        <Text
-          accessibilityRole="alert"
-          style={[styles.help, { color: c.warning }]}
-        >
-          {plannedTransfersError}
-        </Text>
+        <View>
+          <Text accessibilityRole="alert" style={[styles.help, { color: c.warning }]}>
+            {plannedTransfersError}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading transfer plans"
+            onPress={() => { void retryBudgetLoad(); }}
+            style={[styles.action, { borderColor: c.border, alignSelf: "flex-start" }]}
+          >
+            <Text style={[styles.actionText, { color: c.primary }]}>Try again</Text>
+          </Pressable>
+        </View>
       ) : null}
       {error ? (
         <Text
@@ -593,6 +604,7 @@ const styles = StyleSheet.create({
   heading: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   flex: { flex: 1, minWidth: 0, gap: 4 },
   title: { fontSize: 18, lineHeight: 25, fontFamily: "Inter_700Bold" },
+  pageTitle: { fontSize: 30, lineHeight: 37, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.7 },
   help: { fontSize: 12, lineHeight: 19 },
   add: {
     flexDirection: "row",

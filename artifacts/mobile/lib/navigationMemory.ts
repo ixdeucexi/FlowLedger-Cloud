@@ -1,6 +1,7 @@
 const MAIN_APP_ROUTES = new Set([
   "/",
   "/bills",
+  "/transfers",
   "/transactions",
   "/monthly",
   "/more",

@@ -8,7 +8,7 @@ import { ActivityIndicator, Modal, Platform, FlatList, StyleSheet } from "react-
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddBillModal } from "@/components/AddBillModal";
-import { PlannedTransferManager } from "@/components/PlannedTransferManager";
+import { TransferPlansShortcut } from "@/components/TransferPlansShortcut";
 import { AccessibleIconButton } from "@/components/AccessiblePressable";
 import { CommandPlusButton } from "@/components/CommandPlusButton";
 import { DesktopBillsDebtsPage } from "@/components/desktop/DesktopBillsDebtsPage";
@@ -1465,13 +1465,8 @@ export default function BillsScreen() {
               {/* ════════════════════ BILLS VIEW ════════════════════ */}
               {activeTab === "bills" && (
                 <>
-                  <View
-                    style={[
-                      styles.transfersCard,
-                      { backgroundColor: c.card, borderColor: c.border },
-                    ]}
-                  >
-                    <PlannedTransferManager title="Transfers between accounts" />
+                  <View style={styles.transfersCard}>
+                    <TransferPlansShortcut />
                   </View>
                   <View style={styles.sectionHeading}>
                     <View>
@@ -2180,10 +2175,7 @@ export default function BillsScreen() {
 const styles = StyleSheet.create({
   transfersCard: {
     marginHorizontal: 16,
-    marginBottom: 18,
-    padding: 16,
-    borderWidth: 1,
-    borderRadius: 24,
+    marginBottom: 14,
   },
   searchRow: {
     marginHorizontal: 16,

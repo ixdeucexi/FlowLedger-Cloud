@@ -6,6 +6,7 @@ import {
   normalizeHouseholdRole,
 } from "@/lib/householdPermissions";
 import { ownsLegacyPersonalRows } from "@/lib/householdDataScope";
+import { normalizeHouseholdName } from "@/lib/householdNames";
 import { supabase } from "@/lib/supabase";
 import {
   summarizeHouseholdActivity,
@@ -204,9 +205,8 @@ export async function loadHouseholdMemberships(
         isPersonal: household.is_personal === true,
         role,
       });
-      const ownerName = isPersonal
-        ? "Personal"
-        : String(household.name ?? "Household");
+      const ownerName = typeof household.name === "string" && household.name.trim()
+        ? household.name : (isPersonal ? "Personal" : "Household");
       return {
         householdId,
         budgetId: budgetByHousehold.get(householdId) ?? null,
@@ -225,6 +225,30 @@ export async function loadHouseholdMemberships(
         return a.role === "owner" ? -1 : b.role === "owner" ? 1 : 0;
       return a.name.localeCompare(b.name);
     });
+}
+
+/** Name-only endpoint: no financial, membership, or selection fields accepted. */
+export async function renameHousehold(
+  householdId: string,
+  name: string,
+  expectedName: string,
+): Promise<{ householdId: string; name: string }> {
+  const normalized = normalizeHouseholdName(name);
+  const { data, error } = await supabase.rpc("rename_household", {
+    p_household_id: householdId,
+    p_name: normalized,
+    p_expected_name: expectedName,
+  });
+  if (error) {
+    if (error.message?.includes("household_name_conflict")) {
+      throw new Error("This household name changed on another device. Refresh households, then try again.");
+    }
+    throw new Error(friendlyHouseholdError(error.message, "The household name could not be saved. Try again."));
+  }
+  if (data?.household_id !== householdId || data?.name !== normalized) {
+    throw new Error("The saved household name could not be verified. Refresh households before trying again.");
+  }
+  return { householdId, name: data.name };
 }
 
 export async function loadHouseholdInvites(

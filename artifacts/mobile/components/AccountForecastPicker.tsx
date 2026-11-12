@@ -26,6 +26,8 @@ export interface AccountForecastPickerProps {
   allowUnassigned?: boolean;
   disabled?: boolean;
   label?: string;
+  /** Keep the label inside the trigger for compact Forecast controls. */
+  compact?: boolean;
   nullLabel?: string;
 }
 
@@ -45,6 +47,7 @@ export function AccountForecastPicker({
   allowUnassigned = true,
   disabled = false,
   label = "Account",
+  compact = false,
   nullLabel,
 }: AccountForecastPickerProps) {
   const c = useColors();
@@ -152,7 +155,7 @@ export function AccountForecastPicker({
 
   return (
     <View style={styles.field}>
-      <Text style={[styles.label, { color: c.mutedForeground }]}>{label}</Text>
+      {!compact ? <Text style={[styles.label, { color: c.mutedForeground }]}>{label}</Text> : null}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${label}: ${selectedLabel}`}
@@ -165,6 +168,7 @@ export function AccountForecastPicker({
         }}
         style={[
           styles.trigger,
+          compact && styles.compactTrigger,
           {
             backgroundColor: c.card,
             borderColor: unavailable ? c.warning : c.border,
@@ -186,6 +190,7 @@ export function AccountForecastPicker({
           color={unavailable ? c.warning : c.primary}
         />
         <View style={styles.triggerCopy}>
+          {compact ? <Text style={[styles.compactLabel, { color: c.mutedForeground }]}>{label}</Text> : null}
           <Text
             style={[styles.triggerText, { color: c.foreground }]}
             numberOfLines={1}
@@ -387,6 +392,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   triggerCopy: { flex: 1, minWidth: 0 },
+  compactTrigger: { minHeight: 60 },
+  compactLabel: { fontSize: 10, lineHeight: 14, fontFamily: "Inter_500Medium", marginBottom: 2 },
   triggerText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   hint: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular" },
   overlay: {

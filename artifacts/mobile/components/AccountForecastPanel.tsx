@@ -16,7 +16,6 @@ import { AccountForecastSettings } from "@/components/AccountForecastSettings";
 import { CalendarAmountLabel } from "@/components/CalendarAmountLabel";
 import { PlannedTransferModal } from "@/components/PlannedTransferModal";
 import {
-  PlannedTransferManager,
   PlannedTransferManagerModal,
 } from "@/components/PlannedTransferManager";
 import { PlannedTransferOccurrenceModal } from "@/components/PlannedTransferOccurrenceModal";
@@ -112,9 +111,7 @@ export function AccountForecastPanel({
   );
   const [renaming, setRenaming] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [transferEditor, setTransferEditor] = useState<
-    PlannedAccountTransfer | "new" | null
-  >(null);
+  const [transferEditor, setTransferEditor] = useState<PlannedAccountTransfer | null>(null);
   const [transferManager, setTransferManager] = useState(false);
   const [transferDate, setTransferDate] = useState<{
     id: string;
@@ -208,6 +205,7 @@ export function AccountForecastPanel({
         </View>
         <AccountForecastPicker
           label="Forecast account"
+          compact
           includeHousehold
           visibleOnly
           allowUnassigned={false}
@@ -256,38 +254,6 @@ export function AccountForecastPanel({
               ]}
             />
           </View>
-          {canEditHousehold ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Plan a transfer"
-              disabled={
-                !accountForecastReady ||
-                !plannedTransfersReady ||
-                !activeHousehold
-              }
-              accessibilityState={{
-                disabled:
-                  !accountForecastReady ||
-                  !plannedTransfersReady ||
-                  !activeHousehold,
-              }}
-              onPress={() => setTransferEditor("new")}
-              style={[
-                styles.planButton,
-                {
-                  borderColor: c.primary + "55",
-                  backgroundColor: c.primary + "12",
-                  opacity:
-                    !accountForecastReady || !plannedTransfersReady ? 0.5 : 1,
-                },
-              ]}
-            >
-              <Feather name="repeat" size={16} color={c.primary} />
-              <Text style={[styles.textButtonText, { color: c.primary }]}>
-                Plan transfer
-              </Text>
-            </Pressable>
-          ) : null}
         </View>
         {!accountForecastReady || !plannedTransfersReady ? (
           <Text style={[styles.note, { color: c.mutedForeground }]}>
@@ -379,7 +345,7 @@ export function AccountForecastPanel({
               Account details & plans
             </Text>
             <Text style={[styles.note, { color: c.mutedForeground }]}>
-              Recorded balance, upcoming activity, and transfer plans
+              Recorded balance and upcoming activity
             </Text>
           </View>
           <Feather
@@ -581,11 +547,6 @@ export function AccountForecastPanel({
                 ))}
               </View>
             ) : null}
-            <PlannedTransferManager
-              accountRef={accountRef}
-              month={month}
-              year={year}
-            />
             <Text style={[styles.footnote, { color: c.mutedForeground }]}>
               Projected from this account’s recorded balance. Interest and
               transfer plans are forecasts, not posted transactions.
@@ -595,9 +556,7 @@ export function AccountForecastPanel({
       </ScrollView>
       <PlannedTransferModal
         visible={Boolean(transferEditor)}
-        transfer={
-          transferEditor && transferEditor !== "new" ? transferEditor : null
-        }
+        transfer={transferEditor}
         initialToAccountRef={accountRef}
         onClose={() => setTransferEditor(null)}
       />
@@ -834,15 +793,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     padding: 10,
-  },
-  planButton: {
-    minHeight: 44,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 11,
-    gap: 6,
-    flexDirection: "row",
-    alignItems: "center",
   },
   detailsToggle: {
     flexDirection: "row",

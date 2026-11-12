@@ -184,3 +184,27 @@ test("retired linked transfer has a lightweight history entry and never shows ed
   assert.ok(!modal.all().some(n => ["Back to transfer", "Save transfer plan", "Transfer plan name", "Pause this transfer plan"].includes(n.props.accessibilityLabel)));
   h.state.budget.activeHousehold.householdId = "other"; h.render(); assert.ok(!h.all().some(n => n.props.accessibilityLabel === "Earlier bill payments for Kids Transfer")); assert.equal(h.state.calls.length, 0);
 });
+
+test("dedicated transfer page keeps create/read-only guards and performs no writes on open", () => {
+  const h = harness({ presentation: "page", title: "Transfers" }, undefined, "PlannedTransferManager");
+  assert.match(h.text(), /Plans only. Move the money in your bank app./);
+  assert.ok(h.all().some(n => n.props.accessibilityRole === "header" && n.children.includes("Transfers")));
+  h.find("Plan a transfer").props.onPress(); h.render();
+  assert.equal(h.all().find(n => n.type === "TransferEditor")!.props.visible, true);
+  assert.equal(h.state.calls.length, 0);
+  h.state.budget.canEditHousehold = false; h.render();
+  assert.ok(!h.all().some(n => n.props.accessibilityLabel === "Plan a transfer"));
+  assert.equal(h.state.calls.length, 0);
+});
+
+test("transfer page loading disables create and failed reads offer a scoped retry", () => {
+  const h = harness({ presentation: "page" }, undefined, "PlannedTransferManager");
+  h.state.budget.plannedTransfersReady = false; h.render();
+  assert.equal(h.find("Plan a transfer").props.disabled, true);
+  h.state.budget.plannedTransfersError = "Plans unavailable"; h.render();
+  assert.ok(h.all().some(n => n.props.accessibilityRole === "alert" && n.children.includes("Plans unavailable")));
+  h.find("Retry loading transfer plans").props.onPress();
+  assert.deepEqual(h.state.calls, [{ type: "retry", args: [] }]);
+  h.state.budget.plannedTransfersReady = true; h.state.budget.plannedTransfersError = null; h.render();
+  assert.equal(h.find("Plan a transfer").props.disabled, false);
+});
