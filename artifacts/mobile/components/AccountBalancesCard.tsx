@@ -19,7 +19,7 @@ const asOf = (date: string | null) => date && validDate(date)
   : "Balance date unavailable";
 
 /** Observed cash balances only; the existing catalog owns identity and scope. */
-export function AccountBalancesCard({ collapsed = false, onCollapsedChange, collapseDisabled = false }: {
+export function AccountBalancesCard({ collapsed = true, onCollapsedChange, collapseDisabled = false }: {
   collapsed?: boolean;
   onCollapsedChange?: (collapsed: boolean) => void;
   collapseDisabled?: boolean;

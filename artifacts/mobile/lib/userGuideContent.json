@@ -259,7 +259,7 @@
         "items": [
           {
             "title": "Customize Dashboard",
-            "body": "Open Customize dashboard to show, hide or reorder any card and choose up to four favorite actions. Tap the Accounts header to collapse or expand balances. Reset default restores every card. Your choices are saved for you in each household.",
+            "body": "Open Customize dashboard to show, hide or reorder any card and choose up to four favorite actions. Accounts starts collapsed. Tap its header to expand or collapse balances; your choice stays saved. Reset default restores every card. Your choices are saved for you in each household.",
             "icon": "layout"
           },
           {

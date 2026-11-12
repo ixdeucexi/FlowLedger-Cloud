@@ -29,7 +29,7 @@ type CardProps = {
 function harness(rows = [account(1), account(2), account(3)], options: { hidden?: boolean; width?: number; props?: CardProps } = {}) {
   const state = {
     hidden: options.hidden ?? false,
-    props: { ...options.props } as CardProps,
+    props: { collapsed: false, ...options.props } as CardProps,
     collapseChanges: [] as boolean[],
     user: { id: "actor-a" } as { id: string } | null,
     actions: [] as unknown[][],
@@ -127,6 +127,18 @@ function harness(rows = [account(1), account(2), account(3)], options: { hidden?
   render();
   return { state, render, nodes, text, forecast, header };
 }
+
+test("Accounts defaults to its folded header and expands on the first press", () => {
+  const h = harness([account(1)], { props: { collapsed: undefined } });
+  assert.equal(h.text(), "Accounts");
+  assert.equal(h.header()?.props.accessibilityLabel, "Expand accounts");
+  assert.equal(h.header()?.props["aria-expanded"], false);
+  assert.equal(h.forecast("Saved account 1"), undefined);
+  h.header()!.props.onPress(); h.render();
+  assert.deepEqual(h.state.collapseChanges, [false]);
+  assert.match(h.text(), /Saved account 1/);
+  assert.equal(h.header()?.props["aria-expanded"], true);
+});
 
 test("Dashboard balances show saved current observations and a distinct available amount", () => {
   const h = harness([account(1, { name: "Household Bills", currentBalance: 1000, availableBalance: 950 }), account(2), account(3)]);

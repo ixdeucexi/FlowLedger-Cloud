@@ -42,12 +42,14 @@ export type DashboardLayoutPreference = {
   hidden: DashboardWidgetId[];
   favoriteActions: DashboardFavoriteActionId[];
   accountsCollapsed: boolean;
+  accountsCollapseVersion: 1;
 };
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayoutPreference = {
   order: [...DASHBOARD_WIDGET_IDS],
   hidden: [],
   favoriteActions: ["add-transaction", "add-bill", "open-calendar"],
-  accountsCollapsed: false,
+  accountsCollapsed: true,
+  accountsCollapseVersion: 1,
 };
 export const DASHBOARD_WIDGETS: Record<
   DashboardWidgetId,
@@ -217,7 +219,11 @@ export function normalizeDashboardLayout(
     order,
     hidden,
     favoriteActions,
-    accountsCollapsed: candidate.accountsCollapsed === true,
+    // Earlier builds saved false even without a header interaction. Fold those
+    // layouts once; from this version onward preserve an explicit expansion.
+    accountsCollapsed:
+      candidate.accountsCollapseVersion !== 1 || candidate.accountsCollapsed !== false,
+    accountsCollapseVersion: 1,
   };
 }
 export function moveDashboardWidget(
@@ -261,7 +267,11 @@ export function setDashboardAccountsCollapsed(
   layout: DashboardLayoutPreference,
   collapsed: boolean,
 ): DashboardLayoutPreference {
-  return normalizeDashboardLayout({ ...layout, accountsCollapsed: collapsed });
+  return normalizeDashboardLayout({
+    ...layout,
+    accountsCollapsed: collapsed,
+    accountsCollapseVersion: 1,
+  });
 }
 export function visibleDashboardWidgets(layout: DashboardLayoutPreference) {
   const normalized = normalizeDashboardLayout(layout);
@@ -290,7 +300,8 @@ const preset = (
     order,
     hidden: DASHBOARD_WIDGET_IDS.filter((id) => !shown.includes(id)),
     favoriteActions,
-    accountsCollapsed: false,
+    accountsCollapsed: true,
+    accountsCollapseVersion: 1,
   });
 export const DASHBOARD_LAYOUT_PRESETS = [
   {

@@ -132,7 +132,7 @@ endobj
 endobj
 16 0 obj
 <<
-/Author (FlowLedger) /CreationDate (D:20261112054121+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:0c73dd5ac6bc8f531de7826ef8500bc791b24ef73b237dd8eaf601912ab255b0) /ModDate (D:20261112054121+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+/Author (FlowLedger) /CreationDate (D:20261112142843+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:52eaf36fc72f94cbe9e0f551b63571a223ff1c46c6e5264f94d8b83b3a967eb7) /ModDate (D:20261112142843+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
   /Subject (Current Dashboard, Activity, Bills, Forecast, payoff, Flo, and Settings guidance) /Title (FlowLedger User Guide) /Trapped /False
 >>
 endobj
@@ -2645,7 +2645,7 @@ endstream
 endobj
 27 0 obj
 <<
-/Length 6450
+/Length 6493
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -2717,10 +2717,10 @@ BT 1 0 0 1 67 592 Tm (Customize Dashboard) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
 BT 1 0 0 1 56 577 Tm (Open Customize dashboard to show, hide or reorder any) Tj T* ET
-BT 1 0 0 1 56 566 Tm (card and choose up to four favorite actions. Tap the) Tj T* ET
-BT 1 0 0 1 56 555 Tm (Accounts header to collapse or expand balances. Reset) Tj T* ET
-BT 1 0 0 1 56 544 Tm (default restores every card. Your choices are saved for you) Tj T* ET
-BT 1 0 0 1 56 533 Tm (in each household.) Tj T* ET
+BT 1 0 0 1 56 566 Tm (card and choose up to four favorite actions. Accounts starts) Tj T* ET
+BT 1 0 0 1 56 555 Tm (collapsed. Tap its header to expand or collapse balances;) Tj T* ET
+BT 1 0 0 1 56 544 Tm (your choice stays saved. Reset default restores every card.) Tj T* ET
+BT 1 0 0 1 56 533 Tm (Your choices are saved for you in each household.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
@@ -3304,11 +3304,11 @@ xref
 0000049841 00000 n 
 0000056474 00000 n 
 0000066771 00000 n 
-0000073273 00000 n 
+0000073316 00000 n 
 trailer
 <<
 /ID 
-[<babf235d881f60a7a00334f4c815e7ad><babf235d881f60a7a00334f4c815e7ad>]
+[<286d9ca0d4b43dea9d57410541b08c80><286d9ca0d4b43dea9d57410541b08c80>]
 % ReportLab generated PDF document -- digest (opensource)
 
 /Info 16 0 R
@@ -3316,5 +3316,5 @@ trailer
 /Size 29
 >>
 startxref
-82726
+82769
 %%EOF

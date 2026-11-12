@@ -68,7 +68,7 @@ test("legacy utility layouts retain named money-card anchors and saved utility c
     "accounts",
   ]);
   assert.deepEqual(next.favoriteActions, ["add-goal", "open-calendar"]);
-  assert.equal(next.accountsCollapsed, false);
+  assert.equal(next.accountsCollapsed, true);
 });
 
 test("old full layouts preserve all old relative order, visibility and favorites", () => {
@@ -86,7 +86,7 @@ test("old full layouts preserve all old relative order, visibility and favorites
   assert.deepEqual(next.order.slice(-2), ["zero_based_budget", "breathing_room"]);
   assert.deepEqual(next.hidden, ["snapshot", "today_decisions", "buckets"]);
   assert.deepEqual(next.favoriteActions, ["open-review", "add-debt"]);
-  assert.equal(next.accountsCollapsed, false);
+  assert.equal(next.accountsCollapsed, true);
   assert.deepEqual(normalizeDashboardLayout(next), next);
 });
 
@@ -130,6 +130,7 @@ test("normalization closes fields, repairs malformed arrays and deduplicates car
   ]);
   assert.deepEqual(next.favoriteActions, []);
   assert.deepEqual(Object.keys(next).sort(), [
+    "accountsCollapseVersion",
     "accountsCollapsed",
     "favoriteActions",
     "hidden",
@@ -137,18 +138,44 @@ test("normalization closes fields, repairs malformed arrays and deduplicates car
   ]);
 });
 
-test("Accounts collapse accepts only a saved boolean true", () => {
-  for (const value of [
-    undefined, null, false, 0, 1, "true", [], {}, new Boolean(true),
-  ])
-    assert.equal(
-      normalizeDashboardLayout({ accountsCollapsed: value }).accountsCollapsed,
-      false,
-    );
-  assert.equal(
-    normalizeDashboardLayout({ accountsCollapsed: true }).accountsCollapsed,
-    true,
-  );
+test("Accounts starts folded for old or malformed preferences and only versioned boolean false expands", () => {
+  for (const version of [undefined, null, 0, 2, "1", true, [], {}]) {
+    for (const value of [undefined, null, false, true, 0, 1, "false", [], {}]) {
+      const next = normalizeDashboardLayout({ accountsCollapseVersion: version, accountsCollapsed: value });
+      assert.equal(next.accountsCollapsed, true);
+      assert.equal(next.accountsCollapseVersion, 1);
+      assert.deepEqual(normalizeDashboardLayout(next), next);
+    }
+  }
+  for (const value of [undefined, null, true, 0, 1, "false", [], {}, new Boolean(false)])
+    assert.equal(normalizeDashboardLayout({ accountsCollapseVersion: 1, accountsCollapsed: value }).accountsCollapsed, true);
+  assert.equal(normalizeDashboardLayout({ accountsCollapseVersion: 1, accountsCollapsed: false }).accountsCollapsed, false);
+});
+
+test("the one-time folded default preserves old Dashboard choices and a subsequent expansion survives reload", () => {
+  const legacy = {
+    order: ["accounts", ...oldOrder],
+    hidden: ["buckets", "today_decisions"],
+    favoriteActions: ["add-goal", "open-review"],
+    accountsCollapsed: false,
+  };
+  const before = JSON.stringify(legacy);
+  const migrated = normalizeDashboardLayout(legacy);
+  assert.equal(migrated.accountsCollapsed, true);
+  assert.equal(migrated.accountsCollapseVersion, 1);
+  assert.deepEqual(migrated.hidden, legacy.hidden);
+  assert.deepEqual(migrated.favoriteActions, legacy.favoriteActions);
+  assert.deepEqual(migrated.order.filter(id => legacy.order.includes(id)), legacy.order);
+  // The setter can be the first operation on an old, unmarked saved layout.
+  const expanded = setDashboardAccountsCollapsed(legacy as typeof migrated, false);
+  assert.equal(expanded.accountsCollapsed, false);
+  assert.equal(expanded.accountsCollapseVersion, 1);
+  assert.deepEqual(normalizeDashboardLayout(JSON.parse(JSON.stringify(expanded))), expanded);
+  const edited = toggleDashboardFavoriteAction(setDashboardWidgetVisible(expanded, "review_center", false), "add-income");
+  assert.equal(edited.accountsCollapsed, false);
+  assert.deepEqual(normalizeDashboardLayout(JSON.parse(JSON.stringify(edited))), edited);
+  assert.equal(setDashboardAccountsCollapsed(edited, true).accountsCollapsed, true);
+  assert.equal(JSON.stringify(legacy), before);
 });
 
 test("every card can hide and an all-hidden collapsed layout survives serialization", () => {
@@ -287,7 +314,7 @@ test("favorites are bounded canonical commands, never arbitrary persisted routes
     assert.ok(command.route.startsWith("/"));
 });
 
-test("presets and reset expand Accounts and keep formerly unmanaged cards visible", () => {
+test("presets and reset fold Accounts and keep formerly unmanaged cards visible", () => {
   const identities = new Set<string>();
   for (const preset of DASHBOARD_LAYOUT_PRESETS) {
     const value = applyDashboardLayoutPreset(preset.id);
@@ -300,10 +327,11 @@ test("presets and reset expand Accounts and keep formerly unmanaged cards visibl
       assert.ok(visibleDashboardWidgets(value).includes(id));
     assert.equal(value.order[value.order.indexOf("overview") + 1], "accounts");
     assert.deepEqual(value.order.slice(-2), ["zero_based_budget", "breathing_room"]);
-    assert.equal(value.accountsCollapsed, false);
+    assert.equal(value.accountsCollapsed, true);
+    assert.equal(value.accountsCollapseVersion, 1);
     assert.equal(dashboardLayoutPreset(value)?.id, preset.id);
     assert.equal(
-      dashboardLayoutPreset(setDashboardAccountsCollapsed(value, true)),
+      dashboardLayoutPreset(setDashboardAccountsCollapsed(value, false)),
       null,
     );
     assert.ok(value.favoriteActions.length <= 4);
@@ -313,7 +341,7 @@ test("presets and reset expand Accounts and keep formerly unmanaged cards visibl
     value.order.reverse();
     value.hidden.reverse();
     value.favoriteActions.pop();
-    value.accountsCollapsed = true;
+    value.accountsCollapsed = false;
     assert.equal(JSON.stringify(preset.layout), before);
   }
   assert.equal(identities.size, 3);
@@ -327,7 +355,8 @@ test("presets and reset expand Accounts and keep formerly unmanaged cards visibl
     null,
   );
   const reset = normalizeDashboardLayout(DEFAULT_DASHBOARD_LAYOUT);
-  assert.equal(reset.accountsCollapsed, false);
+  assert.equal(reset.accountsCollapsed, true);
+  assert.equal(reset.accountsCollapseVersion, 1);
   assert.deepEqual(reset.hidden, []);
   assert.deepEqual(reset.order, DASHBOARD_WIDGET_IDS);
   assert.deepEqual(applyDashboardLayoutPreset("unknown"), reset);

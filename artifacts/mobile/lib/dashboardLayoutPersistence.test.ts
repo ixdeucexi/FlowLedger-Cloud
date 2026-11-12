@@ -336,6 +336,43 @@ const savedPrivateLayout = () => normalizeDashboardLayout({
   accountsCollapsed: true,
 });
 
+test("old local and cloud expanded defaults fold once and the next explicit expansion persists", async () => {
+  for (const source of ["local", "cloud"] as const) {
+    const legacy = {
+      order: ["buckets", "accounts", "overview", "snapshot"],
+      hidden: ["today_decisions"],
+      favoriteActions: ["add-goal", "open-review"],
+      accountsCollapsed: false,
+    };
+    const h = harness();
+    h.state.local = { layout: source === "local" ? legacy : undefined, pendingSync: false };
+    h.state.remote = source === "cloud" ? legacy : undefined;
+    await h.controller.load();
+    await h.controller.settled();
+    const folded = h.controller.getSnapshot().layout;
+    assert.equal(folded.accountsCollapsed, true, source);
+    assert.equal(folded.accountsCollapseVersion, 1);
+    assert.deepEqual(folded.hidden, legacy.hidden);
+    assert.deepEqual(folded.favoriteActions, legacy.favoriteActions);
+    assert.deepEqual(folded.order.filter(id => legacy.order.includes(id)), legacy.order);
+    h.controller.update(current => setDashboardAccountsCollapsed(current, false));
+    await h.controller.settled();
+    const expanded = h.controller.getSnapshot().layout;
+    assert.equal(expanded.accountsCollapsed, false);
+    assert.equal(expanded.accountsCollapseVersion, 1);
+    assert.deepEqual(h.state.remoteWrites, [expanded]);
+    assert.deepEqual(h.state.local.layout, expanded);
+    const reloaded = harness();
+    reloaded.state.local = structuredClone(h.state.local);
+    reloaded.state.remote = structuredClone(h.state.remote);
+    await reloaded.controller.load();
+    await reloaded.controller.settled();
+    assert.deepEqual(reloaded.controller.getSnapshot().layout, expanded);
+    assert.equal(reloaded.state.remoteWrites.length, 0);
+    h.controller.dispose(); reloaded.controller.dispose();
+  }
+});
+
 test("unknown saved preferences stay unready until the household read confirms absence", async () => {
   const h = harness(), remote = deferred<unknown>();
   h.state.local.layout = undefined;
