@@ -2968,6 +2968,9 @@ export default function MoreScreen({
                     return (
                       <Pressable
                         key={household.householdId}
+                        accessibilityRole="button"
+                        accessibilityLabel={household.name}
+                        accessibilityState={{ selected }}
                         onPress={async () => {
                           if (selected || householdBusy) return;
                           setHouseholdBusy(true);
@@ -2997,6 +3000,8 @@ export default function MoreScreen({
                         ]}
                       >
                         <Text
+                          numberOfLines={1}
+                          ellipsizeMode="tail"
                           style={[
                             styles.householdChipText,
                             {
@@ -6334,12 +6339,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   householdChip: {
+    maxWidth: "100%",
+    flexShrink: 1,
     borderWidth: 1,
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  householdChipText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
+  householdChipText: { minWidth: 0, flexShrink: 1, fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   householdPanel: {
     borderWidth: 1,
     borderRadius: 14,
