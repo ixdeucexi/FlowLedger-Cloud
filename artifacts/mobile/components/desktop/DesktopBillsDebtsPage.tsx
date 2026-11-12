@@ -6,6 +6,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet } from "react-native";
 
 import { AddBillModal } from "@/components/AddBillModal";
+import { PlannedTransferManager } from "@/components/PlannedTransferManager";
 import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import {
   CardHeader,
@@ -363,7 +364,7 @@ export function DesktopBillsDebtsPage() {
               description="Manage your bills and never miss a payment."
               actions={
                 <PrimaryButton
-                  label="Add Bill"
+                  label="Add bill or transfer"
                   onPress={() => openBill(null)}
                 />
               }
@@ -428,6 +429,9 @@ export function DesktopBillsDebtsPage() {
                 icon="pie-chart"
               />
             </View>
+            <DesktopCard style={styles.transfersCard}>
+              <PlannedTransferManager title="Transfers between accounts" />
+            </DesktopCard>
             {billTab === "Overview" ||
             billTab === "Upcoming" ||
             billTab === "Calendar" ? (
@@ -1094,6 +1098,7 @@ function DebtsDesktop({
 }
 
 const styles = StyleSheet.create({
+  transfersCard: { width: "100%", minWidth: 0, marginBottom: 20 },
   screen: { flex: 1, backgroundColor: palette.canvas },
   scroll: { flex: 1 },
   scrollContent: { minHeight: "100%" },

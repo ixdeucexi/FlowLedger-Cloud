@@ -36,7 +36,9 @@ export function PlannedTransferManager({
   accountRef,
   month,
   year,
+  title = "Planned transfers",
 }: {
+  title?: string;
   accountRef?: ForecastAccountRef | null;
   month?: number;
   year?: number;
@@ -76,6 +78,7 @@ export function PlannedTransferManager({
   const [editor, setEditor] = useState<PlannedAccountTransfer | "new" | null>(
     null,
   );
+  const [historyPlan, setHistoryPlan] = useState<PlannedAccountTransfer | null>(null);
   const [dateEditor, setDateEditor] = useState<{
     transferId: string;
     date: string;
@@ -87,6 +90,7 @@ export function PlannedTransferManager({
   useEffect(() => {
     busyRef.current = null;
     setEditor(null);
+    setHistoryPlan(null);
     setDateEditor(null);
     setDeleting(null);
     setError(null);
@@ -101,7 +105,9 @@ export function PlannedTransferManager({
     );
     return account ? accountForecastLabel(account) : "Account unavailable";
   };
+  const planInScope = (plan: PlannedAccountTransfer) => plan.household_id === activeHousehold?.householdId && plan.budget_id === activeHousehold?.budgetId;
   const plans = plannedAccountTransfers.filter((plan) => {
+    if (!planInScope(plan)) return false;
     const adjustments = plannedTransferOccurrences.filter(
       (row) => row.transfer_id === plan.id,
     );
@@ -123,6 +129,18 @@ export function PlannedTransferManager({
       )
     );
   });
+  // Retired plans carry a durable link to earlier Bill payments, without
+  // reappearing as scheduled transfers or outstanding money.
+  const retiredBillHistory = plannedAccountTransfers.filter(plan =>
+    planInScope(plan) && Boolean(plan.deleted_at && plan.source_bill_id)
+    && !plannedTransferOccurrences.some(row => row.transfer_id === plan.id && plannedTransferHasOutstandingReview(plan, row))
+    && (!selectedRef || (resolve(plan.from_account_ref) ?? plan.from_account_ref) === selectedRef
+      || (resolve(plan.to_account_ref) ?? plan.to_account_ref) === selectedRef));
+  const openHistory = (plan: PlannedAccountTransfer) => {
+    if (access.current.scope !== scope || !planInScope(plan) || !plannedTransfersReady || busyRef.current) return;
+    setEditor(null);
+    setHistoryPlan(plan);
+  };
   const run = async (plan: PlannedAccountTransfer, remove: boolean) => {
     if (
       busyRef.current ||
@@ -172,7 +190,7 @@ export function PlannedTransferManager({
       <View style={styles.heading}>
         <View style={styles.flex}>
           <Text style={[styles.title, { color: c.foreground }]}>
-            Planned transfers
+            {title}
           </Text>
           <Text style={[styles.help, { color: c.mutedForeground }]}>
             Between your accounts · {periodLabel}
@@ -410,6 +428,16 @@ export function PlannedTransferManager({
                 </Pressable>
               </View>
             ) : null}
+            {plan.source_bill_id ? <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Earlier bill payments for ${plan.name}`}
+              disabled={!plannedTransfersReady || Boolean(busy)}
+              onPress={() => openHistory(plan)}
+              style={[styles.action, { borderColor: c.primary + "35", alignSelf: "flex-start" }]}
+            >
+              <Feather name="clock" size={15} color={c.primary} />
+              <Text style={[styles.actionText, { color: c.primary }]}>Earlier bill payments</Text>
+            </Pressable> : null}
             {deleting?.id === plan.id ? (
               <View
                 style={[styles.confirm, { borderColor: c.destructive + "55" }]}
@@ -449,7 +477,25 @@ export function PlannedTransferManager({
           </View>
         );
       })}
-      {plannedTransfersReady && !plannedTransfersError && !plans.length ? (
+      {retiredBillHistory.length ? <View style={styles.historySection}>
+        <Text style={[styles.help, { color: c.mutedForeground }]}>Earlier bill payments</Text>
+        {retiredBillHistory.map(plan => <Pressable
+          key={plan.id}
+          accessibilityRole="button"
+          accessibilityLabel={`Earlier bill payments for ${plan.name}`}
+          disabled={!plannedTransfersReady || Boolean(busy)}
+          onPress={() => openHistory(plan)}
+          style={[styles.historyRow, { borderColor: c.border, backgroundColor: c.card }]}
+        >
+          <Feather name="clock" size={18} color={c.primary} />
+          <View style={styles.flex}>
+            <Text numberOfLines={2} style={[styles.planName, { color: c.foreground }]}>{plan.name}</Text>
+            <Text style={[styles.help, { color: c.mutedForeground }]}>View earlier bill payments</Text>
+          </View>
+          <Feather name="chevron-right" size={18} color={c.mutedForeground} />
+        </Pressable>)}
+      </View> : null}
+      {plannedTransfersReady && !plannedTransfersError && !plans.length && !retiredBillHistory.length ? (
         <Text style={[styles.help, { color: c.mutedForeground }]}>
           No transfer plans {accountRef ? "for this account" : "yet"}. Choose
           the accounts, amount, and first date to see future transfers on the
@@ -457,10 +503,13 @@ export function PlannedTransferManager({
         </Text>
       ) : null}
       <PlannedTransferModal
-        visible={Boolean(editor)}
-        transfer={editor && editor !== "new" ? editor : null}
+        key={`${scope}:${historyPlan ? "history" : "edit"}:${historyPlan?.id ?? (editor && editor !== "new" ? editor.id : "new")}`}
+        visible={Boolean(editor || historyPlan)}
+        transfer={historyPlan ?? (editor && editor !== "new" ? editor : null)}
+        initialHistory={Boolean(historyPlan)}
+        historyOnly={Boolean(historyPlan?.deleted_at)}
         initialToAccountRef={accountRef}
-        onClose={() => setEditor(null)}
+        onClose={() => { setEditor(null); setHistoryPlan(null); }}
       />
       <PlannedTransferOccurrenceModal
         transferId={dateEditor?.transferId ?? null}
@@ -538,6 +587,8 @@ export function PlannedTransferManagerModal({
   );
 }
 const styles = StyleSheet.create({
+  historySection: { gap: 8 },
+  historyRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 64, borderWidth: 1, borderRadius: 14, padding: 13 },
   section: { gap: 12 },
   heading: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   flex: { flex: 1, minWidth: 0, gap: 4 },

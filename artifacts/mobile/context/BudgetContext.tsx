@@ -1,4 +1,5 @@
 import { plannedTransferScheduledDate, normalizePlannedTransferData, normalizePlannedTransfer, normalizePlannedTransferOccurrence, mergePlannedTransferRows, type PlannedAccountTransfer, type PlannedTransferOccurrence, type PlannedTransferPatch, type PlannedTransferOccurrencePatch, type PlannedTransferIssue } from "@/lib/plannedAccountTransfers";
+import { billTransferCutoff, billTransferExpected, mergeConvertedBill, verifyBillTransferConversion } from "@/lib/billTransferConversion";
 import { mergeAccountNameRead, acknowledgeAccountNameRead, verifiedRoutingMetadataPatch, mergeRoutingMetadata, normalizeAccountDisplayName, type AccountNameIntent } from "@/lib/accountNameMetadata";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { buildAccountForecast, buildForecastAccountCatalog, forecastPlanCoverageForRange, normalizeAccountForecastPreference, parseForecastAccountRef, resolveForecastAccountReference, transactionForecastAccountRef, type ForecastAccountRef, type ForecastAccountDescriptor, type AccountForecastPreference, type AccountForecastResult, type ForecastRoutingEntity, type ForecastRoutingPatch, type ForecastPlanCoverage, type ForecastRoutingChange } from "@/lib/accountForecasts";
@@ -89,6 +90,7 @@ import { isValidExtraPaymentPlan, plannedDebtAmountError, type DebtSourceCommitm
 
 import { diagnosticErrorCode } from "@/lib/diagnosticPolicy";
 import {
+  BILL_EDITABLE_FIELDS,
   billEditableDbPatch,
   billEditablePatch,
   billEditableValuesEqual,
@@ -288,6 +290,7 @@ interface BudgetContextType {
   plannedTransfersReady: boolean;
   plannedTransfersError: string | null;
   savePlannedAccountTransfer: (id: string, patch: PlannedTransferPatch, expectedRevision: number | null) => Promise<PlannedAccountTransfer>;
+  convertBillToPlannedTransfer: (bill: Bill, patch: PlannedTransferPatch) => Promise<PlannedAccountTransfer>;
   deletePlannedAccountTransfer: (id: string, expectedRevision: number) => Promise<void>;
   savePlannedTransferOccurrence: (id: string, date: string, patch: PlannedTransferOccurrencePatch, expectedTemplateRevision: number, expectedRevision: number | null) => Promise<PlannedTransferOccurrence>;
   getPlannedTransferIssues: (month: number, year: number, ref?: ForecastAccountRef | null) => PlannedTransferIssue[];
@@ -3667,6 +3670,38 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       return saved;
     }), [plannedTransferMutation, demoMode, plannedAccountTransfers, forecastAccounts]);
 
+  const convertBillToPlannedTransfer = useCallback(async (source: Bill, patch: PlannedTransferPatch): Promise<PlannedAccountTransfer> =>
+    plannedTransferMutation(`bill-conversion:${source.id}`, async (scope, uid, current) =>
+      enqueueMutationByKey(billWriteQueuesRef.current, source.id, async () => {
+        if (!current()) throw new Error("The household changed. Open the bill again.");
+        if (demoMode) throw new Error("Sign in to change a bill into a transfer. You can still try planning transfers in demo.");
+        const local = bills.find(row => row.id === source.id);
+        const expected = billTransferExpected(source);
+        const cutoff = typeof patch.start_date === "string" ? billTransferCutoff(patch.start_date) : null;
+        const localExpected = local ? billTransferExpected(local) : null;
+        if (!local || !localExpected || source.is_debt || source.end_date
+          || source.is_recurring && source.frequency !== "monthly"
+          || patch.frequency !== (source.is_recurring ? "monthly" : "once") || patch.status !== "active"
+          || !patch.start_date || patch.start_date <= safeLocalDateInTimeZone(new Date(), householdTimeZone)
+          || BILL_EDITABLE_FIELDS.some(field => field === "end_date"
+            ? localExpected[field] !== expected[field] && localExpected[field] !== cutoff
+            : !billEditableValuesEqual(field, localExpected[field], expected[field])))
+          throw new Error("This bill changed or cannot be changed to a transfer. Reopen it and check its schedule.");
+        const result = await supabase.rpc("convert_bill_to_planned_transfer", {
+          p_household_id: scope.householdId, p_budget_id: scope.budgetId,
+          p_bill_id: source.id, p_expected: expected, p_patch: patch,
+        });
+        if (result.error) throw new Error(result.error.message);
+        const saved = verifyBillTransferConversion(result.data, source, patch, {
+          householdId: scope.householdId, budgetId: scope.budgetId!, userId: uid,
+        });
+        if (!current()) throw new Error("The household changed. The saved transfer belongs to the previous household.");
+        // Both confirmed sides publish in one React turn; neither is optimistic.
+        setBills(previous => mergeConvertedBill(previous, source, saved.bill));
+        setPlannedAccountTransfers(previous => mergePlannedTransferRows(previous, [saved.transfer]));
+        return saved.transfer;
+      })), [plannedTransferMutation, demoMode, bills, householdTimeZone]);
+
   const deletePlannedAccountTransfer = useCallback(async (id: string, expectedRevision: number): Promise<void> => {
     await plannedTransferMutation(id, async (scope, _uid, current) => {
       let raw: unknown;
@@ -6877,7 +6912,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   }, [dashboardDataRevision]);
   const budgetContextValue: BudgetContextType = {
       bills, overrides, billDateMoves, transactions, deletedTransactions, pendingBankTransactions, pendingPlanMatches, incomes, goals, extraPayments, categories, settings, accounts, connectedBankAccounts, transactionAccountIdentities, householdTimeZone, decisions,
-      plannedAccountTransfers, plannedTransferOccurrences, plannedTransfersReady, plannedTransfersError, savePlannedAccountTransfer, deletePlannedAccountTransfer, savePlannedTransferOccurrence, getPlannedTransferIssues,
+      plannedAccountTransfers, plannedTransferOccurrences, plannedTransfersReady, plannedTransfersError, savePlannedAccountTransfer, convertBillToPlannedTransfer, deletePlannedAccountTransfer, savePlannedTransferOccurrence, getPlannedTransferIssues,
       forecastAccounts, accountForecastPreferences, accountForecastReady, accountForecastError, selectedForecastAccountRef, setSelectedForecastAccountRef,
       renameForecastAccount, getForecastPlanCoverage, setForecastAccountRoutingBatch,
       hiddenForecastAccountRefs, forecastVisibilityReady, forecastVisibilityError, setAccountForecastVisible, getAccountForecast, saveAccountForecastPreference, setForecastAccountRouting, resolveTransactionAccountRef,

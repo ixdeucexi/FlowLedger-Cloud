@@ -20,3 +20,10 @@ export function nativeTabBarMetrics(bottomInset: number) {
     paddingBottom,
   };
 }
+
+/** Keep a full icon-and-label row above any reported web home-indicator inset. */
+export function webTabBarMetrics(bottomInset: number, iosWeb: boolean) {
+  const inset = Number.isFinite(bottomInset) ? Math.max(0, bottomInset) : 0;
+  const paddingBottom = Math.max(iosWeb ? 12 : 10, inset);
+  return { height: 72 + paddingBottom, paddingTop: 8, paddingBottom };
+}

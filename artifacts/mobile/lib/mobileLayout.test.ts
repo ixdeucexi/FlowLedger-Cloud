@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { nativeTabBarMetrics, tabBarDisplayLabel, tabBarLabelSize } from "./mobileLayout";
+import { nativeTabBarMetrics, webTabBarMetrics, tabBarDisplayLabel, tabBarLabelSize } from "./mobileLayout";
 
 test("tab labels shrink under enlarged-text viewport pressure", () => {
   assert.equal(tabBarLabelSize(240), 8);
@@ -74,4 +74,16 @@ test("native dashboard gives the full balance card an opaque surface", () => {
   assert.match(dashboard, /const heroSurface = Platform\.OS === "web"/);
   assert.match(dashboard, /c\.isDark\s*\? "#050816"/);
   assert.equal((dashboard.match(/backgroundColor: heroSurface/g) ?? []).length, 2);
+});
+
+test("web navigation keeps a full label row above reported iPhone home-indicator space", () => {
+  assert.deepEqual(webTabBarMetrics(0, true), { height: 84, paddingTop: 8, paddingBottom: 12 });
+  assert.deepEqual(webTabBarMetrics(34, true), { height: 106, paddingTop: 8, paddingBottom: 34 });
+  assert.deepEqual(webTabBarMetrics(Number.NaN, true), webTabBarMetrics(0, true));
+  assert.deepEqual(webTabBarMetrics(-4, true), webTabBarMetrics(0, true));
+  assert.deepEqual(webTabBarMetrics(0, false), { height: 82, paddingTop: 8, paddingBottom: 10 });
+  const layout = readFileSync("app/(tabs)/_layout.tsx", "utf8");
+  assert.match(layout, /tabBarShowLabel: true/);
+  assert.match(layout, /tabBarLabelPosition: isWeb \? "below-icon" : undefined/);
+  assert.match(layout, /isWeb \? \{ lineHeight: 12, minHeight: 12, flexShrink: 0 \}/);
 });

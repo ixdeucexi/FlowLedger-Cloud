@@ -132,7 +132,7 @@ endobj
 endobj
 16 0 obj
 <<
-/Author (FlowLedger) /CreationDate (D:20261112142843+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:52eaf36fc72f94cbe9e0f551b63571a223ff1c46c6e5264f94d8b83b3a967eb7) /ModDate (D:20261112142843+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+/Author (FlowLedger) /CreationDate (D:20261112150151+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:970c0b296cf1dd149319ea880b88ef35a915038893f4c8c5a919c44b1f2e2f5e) /ModDate (D:20261112150151+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
   /Subject (Current Dashboard, Activity, Bills, Forecast, payoff, Flo, and Settings guidance) /Title (FlowLedger User Guide) /Trapped /False
 >>
 endobj
@@ -322,7 +322,7 @@ BT /F1 9.5 Tf 11.4 TL ET
 BT 1 0 0 1 58 201 Tm (Continue paying bills and debts through your bank or provider.) Tj T* ET
 .666667 .701961 .784314 rg
 BT /F1 9 Tf 10.8 TL ET
-BT 1 0 0 1 48 30 Tm (Phone, installed PWA, and desktop - updated November 11, 2026) Tj T* ET
+BT 1 0 0 1 48 30 Tm (Phone, installed PWA, and desktop - updated November 12, 2026) Tj T* ET
  
 endstream
 endobj
@@ -366,7 +366,7 @@ BT 1 0 0 1 42 664 Tm (Set up recurring money once, then review it whenever life 
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 11, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 12, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 2) Tj T* ET
 .133333 .780392 .839216 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -612,7 +612,7 @@ BT 1 0 0 1 42 664 Tm (Use the same short path each day. Go deeper only when some
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 11, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 12, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 3) Tj T* ET
 .145098 .827451 .607843 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -800,7 +800,7 @@ BT 1 0 0 1 42 664 Tm (Activity is the history of what really happened. Review ne
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 11, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 12, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 4) Tj T* ET
 .219608 .741176 .972549 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -954,7 +954,7 @@ endstream
 endobj
 22 0 obj
 <<
-/Length 7781
+/Length 8872
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -987,236 +987,270 @@ BT /F2 27 Tf 32.4 TL ET
 BT 1 0 0 1 42 688 Tm (Bills, debts, and planned payments) Tj T* ET
 BT /F1 10.5 Tf 12.6 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 42 664 Tm (Use Bills for recurring obligations. Switch to Debt to manage balances, minimums, or payoff order.) Tj T* ET
+BT 1 0 0 1 42 664 Tm (Use Bills for recurring obligations and planned transfers between accounts. Switch to Debt to manage balances,) Tj T* ET
+BT 1 0 0 1 42 650 Tm (minimums, or payoff order.) Tj T* ET
 .160784 .207843 .321569 RG
-n 42 644 m 570 644 l S
+n 42 630 m 570 630 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 11, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 12, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 5) Tj T* ET
 .960784 .721569 .180392 rg
 BT /F2 9 Tf 10.8 TL ET
-BT 1 0 0 1 42 625 Tm (BILLS) Tj T* ET
+BT 1 0 0 1 42 611 Tm (BILLS) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-58 558 m
-283 558 l
-291.8448 558 299 565.1552 299 574 c
-299 591 l
-299 599.8448 291.8448 607 283 607 c
-58 607 l
-49.1552 607 42 599.8448 42 591 c
-42 574 l
-42 565.1552 49.1552 558 58 558 c
+58 544 m
+283 544 l
+291.8448 544 299 551.1552 299 560 c
+299 577 l
+299 585.8448 291.8448 593 283 593 c
+58 593 l
+49.1552 593 42 585.8448 42 577 c
+42 560 l
+42 551.1552 49.1552 544 58 544 c
 h
 B*
 .960784 .721569 .180392 rg
 n
-60 590 m
-60 592.2091 58.20914 594 56 594 c
-53.79086 594 52 592.2091 52 590 c
-52 587.7909 53.79086 586 56 586 c
-58.20914 586 60 587.7909 60 590 c
+60 576 m
+60 578.2091 58.20914 580 56 580 c
+53.79086 580 52 578.2091 52 576 c
+52 573.7909 53.79086 572 56 572 c
+58.20914 572 60 573.7909 60 576 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 67 592 Tm (Keep the schedule current) Tj T* ET
+BT 1 0 0 1 67 578 Tm (Keep the schedule current) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 577 Tm (Edit amount, next date, and frequency when they change.) Tj T* ET
+BT 1 0 0 1 56 563 Tm (Edit amount, next date, and frequency when they change.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-58 502 m
-283 502 l
-291.8448 502 299 509.1552 299 518 c
-299 535 l
-299 543.8448 291.8448 551 283 551 c
-58 551 l
-49.1552 551 42 543.8448 42 535 c
-42 518 l
-42 509.1552 49.1552 502 58 502 c
+58 488 m
+283 488 l
+291.8448 488 299 495.1552 299 504 c
+299 521 l
+299 529.8448 291.8448 537 283 537 c
+58 537 l
+49.1552 537 42 529.8448 42 521 c
+42 504 l
+42 495.1552 49.1552 488 58 488 c
 h
 B*
 .960784 .721569 .180392 rg
 n
-60 534 m
-60 536.2091 58.20914 538 56 538 c
-53.79086 538 52 536.2091 52 534 c
-52 531.7909 53.79086 530 56 530 c
-58.20914 530 60 531.7909 60 534 c
+60 520 m
+60 522.2091 58.20914 524 56 524 c
+53.79086 524 52 522.2091 52 520 c
+52 517.7909 53.79086 516 56 516 c
+58.20914 516 60 517.7909 60 520 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 67 536 Tm (Record manual payments) Tj T* ET
+BT 1 0 0 1 67 522 Tm (Record manual payments) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 521 Tm (Mark a bill paid after you pay it outside FlowLedger.) Tj T* ET
+BT 1 0 0 1 56 507 Tm (Mark a bill paid after you pay it outside FlowLedger.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-58 440 m
-283 440 l
-291.8448 440 299 447.1552 299 456 c
-299 479 l
-299 487.8448 291.8448 495 283 495 c
-58 495 l
-49.1552 495 42 487.8448 42 479 c
-42 456 l
-42 447.1552 49.1552 440 58 440 c
+58 393 m
+283 393 l
+291.8448 393 299 400.1552 299 409 c
+299 465 l
+299 473.8448 291.8448 481 283 481 c
+58 481 l
+49.1552 481 42 473.8448 42 465 c
+42 409 l
+42 400.1552 49.1552 393 58 393 c
 h
 B*
 .960784 .721569 .180392 rg
 n
-60 478 m
-60 480.2091 58.20914 482 56 482 c
-53.79086 482 52 480.2091 52 478 c
-52 475.7909 53.79086 474 56 474 c
-58.20914 474 60 475.7909 60 478 c
+60 464 m
+60 466.2091 58.20914 468 56 468 c
+53.79086 468 52 466.2091 52 464 c
+52 461.7909 53.79086 460 56 460 c
+58.20914 460 60 461.7909 60 464 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 67 480 Tm (Close finished items) Tj T* ET
+BT 1 0 0 1 67 466 Tm (Transfer between accounts) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 465 Tm (Inactive bills should stop creating reminders and) Tj T* ET
-BT 1 0 0 1 56 454 Tm (occurrences.) Tj T* ET
+BT 1 0 0 1 56 451 Tm (Choose Transfer when adding a bill, then pick From and To) Tj T* ET
+BT 1 0 0 1 56 440 Tm (accounts, amount and schedule. Manage it under) Tj T* ET
+BT 1 0 0 1 56 429 Tm (Transfers. For a monthly or one-time bill, Change to transfer) Tj T* ET
+BT 1 0 0 1 56 418 Tm (preserves past history and replaces its future schedule after) Tj T* ET
+BT 1 0 0 1 56 407 Tm (you confirm. Resolve any conflicting bill activity first.) Tj T* ET
+.070588 .113725 .203922 rg
+.160784 .207843 .321569 RG
+.8 w
+n
+58 331 m
+283 331 l
+291.8448 331 299 338.1552 299 347 c
+299 370 l
+299 378.8448 291.8448 386 283 386 c
+58 386 l
+49.1552 386 42 378.8448 42 370 c
+42 347 l
+42 338.1552 49.1552 331 58 331 c
+h
+B*
+.960784 .721569 .180392 rg
+n
+60 369 m
+60 371.2091 58.20914 373 56 373 c
+53.79086 373 52 371.2091 52 369 c
+52 366.7909 53.79086 365 56 365 c
+58.20914 365 60 366.7909 60 369 c
+f*
+BT /F2 9.5 Tf 11.4 TL ET
+1 1 1 rg
+BT 1 0 0 1 67 371 Tm (Close finished items) Tj T* ET
+BT /F1 8.6 Tf 10.32 TL ET
+.666667 .701961 .784314 rg
+BT 1 0 0 1 56 356 Tm (Inactive bills should stop creating reminders and) Tj T* ET
+BT 1 0 0 1 56 345 Tm (occurrences.) Tj T* ET
 .960784 .721569 .180392 rg
 BT /F2 9 Tf 10.8 TL ET
-BT 1 0 0 1 313 625 Tm (DEBT PAYOFF PLANNER) Tj T* ET
+BT 1 0 0 1 313 611 Tm (DEBT PAYOFF PLANNER) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-329 552 m
-554 552 l
-562.8448 552 570 559.1552 570 568 c
-570 591 l
-570 599.8448 562.8448 607 554 607 c
-329 607 l
-320.1552 607 313 599.8448 313 591 c
-313 568 l
-313 559.1552 320.1552 552 329 552 c
+329 538 m
+554 538 l
+562.8448 538 570 545.1552 570 554 c
+570 577 l
+570 585.8448 562.8448 593 554 593 c
+329 593 l
+320.1552 593 313 585.8448 313 577 c
+313 554 l
+313 545.1552 320.1552 538 329 538 c
 h
 B*
 .960784 .721569 .180392 rg
 n
-331 590 m
-331 592.2091 329.2091 594 327 594 c
-324.7909 594 323 592.2091 323 590 c
-323 587.7909 324.7909 586 327 586 c
-329.2091 586 331 587.7909 331 590 c
+331 576 m
+331 578.2091 329.2091 580 327 580 c
+324.7909 580 323 578.2091 323 576 c
+323 573.7909 324.7909 572 327 572 c
+329.2091 572 331 573.7909 331 576 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 338 592 Tm (Review the order) Tj T* ET
+BT 1 0 0 1 338 578 Tm (Review the order) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 327 577 Tm (See each lender's original required minimum and the) Tj T* ET
-BT 1 0 0 1 327 566 Tm (current snowball or avalanche target.) Tj T* ET
+BT 1 0 0 1 327 563 Tm (See each lender's original required minimum and the) Tj T* ET
+BT 1 0 0 1 327 552 Tm (current snowball or avalanche target.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-329 479 m
-554 479 l
-562.8448 479 570 486.1552 570 495 c
-570 529 l
-570 537.8448 562.8448 545 554 545 c
-329 545 l
-320.1552 545 313 537.8448 313 529 c
-313 495 l
-313 486.1552 320.1552 479 329 479 c
+329 465 m
+554 465 l
+562.8448 465 570 472.1552 570 481 c
+570 515 l
+570 523.8448 562.8448 531 554 531 c
+329 531 l
+320.1552 531 313 523.8448 313 515 c
+313 481 l
+313 472.1552 320.1552 465 329 465 c
 h
 B*
 .960784 .721569 .180392 rg
 n
-331 528 m
-331 530.2091 329.2091 532 327 532 c
-324.7909 532 323 530.2091 323 528 c
-323 525.7909 324.7909 524 327 524 c
-329.2091 524 331 525.7909 331 528 c
+331 514 m
+331 516.2091 329.2091 518 327 518 c
+324.7909 518 323 516.2091 323 514 c
+323 511.7909 324.7909 510 327 510 c
+329.2091 510 331 511.7909 331 514 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 338 530 Tm (Check rollover) Tj T* ET
+BT 1 0 0 1 338 516 Tm (Check rollover) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 327 515 Tm (Rollover moves to the next debt as extra payoff money. It) Tj T* ET
-BT 1 0 0 1 327 504 Tm (stays in Forecast but never makes the lender minimum) Tj T* ET
-BT 1 0 0 1 327 493 Tm (larger or creates a false missed-payment alert.) Tj T* ET
+BT 1 0 0 1 327 501 Tm (Rollover moves to the next debt as extra payoff money. It) Tj T* ET
+BT 1 0 0 1 327 490 Tm (stays in Forecast but never makes the lender minimum) Tj T* ET
+BT 1 0 0 1 327 479 Tm (larger or creates a false missed-payment alert.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-329 423 m
-554 423 l
-562.8448 423 570 430.1552 570 439 c
-570 456 l
-570 464.8448 562.8448 472 554 472 c
-329 472 l
-320.1552 472 313 464.8448 313 456 c
-313 439 l
-313 430.1552 320.1552 423 329 423 c
+329 409 m
+554 409 l
+562.8448 409 570 416.1552 570 425 c
+570 442 l
+570 450.8448 562.8448 458 554 458 c
+329 458 l
+320.1552 458 313 450.8448 313 442 c
+313 425 l
+313 416.1552 320.1552 409 329 409 c
 h
 B*
 .960784 .721569 .180392 rg
 n
-331 455 m
-331 457.2091 329.2091 459 327 459 c
-324.7909 459 323 457.2091 323 455 c
-323 452.7909 324.7909 451 327 451 c
-329.2091 451 331 452.7909 331 455 c
+331 441 m
+331 443.2091 329.2091 445 327 445 c
+324.7909 445 323 443.2091 323 441 c
+323 438.7909 324.7909 437 327 437 c
+329.2091 437 331 438.7909 331 441 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 338 457 Tm (Edit planned payments) Tj T* ET
+BT 1 0 0 1 338 443 Tm (Edit planned payments) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 327 442 Tm (Change an amount or date when it no longer fits real life.) Tj T* ET
+BT 1 0 0 1 327 428 Tm (Change an amount or date when it no longer fits real life.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-329 262 m
-554 262 l
-562.8448 262 570 269.1552 570 278 c
-570 400 l
-570 408.8448 562.8448 416 554 416 c
-329 416 l
-320.1552 416 313 408.8448 313 400 c
-313 278 l
-313 269.1552 320.1552 262 329 262 c
+329 248 m
+554 248 l
+562.8448 248 570 255.1552 570 264 c
+570 386 l
+570 394.8448 562.8448 402 554 402 c
+329 402 l
+320.1552 402 313 394.8448 313 386 c
+313 264 l
+313 255.1552 320.1552 248 329 248 c
 h
 B*
 .960784 .721569 .180392 rg
 n
-331 399 m
-331 401.2091 329.2091 403 327 403 c
-324.7909 403 323 401.2091 323 399 c
-323 396.7909 324.7909 395 327 395 c
-329.2091 395 331 396.7909 331 399 c
+331 385 m
+331 387.2091 329.2091 389 327 389 c
+324.7909 389 323 387.2091 323 385 c
+323 382.7909 324.7909 381 327 381 c
+329.2091 381 331 382.7909 331 385 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 338 401 Tm (Pause debt payments) Tj T* ET
+BT 1 0 0 1 338 387 Tm (Pause debt payments) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 327 386 Tm (Open a debt and choose Pause debt payments. Set start) Tj T* ET
-BT 1 0 0 1 327 375 Tm (and resume dates, then choose Continue. At the final) Tj T* ET
-BT 1 0 0 1 327 364 Tm (question, choose whether to move the payment to other) Tj T* ET
-BT 1 0 0 1 327 353 Tm (debts in payoff order or keep it available. Redirecting) Tj T* ET
-BT 1 0 0 1 327 342 Tm (requires Debt Payoff Plan to be on. The debt stays open in) Tj T* ET
-BT 1 0 0 1 327 331 Tm (order and resumes automatically, or choose Resume now.) Tj T* ET
-BT 1 0 0 1 327 320 Tm (Use Edit pause to change the resume date or payment) Tj T* ET
-BT 1 0 0 1 327 309 Tm (choice. Scheduled pauses can also change their start date.) Tj T* ET
-BT 1 0 0 1 327 298 Tm (Earlier pause history stays intact; changes apply going) Tj T* ET
-BT 1 0 0 1 327 287 Tm (forward. This changes your FlowLedger plan only; lender) Tj T* ET
-BT 1 0 0 1 327 276 Tm (payments and interest may still apply.) Tj T* ET
+BT 1 0 0 1 327 372 Tm (Open a debt and choose Pause debt payments. Set start) Tj T* ET
+BT 1 0 0 1 327 361 Tm (and resume dates, then choose Continue. At the final) Tj T* ET
+BT 1 0 0 1 327 350 Tm (question, choose whether to move the payment to other) Tj T* ET
+BT 1 0 0 1 327 339 Tm (debts in payoff order or keep it available. Redirecting) Tj T* ET
+BT 1 0 0 1 327 328 Tm (requires Debt Payoff Plan to be on. The debt stays open in) Tj T* ET
+BT 1 0 0 1 327 317 Tm (order and resumes automatically, or choose Resume now.) Tj T* ET
+BT 1 0 0 1 327 306 Tm (Use Edit pause to change the resume date or payment) Tj T* ET
+BT 1 0 0 1 327 295 Tm (choice. Scheduled pauses can also change their start date.) Tj T* ET
+BT 1 0 0 1 327 284 Tm (Earlier pause history stays intact; changes apply going) Tj T* ET
+BT 1 0 0 1 327 273 Tm (forward. This changes your FlowLedger plan only; lender) Tj T* ET
+BT 1 0 0 1 327 262 Tm (payments and interest may still apply.) Tj T* ET
 .062745 .094118 .168627 rg
 .960784 .721569 .180392 RG
 .8 w
@@ -1244,7 +1278,7 @@ endstream
 endobj
 23 0 obj
 <<
-/Length 11032
+/Length 11054
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -1282,7 +1316,7 @@ BT 1 0 0 1 42 664 Tm (Forecast shows when money should move and what each day's 
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 11, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 12, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 6) Tj T* ET
 .360784 .65098 1 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -1596,11 +1630,11 @@ BT /F2 9.5 Tf 11.4 TL ET
 BT 1 0 0 1 338 379 Tm (Plan account transfers) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 327 364 Tm (Choose Plan transfer in an account's Forecast or Activity.) Tj T* ET
-BT 1 0 0 1 327 353 Tm (Pick From and To accounts, amount, first date, Monthly or) Tj T* ET
-BT 1 0 0 1 327 342 Tm (One time, and an optional last date. Review both sides,) Tj T* ET
-BT 1 0 0 1 327 331 Tm (then save. No money moves and no Activity transactions) Tj T* ET
-BT 1 0 0 1 327 320 Tm (are created.) Tj T* ET
+BT 1 0 0 1 327 364 Tm (Choose Transfer in Bills, or Plan transfer in an account's) Tj T* ET
+BT 1 0 0 1 327 353 Tm (Forecast or Activity. Pick From and To accounts, amount,) Tj T* ET
+BT 1 0 0 1 327 342 Tm (first date, Monthly or One time, and an optional last date.) Tj T* ET
+BT 1 0 0 1 327 331 Tm (Review both sides, then save. No money moves and no) Tj T* ET
+BT 1 0 0 1 327 320 Tm (Activity transactions are created.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
@@ -1698,7 +1732,7 @@ BT 1 0 0 1 42 664 Tm (Use savings for purpose-based balances. Use Flo for explan
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 11, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 12, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 7) Tj T* ET
 .654902 .427451 1 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -2018,7 +2052,7 @@ BT 1 0 0 1 42 664 Tm (Use focused reminders and the Guided Tour when you need he
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 11, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 12, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 8) Tj T* ET
 1 .615686 .301961 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -2298,7 +2332,7 @@ BT 1 0 0 1 42 650 Tm (support.) Tj T* ET
 n 42 630 m 570 630 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 11, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 12, 2026) Tj T* ET
 BT 1 0 0 1 544.648 24 Tm (Page 9) Tj T* ET
 .654902 .545098 .980392 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -2683,7 +2717,7 @@ BT 1 0 0 1 42 664 Tm (Choose the view that helps you plan, keep amounts private,
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 11, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 12, 2026) Tj T* ET
 BT 1 0 0 1 540.2 24 Tm (Page 10) Tj T* ET
 .607843 .360784 1 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -2916,7 +2950,7 @@ BT 1 0 0 1 42 664 Tm (Most differences come from status, recurrence, unmatched a
 n 42 644 m 570 644 l S
 .666667 .701961 .784314 rg
 BT /F1 8 Tf 9.6 TL ET
-BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 11, 2026) Tj T* ET
+BT 1 0 0 1 42 24 Tm (FlowLedger User Guide - Updated November 12, 2026) Tj T* ET
 BT 1 0 0 1 540.2 24 Tm (Page 11) Tj T* ET
 1 .435294 .568627 rg
 BT /F2 9 Tf 10.8 TL ET
@@ -3299,16 +3333,16 @@ xref
 0000013136 00000 n 
 0000017696 00000 n 
 0000022682 00000 n 
-0000030515 00000 n 
-0000041600 00000 n 
-0000049841 00000 n 
-0000056474 00000 n 
-0000066771 00000 n 
-0000073316 00000 n 
+0000031606 00000 n 
+0000042713 00000 n 
+0000050954 00000 n 
+0000057587 00000 n 
+0000067884 00000 n 
+0000074429 00000 n 
 trailer
 <<
 /ID 
-[<286d9ca0d4b43dea9d57410541b08c80><286d9ca0d4b43dea9d57410541b08c80>]
+[<abf41ff5a0a76bd656062376b62118ad><abf41ff5a0a76bd656062376b62118ad>]
 % ReportLab generated PDF document -- digest (opensource)
 
 /Info 16 0 R
@@ -3316,5 +3350,5 @@ trailer
 /Size 29
 >>
 startxref
-82769
+83882
 %%EOF

@@ -19,6 +19,8 @@ export interface PlannedAccountTransfer {
   created_at: string;
   updated_at: string;
   created_by: string | null;
+  /** Read-only origin for a retired Bill; only the atomic conversion sets it. */
+  source_bill_id?: string | null;
 }
 
 export type PlannedTransferPatch = Partial<Pick<PlannedAccountTransfer,
@@ -120,7 +122,8 @@ export function normalizePlannedTransfer(row: unknown): PlannedAccountTransfer {
     || value.frequency !== "once" && value.frequency !== "monthly"
     || value.status !== "active" && value.status !== "paused"
     || !Number.isSafeInteger(Number(value.revision)) || Number(value.revision) < 1
-    || typeof value.from_account_ref !== "string" || typeof value.to_account_ref !== "string")
+    || typeof value.from_account_ref !== "string" || typeof value.to_account_ref !== "string"
+    || value.source_bill_id != null && (typeof value.source_bill_id !== "string" || !value.source_bill_id))
     throw new Error("The saved planned transfers could not be read. Refresh and try again.");
   return { ...value, amount: Number(value.amount), revision: Number(value.revision) };
 }

@@ -46,7 +46,7 @@ function handler(file: string, start: string, end: string, bindings: Record<stri
     const access = { current: { scopeKey: "fictional-household:fictional-budget", canEdit: true, visible: true } };
     bindings = { formScopeRef: { current: access.current.scopeKey }, formAccessRef: access, pauseAccessRef: access,
       fundingAccountRef: null, depositAccountRef: null, accountRef: null, sourceAccountLocked: false, accountForecastReady: true,
-      forecastAccounts: [], activeForecastAccounts: [], creationContext: undefined, initialValues: undefined, ...bindings };
+      forecastAccounts: [], activeForecastAccounts: [], creationContext: undefined, initialValues: undefined, historyOnly: false, ...bindings };
   }
   bindings = revealedPrivacyBindings(bindings);
   const source = readFileSync(file, "utf8");

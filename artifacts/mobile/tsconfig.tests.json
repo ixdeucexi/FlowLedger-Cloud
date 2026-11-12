@@ -14,6 +14,8 @@
   "include": [
     "lib/accountBalancesCard.test.ts",
     "lib/plannedTransferContext.test.ts",
+    "lib/billTransferConversion.test.ts",
+    "lib/billsTransferUi.test.ts",
     "lib/plannedAccountTransfers.test.ts",
     "lib/accountForecasts.test.ts",
     "lib/accountNameMetadata.test.ts",

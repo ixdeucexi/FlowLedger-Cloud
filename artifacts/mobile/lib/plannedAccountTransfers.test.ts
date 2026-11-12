@@ -29,6 +29,19 @@ function own(snapshot:FinancialProjectionSnapshot,ref:ForecastAccountRef,month=0
   const engine=createFinancialProjection(snapshot,{now:new Date("2027-01-01T12:00:00Z"),timeZone:"UTC"});
   return buildAccountForecast({ref,month,year,snapshot,accounts,getEvents:engine.getUnanchoredCashEvents});
 }
+test("a converted paid Bill leaves one transfer per account and no future Bill obligation",()=>{
+  const snapshot=fixture();snapshot.settings.starting_balance_date="2027-01-15";
+  snapshot.transactionAccountIdentities.forEach(account=>account.updated_at="2027-01-15T12:00:00Z");
+  snapshot.bills=[{id:"kids",name:"Kids transfer",amount:50,category:"Family",priority:1,is_debt:false,balance:0,interest_rate:0,due_day:4,is_recurring:true,frequency:"monthly",start_date:"2026-07-04",end_date:"2027-01-30",created_at:"2026-07-01",funding_account_ref:from}];
+  snapshot.overrides=[{id:"paid-kids",bill_id:"kids",month:0,year:2027,paid_amount:50,actual_amount:50,paid_date:"2027-01-04"}];
+  snapshot.plannedAccountTransfers=[transfer({amount:50,source_bill_id:"kids"})];
+  const engine=createFinancialProjection(snapshot,{now:new Date("2027-01-15T12:00:00Z"),timeZone:"UTC"}),accounts=catalog(snapshot);
+  const balance=(ref:ForecastAccountRef,month:number)=>buildAccountForecast({ref,month,year:2027,snapshot,accounts,getEvents:engine.getUnanchoredCashEvents}).endingBalance;
+  assert.equal(balance(from,0),950);assert.equal(balance(to,0),2050);assert.equal(balance(other,0),500);
+  assert.equal(balance(from,1),900);assert.equal(balance(to,1),2100);
+  for(const month of [1,2])assert.equal(engine.getUnanchoredCashEvents(month,2027).filter(event=>event.sourceType==="bill"&&event.sourceId==="kids").length,0);
+  assert.equal(snapshot.transactions.length,0);assert.equal(snapshot.pendingPlanMatches!.length,0);assert.equal(snapshot.incomes.length,0);
+});
 test("monthly anchor clips February and restores original day, inclusive end and one-off",()=>{
   assert.deepEqual([0,1,2,3].map(month=>plannedTransferScheduledDate(transfer(),month,2027)),["2027-01-31","2027-02-28","2027-03-31","2027-04-30"]);
   assert.equal(plannedTransferScheduledDate(transfer({start_date:"2028-01-31"}),1,2028),"2028-02-29");

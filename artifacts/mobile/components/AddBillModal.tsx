@@ -15,6 +15,8 @@ import { BillPaymentHistoryPanel } from "@/components/BillPaymentHistoryPanel";
 import { DebtPaymentPauseModal, type DebtPaymentPauseDateField, type DebtPaymentPauseInput, type DebtPaymentPauseStep } from "@/components/DebtPaymentPauseModal";
 import type { Bill } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
+import { useAuth } from "@/context/AuthContext";
+import { PlannedTransferModal, type PlannedTransferInitialValues } from "@/components/PlannedTransferModal";
 import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
@@ -70,10 +72,14 @@ interface AddBillModalProps {
 export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture, onResume, onDeleteMistake, editBill, forceDebt, initialValues, title, saveLabel }: AddBillModalProps) {
   const privacyAlerts = usePrivacyAlerts();
   const c = useColors();
+  const { user } = useAuth();
   const isDesktop = useDesktopExperience();
-  const { bills, categories, settings, activeHousehold, canEditHousehold, householdTimeZone, pauseDebtPayments, editDebtPaymentPause, resumeDebtPayments, forecastAccounts, accountForecastReady, selectedForecastAccountRef } = useBudget();
+  const { bills, categories, settings, activeHousehold, canEditHousehold, householdTimeZone, pauseDebtPayments, editDebtPaymentPause, resumeDebtPayments, forecastAccounts, accountForecastReady, selectedForecastAccountRef, plannedAccountTransfers, plannedTransfersReady, plannedTransfersError, retryBudgetLoad, demoMode } = useBudget();
   useLocalDay();
   const today = localDateInTimeZone(new Date(), householdTimeZone);
+  const convertedPlan = editBill ? plannedAccountTransfers.find(plan => plan.source_bill_id === editBill.id) : undefined;
+  const statusUnverified = Boolean(editBill && !editBill.is_debt && !demoMode && !plannedTransfersReady);
+  const historyOnly = Boolean(convertedPlan) || statusUnverified;
   const currentDebt = editBill?.is_debt ? bills.find(bill => bill.id === editBill.id && bill.is_debt) : undefined;
   const activePause = activeDebtPaymentPause(currentDebt, today);
   const upcomingPause = currentDebt?.debt_payment_pauses?.filter(pause => pause.start_date > today).sort((left, right) => left.start_date.localeCompare(right.start_date))[0];
@@ -109,6 +115,19 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   const [pickerYear,    setPickerYear]    = useState(() => new Date().getFullYear());
   const [pickerMonth,   setPickerMonth]   = useState(() => new Date().getMonth());
   const [saving,         setSaving]        = useState(false);
+  const transferScopeKey = `${user?.id ?? "demo"}:${pauseScopeKey}`;
+  const [transferFlow, setTransferFlow] = useState<{
+    scope: string;
+    bill: Bill | null;
+    initialValues: PlannedTransferInitialValues;
+  } | null>(null);
+  useEffect(() => {
+    if (!visible) setTransferFlow(null);
+    else if (transferFlow && transferFlow.scope !== transferScopeKey) {
+      setTransferFlow(null);
+      onClose();
+    }
+  }, [visible, transferScopeKey, transferFlow?.scope]);
   const [confirmation, setConfirmation] = useState<ConfirmActionOptions | null>(null);
   const [actionMenuVisible, setActionMenuVisible] = useState(false);
   const [historyVisible, setHistoryVisible] = useState(false);
@@ -139,7 +158,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   };
   // A refused browser Back has consumed its nested entry; a new revision
   // asks the existing controller to restore that owned entry while saving.
-  useBackDismiss(visible, dismissLayer, true, pauseVisible ? (pauseDateField || pauseStep === "transfer" ? 2 : 1) + pauseBackRevision * 3 : historyVisible || frequencyOpen ? 1 : 0);
+  useBackDismiss(visible && !transferFlow, dismissLayer, true, pauseVisible ? (pauseDateField || pauseStep === "transfer" ? 2 : 1) + pauseBackRevision * 3 : historyVisible || frequencyOpen ? 1 : 0);
 
   useEffect(() => {
     setPauseVisible(false);
@@ -277,9 +296,32 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   }, [editBill, visible, forceDebt, initialValues]);
 
   const noun = forceDebt || isDebt ? "Debt" : "Bill";
+  const conversionUnavailable = !editBill ? ""
+    : editBill.is_debt || isDebt ? "Debt payments stay in your debt plan. Add a separate transfer between your cash accounts."
+    : editBill.end_date ? "This bill’s schedule has already ended. You can add a separate transfer."
+    : editBill.is_recurring && editBill.frequency !== "monthly" ? "Changing to a transfer is available for monthly and one-time bills."
+    : "";
+  const openTransfer = (convert: boolean) => {
+    if (saving || pausePendingRef.current || !canEditHousehold || !accountForecastReady
+      || formScopeRef.current !== pauseScopeKey || (convert && (!editBill || conversionUnavailable))) return;
+    Keyboard.dismiss();
+    setFrequencyOpen(false);
+    setActionMenuVisible(false);
+    setTransferFlow({
+      scope: transferScopeKey,
+      // Keep the exact source snapshot through background reads and retry.
+      bill: convert && editBill ? JSON.parse(JSON.stringify(editBill)) as Bill : null,
+      initialValues: {
+        name,
+        amount,
+        fromAccountRef: fundingAccountRef,
+        frequency: !isRecurring ? "once" : "monthly",
+      },
+    });
+  };
 
   const handleSave = async () => {
-    if (saving || pausePendingRef.current) return;
+    if (saving || pausePendingRef.current || historyOnly) return;
     if (!pauseAccessRef.current.canEdit || !pauseAccessRef.current.visible || formScopeRef.current !== pauseAccessRef.current.scopeKey) {
       privacyAlerts.formError("Reopen this editor", "Your household or editing access changed. Close this editor and try again.");
       return;
@@ -420,8 +462,9 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   const lbl = [styles.label, { color: c.mutedForeground }];
 
   return (
+    <>
     <Modal
-      visible={visible}
+      visible={visible && !transferFlow}
       animationType={isDesktop ? "fade" : "slide"}
       transparent
       onRequestClose={dismissLayer}
@@ -435,10 +478,10 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
               <Feather name="arrow-left" size={22} color={c.foreground} />
               <Text style={[styles.title, { color: c.foreground }]}>Payment history</Text>
             </Pressable> : <Text style={[styles.title, { color: c.foreground }]}>
-              {title ?? (editBill ? `Edit ${noun}` : `Add ${noun}`)}
+              {historyOnly ? "Bill history" : title ?? (editBill ? `Edit ${noun}` : `Add ${noun}`)}
             </Text>}
             <View style={styles.headerActions}>
-              {editBill && !historyVisible ? (
+              {editBill && !historyVisible && !historyOnly ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="More bill actions"
@@ -457,7 +500,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
             </View>
           </View>
 
-          {editBill && actionMenuVisible && !historyVisible ? (
+          {editBill && actionMenuVisible && !historyVisible && !historyOnly ? (
             <View style={[styles.actionMenu, { backgroundColor: c.card, borderColor: c.border }]}>
               {editBill.end_date && onResume ? (
                 <Pressable
@@ -536,7 +579,19 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
             </View>
           ) : null}
 
-          {historyVisible && editBill ? <BillPaymentHistoryPanel billId={editBill.id} billName={editBill.name} /> : <ScrollView showsVerticalScrollIndicator={isDesktop} keyboardShouldPersistTaps="handled">
+          {historyOnly && editBill ? <ScrollView showsVerticalScrollIndicator={isDesktop}>
+            <View style={[styles.transferCard, { backgroundColor: c.primary + "08", borderColor: c.primary + "25", marginTop: 0, marginBottom: 14 }]}>
+              <Text style={[styles.actionMenuLabel, { color: c.primary }]}>{convertedPlan ? "Changed to transfer" : plannedTransfersError ? "Couldn’t load bill details" : "Loading bill details…"}</Text>
+              <Text style={[styles.actionMenuHelp, { color: c.foreground }]}>{editBill.name}</Text>
+              <Text style={[styles.actionMenuHelp, { color: c.mutedForeground }]}>{convertedPlan
+                ? "Your earlier bill payments stay here. Manage the future schedule under Transfers between accounts."
+                : plannedTransfersError ? "We couldn’t check this bill’s current status. Try again before editing it." : "Your saved payment history is available below."}</Text>
+              {!convertedPlan && plannedTransfersError ? <Pressable accessibilityRole="button" accessibilityLabel="Retry loading bill details" onPress={retryBudgetLoad} style={[styles.transferAction, { borderColor: c.primary + "55" }]}>
+                <Text style={[styles.entryChoiceText, { color: c.primary }]}>Retry</Text>
+              </Pressable> : null}
+            </View>
+            <BillPaymentHistoryPanel billId={editBill.id} billName={editBill.name} />
+          </ScrollView> : historyVisible && editBill ? <BillPaymentHistoryPanel billId={editBill.id} billName={editBill.name} /> : <ScrollView showsVerticalScrollIndicator={isDesktop} keyboardShouldPersistTaps="handled">
 
             {editBill?.is_debt ? (
               <View
@@ -658,9 +713,24 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
               <Feather name="chevron-right" size={19} color={c.primary} />
             </Pressable> : null}
 
+            {!editBill && !forceDebt && !isDebt ? (
+              <View accessibilityRole="radiogroup" accessibilityLabel="Add bill or transfer" style={styles.entryChoices}>
+                <View accessibilityRole="radio" accessibilityState={{ checked: true }} aria-checked style={[styles.entryChoice, { backgroundColor: c.primary + "18", borderColor: c.primary }]}>
+                  <Feather name="file-text" size={18} color={c.primary} />
+                  <Text style={[styles.entryChoiceText, { color: c.primary }]}>Bill</Text>
+                </View>
+                <Pressable accessibilityRole="radio" accessibilityLabel="Transfer" accessibilityState={{ checked: false, disabled: !canEditHousehold || !accountForecastReady || saving }} aria-checked={false}
+                  disabled={!canEditHousehold || !accountForecastReady || saving} onPress={() => openTransfer(false)}
+                  style={[styles.entryChoice, { backgroundColor: c.card, borderColor: c.border }]}>
+                  <Feather name="repeat" size={18} color={c.foreground} />
+                  <Text style={[styles.entryChoiceText, { color: c.foreground }]}>Transfer</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
             {/* Name */}
             <Text style={lbl}>{noun} Name</Text>
-            <TextInput style={inp} value={name} onChangeText={setName}
+            <TextInput accessibilityLabel={`${noun} name`} style={inp} value={name} onChangeText={setName}
               placeholder={`e.g. ${isDebt ? "Car Loan" : "Electric Bill"}`}
               placeholderTextColor={c.mutedForeground} returnKeyType="next" />
 
@@ -672,6 +742,23 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
 
             <AccountForecastPicker label="Paid from" value={fundingAccountRef} onChange={setFundingAccountRef}
               includeHousehold={false} allowUnassigned disabled={saving || pauseActionSaving || !canEditHousehold} />
+
+            {editBill ? (
+              <View style={[styles.transferCard, { backgroundColor: c.primary + "08", borderColor: c.primary + "25" }]}>
+                <View style={styles.transferCopy}>
+                  <Text style={[styles.actionMenuLabel, { color: c.foreground }]}>Transfer between accounts</Text>
+                  <Text style={[styles.actionMenuHelp, { color: c.mutedForeground }]}>
+                    {conversionUnavailable || "Use this when the payment goes to another account you own."}
+                  </Text>
+                </View>
+                {!conversionUnavailable ? <Pressable accessibilityRole="button" accessibilityLabel="Change to transfer"
+                  accessibilityState={{ disabled: saving || !canEditHousehold || !accountForecastReady }} disabled={saving || !canEditHousehold || !accountForecastReady}
+                  onPress={() => openTransfer(true)} style={[styles.transferAction, { borderColor: c.primary + "55" }]}>
+                  <Feather name="repeat" size={16} color={c.primary} />
+                  <Text style={[styles.entryChoiceText, { color: c.primary }]}>Change to transfer</Text>
+                </Pressable> : null}
+              </View>
+            ) : null}
 
             {/* Frequency */}
             <Text style={lbl}>Frequency</Text>
@@ -953,7 +1040,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
             )}
 
             {/* Save */}
-            <Pressable disabled={saving || pauseActionSaving || !canEditHousehold} onPress={handleSave}
+            <Pressable accessibilityRole="button" accessibilityLabel={saveLabel ?? (editBill ? `Update ${noun}` : `Add ${noun}`)} disabled={saving || pauseActionSaving || !canEditHousehold} onPress={handleSave}
               style={({ pressed }) => [styles.saveBtn, { backgroundColor: c.primary, borderRadius: colors.radius, opacity: saving || pauseActionSaving ? 0.55 : pressed ? 0.85 : 1 }]}
             >
               <Text style={[styles.saveBtnText, { color: c.primaryForeground }]}>
@@ -981,10 +1068,25 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
         onSave={savePaymentPause}
       />}
     </Modal>
+    <PlannedTransferModal
+      visible={visible && Boolean(transferFlow) && transferFlow?.scope === transferScopeKey}
+      initialValues={transferFlow?.initialValues}
+      conversionBill={transferFlow?.bill}
+      onBackToBill={() => setTransferFlow(null)}
+      onClose={() => setTransferFlow(null)}
+      onSaved={() => { setTransferFlow(null); onClose(); }}
+    />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  entryChoices: { flexDirection: "row", gap: 10, marginTop: 4, marginBottom: 4 },
+  entryChoice: { flex: 1, minWidth: 0, minHeight: 46, borderWidth: 1, borderRadius: 12, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8, padding: 10 },
+  entryChoiceText: { fontFamily: "Inter_600SemiBold", fontSize: 13 },
+  transferCard: { borderWidth: 1, borderRadius: 14, padding: 13, gap: 10, marginTop: 12 },
+  transferCopy: { gap: 2 },
+  transferAction: { alignSelf: "flex-start", minHeight: 42, borderWidth: 1, borderRadius: 11, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 8 },
   overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.65)" },
   container: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingTop: 12, maxHeight: "94%" },
   handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#444", alignSelf: "center", marginBottom: 16 },

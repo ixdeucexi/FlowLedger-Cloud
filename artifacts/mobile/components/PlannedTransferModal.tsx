@@ -19,8 +19,9 @@ import {
   accountForecastLabel,
 } from "@/components/AccountForecastPicker";
 import { DatePickerField } from "@/components/DatePickerField";
+import { BillPaymentHistoryPanel } from "@/components/BillPaymentHistoryPanel";
 import { useAuth } from "@/context/AuthContext";
-import { useBudget } from "@/context/BudgetContext";
+import { useBudget, type Bill } from "@/context/BudgetContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
 import {
@@ -29,6 +30,7 @@ import {
 } from "@/lib/accountForecasts";
 import { safeLocalDateInTimeZone } from "@/lib/financialProjection";
 import { parseMoneyInput } from "@/lib/moneyFormInput";
+import { addDateOnlyDays } from "@/lib/dateLabels";
 import {
   validPlannedTransferDate,
   type PlannedAccountTransfer,
@@ -38,6 +40,15 @@ import {
 const money = (value: number) =>
   value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
+export interface PlannedTransferInitialValues {
+  name?: string;
+  amount?: number | string;
+  fromAccountRef?: ForecastAccountRef | null;
+  frequency?: "once" | "monthly";
+  startDate?: string;
+  endDate?: string | null;
+}
+
 /** Plans future cash movement only; never records or initiates a bank transfer. */
 export function PlannedTransferModal({
   visible,
@@ -45,23 +56,37 @@ export function PlannedTransferModal({
   transfer = null,
   initialToAccountRef,
   initialDate,
+  initialValues,
+  conversionBill = null,
+  onSaved,
+  onBackToBill,
+  initialHistory = false,
+  historyOnly = false,
 }: {
   visible: boolean;
   onClose: () => void;
   transfer?: PlannedAccountTransfer | null;
   initialToAccountRef?: ForecastAccountRef | null;
   initialDate?: string;
+  initialValues?: PlannedTransferInitialValues;
+  conversionBill?: Bill | null;
+  onSaved?: () => void;
+  onBackToBill?: () => void;
+  initialHistory?: boolean;
+  historyOnly?: boolean;
 }) {
   const c = useColors();
   const { user } = useAuth();
   const {
     activeHousehold,
+    bills,
     canEditHousehold,
     accountForecastReady,
     forecastAccounts,
     householdTimeZone,
     plannedTransfersReady,
     savePlannedAccountTransfer,
+    convertBillToPlannedTransfer,
   } = useBudget();
   const scope = `${user?.id ?? "demo"}:${activeHousehold?.householdId ?? "none"}:${activeHousehold?.budgetId ?? "none"}`;
   const [name, setName] = useState("");
@@ -75,6 +100,19 @@ export function PlannedTransferModal({
   const [expectedRevision, setExpectedRevision] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conversionConfirmed, setConversionConfirmed] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(initialHistory || historyOnly);
+  const openScopeRef = useRef<string | null>(visible ? scope : null);
+  const scopeChanged = visible && openScopeRef.current !== null && openScopeRef.current !== scope;
+  const conversion = Boolean(conversionBill);
+  const sourceBillId = transfer?.source_bill_id ?? null;
+  const historyAvailable = Boolean(sourceBillId && user?.id && !scopeChanged
+    && transfer?.household_id === activeHousehold?.householdId
+    && transfer?.budget_id === activeHousehold?.budgetId);
+  const sourceBill = bills.find((bill: Bill & { household_id?: string; budget_id?: string }) => bill.id === sourceBillId
+    && bill.household_id === activeHousehold?.householdId
+    && bill.budget_id === activeHousehold?.budgetId);
+  const showingHistory = historyOnly || historyOpen;
   const validationField = useRef<"name" | "amount" | "date" | "account" | null>(
     null,
   );
@@ -106,32 +144,43 @@ export function PlannedTransferModal({
   };
   useEffect(() => {
     savingRef.current = null;
-    if (!visible) return;
+    if (!visible) { openScopeRef.current = null; return; }
+    if (openScopeRef.current === null) openScopeRef.current = scope;
+    if (openScopeRef.current !== scope) {
+      setName(""); setAmount(""); setFromRef(null); setToRef(null);
+      setHistoryOpen(false);
+      setError("The household changed. Close this editor and open it again.");
+      return;
+    }
     createId.current =
       transfer?.id ?? `planned-transfer-${Crypto.randomUUID()}`;
-    setName(transfer?.name ?? "");
-    setAmount(transfer ? String(transfer.amount) : "");
-    setFromRef(transfer?.from_account_ref ?? null);
+    setName(transfer?.name ?? initialValues?.name ?? conversionBill?.name ?? "");
+    setAmount(transfer ? String(transfer.amount) : String(initialValues?.amount ?? conversionBill?.amount ?? ""));
+    setFromRef(transfer?.from_account_ref ?? initialValues?.fromAccountRef ?? resolveForecastAccountReference(conversionBill?.funding_account_ref, forecastAccounts));
     setToRef(transfer?.to_account_ref ?? initialToAccountRef ?? null);
-    setFrequency(transfer?.frequency ?? "monthly");
+    setFrequency(transfer?.frequency ?? (conversionBill ? (conversionBill.is_recurring ? "monthly" : "once") : initialValues?.frequency ?? "monthly"));
     setStartDate(
       transfer?.start_date ??
+        (conversionBill ? "" : initialValues?.startDate) ??
         initialDate ??
         safeLocalDateInTimeZone(new Date(), householdTimeZone),
     );
-    setEndDate(transfer?.end_date ?? "");
+    setEndDate(transfer?.end_date ?? initialValues?.endDate ?? "");
     setPaused(transfer?.status === "paused");
     setExpectedRevision(transfer?.revision ?? null);
     setSaving(false);
+    setConversionConfirmed(false);
+    setHistoryOpen(initialHistory || historyOnly);
     validationField.current = null;
     setError(null);
-  }, [visible, transfer?.id, scope]);
-  useBackDismiss(visible && !saving, onClose);
+  }, [visible, transfer?.id, conversionBill?.id, scope, initialHistory, historyOnly]);
+  useBackDismiss(visible && !saving, showingHistory && !historyOnly ? () => setHistoryOpen(false) : onClose);
   const locked =
     !access.current.ready ||
     !canEditHousehold ||
     saving ||
-    Boolean(transfer?.deleted_at);
+    Boolean(transfer?.deleted_at) ||
+    scopeChanged;
   const parsed = parseMoneyInput(amount);
   const canonicalFrom = resolveForecastAccountReference(
     fromRef,
@@ -189,11 +238,19 @@ export function PlannedTransferModal({
       );
       return;
     }
+    if (conversion && startDate <= safeLocalDateInTimeZone(new Date(), householdTimeZone)) {
+      showValidationError("date", "Choose a first transfer date after today. Your earlier bill history stays saved.");
+      return;
+    }
     if (!previewReady || !canonicalFrom || !canonicalTo) {
       showValidationError(
         "account",
         "Choose two different available cash accounts. Linked names for the same account cannot transfer to each other.",
       );
+      return;
+    }
+    if (conversion && !conversionConfirmed) {
+      setError("Confirm that future bill payments will become a transfer plan.");
       return;
     }
     const patch: PlannedTransferPatch = {
@@ -204,7 +261,7 @@ export function PlannedTransferModal({
       frequency,
       start_date: startDate,
       end_date: frequency === "monthly" ? endDate || null : null,
-      status: paused ? "paused" : "active",
+      status: !conversion && paused ? "paused" : "active",
     };
     const startedScope = scope;
     const operation = {};
@@ -213,17 +270,16 @@ export function PlannedTransferModal({
     validationField.current = null;
     setError(null);
     try {
-      await savePlannedAccountTransfer(
-        createId.current!,
-        patch,
-        expectedRevision,
-      );
+      if (conversionBill) await convertBillToPlannedTransfer(conversionBill, patch);
+      else await savePlannedAccountTransfer(createId.current!, patch, expectedRevision);
       if (
         savingRef.current === operation &&
         access.current.scope === startedScope &&
         access.current.visible
-      )
-        onClose();
+      ) {
+        if (onSaved) onSaved();
+        else onClose();
+      }
     } catch (caught) {
       if (
         savingRef.current === operation &&
@@ -268,10 +324,10 @@ export function PlannedTransferModal({
           <View style={styles.heading}>
             <View style={styles.flex}>
               <Text style={[styles.title, { color: c.foreground }]}>
-                {transfer ? "Edit transfer plan" : "Plan a transfer"}
+                {showingHistory ? "Earlier bill payments" : conversion ? "Change to transfer" : transfer ? "Edit transfer plan" : "Plan a transfer"}
               </Text>
               <Text style={[styles.help, { color: c.mutedForeground }]}>
-                Planned only. FlowLedger does not move money.
+                {showingHistory ? "Recorded payments from the original bill." : "Planned only. FlowLedger does not move money."}
               </Text>
             </View>
             <Pressable
@@ -284,11 +340,32 @@ export function PlannedTransferModal({
               <Feather name="x" size={22} color={c.mutedForeground} />
             </Pressable>
           </View>
-          <ScrollView
+          {onBackToBill ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Back to bill" disabled={saving} onPress={onBackToBill} style={styles.back}>
+              <Feather name="arrow-left" size={18} color={c.primary} />
+              <Text style={[styles.choiceText, { color: c.primary }]}>Back to bill</Text>
+            </Pressable>
+          ) : null}
+          {showingHistory ? (
+            <View style={styles.historyContent}>
+              {!historyOnly ? <Pressable accessibilityRole="button" accessibilityLabel="Back to transfer" onPress={() => setHistoryOpen(false)} style={styles.back}>
+                <Feather name="arrow-left" size={18} color={c.primary} />
+                <Text style={[styles.choiceText, { color: c.primary }]}>Back to transfer</Text>
+              </Pressable> : null}
+              {historyAvailable && sourceBillId ? <BillPaymentHistoryPanel billId={sourceBillId} billName={sourceBill?.name ?? transfer?.name ?? "Earlier bill payments"} /> : (
+                <Text accessibilityRole="alert" style={[styles.help, { color: c.mutedForeground }]}>Close this editor and reopen the transfer in its household to view earlier payments.</Text>
+              )}
+            </View>
+          ) : <ScrollView
             keyboardShouldPersistTaps="handled"
             style={styles.scroll}
             contentContainerStyle={styles.form}
           >
+            {historyAvailable ? <Pressable accessibilityRole="button" accessibilityLabel="Earlier bill payments" disabled={saving} onPress={() => setHistoryOpen(true)} style={[styles.historyLink, { borderColor: c.primary + "35", backgroundColor: c.primary + "0c" }]}>
+              <Feather name="clock" size={18} color={c.primary} />
+              <Text style={[styles.confirmText, { color: c.foreground }]}>Earlier bill payments</Text>
+              <Feather name="chevron-right" size={18} color={c.primary} />
+            </Pressable> : null}
             {!canEditHousehold ? (
               <Text style={[styles.help, { color: c.warning }]}>
                 Only a household owner or editor can change transfer plans.
@@ -360,7 +437,9 @@ export function PlannedTransferModal({
                 },
               ]}
             />
-            <View
+            {conversion ? <Text style={[styles.help, { color: c.mutedForeground }]}>
+              {frequency === "monthly" ? "Monthly transfer · keeps this bill’s frequency" : "One-time transfer · replaces this one-time bill"}
+            </Text> : <View
               style={styles.frequency}
               accessibilityRole="radiogroup"
               accessibilityLabel="Transfer frequency"
@@ -400,20 +479,27 @@ export function PlannedTransferModal({
                   </Text>
                 </Pressable>
               ))}
-            </View>
+            </View>}
             <DatePickerField
               label={
-                frequency === "monthly"
+                conversion || frequency === "monthly"
                   ? "First transfer date"
                   : "Transfer date"
               }
               value={startDate}
+              placeholder={conversion ? "Choose a future date…" : undefined}
+              minDate={conversion ? addDateOnlyDays(safeLocalDateInTimeZone(new Date(), householdTimeZone), 1) : undefined}
               onChange={(value) => {
                 setStartDate(value);
                 clearValidationError("date");
               }}
               disabled={locked}
             />
+            {conversion ? (
+              <Text style={[styles.help, { color: c.mutedForeground }]}>
+                Start on or before the next unpaid bill payment. Review earlier payments first.
+              </Text>
+            ) : null}
             {frequency === "monthly" ? (
               <>
                 <Text style={[styles.help, { color: c.mutedForeground }]}>
@@ -433,7 +519,7 @@ export function PlannedTransferModal({
                 />
               </>
             ) : null}
-            <Pressable
+            {!conversion ? <Pressable
               accessibilityRole="checkbox"
               accessibilityLabel="Pause this transfer plan"
               accessibilityState={{ checked: paused, disabled: locked }}
@@ -450,7 +536,7 @@ export function PlannedTransferModal({
               <Text style={[styles.help, { color: c.foreground }]}>
                 Pause this plan
               </Text>
-            </Pressable>
+            </Pressable> : null}
             {previewReady && from && to && parsed !== null ? (
               <View
                 style={[
@@ -503,6 +589,17 @@ export function PlannedTransferModal({
                 Change those dates separately if needed.
               </Text>
             ) : null}
+            {conversion ? (
+              <View style={[styles.preview, { backgroundColor: c.primary + "0c", borderColor: c.primary + "35" }]}>
+                <Text style={[styles.help, { color: c.foreground }]}>
+                  Earlier bill payments and history stay saved. From the date you choose, this transfer replaces the bill’s future schedule.
+                </Text>
+                <Pressable accessibilityRole="checkbox" accessibilityLabel="Confirm changing future bill payments to a transfer" accessibilityState={{ checked: conversionConfirmed, disabled: locked }} aria-checked={conversionConfirmed} disabled={locked} onPress={() => { setConversionConfirmed(value => !value); setError(null); }} style={styles.check}>
+                  <Feather name={conversionConfirmed ? "check-square" : "square"} size={20} color={c.primary} />
+                  <Text style={[styles.confirmText, { color: c.foreground }]}>Change future payments to this transfer</Text>
+                </Pressable>
+              </View>
+            ) : null}
             {error ? (
               <Text
                 accessibilityRole="alert"
@@ -513,7 +610,7 @@ export function PlannedTransferModal({
             ) : null}
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Save transfer plan"
+              accessibilityLabel={conversion ? "Change to transfer" : "Save transfer plan"}
               accessibilityState={{ disabled: locked }}
               disabled={locked}
               onPress={() => {
@@ -525,10 +622,10 @@ export function PlannedTransferModal({
               ]}
             >
               <Text style={[styles.saveText, { color: c.primaryForeground }]}>
-                {saving ? "Saving…" : "Save plan"}
+                {saving ? "Saving…" : conversion ? "Change to transfer" : "Save plan"}
               </Text>
             </Pressable>
-          </ScrollView>
+          </ScrollView>}
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -552,6 +649,10 @@ const styles = StyleSheet.create({
     padding: 18,
     gap: 12,
   },
+  historyContent: { flexShrink: 1, minHeight: 0, gap: 8 },
+  historyLink: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 12, minHeight: 48, padding: 12 },
+  back: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 40 },
+  confirmText: { flex: 1, minWidth: 0, fontSize: 13, lineHeight: 19 },
   heading: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   flex: { flex: 1, minWidth: 0, gap: 5 },
   title: { fontSize: 22, lineHeight: 28, fontFamily: "Inter_700Bold" },

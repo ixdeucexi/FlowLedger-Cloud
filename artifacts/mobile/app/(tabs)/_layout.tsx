@@ -45,7 +45,7 @@ import {
   pendingOccurrenceKeySet,
   unmatchedPendingTransactions,
 } from "@/lib/pendingPlanMatches";
-import { nativeTabBarMetrics, tabBarDisplayLabel, tabBarLabelSize } from "@/lib/mobileLayout";
+import { nativeTabBarMetrics, webTabBarMetrics, tabBarDisplayLabel, tabBarLabelSize } from "@/lib/mobileLayout";
 import {
   appNotificationCount,
   clearAppBadge,
@@ -563,6 +563,7 @@ function TabContent() {
     isWeb &&
     typeof navigator !== "undefined" &&
     /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const webTabMetrics = webTabBarMetrics(insets.bottom, isIosWeb);
   const activityReviewCount = React.useMemo(
     () => countReviewQueue(transactions, todayIsoDate()),
     [transactions],
@@ -793,12 +794,15 @@ function TabContent() {
               tabBarActiveTintColor: colors.primary,
               tabBarInactiveTintColor: colors.mutedForeground,
               headerShown: false,
+              tabBarShowLabel: true,
+              tabBarLabelPosition: isWeb ? "below-icon" : undefined,
               tabBarLabelStyle: {
                 fontFamily: "Inter_600SemiBold",
                 fontSize: tabBarLabelSize(viewportWidth),
                 marginTop: 1,
                 width: "100%",
                 textAlign: "center",
+                ...(isWeb ? { lineHeight: 12, minHeight: 12, flexShrink: 0 } : {}),
               },
               tabBarItemStyle: {
                 flex: 1,
@@ -810,6 +814,7 @@ function TabContent() {
               tabBarIconStyle: {
                 width: 28,
                 height: 28,
+                ...(isWeb ? { flexShrink: 0 } : {}),
               },
               tabBarStyle: {
                 display: isDesktop ? "none" : "flex",
@@ -843,9 +848,9 @@ function TabContent() {
                 overflow: "visible",
                 ...(isWeb
                   ? {
-                      height: isIosWeb ? 72 : 82,
-                      paddingTop: isIosWeb ? 6 : 8,
-                      paddingBottom: isIosWeb ? 12 : 10,
+                      height: webTabMetrics.height,
+                      paddingTop: webTabMetrics.paddingTop,
+                      paddingBottom: webTabMetrics.paddingBottom,
                     }
                    : {
                       height: nativeTabMetrics.height,
