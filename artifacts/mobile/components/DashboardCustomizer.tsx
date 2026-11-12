@@ -26,7 +26,7 @@ import {
 type Props = {
   visible: boolean;
   layout: DashboardLayoutPreference;
-  onChange: (layout: DashboardLayoutPreference) => void;
+  onChange: (value: DashboardLayoutPreference | ((current: DashboardLayoutPreference) => DashboardLayoutPreference)) => void;
   onReset: () => void;
   onClose: () => void;
   availableWidgetIds?: readonly DashboardWidgetId[];
@@ -58,7 +58,7 @@ export function DashboardCustomizer({ visible, layout, onChange, onReset, onClos
   }, [onClose, visible]);
 
   const move = (id: DashboardWidgetId, direction: "up" | "down") => {
-    onChange(moveDashboardWidget(layout, id, direction, availableWidgetIds));
+    onChange(current => moveDashboardWidget(current, id, direction, availableWidgetIds));
   };
 
   return (
@@ -119,7 +119,7 @@ export function DashboardCustomizer({ visible, layout, onChange, onReset, onClos
               })}
             </View>
             <Text accessibilityRole="header" style={[styles.sectionTitle, { color: c.foreground }]}>Arrange your cards</Text>
-            <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Use the arrows to move cards. Hide optional cards without changing your plan.</Text>
+            <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Use the arrows to move cards. Show or hide any card without changing your plan.</Text>
             <FloLauncherSetting />
             {widgetOrder.map((id, index) => {
               const widget = DASHBOARD_WIDGETS[id];
@@ -132,7 +132,7 @@ export function DashboardCustomizer({ visible, layout, onChange, onReset, onClos
                   <View style={styles.rowCopy}>
                     <Text style={[styles.rowTitle, { color: c.foreground }]}>{widget.label}</Text>
                     <Text style={[styles.rowDescription, { color: c.mutedForeground }]}>{widget.description}</Text>
-                    {widget.required ? <Text style={[styles.required, { color: c.primary }]}>Required</Text> : null}
+
                   </View>
                   <View style={styles.rowActions}>
                     <View style={styles.moveActions}>
@@ -160,12 +160,13 @@ export function DashboardCustomizer({ visible, layout, onChange, onReset, onClos
                     <Pressable
                       accessibilityRole="switch"
                       accessibilityLabel={`${visibleWidget ? "Hide" : "Show"} ${widget.label}`}
-                      accessibilityState={{ checked: visibleWidget, disabled: loading || Boolean(widget.required) }}
-                      disabled={loading || widget.required}
-                      onPress={() => onChange(setDashboardWidgetVisible(layout, id, !visibleWidget))}
+                      aria-checked={visibleWidget}
+                      accessibilityState={{ checked: visibleWidget, disabled: loading }}
+                      disabled={loading}
+                      onPress={() => onChange(current => setDashboardWidgetVisible(current, id, current.hidden.includes(id)))}
                       style={[
                         styles.switch,
-                        { backgroundColor: visibleWidget ? c.primary : c.muted, opacity: widget.required ? 0.62 : 1 },
+                        { backgroundColor: visibleWidget ? c.primary : c.muted, opacity: loading ? 0.62 : 1 },
                       ]}
                     >
                       <View style={[styles.switchThumb, visibleWidget && styles.switchThumbOn]} />
@@ -188,7 +189,7 @@ export function DashboardCustomizer({ visible, layout, onChange, onReset, onClos
                 accessibilityLabel={`${pinned ? "Unpin" : "Pin"} ${command.title}`}
                 accessibilityState={{ checked: pinned, disabled }}
                 disabled={disabled}
-                onPress={() => onChange(toggleDashboardFavoriteAction(layout, command.id))}
+                onPress={() => onChange(current => toggleDashboardFavoriteAction(current, command.id))}
                 style={({ pressed }) => [styles.favoriteRow, { backgroundColor: c.card, borderColor: pinned ? c.primary : c.border, opacity: disabled && !pinned ? 0.45 : pressed ? 0.78 : 1 }]}
               >
                 <Feather name={command.icon as React.ComponentProps<typeof Feather>["name"]} size={18} color={c.primary} />
@@ -238,7 +239,6 @@ const styles = StyleSheet.create({
   rowCopy: { flex: 1, minWidth: 0 },
   rowTitle: { fontFamily: "Inter_700Bold", fontSize: 15 },
   rowDescription: { fontFamily: "Inter_500Medium", fontSize: 12, lineHeight: 17, marginTop: 3 },
-  required: { fontFamily: "Inter_700Bold", fontSize: 11, marginTop: 5, textTransform: "uppercase", letterSpacing: 0.6 },
   rowActions: { alignItems: "flex-end", gap: 10 },
   moveActions: { flexDirection: "row", gap: 6 },
   smallButton: { width: 42, height: 42, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },

@@ -19,11 +19,18 @@ function account(n: number, patch: Partial<ForecastAccountDescriptor> = {}): For
 }
 
 type Tree = { type: string; props: any; children: Array<Tree | string> };
+type CardProps = {
+  collapsed?: boolean;
+  onCollapsedChange?: (next: boolean) => void;
+  collapseDisabled?: boolean;
+};
 /** Execute the actual component. Native primitives are inert; their privacy
  * transformations are the same pure functions used by the real wrappers. */
-function harness(rows = [account(1), account(2), account(3)], options: { hidden?: boolean; width?: number } = {}) {
+function harness(rows = [account(1), account(2), account(3)], options: { hidden?: boolean; width?: number; props?: CardProps } = {}) {
   const state = {
     hidden: options.hidden ?? false,
+    props: { ...options.props } as CardProps,
+    collapseChanges: [] as boolean[],
     user: { id: "actor-a" } as { id: string } | null,
     actions: [] as unknown[][],
     budget: {
@@ -35,6 +42,10 @@ function harness(rows = [account(1), account(2), account(3)], options: { hidden?
       householdTimeZone: "America/Chicago",
       setSelectedForecastAccountRef: (ref: unknown) => state.actions.push(["select", ref]),
     },
+  };
+  state.props.onCollapsedChange ??= (next) => {
+    state.collapseChanges.push(next);
+    state.props.collapsed = next;
   };
   const hooks: any[] = [];
   let cursor = 0, dirty = false;
@@ -97,7 +108,7 @@ function harness(rows = [account(1), account(2), account(3)], options: { hidden?
   const render = () => {
     for (let attempts = 0; attempts < 8; attempts++) {
       cursor = 0; dirty = false;
-      tree = expand(mod.exports.AccountBalancesCard());
+      tree = expand(mod.exports.AccountBalancesCard(state.props));
       while (effects.length) effects.shift()!();
       if (!dirty) return tree;
     }
@@ -112,8 +123,9 @@ function harness(rows = [account(1), account(2), account(3)], options: { hidden?
     return visit(tree).replace(/\s+/g, " ").trim();
   };
   const forecast = (name: string) => nodes().find(node => /^View forecast for /i.test(node.props.accessibilityLabel ?? "") && (node.props.accessibilityLabel ?? "").includes(name));
+  const header = () => nodes().find(node => /^(Expand|Collapse) accounts$/i.test(node.props.accessibilityLabel ?? ""));
   render();
-  return { state, render, nodes, text, forecast };
+  return { state, render, nodes, text, forecast, header };
 }
 
 test("Dashboard balances show saved current observations and a distinct available amount", () => {
@@ -242,4 +254,93 @@ test("queued row actions recheck current readiness, display preference and accou
     if (problem === "date") h.state.budget.forecastAccounts = [account(1, { asOfDate: null })];
     h.render(); old.props.onPress(); assert.deepEqual(h.state.actions, [], problem);
   }
+});
+
+test("the Accounts header controls folding and removes the balance body from visible and accessible output", () => {
+  const manual = account(4, { ref: "manual:cash", source: "manual", name: "Manual holiday", aliases: ["manual:cash"], asOfDate: "2026-11-09" });
+  const h = harness([account(1, { currentBalance: 1234.56, availableBalance: 1200 }), manual], { props: { collapsed: true } });
+  assert.match(h.text(), /Accounts/);
+  const folded = h.header();
+  assert.equal(folded?.props.accessibilityRole, "button");
+  assert.equal(folded?.props.accessibilityLabel, "Expand accounts");
+  assert.equal(folded?.props["aria-expanded"], false);
+  assert.equal(folded?.props.accessibilityState?.expanded, false);
+  const output = () => h.text() + " " + h.nodes().map(node => [node.props.accessibilityLabel, node.props.accessibilityHint, node.props.title, node.props["aria-label"]].filter(Boolean).join(" ")).join(" ");
+  assert.doesNotMatch(output(), /Saved account 1|Manual holiday|Manual accounts|1,234\.56|1,200\.00|Nov 11|2026-11-11|Current balances|Current balance|Available/i);
+  assert.ok(folded?.props.onPress);
+  folded.props.onPress(); h.render();
+  assert.deepEqual(h.state.collapseChanges, [false]);
+  assert.match(h.text(), /Saved account 1/);
+  assert.match(h.text(), /1,234\.56/);
+  assert.match(h.text(), /Available \$1,200\.00/);
+  assert.match(h.text(), /Bank balances as of Nov 11, 2026/);
+  assert.equal(h.header()?.props.accessibilityLabel, "Collapse accounts");
+  assert.equal(h.header()?.props["aria-expanded"], true);
+  assert.equal(h.header()?.props.accessibilityState?.expanded, true);
+  const queuedRow = h.forecast("Saved account 1");
+  h.header()!.props.onPress(); h.render();
+  assert.deepEqual(h.state.collapseChanges, [false, true]);
+  assert.doesNotMatch(output(), /Saved account 1|Manual accounts|1,234\.56|1,200\.00|Nov 11|Current balance|Available/i);
+  queuedRow?.props.onPress?.();
+  assert.deepEqual(h.state.actions, [], "a queued action cannot open a row removed by folding");
+});
+
+test("folding Accounts preserves the independent Manual accounts expansion when reopened", () => {
+  const manual = account(4, { ref: "manual:cash", source: "manual", name: "Manual holiday", aliases: ["manual:cash"], asOfDate: "2026-11-09" });
+  const h = harness([account(1), manual]);
+  const manualToggle = () => h.nodes().find(node => /Manual accounts/i.test(node.props.accessibilityLabel ?? ""));
+  assert.doesNotMatch(h.text(), /Manual holiday/);
+  manualToggle()!.props.onPress(); h.render();
+  assert.match(h.text(), /Manual holiday/);
+  h.header()!.props.onPress(); h.render();
+  assert.doesNotMatch(h.text(), /Manual holiday|Manual accounts|Saved account 1/);
+  h.header()!.props.onPress(); h.render();
+  assert.match(h.text(), /Manual holiday/);
+  assert.match(h.text(), /As of Nov 9, 2026/);
+  assert.equal(manualToggle()?.props["aria-expanded"], true);
+  assert.equal(manualToggle()?.props.accessibilityState?.expanded, true);
+  manualToggle()!.props.onPress(); h.render();
+  assert.doesNotMatch(h.text(), /Manual holiday/);
+  assert.equal(h.header()?.props["aria-expanded"], true, "Manual accounts does not fold the outer card");
+});
+
+test("reopening a folded Accounts card respects current money privacy without changing balances", () => {
+  const rows = [account(1, { currentBalance: 1234.56, availableBalance: 1200 })], original = structuredClone(rows);
+  const h = harness(rows, { hidden: true, props: { collapsed: true } });
+  h.header()!.props.onPress(); h.render();
+  const output = h.text() + " " + h.nodes().map(node => [node.props.accessibilityLabel, node.props["aria-label"], JSON.stringify(node.props.accessibilityValue)].filter(Boolean).join(" ")).join(" ");
+  assert.doesNotMatch(output, /1,234\.56|1234\.56|1,200\.00|1200/);
+  assert.match(output, /••••/);
+  h.header()!.props.onPress(); h.render();
+  h.state.hidden = false; h.render();
+  assert.doesNotMatch(h.text(), /1,234\.56|1,200\.00/);
+  h.header()!.props.onPress(); h.render();
+  assert.match(h.text(), /1,234\.56/);
+  assert.match(h.text(), /1,200\.00/);
+  assert.deepEqual(rows, original);
+});
+
+test("queued Accounts headers reject changed actors, households, A-B-A visits and disabled controls", () => {
+  const h = harness([account(1)]), firstHeader = h.header();
+  assert.ok(firstHeader?.props.onPress);
+  h.state.user = { id: "actor-b" }; h.render();
+  firstHeader.props.onPress(); h.render();
+  assert.deepEqual(h.state.collapseChanges, []);
+  const actorBHeader = h.header();
+  h.state.budget.activeHousehold = { householdId: "home-b", budgetId: "budget-b" }; h.render();
+  actorBHeader?.props.onPress?.(); h.render();
+  assert.deepEqual(h.state.collapseChanges, []);
+  h.state.user = { id: "actor-a" };
+  h.state.budget.activeHousehold = { householdId: "home-a", budgetId: "budget-a" }; h.render();
+  firstHeader.props.onPress(); h.render();
+  assert.deepEqual(h.state.collapseChanges, [], "returning to the same owner does not reactivate an old header");
+  const enabledHeader = h.header();
+  h.state.props.collapseDisabled = true; h.render();
+  assert.equal(h.header()?.props.disabled, true);
+  assert.equal(h.header()?.props.accessibilityState?.disabled, true);
+  enabledHeader?.props.onPress?.(); h.header()?.props.onPress?.(); h.render();
+  assert.deepEqual(h.state.collapseChanges, []);
+  h.state.props.collapseDisabled = false; h.render();
+  h.header()!.props.onPress(); h.render();
+  assert.deepEqual(h.state.collapseChanges, [true]);
 });

@@ -27,23 +27,27 @@ export function useDashboardLayoutPreferences() {
     userId && householdId
       ? JSON.stringify([userId, householdId, demoMode])
       : null;
-  const scopeRef = useRef(scope);
-  scopeRef.current = scope;
+  // A fresh epoch also distinguishes A → B → A from the earlier A instance.
+  const scopeRef = useRef({ scope, generation: 0 });
+  const generation = scopeRef.current.generation + Number(scopeRef.current.scope !== scope);
+  scopeRef.current = { scope, generation };
   const controllerRef = useRef<DashboardLayoutController | null>(null);
   const [snapshot, setSnapshot] = useState<{
     scope: string | null;
+    generation: number;
     value: DashboardLayoutState;
-  }>({ scope: null, value: initialDashboardLayoutState() });
+  }>({ scope: null, generation: -1, value: initialDashboardLayoutState() });
 
   useEffect(() => {
     if (!userId || !householdId || !scope) {
       controllerRef.current = null;
-      setSnapshot({ scope, value: initialDashboardLayoutState(false) });
+      setSnapshot({ scope, generation, value: initialDashboardLayoutState(false) });
       return;
     }
     const controller: DashboardLayoutController = new DashboardLayoutController({
       isCurrent: (): boolean =>
-        scopeRef.current === scope && controllerRef.current === controller,
+        scopeRef.current.scope === scope && scopeRef.current.generation === generation
+        && controllerRef.current === controller,
       remoteEnabled: !demoMode,
       readLocal: async () => {
         const local = await readInterfacePreferences(userId, householdId, true);
@@ -59,10 +63,11 @@ export function useDashboardLayoutPreferences() {
           .eq("user_id", userId)
           .maybeSingle();
         if (error) throw error;
-        const layouts = data?.dashboard_layouts;
-        return layouts && typeof layouts === "object" && !Array.isArray(layouts)
-          ? (layouts as Record<string, unknown>)[householdId]
-          : undefined;
+        if (!data) return undefined;
+        const layouts = data.dashboard_layouts;
+        if (!layouts || typeof layouts !== "object" || Array.isArray(layouts))
+          throw new Error("Invalid saved Dashboard preferences");
+        return (layouts as Record<string, unknown>)[householdId];
       },
       writeLocal: (layout, pendingSync, canWrite) =>
         updateInterfacePreferences(
@@ -93,16 +98,16 @@ export function useDashboardLayoutPreferences() {
             if (error) throw error;
           },
         }),
-      onChange: (value) => setSnapshot({ scope, value }),
+      onChange: (value) => setSnapshot({ scope, generation, value }),
     });
     controllerRef.current = controller;
-    setSnapshot({ scope, value: controller.getSnapshot() });
+    setSnapshot({ scope, generation, value: controller.getSnapshot() });
     void controller.load();
     return () => {
       controller.dispose();
       if (controllerRef.current === controller) controllerRef.current = null;
     };
-  }, [demoMode, householdId, scope, userId]);
+  }, [demoMode, generation, householdId, scope, userId]);
 
   const updateLayout = useCallback(
     (
@@ -110,22 +115,24 @@ export function useDashboardLayoutPreferences() {
         | DashboardLayoutPreference
         | ((current: DashboardLayoutPreference) => DashboardLayoutPreference),
     ) => {
-      if (scopeRef.current === scope) controllerRef.current?.update(value);
+      if (scopeRef.current.scope !== scope || scopeRef.current.generation !== generation) return;
+      const controller = controllerRef.current;
+      if (controller?.getSnapshot().ready && !controller.getSnapshot().loading) controller.update(value);
     },
-    [scope],
+    [generation, scope],
   );
   const resetLayout = useCallback(
     () => updateLayout(DEFAULT_DASHBOARD_LAYOUT),
     [updateLayout],
   );
   const retrySave = useCallback(() => {
-    if (scopeRef.current === scope) controllerRef.current?.retrySave();
-  }, [scope]);
+    if (scopeRef.current.scope === scope && scopeRef.current.generation === generation) controllerRef.current?.retrySave();
+  }, [generation, scope]);
   const retryLoad = useCallback(() => {
-    if (scopeRef.current === scope) void controllerRef.current?.retryLoad();
-  }, [scope]);
+    if (scopeRef.current.scope === scope && scopeRef.current.generation === generation) void controllerRef.current?.retryLoad();
+  }, [generation, scope]);
   const current =
-    snapshot.scope === scope
+    snapshot.scope === scope && snapshot.generation === generation
       ? snapshot.value
       : initialDashboardLayoutState(Boolean(scope));
   return { ...current, updateLayout, resetLayout, retrySave, retryLoad };

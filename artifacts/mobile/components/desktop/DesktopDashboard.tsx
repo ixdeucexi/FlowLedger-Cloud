@@ -22,7 +22,7 @@ import Svg, {
 import { AddBillModal } from "@/components/AddBillModal";
 import { AppText } from "@/components/AppText";
 import { AccountBalancesCard } from "@/components/AccountBalancesCard";
-import { DashboardSections } from "@/components/DashboardSections";
+import { DashboardSections, DESKTOP_DASHBOARD_WIDGET_IDS } from "@/components/DashboardSections";
 import { DashboardFavoriteActions } from "@/components/DashboardFavoriteActions";
 import { DashboardLayoutStatus } from "@/components/DashboardLayoutStatus";
 import { DashboardCustomizer } from "@/components/DashboardCustomizer";
@@ -38,6 +38,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useBudget, type Bill, type Goal, type IncomeItem } from "@/context/BudgetContext";
 import { useDashboardFinancialSnapshot } from "@/context/DashboardFinancialSnapshotContext";
 import { useDashboardLayoutPreferences } from "@/hooks/useDashboardLayoutPreferences";
+import { setDashboardAccountsCollapsed } from "@/lib/dashboardCustomization";
 import { useSetupReadiness } from "@/hooks/useSetupReadiness";
 import {
   isDashboardFinancialSnapshotReadyForScope,
@@ -744,7 +745,11 @@ function DesktopDashboardContent({
         </View>
       </View>
 
-      {!settings.onboarding_completed ? (
+
+
+      {!customizerOpen ? <DashboardLayoutStatus {...dashboardPreferences} /> : null}
+      <DashboardSections desktop layout={dashboardLayout} ready={dashboardPreferences.ready} loading={dashboardPreferences.loading} onCustomize={() => setCustomizerOpen(true)} onReset={resetDashboardLayout} sections={{
+setup: (!settings.onboarding_completed ? (
         <View style={styles.setupCard}>
           <View style={styles.setupIcon}>
             <Feather name="compass" size={20} color="#c4b5fd" />
@@ -770,11 +775,8 @@ function DesktopDashboardContent({
             <Feather name="arrow-right" size={16} color="#ffffff" />
           </Pressable>
         </View>
-      ) : null}
-
-      {!customizerOpen ? <DashboardLayoutStatus {...dashboardPreferences} /> : null}
-      <DashboardSections desktop layout={dashboardLayout} sections={{
-overview: (<View style={{ width: "100%", gap: 16 }}><SurfaceCard
+      ) : null),
+overview: (<SurfaceCard
             accent="blue"
             style={styles.accountCardWrap}
             accessibilityLabel={`${checkingBalanceAccessibilityLabel}. Flow Score ${algorithmSuite.flowScore.score}.`}
@@ -840,7 +842,12 @@ overview: (<View style={{ width: "100%", gap: 16 }}><SurfaceCard
                 </Pressable>
               </View>
             </View>
-          </SurfaceCard><AccountBalancesCard /></View>),
+          </SurfaceCard>),
+accounts: (<AccountBalancesCard
+  collapsed={dashboardLayout.accountsCollapsed}
+  collapseDisabled={dashboardPreferences.loading || !dashboardPreferences.ready}
+  onCollapsedChange={() => updateDashboardLayout(current => setDashboardAccountsCollapsed(current, !current.accountsCollapsed))}
+/>),
 snapshot: (<View style={styles.metricGrid}>
         <MetricCard
           label="Available to Spend"
@@ -1288,7 +1295,8 @@ savings_goals: (<SurfaceCard
       {customizerOpen ? <DashboardCustomizer
         visible={customizerOpen}
         layout={dashboardLayout}
-        loading={dashboardPreferences.loading}
+        availableWidgetIds={DESKTOP_DASHBOARD_WIDGET_IDS}
+        loading={dashboardPreferences.loading || !dashboardPreferences.ready}
         saving={dashboardPreferences.saving}
         saveError={dashboardPreferences.saveError}
         loadError={dashboardPreferences.loadError}

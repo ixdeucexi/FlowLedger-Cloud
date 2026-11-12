@@ -43,6 +43,7 @@ import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useDashboardLayoutPreferences } from "@/hooks/useDashboardLayoutPreferences";
+import { setDashboardAccountsCollapsed } from "@/lib/dashboardCustomization";
 import { useSetupReadiness } from "@/hooks/useSetupReadiness";
 import { applyCategoryBudgetMove, buildZeroBudgetSummary } from "@/lib/categoryPlanning";
 import { saveCategoryBudgets as saveCategoryBudgetsRemote } from "@/lib/categoryBudgetStore";
@@ -987,25 +988,10 @@ function MobileDashboardContent({
         </View>
       </View>
       <DataFreshnessLabel inset compact />
-      {!settings.onboarding_completed && (
-        <View style={[styles.setupCard, { backgroundColor: c.card, borderColor: c.border }]}>
-          <View style={styles.setupHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.setupTitle, { color: c.foreground }]}>Continue setup with Flo</Text>
-              <Text style={[styles.setupDesc, { color: c.mutedForeground }]}>Flo will pick up where you left off. {setupReadiness.completeCount} of {setupReadiness.stages.length} stages complete</Text>
-            </View>
-          </View>
-          {setupReadiness.stages.map(stageItem => (
-            <View key={stageItem.id} style={styles.setupStep}>
-              <Feather name={stageItem.complete ? "check-circle" : "circle"} size={15} color={stageItem.complete ? c.success : c.mutedForeground} />
-              <Text style={[styles.setupStepText, { color: stageItem.complete ? c.mutedForeground : c.foreground }]}>{stageItem.label}</Text>
-            </View>
-          ))}
-          <Pressable accessibilityRole="button" onPress={() => router.push("/setup" as any)} style={[styles.setupButton, { backgroundColor: c.primary }]}>
-            <Text style={[styles.setupButtonText, { color: c.primaryForeground }]}>{setupReadiness.isComplete ? "Review and finish" : "Continue with Flo"}</Text>
-          </Pressable>
-        </View>
-      )}
+      {!dashboardPreferences.ready || dashboardLayout.hidden.includes("overview") ? (
+        <View style={{ alignSelf: "flex-end" }}><MoneyPrivacyToggle label /></View>
+      ) : null}
+
 
       {pendingFloCharge ? <Modal
         visible={Boolean(pendingFloCharge)}
@@ -1095,8 +1081,84 @@ function MobileDashboardContent({
       /> : null}
 
       {!customizerOpen ? <DashboardLayoutStatus {...dashboardPreferences} /> : null}
-      <DashboardSections layout={dashboardLayout} sections={{
-overview: (<View style={{ width: "100%", gap: 10 }}><View style={styles.referenceCommandHeroFlipShell}>
+      <DashboardSections layout={dashboardLayout} ready={dashboardPreferences.ready} loading={dashboardPreferences.loading} onCustomize={() => setCustomizerOpen(true)} onReset={resetDashboardLayout} sections={{
+setup: (!settings.onboarding_completed && (
+        <View style={[styles.setupCard, { backgroundColor: c.card, borderColor: c.border }]}>
+          <View style={styles.setupHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.setupTitle, { color: c.foreground }]}>Continue setup with Flo</Text>
+              <Text style={[styles.setupDesc, { color: c.mutedForeground }]}>Flo will pick up where you left off. {setupReadiness.completeCount} of {setupReadiness.stages.length} stages complete</Text>
+            </View>
+          </View>
+          {setupReadiness.stages.map(stageItem => (
+            <View key={stageItem.id} style={styles.setupStep}>
+              <Feather name={stageItem.complete ? "check-circle" : "circle"} size={15} color={stageItem.complete ? c.success : c.mutedForeground} />
+              <Text style={[styles.setupStepText, { color: stageItem.complete ? c.mutedForeground : c.foreground }]}>{stageItem.label}</Text>
+            </View>
+          ))}
+          <Pressable accessibilityRole="button" onPress={() => router.push("/setup" as any)} style={[styles.setupButton, { backgroundColor: c.primary }]}>
+            <Text style={[styles.setupButtonText, { color: c.primaryForeground }]}>{setupReadiness.isComplete ? "Review and finish" : "Continue with Flo"}</Text>
+          </Pressable>
+        </View>
+      )),
+zero_based_budget: (isCommandWide && settings.zeroBasedBudgetEnabled && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open this month's zero-based budget"
+          onPress={() => router.push("/(tabs)/category-budget" as any)}
+          style={({ pressed }) => [styles.zeroBudgetDashboardCard, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.84 : 1 }]}
+        >
+          <View style={styles.zeroBudgetDashboardHeader}>
+            <View style={[styles.categoryPlanIcon, { backgroundColor: c.primary + "18" }]}>
+              <Feather name="pie-chart" size={16} color={c.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.zeroBudgetDashboardTitle, { color: c.foreground }]}>Zero-Based Budget</Text>
+              <Text style={[styles.zeroBudgetDashboardSub, { color: c.mutedForeground }]}>{MONTH_FULL[currentMonth]} · ${postedIncome.toFixed(0)} received so far</Text>
+            </View>
+            <View style={[styles.categoryPlanBadge, { backgroundColor: Math.abs(zeroBudgetLeftToAssign) <= 0.01 ? c.success + "18" : zeroBudgetLeftToAssign > 0 ? c.warning + "18" : c.destructive + "18" }]}>
+              <Text style={[styles.categoryPlanBadgeText, { color: Math.abs(zeroBudgetLeftToAssign) <= 0.01 ? c.success : zeroBudgetLeftToAssign > 0 ? c.warning : c.destructive }]}>
+                {Math.abs(zeroBudgetLeftToAssign) <= 0.01 ? "Balanced" : zeroBudgetLeftToAssign > 0 ? "To assign" : "Overassigned"}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.zeroBudgetDashboardStats}>
+            <ZeroBudgetStat label="Income" value={zeroBudgetIncome} color={c.success} />
+            <ZeroBudgetStat label="Assigned" value={zeroBudgetSummary.assigned} color={c.primary} />
+            <ZeroBudgetStat label={zeroBudgetLeftToAssign < -0.01 ? "Over" : "Left"} value={Math.abs(zeroBudgetLeftToAssign)} color={Math.abs(zeroBudgetLeftToAssign) <= 0.01 ? c.success : zeroBudgetLeftToAssign > 0 ? c.warning : c.destructive} />
+          </View>
+          <View style={styles.zeroBudgetDashboardAction}>
+            <Text style={[styles.categoryBudgetEditText, { color: c.primary }]}>{canEditHousehold ? "Assign or move money" : "View category assignments"}</Text>
+            <Feather name="chevron-right" size={15} color={c.primary} />
+          </View>
+        </Pressable>
+      )),
+breathing_room: (<Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open the breathing room outlook"
+        onPress={() => {
+          setYearNegSchedule([]);
+          setNegCalendarVisible(true);
+        }}
+        style={({ pressed }) => [styles.negWarning, { backgroundColor: c.primary + "18", borderRadius: colors.radius, opacity: pressed ? 0.8 : 1 }]}
+      >
+        <Feather name={firstYearNegEntry ? "trending-up" : "calendar"} size={15} color={c.primary} />
+        <Text style={[styles.negWarningText, { color: c.primary }]}>
+          {!outlookReady
+            ? `Review your ${settings.forecast_horizon_months}-month breathing room outlook — tap to calculate`
+            : firstYearNegEntry
+              ? <>
+                  Build more breathing room by{" "}
+                  <Text style={{ fontFamily: "Inter_700Bold" }}>
+                    {formatMonthDay(firstYearNegEntry.month, firstYearNegEntry.year, firstYearNegEntry.firstNegDay)}
+                  </Text>
+                  {" "}— tap to see full outlook
+                </>
+              : `No below-zero day found in your ${settings.forecast_horizon_months}-month outlook — tap to review`}
+        </Text>
+        <Feather name="chevron-right" size={14} color={c.primary} />
+      </Pressable>),
+overview: (<View style={styles.referenceCommandHeroFlipShell}>
           <Animated.View
             pointerEvents={flipped ? "none" : "auto"}
             style={[
@@ -1295,7 +1357,12 @@ overview: (<View style={{ width: "100%", gap: 10 }}><View style={styles.referenc
               </Pressable>
             )}
           </Animated.View>
-      </View><AccountBalancesCard /></View>),
+      </View>),
+accounts: (<AccountBalancesCard
+  collapsed={dashboardLayout.accountsCollapsed}
+  collapseDisabled={dashboardPreferences.loading || !dashboardPreferences.ready}
+  onCollapsedChange={() => updateDashboardLayout(current => setDashboardAccountsCollapsed(current, !current.accountsCollapsed))}
+/>),
 snapshot: (<View style={[styles.dashboardSnapshotCard, { backgroundColor: c.card, borderColor: c.border }]}>
         <Pressable
           accessibilityRole="button"
@@ -1441,7 +1508,7 @@ quick_actions: (<DashboardFavoriteActions layout={dashboardLayout} canEdit={canE
         visible={customizerOpen}
         layout={dashboardLayout}
         availableWidgetIds={MOBILE_DASHBOARD_WIDGET_IDS}
-        loading={dashboardPreferences.loading}
+        loading={dashboardPreferences.loading || !dashboardPreferences.ready}
         saving={dashboardPreferences.saving}
         saveError={dashboardPreferences.saveError}
         loadError={dashboardPreferences.loadError}
@@ -1452,38 +1519,7 @@ quick_actions: (<DashboardFavoriteActions layout={dashboardLayout} canEdit={canE
         onClose={() => setCustomizerOpen(false)}
       /> : null}
 
-      {isCommandWide && settings.zeroBasedBudgetEnabled && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open this month's zero-based budget"
-          onPress={() => router.push("/(tabs)/category-budget" as any)}
-          style={({ pressed }) => [styles.zeroBudgetDashboardCard, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.84 : 1 }]}
-        >
-          <View style={styles.zeroBudgetDashboardHeader}>
-            <View style={[styles.categoryPlanIcon, { backgroundColor: c.primary + "18" }]}>
-              <Feather name="pie-chart" size={16} color={c.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.zeroBudgetDashboardTitle, { color: c.foreground }]}>Zero-Based Budget</Text>
-              <Text style={[styles.zeroBudgetDashboardSub, { color: c.mutedForeground }]}>{MONTH_FULL[currentMonth]} · ${postedIncome.toFixed(0)} received so far</Text>
-            </View>
-            <View style={[styles.categoryPlanBadge, { backgroundColor: Math.abs(zeroBudgetLeftToAssign) <= 0.01 ? c.success + "18" : zeroBudgetLeftToAssign > 0 ? c.warning + "18" : c.destructive + "18" }]}>
-              <Text style={[styles.categoryPlanBadgeText, { color: Math.abs(zeroBudgetLeftToAssign) <= 0.01 ? c.success : zeroBudgetLeftToAssign > 0 ? c.warning : c.destructive }]}>
-                {Math.abs(zeroBudgetLeftToAssign) <= 0.01 ? "Balanced" : zeroBudgetLeftToAssign > 0 ? "To assign" : "Overassigned"}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.zeroBudgetDashboardStats}>
-            <ZeroBudgetStat label="Income" value={zeroBudgetIncome} color={c.success} />
-            <ZeroBudgetStat label="Assigned" value={zeroBudgetSummary.assigned} color={c.primary} />
-            <ZeroBudgetStat label={zeroBudgetLeftToAssign < -0.01 ? "Over" : "Left"} value={Math.abs(zeroBudgetLeftToAssign)} color={Math.abs(zeroBudgetLeftToAssign) <= 0.01 ? c.success : zeroBudgetLeftToAssign > 0 ? c.warning : c.destructive} />
-          </View>
-          <View style={styles.zeroBudgetDashboardAction}>
-            <Text style={[styles.categoryBudgetEditText, { color: c.primary }]}>{canEditHousehold ? "Assign or move money" : "View category assignments"}</Text>
-            <Feather name="chevron-right" size={15} color={c.primary} />
-          </View>
-        </Pressable>
-      )}
+
 
       {/* ── HERO: flip card — front = Balance Today, back = Savings ── */}
 
@@ -1495,32 +1531,7 @@ quick_actions: (<DashboardFavoriteActions layout={dashboardLayout} canEdit={canE
       {/* Row 2: Debt — full width */}
 
 
-      {/* ── Breathing-room opportunity (tappable → 12-month outlook) ── */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Open the breathing room outlook"
-        onPress={() => {
-          setYearNegSchedule([]);
-          setNegCalendarVisible(true);
-        }}
-        style={({ pressed }) => [styles.negWarning, { backgroundColor: c.primary + "18", borderRadius: colors.radius, opacity: pressed ? 0.8 : 1 }]}
-      >
-        <Feather name={firstYearNegEntry ? "trending-up" : "calendar"} size={15} color={c.primary} />
-        <Text style={[styles.negWarningText, { color: c.primary }]}>
-          {!outlookReady
-            ? `Review your ${settings.forecast_horizon_months}-month breathing room outlook — tap to calculate`
-            : firstYearNegEntry
-              ? <>
-                  Build more breathing room by{" "}
-                  <Text style={{ fontFamily: "Inter_700Bold" }}>
-                    {formatMonthDay(firstYearNegEntry.month, firstYearNegEntry.year, firstYearNegEntry.firstNegDay)}
-                  </Text>
-                  {" "}— tap to see full outlook
-                </>
-              : `No below-zero day found in your ${settings.forecast_horizon_months}-month outlook — tap to review`}
-        </Text>
-        <Feather name="chevron-right" size={14} color={c.primary} />
-      </Pressable>
+
 
 
       {/* ── Upcoming Bills ── */}

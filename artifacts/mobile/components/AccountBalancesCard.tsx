@@ -19,7 +19,11 @@ const asOf = (date: string | null) => date && validDate(date)
   : "Balance date unavailable";
 
 /** Observed cash balances only; the existing catalog owns identity and scope. */
-export function AccountBalancesCard() {
+export function AccountBalancesCard({ collapsed = false, onCollapsedChange, collapseDisabled = false }: {
+  collapsed?: boolean;
+  onCollapsedChange?: (collapsed: boolean) => void;
+  collapseDisabled?: boolean;
+} = {}) {
   const c = useColors();
   const router = useRouter();
   const { user } = useAuth();
@@ -32,19 +36,21 @@ export function AccountBalancesCard() {
     ? JSON.stringify([user.id, activeHousehold.householdId, activeHousehold.budgetId])
     : null;
   const ready = Boolean(scope && startupCoreReady && !loading && !loadError);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [manualExpandedScope, setManualExpandedScope] = useState<string | null>(null);
   useEffect(() => { setManualExpandedScope(null); }, [scope]);
   const navigationReady = accountForecastReady && forecastVisibilityReady && !accountForecastError && !forecastVisibilityError;
   const latest = useRef({ scope, generation: 0, ready, forecastAccounts, navigationReady,
-    hiddenForecastAccountRefs, setSelectedForecastAccountRef });
+    hiddenForecastAccountRefs, setSelectedForecastAccountRef, collapsed, collapseDisabled, onCollapsedChange });
   const generation = latest.current.generation + Number(latest.current.scope !== scope);
   latest.current = { scope, generation, ready, forecastAccounts, navigationReady,
-    hiddenForecastAccountRefs, setSelectedForecastAccountRef };
+    hiddenForecastAccountRefs, setSelectedForecastAccountRef, collapsed, collapseDisabled, onCollapsedChange };
 
   const openForecast = (ref: ForecastAccountRef) => {
     const current = latest.current;
     const account = current.forecastAccounts.find(row => row.ref === ref);
-    if (current.scope !== scope || current.generation !== generation || !current.ready
+    if (!mounted.current || current.collapsed || current.scope !== scope || current.generation !== generation || !current.ready
       || !current.navigationReady
       || current.hiddenForecastAccountRefs.includes(ref) || !account?.active
       || account.unavailableReason || !finite(account.currentBalance) || !validDate(account.asOfDate)) return;
@@ -115,10 +121,26 @@ export function AccountBalancesCard() {
 
   return (
     <View accessibilityLabel="Account balances" style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
-      <View style={styles.header}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={collapsed ? "Expand accounts" : "Collapse accounts"}
+        aria-expanded={!collapsed}
+        accessibilityState={{ expanded: !collapsed, disabled: collapseDisabled || !onCollapsedChange }}
+        disabled={collapseDisabled || !onCollapsedChange}
+        onPress={() => {
+          const current = latest.current;
+          if (!mounted.current || !scope || current.scope !== scope || current.generation !== generation || current.collapseDisabled) return;
+          current.onCollapsedChange?.(!current.collapsed);
+        }}
+        style={styles.header}
+      >
         <AppText tone="title" style={[styles.title, { color: c.foreground }]}>Accounts</AppText>
-        <AppText style={[styles.columnLabel, { color: c.mutedForeground }]}>Current balances</AppText>
-      </View>
+        <View style={styles.headerActions}>
+          {!collapsed ? <AppText style={[styles.columnLabel, { color: c.mutedForeground }]}>Current balances</AppText> : null}
+          <Feather name={collapsed ? "chevron-down" : "chevron-up"} size={18} color={c.mutedForeground} />
+        </View>
+      </Pressable>
+      {!collapsed ? <>
       {loadError ? <AppText accessibilityRole="alert" style={[styles.message, { color: c.mutedForeground }]}>Account balances couldn't be loaded. Try refreshing.</AppText>
         : !ready ? <AppText style={[styles.message, { color: c.mutedForeground }]}>Loading account balances…</AppText>
           : !accounts.length ? <AppText style={[styles.message, { color: c.mutedForeground }]}>No checking or savings accounts yet.</AppText>
@@ -132,7 +154,7 @@ export function AccountBalancesCard() {
                   aria-expanded={showManual}
                   accessibilityState={{ expanded: showManual }}
                   onPress={() => {
-                    if (latest.current.scope !== scope || latest.current.generation !== generation || !latest.current.ready) return;
+                    if (!mounted.current || latest.current.collapsed || latest.current.scope !== scope || latest.current.generation !== generation || !latest.current.ready) return;
                     setManualExpandedScope(previous => previous === scope ? null : scope);
                   }}
                   style={[styles.manualToggle, { borderTopColor: c.border }]}>
@@ -142,13 +164,15 @@ export function AccountBalancesCard() {
               ) : null}
               {showManual ? manual.map(row) : null}
             </>}
+      </> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: { width: "100%", minWidth: 0, borderWidth: 1, borderRadius: 22, paddingHorizontal: 16 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingTop: 14, paddingBottom: 6 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, minHeight: 54, paddingVertical: 14 },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   title: { fontSize: 17, fontWeight: "700" },
   columnLabel: { fontSize: 11 },
   row: { width: "100%", minWidth: 0, minHeight: 60, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 9 },

@@ -30,6 +30,8 @@ export async function dispatchDashboardLayoutSave(dependencies: {
 export type DashboardLayoutState = {
   layout: DashboardLayoutPreference;
   loading: boolean;
+  /** A scoped saved layout, or confirmed absence, has been read. */
+  ready: boolean;
   saving: boolean;
   loadError: string | null;
   saveError: string | null;
@@ -40,6 +42,7 @@ export function initialDashboardLayoutState(
   return {
     layout: normalizeDashboardLayout(DEFAULT_DASHBOARD_LAYOUT),
     loading,
+    ready: false,
     saving: false,
     loadError: null,
     saveError: null,
@@ -93,16 +96,29 @@ export class DashboardLayoutController {
     const revision = this.revision;
     const dirtyAtStart = this.dirty;
     this.publish({ loading: true, loadError: null });
-    const [local, remote] = await Promise.allSettled([
-      this.dependencies.readLocal(),
-      this.dependencies.remoteEnabled
-        ? this.dependencies.readRemote()
-        : Promise.resolve(undefined),
-    ]);
+    const isLayout = (value: unknown): value is Record<string, unknown> =>
+      Boolean(value && typeof value === "object" && !Array.isArray(value));
+    const localRead = Promise.resolve().then(() => this.dependencies.readLocal()).then(value => {
+      if (value.layout != null && !isLayout(value.layout)) throw new Error("Invalid saved Dashboard layout");
+      // A verified cache belongs to this exact actor/household. It may render
+      // while the cloud read is pending; an absent cache cannot verify defaults.
+      if (isLayout(value.layout) && this.sameRevision(revision)
+        && generation === this.loadGeneration && !dirtyAtStart && !this.dirty) {
+        this.publish({ layout: normalizeDashboardLayout(value.layout), ready: true });
+      }
+      return value;
+    });
+    const remoteRead = this.dependencies.remoteEnabled
+      ? Promise.resolve().then(() => this.dependencies.readRemote()).then(value => {
+          if (value != null && !isLayout(value)) throw new Error("Invalid account Dashboard layout");
+          return value;
+        })
+      : Promise.resolve(undefined);
+    const [local, remote] = await Promise.allSettled([localRead, remoteRead]);
     if (!this.current() || generation !== this.loadGeneration) return;
     const loadError =
       local.status === "rejected" || remote.status === "rejected"
-        ? "Couldn’t load all saved Dashboard preferences. Your current device layout is kept."
+        ? "Couldn’t load all saved Dashboard preferences. Retry loading."
         : null;
     // A retry or delayed hydration must never replace a newer on-screen edit.
     if (!this.sameRevision(revision) || dirtyAtStart || this.dirty) {
@@ -110,14 +126,16 @@ export class DashboardLayoutController {
       return;
     }
     const localValue = local.status === "fulfilled" ? local.value : undefined;
-    const pending =
-      this.dependencies.remoteEnabled &&
-      localValue?.pendingSync === true &&
-      Boolean(
-        localValue.layout &&
-        typeof localValue.layout === "object" &&
-        !Array.isArray(localValue.layout),
-      );
+    const localLayout = isLayout(localValue?.layout) ? localValue.layout : undefined;
+    const ready = Boolean(localLayout) || (this.dependencies.remoteEnabled
+      ? remote.status === "fulfilled"
+      : local.status === "fulfilled");
+    if (!ready) {
+      this.publish({ loading: false, ready: false, loadError });
+      return;
+    }
+    const pending = this.dependencies.remoteEnabled
+      && localValue?.pendingSync === true && Boolean(localLayout);
     const remoteValue =
       remote.status === "fulfilled" ? remote.value : undefined;
     const next = normalizeDashboardLayout(
@@ -125,7 +143,7 @@ export class DashboardLayoutController {
         ? localValue?.layout
         : remoteValue,
     );
-    this.publish({ layout: next, loading: false, loadError });
+    this.publish({ layout: next, ready: true, loading: false, loadError });
     if (pending) {
       this.update(next);
       return;
@@ -161,7 +179,7 @@ export class DashboardLayoutController {
     );
     const revision = ++this.revision;
     this.dirty = true;
-    this.publish({ layout: next, saving: true, saveError: null });
+    this.publish({ layout: next, ready: true, saving: true, saveError: null });
     // Start the local snapshot immediately. A slow remote save must not hold up
     // the newest local edit while this device is offline or the app is reloaded.
     const local = this.dependencies.writeLocal(
@@ -243,6 +261,7 @@ export class DashboardLayoutController {
     this.remoteQueue = this.remoteQueue.catch(() => undefined).then(run);
   }
   retrySave() {
+    if (!this.state.ready) return;
     this.update(this.state.layout);
   }
   retryLoad() {

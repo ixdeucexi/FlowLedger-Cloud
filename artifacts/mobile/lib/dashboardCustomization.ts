@@ -1,7 +1,9 @@
 import { APP_COMMANDS } from "./universalSearch";
 
 export const DASHBOARD_WIDGET_IDS = [
+  "setup",
   "overview",
+  "accounts",
   "snapshot",
   "today_decisions",
   "review_center",
@@ -15,6 +17,8 @@ export const DASHBOARD_WIDGET_IDS = [
   "upcoming_payments",
   "category_budget",
   "savings_goals",
+  "zero_based_budget",
+  "breathing_room",
 ] as const;
 export type DashboardWidgetId = (typeof DASHBOARD_WIDGET_IDS)[number];
 export const DASHBOARD_FAVORITE_ACTION_IDS = [
@@ -37,24 +41,36 @@ export type DashboardLayoutPreference = {
   order: DashboardWidgetId[];
   hidden: DashboardWidgetId[];
   favoriteActions: DashboardFavoriteActionId[];
+  accountsCollapsed: boolean;
 };
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayoutPreference = {
   order: [...DASHBOARD_WIDGET_IDS],
   hidden: [],
   favoriteActions: ["add-transaction", "add-bill", "open-calendar"],
+  accountsCollapsed: false,
 };
 export const DASHBOARD_WIDGETS: Record<
   DashboardWidgetId,
   {
     label: string;
     description: string;
-    required?: boolean;
   }
 > = {
+  setup: {
+    label: "Continue setup with Flo",
+    description: "Your next setup step, when setup is incomplete.",
+  },
+  zero_based_budget: {
+    label: "Zero-Based Budget",
+    description: "Your zero-based plan on wider screens, when enabled.",
+  },
   overview: {
     label: "Money overview",
     description: "Your balances and the current plan at a glance.",
-    required: true,
+  },
+  accounts: {
+    label: "Accounts",
+    description: "Your account balances and manual account details.",
   },
   snapshot: {
     label: "Money snapshot",
@@ -63,7 +79,6 @@ export const DASHBOARD_WIDGETS: Record<
   today_decisions: {
     label: "Today’s Decisions",
     description: "The most useful next actions from your current plan.",
-    required: true,
   },
   review_center: {
     label: "Review Center",
@@ -109,12 +124,25 @@ export const DASHBOARD_WIDGETS: Record<
     label: "Savings goals",
     description: "Your goals and progress on desktop.",
   },
+  breathing_room: {
+    label: "Breathing room",
+    description: "Your protected-day outlook and next stability step.",
+  },
 };
 const LEGACY_IDS: readonly DashboardWidgetId[] = [
   "today_decisions",
   "review_center",
   "reports_insights",
 ];
+const NEW_WIDGET_IDS: readonly DashboardWidgetId[] = [
+  "setup",
+  "zero_based_budget",
+  "accounts",
+  "breathing_room",
+];
+const ORIGINAL_WIDGET_IDS = DASHBOARD_WIDGET_IDS.filter(
+  (id) => !NEW_WIDGET_IDS.includes(id),
+);
 function isDashboardWidgetId(value: unknown): value is DashboardWidgetId {
   return (
     typeof value === "string" &&
@@ -139,37 +167,58 @@ export function normalizeDashboardLayout(
   const requested = Array.isArray(candidate.order)
     ? [...new Set(candidate.order.filter(isDashboardWidgetId))]
     : [];
-  // Old versions customized only three utilities. Keep them in their default slot.
+  // Old versions customized only three utilities. Keep their named money-card
+  // anchors instead of relying on catalog positions that change as cards grow.
   const legacy =
     requested.length > 0 && requested.every((id) => LEGACY_IDS.includes(id));
-  const requestedOrder = legacy
+  const requestedOrder: DashboardWidgetId[] = legacy
     ? [
-        ...DASHBOARD_WIDGET_IDS.slice(0, 2),
+        "overview",
+        "snapshot",
         ...requested,
         ...LEGACY_IDS.filter((id) => !requested.includes(id)),
-        ...DASHBOARD_WIDGET_IDS.slice(5),
+        ...ORIGINAL_WIDGET_IDS.filter(
+          (id) =>
+            id !== "overview" && id !== "snapshot" && !LEGACY_IDS.includes(id),
+        ),
       ]
     : requested;
   const order = [
     ...requestedOrder,
-    ...DASHBOARD_WIDGET_IDS.filter((id) => !requestedOrder.includes(id)),
+    ...ORIGINAL_WIDGET_IDS.filter((id) => !requestedOrder.includes(id)),
   ];
+  // Preserve every saved card's relative order. Previously unmanaged cards keep
+  // their original leading/trailing positions, and Accounts follows its former
+  // parent only when it does not already have its own saved position.
+  if (!order.includes("setup")) order.unshift("setup");
+  if (!order.includes("accounts"))
+    order.splice(order.indexOf("overview") + 1, 0, "accounts");
+  if (!order.includes("breathing_room")) order.push("breathing_room");
+  if (!order.includes("zero_based_budget"))
+    order.splice(order.indexOf("breathing_room"), 0, "zero_based_budget");
   const hidden = Array.isArray(candidate.hidden)
-    ? [
-        ...new Set(
-          candidate.hidden.filter(
-            (id) => isDashboardWidgetId(id) && !DASHBOARD_WIDGETS[id].required,
-          ),
-        ),
-      ]
+    ? [...new Set(candidate.hidden.filter(isDashboardWidgetId))]
     : [];
+  // An old hidden overview also hid the Accounts body nested inside it. Once
+  // Accounts has a saved position, the two visibility settings are independent.
+  if (
+    !requested.includes("accounts") &&
+    hidden.includes("overview") &&
+    !hidden.includes("accounts")
+  )
+    hidden.push("accounts");
   const favoriteActions = Array.isArray(candidate.favoriteActions)
     ? [...new Set(candidate.favoriteActions.filter(isFavoriteActionId))].slice(
         0,
         MAX_DASHBOARD_FAVORITES,
       )
     : [...DEFAULT_DASHBOARD_LAYOUT.favoriteActions];
-  return { order, hidden, favoriteActions };
+  return {
+    order,
+    hidden,
+    favoriteActions,
+    accountsCollapsed: candidate.accountsCollapsed === true,
+  };
 }
 export function moveDashboardWidget(
   layout: DashboardLayoutPreference,
@@ -200,14 +249,19 @@ export function setDashboardWidgetVisible(
   visible: boolean,
 ): DashboardLayoutPreference {
   const normalized = normalizeDashboardLayout(layout);
-  if (!isDashboardWidgetId(widgetId) || DASHBOARD_WIDGETS[widgetId].required)
-    return normalized;
+  if (!isDashboardWidgetId(widgetId)) return normalized;
   return {
     ...normalized,
     hidden: visible
       ? normalized.hidden.filter((id) => id !== widgetId)
       : [...new Set([...normalized.hidden, widgetId])],
   };
+}
+export function setDashboardAccountsCollapsed(
+  layout: DashboardLayoutPreference,
+  collapsed: boolean,
+): DashboardLayoutPreference {
+  return normalizeDashboardLayout({ ...layout, accountsCollapsed: collapsed });
 }
 export function visibleDashboardWidgets(layout: DashboardLayoutPreference) {
   const normalized = normalizeDashboardLayout(layout);
@@ -231,16 +285,13 @@ const preset = (
   order: DashboardWidgetId[],
   shown: DashboardWidgetId[],
   favoriteActions: DashboardFavoriteActionId[],
-): DashboardLayoutPreference => ({
-  order: [
-    ...order,
-    ...DASHBOARD_WIDGET_IDS.filter((id) => !order.includes(id)),
-  ],
-  hidden: DASHBOARD_WIDGET_IDS.filter(
-    (id) => !shown.includes(id) && !DASHBOARD_WIDGETS[id].required,
-  ),
-  favoriteActions,
-});
+): DashboardLayoutPreference =>
+  normalizeDashboardLayout({
+    order,
+    hidden: DASHBOARD_WIDGET_IDS.filter((id) => !shown.includes(id)),
+    favoriteActions,
+    accountsCollapsed: false,
+  });
 export const DASHBOARD_LAYOUT_PRESETS = [
   {
     id: "simple",
@@ -248,18 +299,24 @@ export const DASHBOARD_LAYOUT_PRESETS = [
     description: "Your essentials, with fewer cards.",
     layout: preset(
       [
+        "setup",
         "overview",
+        "accounts",
         "snapshot",
         "today_decisions",
         "quick_actions",
         "monthly_plan",
       ],
       [
+        "setup",
         "overview",
+        "accounts",
         "snapshot",
         "today_decisions",
         "quick_actions",
         "monthly_plan",
+        "zero_based_budget",
+        "breathing_room",
       ],
       ["add-transaction", "add-bill", "open-calendar"],
     ),
@@ -270,7 +327,9 @@ export const DASHBOARD_LAYOUT_PRESETS = [
     description: "Keep your next payoff step in view.",
     layout: preset(
       [
+        "setup",
         "overview",
+        "accounts",
         "debt_planner",
         "today_decisions",
         "snapshot",
@@ -279,7 +338,9 @@ export const DASHBOARD_LAYOUT_PRESETS = [
         "monthly_plan",
       ],
       [
+        "setup",
         "overview",
+        "accounts",
         "debt_planner",
         "today_decisions",
         "snapshot",
@@ -287,6 +348,8 @@ export const DASHBOARD_LAYOUT_PRESETS = [
         "stability_path",
         "monthly_plan",
         "review_center",
+        "zero_based_budget",
+        "breathing_room",
       ],
       ["open-snowball", "add-debt", "add-transaction", "open-review"],
     ),
@@ -297,7 +360,9 @@ export const DASHBOARD_LAYOUT_PRESETS = [
     description: "Make space for upcoming plans and goals.",
     layout: preset(
       [
+        "setup",
         "overview",
+        "accounts",
         "monthly_plan",
         "buckets",
         "stability_path",
@@ -308,7 +373,9 @@ export const DASHBOARD_LAYOUT_PRESETS = [
         "upcoming_payments",
       ],
       [
+        "setup",
         "overview",
+        "accounts",
         "monthly_plan",
         "buckets",
         "stability_path",
@@ -318,6 +385,8 @@ export const DASHBOARD_LAYOUT_PRESETS = [
         "savings_goals",
         "upcoming_payments",
         "review_center",
+        "zero_based_budget",
+        "breathing_room",
       ],
       ["open-calendar", "add-goal", "add-income", "add-transaction"],
     ),
@@ -338,6 +407,7 @@ export function dashboardLayoutPreset(layout: DashboardLayoutPreference) {
       order: value.order,
       hidden: DASHBOARD_WIDGET_IDS.filter((id) => value.hidden.includes(id)),
       favoriteActions: value.favoriteActions,
+      accountsCollapsed: value.accountsCollapsed,
     });
   return (
     DASHBOARD_LAYOUT_PRESETS.find(

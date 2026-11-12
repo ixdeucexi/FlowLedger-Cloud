@@ -224,6 +224,7 @@
     ,"lib/dashboardCustomization.ts"
     ,"lib/dashboardCustomization.test.ts"
     ,"lib/dashboardLayoutPersistence.test.ts"
+    ,"lib/dashboardLayoutFlow.test.ts"
     ,"lib/dashboardMonthlyPlan.test.ts"
     ,"lib/todaysDecisions.ts"
     ,"lib/todaysDecisions.test.ts"

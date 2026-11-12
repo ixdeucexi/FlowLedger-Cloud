@@ -132,7 +132,7 @@ endobj
 endobj
 16 0 obj
 <<
-/Author (FlowLedger) /CreationDate (D:20261111195423+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:541cddb6e7a481f5aedd6767a6f1f75b4f7569d2c15d030cf0d14a6109f12f5d) /ModDate (D:20261111195423+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+/Author (FlowLedger) /CreationDate (D:20261112054121+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:0c73dd5ac6bc8f531de7826ef8500bc791b24ef73b237dd8eaf601912ab255b0) /ModDate (D:20261112054121+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
   /Subject (Current Dashboard, Activity, Bills, Forecast, payoff, Flo, and Settings guidance) /Title (FlowLedger User Guide) /Trapped /False
 >>
 endobj
@@ -2645,7 +2645,7 @@ endstream
 endobj
 27 0 obj
 <<
-/Length 6310
+/Length 6450
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -2692,15 +2692,15 @@ BT 1 0 0 1 42 625 Tm (YOUR VIEW AND SHORTCUTS) Tj T* ET
 .160784 .207843 .321569 RG
 .8 w
 n
-58 541 m
-283 541 l
-291.8448 541 299 548.1552 299 557 c
+58 519 m
+283 519 l
+291.8448 519 299 526.1552 299 535 c
 299 591 l
 299 599.8448 291.8448 607 283 607 c
 58 607 l
 49.1552 607 42 599.8448 42 591 c
-42 557 l
-42 548.1552 49.1552 541 58 541 c
+42 535 l
+42 526.1552 49.1552 519 58 519 c
 h
 B*
 .607843 .360784 1 rg
@@ -2716,72 +2716,74 @@ BT /F2 9.5 Tf 11.4 TL ET
 BT 1 0 0 1 67 592 Tm (Customize Dashboard) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 577 Tm (Open Customize dashboard. Start with Simple, Debt Focus) Tj T* ET
-BT 1 0 0 1 56 566 Tm (or Planning Ahead, move cards with the arrows, hide) Tj T* ET
-BT 1 0 0 1 56 555 Tm (optional cards, and choose up to four favorite actions.) Tj T* ET
+BT 1 0 0 1 56 577 Tm (Open Customize dashboard to show, hide or reorder any) Tj T* ET
+BT 1 0 0 1 56 566 Tm (card and choose up to four favorite actions. Tap the) Tj T* ET
+BT 1 0 0 1 56 555 Tm (Accounts header to collapse or expand balances. Reset) Tj T* ET
+BT 1 0 0 1 56 544 Tm (default restores every card. Your choices are saved for you) Tj T* ET
+BT 1 0 0 1 56 533 Tm (in each household.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-58 457 m
-283 457 l
-291.8448 457 299 464.1552 299 473 c
-299 518 l
-299 526.8448 291.8448 534 283 534 c
-58 534 l
-49.1552 534 42 526.8448 42 518 c
-42 473 l
-42 464.1552 49.1552 457 58 457 c
+58 435 m
+283 435 l
+291.8448 435 299 442.1552 299 451 c
+299 496 l
+299 504.8448 291.8448 512 283 512 c
+58 512 l
+49.1552 512 42 504.8448 42 496 c
+42 451 l
+42 442.1552 49.1552 435 58 435 c
 h
 B*
 .607843 .360784 1 rg
 n
-60 517 m
-60 519.2091 58.20914 521 56 521 c
-53.79086 521 52 519.2091 52 517 c
-52 514.7909 53.79086 513 56 513 c
-58.20914 513 60 514.7909 60 517 c
+60 495 m
+60 497.2091 58.20914 499 56 499 c
+53.79086 499 52 497.2091 52 495 c
+52 492.7909 53.79086 491 56 491 c
+58.20914 491 60 492.7909 60 495 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 67 519 Tm (Custom colors) Tj T* ET
+BT 1 0 0 1 67 497 Tm (Custom colors) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 504 Tm (Open Settings > Appearance to choose a custom app) Tj T* ET
-BT 1 0 0 1 56 493 Tm (accent or calendar category color. Pick visually or enter a) Tj T* ET
-BT 1 0 0 1 56 482 Tm (hex code, preview, then Apply. Colors save on this device;) Tj T* ET
-BT 1 0 0 1 56 471 Tm (calendar overrides stay when you change presets.) Tj T* ET
+BT 1 0 0 1 56 482 Tm (Open Settings > Appearance to choose a custom app) Tj T* ET
+BT 1 0 0 1 56 471 Tm (accent or calendar category color. Pick visually or enter a) Tj T* ET
+BT 1 0 0 1 56 460 Tm (hex code, preview, then Apply. Colors save on this device;) Tj T* ET
+BT 1 0 0 1 56 449 Tm (calendar overrides stay when you change presets.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-58 384 m
-283 384 l
-291.8448 384 299 391.1552 299 400 c
-299 434 l
-299 442.8448 291.8448 450 283 450 c
-58 450 l
-49.1552 450 42 442.8448 42 434 c
-42 400 l
-42 391.1552 49.1552 384 58 384 c
+58 362 m
+283 362 l
+291.8448 362 299 369.1552 299 378 c
+299 412 l
+299 420.8448 291.8448 428 283 428 c
+58 428 l
+49.1552 428 42 420.8448 42 412 c
+42 378 l
+42 369.1552 49.1552 362 58 362 c
 h
 B*
 .607843 .360784 1 rg
 n
-60 433 m
-60 435.2091 58.20914 437 56 437 c
-53.79086 437 52 435.2091 52 433 c
-52 430.7909 53.79086 429 56 429 c
-58.20914 429 60 430.7909 60 433 c
+60 411 m
+60 413.2091 58.20914 415 56 415 c
+53.79086 415 52 413.2091 52 411 c
+52 408.7909 53.79086 407 56 407 c
+58.20914 407 60 408.7909 60 411 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 67 435 Tm (Privacy Mode) Tj T* ET
+BT 1 0 0 1 67 413 Tm (Privacy Mode) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 420 Tm (Use the Dashboard eye or Settings > Appearance to hide) Tj T* ET
-BT 1 0 0 1 56 409 Tm (amounts and Flo conversations. Show amounts restores the) Tj T* ET
-BT 1 0 0 1 56 398 Tm (view. Your saved numbers and calculations stay the same.) Tj T* ET
+BT 1 0 0 1 56 398 Tm (Use the Dashboard eye or Settings > Appearance to hide) Tj T* ET
+BT 1 0 0 1 56 387 Tm (amounts and Flo conversations. Show amounts restores the) Tj T* ET
+BT 1 0 0 1 56 376 Tm (view. Your saved numbers and calculations stay the same.) Tj T* ET
 .607843 .360784 1 rg
 BT /F2 9 Tf 10.8 TL ET
 BT 1 0 0 1 313 625 Tm (PERSONAL BUCKETS AND A CLEAR HISTORY) Tj T* ET
@@ -3302,11 +3304,11 @@ xref
 0000049841 00000 n 
 0000056474 00000 n 
 0000066771 00000 n 
-0000073133 00000 n 
+0000073273 00000 n 
 trailer
 <<
 /ID 
-[<42ec02fc5ece5f8d6ca99fad58d650b0><42ec02fc5ece5f8d6ca99fad58d650b0>]
+[<babf235d881f60a7a00334f4c815e7ad><babf235d881f60a7a00334f4c815e7ad>]
 % ReportLab generated PDF document -- digest (opensource)
 
 /Info 16 0 R
@@ -3314,5 +3316,5 @@ trailer
 /Size 29
 >>
 startxref
-82586
+82726
 %%EOF
