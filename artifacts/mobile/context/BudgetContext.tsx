@@ -1,5 +1,5 @@
 import { plannedTransferScheduledDate, normalizePlannedTransferData, normalizePlannedTransfer, normalizePlannedTransferOccurrence, mergePlannedTransferRows, type PlannedAccountTransfer, type PlannedTransferOccurrence, type PlannedTransferPatch, type PlannedTransferOccurrencePatch, type PlannedTransferIssue } from "@/lib/plannedAccountTransfers";
-import { acknowledgeHouseholdNameRead, mergeHouseholdNameRead, normalizeHouseholdName, type HouseholdNameIntent } from "@/lib/householdNames";
+import { acknowledgeHouseholdNicknameRead, mergeHouseholdNicknameRead, type HouseholdNicknameIntent, acknowledgeHouseholdNameRead, mergeHouseholdNameRead, normalizeHouseholdName, type HouseholdNameIntent } from "@/lib/householdNames";
 import { billTransferCutoff, billTransferExpected, mergeConvertedBill, verifyBillTransferConversion } from "@/lib/billTransferConversion";
 import { mergeAccountNameRead, acknowledgeAccountNameRead, verifiedRoutingMetadataPatch, mergeRoutingMetadata, normalizeAccountDisplayName, type AccountNameIntent } from "@/lib/accountNameMetadata";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -127,6 +127,8 @@ import {
   loadHouseholdActivity,
   leaveHousehold as leaveHouseholdRecord,
   loadHouseholdMemberships,
+  loadHouseholdNicknames,
+  saveHouseholdNickname as saveHouseholdNicknameRecord,
   loadHouseholdMembers,
   loadRemoteActiveHouseholdId,
   removeHouseholdMember as removeHouseholdMemberRecord,
@@ -358,6 +360,8 @@ interface BudgetContextType {
   clearSaveError: () => void;
   refreshHouseholds: () => Promise<void>;
   renameActiveHousehold: (name: string, expectedName: string) => Promise<void>;
+  saveActiveHouseholdNickname: (nickname: string | null, expectedNickname: string | null) => Promise<void>;
+  refreshHouseholdNicknames: () => Promise<void>;
   refreshHouseholdsForPrivacy: () => Promise<void>;
   refreshHouseholdActivity: () => Promise<void>;
   switchHousehold: (householdId: string) => Promise<void>;
@@ -878,6 +882,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const connectedBankAccountsRef = useRef<ConnectedBankAccount[]>([]);
   const transactionAccountIdentitiesRef = useRef<ConnectedBankAccount[]>([]);
   const householdsRef = useRef<HouseholdMembership[]>([]);
+  const householdNicknameVersionRef = useRef(0);
+  const householdNicknameIntentsRef = useRef<HouseholdNicknameIntent[]>([]);
+  const householdNicknameInFlightRef = useRef(new Set<string>());
   const householdNameVersionRef = useRef(0);
   const householdNameIntentsRef = useRef<HouseholdNameIntent[]>([]);
   const householdRenameInFlightRef = useRef(new Set<string>());
@@ -1095,8 +1102,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     authoritativeHousehold?: HouseholdMembership,
     authoritativeHouseholds?: HouseholdMembership[],
   ) => {
-    const sourceHousehold = authoritativeHousehold ?? cache.household;
-    const nextHousehold = mergeHouseholdNameRead([sourceHousehold], cache.userId, 0, householdNameIntentsRef.current)[0];
+    const nicknameKnown = [...cache.households, ...householdsRef.current];
+    const sourceHousehold = authoritativeHousehold ?? { ...cache.household, nicknameReady: false, nicknameError: null };
+    const nextHousehold = mergeHouseholdNicknameRead(mergeHouseholdNameRead([sourceHousehold], cache.userId, 0, householdNameIntentsRef.current), cache.userId, -1, householdNicknameIntentsRef.current, nicknameKnown, true)[0];
     if (
       cache.userId !== financialDataUserIdRef.current
       || cache.household.householdId !== nextHousehold.householdId
@@ -1137,7 +1145,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     } as Settings;
     const cachedCategories = fallbackCategoryList(cache.data.categories);
     const cachedCloses = normalizeDailyCheckingCloseRows(cache.data.dailyCheckingCloses);
-    const nextHouseholds = mergeHouseholdNameRead(authoritativeHouseholds ?? cache.households, cache.userId, 0, householdNameIntentsRef.current);
+    const nextHouseholds = mergeHouseholdNicknameRead(mergeHouseholdNameRead(authoritativeHouseholds ?? cache.households.map(row => ({ ...row, nicknameReady: false, nicknameError: null })), cache.userId, 0, householdNameIntentsRef.current), cache.userId, -1, householdNicknameIntentsRef.current, nicknameKnown, true);
     planCacheHydrationWriteSkipRef.current = {
       scopeKey: `${cache.userId}:${nextHousehold.householdId}`,
       dataUpdatedAt: cache.dataUpdatedAt,
@@ -1581,6 +1589,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const resolveHouseholds = useCallback(async (uid: string, loadDetails = true) => {
     const resolutionRequestId = ++householdResolutionRequestRef.current;
     const nameReadVersion = householdNameVersionRef.current;
+    const nicknameReadVersion = ++householdNicknameVersionRef.current;
     const resolution = await loadResolvedHouseholdSelection({
       loadHouseholds: () => loadHouseholdMemberships(uid),
       readStoredHouseholdId: () => readStoredActiveHouseholdId(uid),
@@ -1597,7 +1606,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     ) {
       throw new Error("Household resolution was superseded by a newer session or request");
     }
-    const memberships = mergeHouseholdNameRead(resolution.households, uid, nameReadVersion, householdNameIntentsRef.current);
+    const memberships = mergeHouseholdNicknameRead(mergeHouseholdNameRead(resolution.households, uid, nameReadVersion, householdNameIntentsRef.current), uid, nicknameReadVersion, householdNicknameIntentsRef.current, householdsRef.current);
+    householdNicknameIntentsRef.current = acknowledgeHouseholdNicknameRead(memberships, uid, nicknameReadVersion, householdNicknameIntentsRef.current);
     householdNameIntentsRef.current = acknowledgeHouseholdNameRead(memberships, uid, nameReadVersion, householdNameIntentsRef.current);
     const next = memberships.find(row => row.householdId === resolution.activeHousehold?.householdId) ?? null;
     const nextHouseholdId = next?.householdId ?? null;
@@ -1849,6 +1859,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const priorUserId = financialDataUserIdRef.current;
     if (priorUserId) void clearBudgetPlanCachesForUser(priorUserId);
     financialDataUserIdRef.current = userId;
+    householdNicknameVersionRef.current += 1;
+    householdNicknameIntentsRef.current = [];
     householdResolutionRequestRef.current += 1;
     loadRequestRef.current += 1;
     bankRefreshRequestRef.current += 1;
@@ -1899,6 +1911,63 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setLoadRetryNonce(value => value + 1);
     await coreReady;
   }, [userId, demoMode, queryClient, resolveHouseholds, waitForScopeCoreLoad]);
+
+  const refreshHouseholdNicknames = useCallback(async () => {
+    const uid = user?.id, generation = financialScopeGenerationRef.current;
+    if (!uid || demoMode) return;
+    const readVersion = ++householdNicknameVersionRef.current;
+    const ids = householdsRef.current.map(row => row.householdId);
+    const isCurrent = () => userScopeIdRef.current === uid && financialDataUserIdRef.current === uid && financialScopeGenerationRef.current === generation;
+    let nicknames: Map<string, string>, failure: string | null = null;
+    try { nicknames = await loadHouseholdNicknames(uid, ids); }
+    catch { nicknames = new Map(); failure = "Your household nicknames could not be loaded. Try again."; }
+    if (!isCurrent()) throw new Error("The household changed. Reopen the nickname editor.");
+    const rows = householdsRef.current.map(row => ({ ...row,
+      nickname: failure ? undefined : nicknames.get(row.householdId) ?? null,
+      nicknameReady: !failure, nicknameError: failure,
+    }));
+    const next = mergeHouseholdNicknameRead(rows, uid, readVersion, householdNicknameIntentsRef.current, householdsRef.current);
+    householdNicknameIntentsRef.current = acknowledgeHouseholdNicknameRead(next, uid, readVersion, householdNicknameIntentsRef.current);
+    householdsRef.current = next;
+    const selected = next.find(row => row.householdId === householdScopeRef.current?.householdId);
+    if (selected) householdScopeRef.current = selected;
+    setHouseholds(current => isCurrent() ? next : current);
+    if (failure && next.some(row => !row.nicknameReady)) throw new Error(failure);
+  }, [demoMode, user]);
+
+  const saveActiveHouseholdNickname = useCallback(async (nickname: string | null, expectedNickname: string | null) => {
+    const uid = user?.id, scope = householdScopeRef.current, generation = financialScopeGenerationRef.current;
+    if (!uid || demoMode || !scope || activeHousehold?.householdId !== scope.householdId
+      || userScopeIdRef.current !== uid || financialDataUserIdRef.current !== uid
+      || !["owner", "manager", "editor", "viewer"].includes(scope.role)) {
+      throw new Error("Choose your current household to save a nickname.");
+    }
+    if (startupCoreReadyScopeKeyRef.current !== `${uid}:${scope.householdId}` || !scope.nicknameReady) {
+      throw new Error("Reload your household nicknames before making changes.");
+    }
+    const canonical = nickname === null ? null : normalizeHouseholdName(nickname);
+    if (canonical === expectedNickname) return;
+    const key = `${uid}:${scope.householdId}`;
+    if (householdNicknameInFlightRef.current.has(key)) throw new Error("Your nickname is already saving.");
+    householdNicknameInFlightRef.current.add(key);
+    try {
+      const saved = await saveHouseholdNicknameRecord(uid, scope.householdId, canonical, expectedNickname);
+      if (financialScopeGenerationRef.current !== generation || userScopeIdRef.current !== uid
+        || financialDataUserIdRef.current !== uid || householdScopeRef.current?.householdId !== scope.householdId
+        || !householdsRef.current.some(row => row.householdId === scope.householdId)) {
+        throw new Error("The household changed. Reload nicknames to see your saved name.");
+      }
+      const version = ++householdNicknameVersionRef.current;
+      householdNicknameIntentsRef.current = householdNicknameIntentsRef.current
+        .filter(row => row.userId !== uid || row.householdId !== scope.householdId)
+        .concat({ userId: uid, householdId: scope.householdId, nickname: saved.nickname, version });
+      const apply = (rows: HouseholdMembership[]) => rows.map(row => row.householdId === scope.householdId
+        ? { ...row, nickname: saved.nickname, nicknameReady: true, nicknameError: null } : row);
+      householdsRef.current = apply(householdsRef.current);
+      householdScopeRef.current = { ...householdScopeRef.current, nickname: saved.nickname, nicknameReady: true, nicknameError: null };
+      setHouseholds(current => userScopeIdRef.current === uid ? apply(current) : current);
+    } finally { householdNicknameInFlightRef.current.delete(key); }
+  }, [activeHousehold?.householdId, demoMode, user]);
 
   const renameActiveHousehold = useCallback(async (name: string, expectedName: string) => {
     const uid = user?.id;
@@ -6965,7 +7034,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       renameForecastAccount, getForecastPlanCoverage, setForecastAccountRoutingBatch,
       hiddenForecastAccountRefs, forecastVisibilityReady, forecastVisibilityError, setAccountForecastVisible, getAccountForecast, saveAccountForecastPreference, setForecastAccountRouting, resolveTransactionAccountRef,
       households, householdMembers, householdActivity, householdDetailsReady, categoriesReady, activeHousehold, householdRole, canEditHousehold,
-      refreshHouseholds, renameActiveHousehold, refreshHouseholdsForPrivacy, refreshHouseholdActivity, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
+      refreshHouseholds, renameActiveHousehold, saveActiveHouseholdNickname, refreshHouseholdNicknames, refreshHouseholdsForPrivacy, refreshHouseholdActivity, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
       updateHouseholdMemberRole, removeHouseholdMember, leaveActiveHousehold,
       forecastConfidence, loading, startupCoreReady, loadError, dataUpdatedAt, retryBudgetLoad, refreshBankData, demoMode,
       saveStatus, saveError, retryLastSave, clearSaveError,

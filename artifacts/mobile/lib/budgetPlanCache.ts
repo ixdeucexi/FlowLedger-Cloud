@@ -1,3 +1,4 @@
+import { normalizeHouseholdName } from "./householdNames";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const CACHE_PREFIX = "flowledger-plan-cache-v1";
@@ -31,6 +32,9 @@ export interface CachedHouseholdMembership {
   householdId: string;
   budgetId: string | null;
   name: string;
+  nickname?: string | null;
+  nicknameReady?: boolean;
+  nicknameError?: string | null;
   isPersonal: boolean;
   role: "owner" | "manager" | "editor" | "viewer";
 }
@@ -152,7 +156,12 @@ export function parseBudgetPlanCache(
       || Date.parse(parsed.dataUpdatedAt) > now + MAX_CLOCK_SKEW_MS
       || !validCacheData(parsed.data)
     ) return null;
-    return parsed as BudgetPlanCacheRecord;
+    const cleanNickname = (row: CachedHouseholdMembership): CachedHouseholdMembership => {
+      if (row.nickname === undefined || row.nickname === null) return row;
+      try { return { ...row, nickname: normalizeHouseholdName(row.nickname) }; }
+      catch { const { nickname: _invalid, ...rest } = row; return rest; }
+    };
+    return { ...parsed, household: cleanNickname(parsed.household), households: parsed.households.map(cleanNickname) } as BudgetPlanCacheRecord;
   } catch {
     return null;
   }

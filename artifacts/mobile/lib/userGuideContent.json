@@ -225,7 +225,7 @@
       {
         "title": "Keep the workspace current",
         "items": [
-          { "title": "Household access", "body": "Open Settings > Household to invite or join. Owners and managers can use the name’s pencil to rename. Can edit changes plans; View only reads them. Dashboard’s people button switches households. All members can view shared accounts.", "icon": "users" },
+          { "title": "Household access", "body": "Open Settings > Household to invite or join. Any member can add a nickname visible only to them. Owners and managers can also change the shared name. Dashboard’s people button switches households. All members can view shared accounts.", "icon": "users" },
           { "title": "Bank connections", "body": "Open Settings > Bank connections to see linked accounts. New links request two months of history. Review subscription flags. Unlink disconnects all accounts at that bank and keeps past activity.", "icon": "credit-card" },
           { "title": "Categories and monthly budgets", "body": "Open Settings > Plan > Categories to set monthly limits or manage categories. Choose This month or Every month, then Save. Each category shows Spent and Left. Clear a limit to remove it; category changes keep linked activity together.", "icon": "tag" },
           { "title": "Setup & walkthrough", "body": "Run setup again after a major change or replay the Guided Tour from its first step.", "icon": "compass" },

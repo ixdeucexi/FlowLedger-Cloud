@@ -12,6 +12,7 @@
     "outDir": ".test-dist"
   },
   "include": [
+    "lib/householdNicknames.test.ts",
     "lib/householdNames.test.ts",
     "lib/accountBalancesCard.test.ts",
     "lib/plannedTransferContext.test.ts",

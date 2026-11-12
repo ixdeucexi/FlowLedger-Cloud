@@ -1,6 +1,6 @@
 import { normalizePlannedTransferData } from "./plannedAccountTransfers";
 import {mergeAccountNameRead} from "./accountNameMetadata";
-import { mergeHouseholdNameRead } from "./householdNames";
+import { mergeHouseholdNicknameRead, mergeHouseholdNameRead } from "./householdNames";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -165,7 +165,7 @@ test("startup hydrates an exact cached plan before awaiting the financial core",
   assert.match(auth, /await clearBudgetPlanCachesForUser\(signedOutUserId\)/);
 });
 
-function hydrateActualCallback(cache: BudgetPlanCacheRecord, actor = cache.userId, household = cache.household) {
+function hydrateActualCallback(cache: BudgetPlanCacheRecord, actor = cache.userId, household = cache.household, options: { intents?: import("./householdNames").HouseholdNicknameIntent[]; known?: typeof cache.households } = {}) {
   const source = readFileSync("context/BudgetContext.tsx", "utf8");
   const ast = ts.createSourceFile("BudgetContext.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let callback: ts.Expression | undefined;
@@ -188,12 +188,12 @@ function hydrateActualCallback(cache: BudgetPlanCacheRecord, actor = cache.userI
   };
   const dependencies: Record<string, any> = {
     normalizePlannedTransferData, publishPlannedTransferData: (data:unknown, scope:string) => state.calls.push({name:"plannedTransfers",value:{data,scope}}),
-    ...projectionInput, mergeAccountNameRead, accountNameIntentsRef: {current: []}, mergeHouseholdNameRead, householdNameIntentsRef: {current: []}, canonicalConnectedAccounts, pendingPlaidActivityWithBalanceHolds, localDateInTimeZone, fallbackCategoryList,
+    ...projectionInput, mergeAccountNameRead, accountNameIntentsRef: {current: []}, mergeHouseholdNicknameRead, householdNicknameIntentsRef: {current: options.intents ?? []}, mergeHouseholdNameRead, householdNameIntentsRef: {current: []}, canonicalConnectedAccounts, pendingPlaidActivityWithBalanceHolds, localDateInTimeZone, fallbackCategoryList,
     DEFAULT_SETTINGS: {}, canonicalDebtPaymentMethod: (value: unknown) => value,
     reorderDebtPriorities: (rows: unknown[]) => rows, normalizeDailyCheckingCloseRows: (rows: unknown[]) => rows,
     reuseStructurallyEqualFinancialValue: (_previous: unknown, next: unknown) => next, isValidExtraPaymentPlan: () => true,
     financialDataUserIdRef: { current: actor }, planCacheHydrationWriteSkipRef: { current: null },
-    householdsRef: { current: [] }, overridesRef: { current: [] }, billDateMovesRef: { current: [] },
+    householdsRef: { current: options.known ?? [] }, overridesRef: { current: [] }, billDateMovesRef: { current: [] },
     accountsRef: { current: [] }, authoritativeAccountsByIdRef: { current: new Map() },
     connectedBankAccountsRef: { current: [] }, transactionAccountIdentitiesRef: { current: [] },
     settingsRef: { current: {} }, authoritativeSettingsByScopeRef: { current: new Map() },
@@ -280,5 +280,22 @@ test("unknown bank current balances survive normalization and cache hydration wh
     const summary = summarizePendingCheckingActivity(hydrated.state.pending, hydrated.state.connected);
     if (current === null) assert.equal(summary, null);
     else assert.equal(summary?.currentBalance, 0);
+  }
+});
+
+
+test("actual cache hydration cannot restore a nickname removed after the cached snapshot", () => {
+  for (const nickname of [null, "New nickname"]) {
+    const cached = record();
+    cached.household.nickname = "Old nickname";
+    cached.households[0].nickname = "Old nickname";
+    const known = [{ ...cached.household, nickname, nicknameReady: true, nicknameError: null }];
+    const hydrated = hydrateActualCallback(cached, cached.userId, cached.household, {
+      intents: [{ userId: cached.userId, householdId: cached.household.householdId, nickname, version: 2 }], known,
+    });
+    assert.equal(hydrated.result, true);
+    assert.equal((hydrated.state.calls.find(row => row.name === "scope")?.value as any).nickname, nickname);
+    assert.equal(hydrated.dependencies.householdsRef.current[0].nickname, nickname);
+    assert.equal(hydrated.state.dataUpdatedAt, cached.dataUpdatedAt);
   }
 });

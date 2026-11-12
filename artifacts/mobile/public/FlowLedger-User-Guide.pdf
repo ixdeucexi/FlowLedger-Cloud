@@ -132,7 +132,7 @@ endobj
 endobj
 16 0 obj
 <<
-/Author (FlowLedger) /CreationDate (D:20261112191523+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:0ed9eb3eb1fc74d12d4f53c8871862fd296fb76726d8e0ec0c05876de7404915) /ModDate (D:20261112191523+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+/Author (FlowLedger) /CreationDate (D:20261112201635+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:629fae899e6cfef9cf21ffa88c017f593c8ac9c91508e575ed2fa5e311990605) /ModDate (D:20261112201635+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
   /Subject (Current Dashboard, Activity, Bills, Forecast, payoff, Flo, and Settings guidance) /Title (FlowLedger User Guide) /Trapped /False
 >>
 endobj
@@ -2293,7 +2293,7 @@ endstream
 endobj
 26 0 obj
 <<
-/Length 10328
+/Length 10330
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -2365,11 +2365,11 @@ BT /F2 9.5 Tf 11.4 TL ET
 BT 1 0 0 1 67 578 Tm (Household access) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 563 Tm (Open Settings > Household to invite or join. Owners and) Tj T* ET
-BT 1 0 0 1 56 552 Tm (managers can use the name's pencil to rename. Can edit) Tj T* ET
-BT 1 0 0 1 56 541 Tm (changes plans; View only reads them. Dashboard's people) Tj T* ET
-BT 1 0 0 1 56 530 Tm (button switches households. All members can view shared) Tj T* ET
-BT 1 0 0 1 56 519 Tm (accounts.) Tj T* ET
+BT 1 0 0 1 56 563 Tm (Open Settings > Household to invite or join. Any member) Tj T* ET
+BT 1 0 0 1 56 552 Tm (can add a nickname visible only to them. Owners and) Tj T* ET
+BT 1 0 0 1 56 541 Tm (managers can also change the shared name. Dashboard's) Tj T* ET
+BT 1 0 0 1 56 530 Tm (people button switches households. All members can view) Tj T* ET
+BT 1 0 0 1 56 519 Tm (shared accounts.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
@@ -3338,12 +3338,12 @@ xref
 0000042718 00000 n 
 0000050959 00000 n 
 0000057592 00000 n 
-0000067973 00000 n 
-0000074518 00000 n 
+0000067975 00000 n 
+0000074520 00000 n 
 trailer
 <<
 /ID 
-[<8c42a6579263606b25b3abf2da913098><8c42a6579263606b25b3abf2da913098>]
+[<c39432e0029905ddbcc9d04e144e135c><c39432e0029905ddbcc9d04e144e135c>]
 % ReportLab generated PDF document -- digest (opensource)
 
 /Info 16 0 R
@@ -3351,5 +3351,5 @@ trailer
 /Size 29
 >>
 startxref
-83971
+83973
 %%EOF

@@ -66,3 +66,107 @@ export function acknowledgeHouseholdNameRead(
   }
   return [...byKey.values()];
 }
+
+export interface HouseholdNicknameMetadata {
+  nickname?: string | null;
+  nicknameReady?: boolean;
+  nicknameError?: string | null;
+}
+
+/** Shared identity/name remain separate from this user's optional display label. */
+export function householdDisplayName(
+  household?: { name?: string | null; nickname?: unknown } | null,
+): string {
+  if (typeof household?.nickname === "string") {
+    try {
+      return normalizeHouseholdName(household.nickname);
+    } catch {
+      /* Invalid cached metadata never hides the plan. */
+    }
+  }
+  return household?.name?.trim() || "Personal household";
+}
+
+export interface HouseholdNicknameIntent {
+  userId: string;
+  householdId: string;
+  nickname: string | null;
+  version: number;
+}
+
+export function mergeHouseholdNicknameRead<
+  T extends { householdId: string } & HouseholdNicknameMetadata,
+>(
+  rows: readonly T[],
+  userId: string,
+  readVersion: number,
+  intents: readonly HouseholdNicknameIntent[],
+  knownRows: readonly ({
+    householdId: string;
+  } & HouseholdNicknameMetadata)[] = [],
+  fromCache = false,
+): T[] {
+  const known = new Map<
+    string,
+    { householdId: string } & HouseholdNicknameMetadata
+  >();
+  for (const row of knownRows) {
+    const prior = known.get(row.householdId);
+    known.set(row.householdId, {
+      ...prior,
+      ...row,
+      nickname: row.nickname === undefined ? prior?.nickname : row.nickname,
+    });
+  }
+  const latest = new Map(
+    intents
+      .filter((row) => row.userId === userId && row.version > readVersion)
+      .map((row) => [row.householdId, row]),
+  );
+  return rows.map((row) => {
+    const prior = known.get(row.householdId),
+      intent = latest.get(row.householdId);
+    if (intent)
+      return {
+        ...row,
+        nickname: intent.nickname,
+        nicknameReady: fromCache ? prior?.nicknameReady === true : true,
+        nicknameError: fromCache ? (prior?.nicknameError ?? null) : null,
+      };
+    if (row.nicknameReady !== true)
+      return {
+        ...row,
+        nickname: prior?.nickname !== undefined ? prior.nickname : row.nickname,
+        nicknameReady: false,
+        nicknameError: row.nicknameError ?? null,
+      };
+    return row;
+  });
+}
+
+export function acknowledgeHouseholdNicknameRead(
+  rows: readonly ({ householdId: string } & HouseholdNicknameMetadata)[],
+  userId: string,
+  readVersion: number,
+  intents: readonly HouseholdNicknameIntent[],
+): HouseholdNicknameIntent[] {
+  const byKey = new Map(
+    intents.map((row) => [`${row.userId}:${row.householdId}`, row]),
+  );
+  for (const row of rows) {
+    const key = `${userId}:${row.householdId}`;
+    if (
+      !row.nicknameReady ||
+      row.nickname === undefined ||
+      (byKey.get(key)?.version ?? -1) > readVersion
+    )
+      continue;
+    byKey.set(key, {
+      userId,
+      householdId: row.householdId,
+      nickname: row.nickname,
+      version: readVersion,
+    });
+  }
+  return [...byKey.values()];
+}

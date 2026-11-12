@@ -1,3 +1,4 @@
+import { householdDisplayName } from "@/lib/householdNames";
 import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
 import { useRouter } from "expo-router";
@@ -93,7 +94,7 @@ export function HouseholdSwitcher({
     router.push({ pathname: "/(tabs)/more", params: { section: "accounts" } });
   };
 
-  const currentName = activeHousehold?.name ?? "Personal";
+  const currentName = householdDisplayName(activeHousehold);
   const messageColor = message?.error ? colors.destructive : colors.success;
 
   return (
@@ -192,7 +193,7 @@ export function HouseholdSwitcher({
                     accessibilityState={{ selected, disabled: busy }}
                     aria-pressed={selected}
                     aria-disabled={busy}
-                    accessibilityLabel={`${household.name}, ${accessLabel(household.role)}${selected ? ", current household" : ""}`}
+                    accessibilityLabel={`${householdDisplayName(household)}, ${accessLabel(household.role)}${selected ? ", current household" : ""}`}
                     disabled={busy}
                     onPress={() => void chooseHousehold(household.householdId)}
                     style={({ pressed }) => [
@@ -218,7 +219,7 @@ export function HouseholdSwitcher({
                     </View>
                     <View style={styles.householdCopy}>
                       <Text numberOfLines={1} style={[styles.householdName, { color: colors.foreground }]}>
-                        {household.name}
+                        {householdDisplayName(household)}
                       </Text>
                       <Text style={[styles.householdMeta, { color: colors.mutedForeground }]}>
                         {selected ? "Current household · " : ""}{household.isPersonal ? "Personal plan" : "Shared household"} · {accessLabel(household.role)}

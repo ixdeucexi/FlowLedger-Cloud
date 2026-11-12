@@ -168,10 +168,10 @@ export function HouseholdNameModal({
             <View style={styles.header}>
               <View style={styles.flex}>
                 <Text style={[styles.title, { color: c.foreground }]}>
-                  Rename household
+                  Shared household name
                 </Text>
                 <Text style={[styles.help, { color: c.mutedForeground }]}>
-                  Choose a name everyone will recognize.
+                  Everyone in this household sees this name.
                 </Text>
               </View>
               <Pressable

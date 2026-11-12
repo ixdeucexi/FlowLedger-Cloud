@@ -20,6 +20,9 @@ export interface HouseholdMembership {
   householdId: string;
   budgetId: string | null;
   name: string;
+  nickname?: string | null;
+  nicknameReady?: boolean;
+  nicknameError?: string | null;
   isPersonal: boolean;
   role: HouseholdRole;
   createdAt?: string;
@@ -168,7 +171,7 @@ export async function loadHouseholdMemberships(
   );
   if (householdIds.length === 0) return [];
 
-  const [households, budgets] = await Promise.all([
+  const [households, budgets, nicknames] = await Promise.all([
     supabase
       .from("households")
       .select("id, name, is_personal, created_by")
@@ -177,6 +180,7 @@ export async function loadHouseholdMemberships(
       .from("budgets")
       .select("id, household_id, is_default")
       .in("household_id", householdIds),
+    loadHouseholdNicknames(userId, householdIds).then(rows => ({ rows, error: null })).catch(() => ({ rows: new Map<string, string>(), error: "Your household nicknames could not be loaded. Try again." })),
   ]);
 
   if (households.error) throw new HouseholdDiscoveryError("households");
@@ -211,6 +215,9 @@ export async function loadHouseholdMemberships(
         householdId,
         budgetId: budgetByHousehold.get(householdId) ?? null,
         name: ownerName,
+        nickname: nicknames.error ? undefined : nicknames.rows.get(householdId) ?? null,
+        nicknameReady: !nicknames.error,
+        nicknameError: nicknames.error,
         isPersonal,
         role,
         createdAt: membership.created_at
@@ -225,6 +232,42 @@ export async function loadHouseholdMemberships(
         return a.role === "owner" ? -1 : b.role === "owner" ? 1 : 0;
       return a.name.localeCompare(b.name);
     });
+}
+
+/** Failed nickname reads are separate from membership/financial discovery. */
+export async function loadHouseholdNicknames(userId: string, householdIds: readonly string[]): Promise<Map<string, string>> {
+  if (!householdIds.length) return new Map();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3500);
+  try {
+    const { data, error } = await supabase.from("household_nicknames")
+      .select("user_id,household_id,nickname").eq("user_id", userId).in("household_id", [...householdIds]).abortSignal(controller.signal);
+    if (error || !Array.isArray(data)) throw new Error("Your household nicknames could not be loaded. Try again.");
+    const result = new Map<string, string>();
+    for (const row of data) {
+      if (row.user_id !== userId || !householdIds.includes(row.household_id)
+        || typeof row.nickname !== "string" || normalizeHouseholdName(row.nickname) !== row.nickname) {
+        throw new Error("Your household nicknames could not be verified. Try again.");
+      }
+      result.set(row.household_id, row.nickname);
+    }
+    return result;
+  } finally { clearTimeout(timeout); }
+}
+
+export async function saveHouseholdNickname(userId: string, householdId: string, nickname: string | null, expectedNickname: string | null): Promise<{ householdId: string; nickname: string | null }> {
+  const canonical = nickname === null ? null : normalizeHouseholdName(nickname);
+  const { data, error } = await supabase.rpc("save_household_nickname", {
+    p_household_id: householdId, p_nickname: canonical, p_expected_nickname: expectedNickname,
+  });
+  if (error) {
+    if (error.message?.includes("household_nickname_conflict")) throw new Error("Your nickname changed on another device. Reload nicknames, then try again.");
+    throw new Error("Your household nickname could not be saved. Try again.");
+  }
+  if (data?.user_id !== userId || data?.household_id !== householdId || data?.nickname !== canonical) {
+    throw new Error("The saved nickname could not be verified. Reload nicknames before trying again.");
+  }
+  return { householdId, nickname: canonical };
 }
 
 /** Name-only endpoint: no financial, membership, or selection fields accepted. */

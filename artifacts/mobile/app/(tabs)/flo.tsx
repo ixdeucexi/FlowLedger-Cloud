@@ -1,3 +1,4 @@
+import { householdDisplayName } from "@/lib/householdNames";
 import { useMoneyPrivacy } from "@/context/MoneyPrivacyContext";
 import { MoneyPrivacyToggle } from "@/components/privacy/MoneyPrivacyControls";
 import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as TextInput, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
@@ -975,7 +976,7 @@ export default function FloScreen() {
       const messages = await listAllFloMessages(conversation.id);
       sections.push(`${conversation.title}\n${messages.map(message => `${message.role === "flo" ? "Flo" : "You"}: ${message.text}${message.caveat ? `\nCaveat: ${message.caveat}` : ""}`).join("\n\n")}`);
     }
-    const content = `${exportFloHistoryText(activeHousehold?.name ?? "Personal household", [])}\n${sections.join("\n\n---\n\n")}`;
+    const content = `${exportFloHistoryText(householdDisplayName(activeHousehold), [])}\n${sections.join("\n\n---\n\n")}`;
     await Share.share({ title: "FlowLedger Flo history", message: content });
   };
 
@@ -1457,13 +1458,13 @@ export default function FloScreen() {
         <FloLogo size={38} />
         <View style={styles.headerText}>
           <Text accessibilityRole="header" style={[styles.title, { color: colors.foreground }]}>Flo</Text>
-          <Text numberOfLines={1} style={[styles.subtitle, { color: colors.mutedForeground }]}>{floV4Preview ? "Chat not saved" : activeHousehold?.name ?? "Your money assistant"}</Text>
+          <Text numberOfLines={1} style={[styles.subtitle, { color: colors.mutedForeground }]}>{floV4Preview ? "Chat not saved" : householdDisplayName(activeHousehold)}</Text>
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="New chat" disabled={creationSaving} onPress={() => { startNewConversation(); inputRef.current?.focus(); }} style={[styles.headerButton, { borderColor: colors.border, backgroundColor: colors.card }]}>
           <Feather name="edit" size={18} color={colors.foreground} />
           {isDesktop ? <Text style={[styles.headerButtonText, { color: colors.foreground }]}>New chat</Text> : null}
         </Pressable>
-        {!floV4Preview ? <FloConversationBar key={floDataScopeKey} compact desktop={isDesktop} conversations={conversations} activeId={activeConversationId} disabled={chat.sending || creationSaving || historyBusy} preferencesDisabled={!preferencesControlsReady} householdName={activeHousehold?.name ?? "Personal household"} preferences={floPreferences} onNew={startNewConversation} onSelect={selectConversation} onRename={renameConversation} onDelete={removeConversation} onDeleteAll={removeAllConversations} onExport={exportConversations} onSearchHistory={searchHistory} onPreferencesChange={updatePreferences} /> : null}
+        {!floV4Preview ? <FloConversationBar key={floDataScopeKey} compact desktop={isDesktop} conversations={conversations} activeId={activeConversationId} disabled={chat.sending || creationSaving || historyBusy} preferencesDisabled={!preferencesControlsReady} householdName={householdDisplayName(activeHousehold)} preferences={floPreferences} onNew={startNewConversation} onSelect={selectConversation} onRename={renameConversation} onDelete={removeConversation} onDeleteAll={removeAllConversations} onExport={exportConversations} onSearchHistory={searchHistory} onPreferencesChange={updatePreferences} /> : null}
       </View>
 
       {!floV4Preview ? <View style={[styles.allowanceBar, { backgroundColor: colors.card, borderColor: colors.border }]}>

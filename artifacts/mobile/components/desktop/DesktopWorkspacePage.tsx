@@ -1,3 +1,4 @@
+import { householdDisplayName } from "@/lib/householdNames";
 import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import { createTransactionNameResolver } from "@/lib/transactionNames";
 import Feather from "@expo/vector-icons/Feather";
@@ -478,7 +479,7 @@ function SettingsPage({ onOpenPlanner, onOpenMoneySettings }: { onOpenPlanner: (
     <>
       <PageHeader eyebrow="Workspace" title="Settings" description="Account, forecasting, and planning preferences in a desktop settings hub." action="Edit settings" onAction={onOpenPlanner} />
       <View style={styles.statGrid}>
-        <Stat label="Workspace" value={activeHousehold?.name || "Personal"} detail="Active budget" icon="users" tone="purple" />
+        <Stat label="Workspace" value={householdDisplayName(activeHousehold)} detail="Active budget" icon="users" tone="purple" />
         <Stat label="Manual accounts" value={String(accounts.length)} detail="Active balance sources" icon="database" tone="blue" />
         <Stat label="Connected accounts" value={String(connectedBankAccounts.length)} detail="Plaid-linked sources" icon="link" tone="green" />
         <Stat label="Forecast confidence" value={confidenceLabel} detail="Current data quality" icon="shield" tone="amber" />

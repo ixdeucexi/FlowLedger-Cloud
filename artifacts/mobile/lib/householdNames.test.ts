@@ -330,7 +330,7 @@ test("personal household discovery honors stored names without altering personal
         serviceSource.indexOf(
           "export async function loadHouseholdMemberships(",
         ),
-        serviceSource.indexOf("/** Name-only endpoint"),
+        serviceSource.indexOf("/** Failed nickname reads"),
       )
       .replace("export async function", "async function") +
       "\nreturn loadHouseholdMemberships;",
@@ -346,12 +346,14 @@ test("personal household discovery honors stored names without altering personal
     "normalizeHouseholdRole",
     "ownsLegacyPersonalRows",
     "HouseholdDiscoveryError",
+    "loadHouseholdNicknames",
     javascript,
   )(
     supabase,
     (role: unknown) => role,
     (row: any) => row.isPersonal && row.role === "owner",
     Error,
+    async () => new Map(),
   );
   const result = await load("owner");
   assert.equal(result[0].name, "Named personal");
@@ -359,4 +361,15 @@ test("personal household discovery honors stored names without altering personal
   assert.equal(result[0].role, "owner");
   assert.equal(result[1].name, "Cousin");
   assert.equal(result[1].isPersonal, false);
+});
+
+
+test("shared rename uses raw shared CAS and preserves an active private nickname", async () => {
+  const calls: any[] = [];
+  const h = contextHarness(async (...args) => { calls.push(args); return { householdId: "home", name: "New shared name" }; });
+  (h.state.rows[0] as any).nickname = "My private label";
+  await h.rename("New shared name", home.name);
+  assert.deepEqual(calls, [["home", "New shared name", home.name]]);
+  assert.equal((h.state.rows[0] as any).nickname, "My private label");
+  assert.equal(h.state.rows[0].name, "New shared name");
 });

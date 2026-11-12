@@ -42,6 +42,8 @@ import { FeedbackManageModal } from "@/components/FeedbackManageModal";
 import { IncomeModal } from "@/components/IncomeModal";
 import { GoalModal } from "@/components/GoalModal";
 import { HouseholdMemberActionsModal } from "@/components/HouseholdMemberActionsModal";
+import { householdDisplayName } from "@/lib/householdNames";
+import { HouseholdNicknameModal, type HouseholdNicknameTarget } from "@/components/HouseholdNicknameModal";
 import { HouseholdNameModal, type HouseholdNameEditorTarget } from "@/components/HouseholdNameModal";
 import { MembershipPanel } from "@/components/MembershipPanel";
 import { FOUNDING_FREE_LAUNCH, FOUNDING_FREE_NAME, hasAdminProAccess } from "@/lib/launchMode";
@@ -614,6 +616,7 @@ export default function MoreScreen({
   const [householdInviteCode, setHouseholdInviteCode] = useState("");
   const [householdJoinCode, setHouseholdJoinCode] = useState("");
   const [householdBusy, setHouseholdBusy] = useState(false);
+  const [householdNicknameEditor, setHouseholdNicknameEditor] = useState<HouseholdNicknameTarget | null>(null);
   const [householdNameEditor, setHouseholdNameEditor] = useState<HouseholdNameEditorTarget | null>(null);
   const [householdMessage, setHouseholdMessage] = useState<string | null>(null);
   const [managedHouseholdMember, setManagedHouseholdMember] = useState<{
@@ -1268,7 +1271,7 @@ export default function MoreScreen({
       );
       return;
     }
-    const householdName = activeHousehold.name;
+    const householdName = householdDisplayName(activeHousehold);
     confirmAction({
       title: `Leave ${householdName}?`,
       message:
@@ -2547,7 +2550,7 @@ export default function MoreScreen({
       >
         {activeSettingsSection === "overview" ? (
           <MoreHub
-            householdName={activeHousehold?.name ?? "Personal household"}
+            householdName={householdDisplayName(activeHousehold)}
             householdRole={
               householdRole
                 ? `${householdRoleLabel(householdRole)} access`
@@ -2935,7 +2938,7 @@ export default function MoreScreen({
                 </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={[styles.accountName, { color: c.foreground }]}>
-                    {activeHousehold?.name ?? "Personal household"}
+                    {householdDisplayName(activeHousehold)}
                   </Text>
                   <Text
                     style={[styles.switchDesc, { color: c.mutedForeground }]}
@@ -2946,18 +2949,25 @@ export default function MoreScreen({
                     {canEditHousehold ? " • editing allowed" : " • view only"}
                   </Text>
                 </View>
-                {user && activeHousehold && !budgetDemoMode && canManageHouseholdMembers(householdRole) ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Rename household"
-                    disabled={householdBusy || !startupCoreReady}
-                    onPress={() => setHouseholdNameEditor({ userId: user.id, householdId: activeHousehold.householdId, name: activeHousehold.name })}
-                    style={({ pressed }) => [styles.householdRenameButton, { backgroundColor: c.primary + "16", borderColor: c.primary + "30", opacity: pressed || householdBusy || !startupCoreReady ? 0.55 : 1 }]}
-                  >
+              </View>
+              {user && activeHousehold && householdRole && !budgetDemoMode ? (
+                <View style={styles.householdNicknameRow}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={[styles.householdPanelTitle, { color: c.foreground }]}>Nickname · only for you</Text>
+                    <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>{activeHousehold.nickname ? `Shared name: ${activeHousehold.name}` : "Choose a name to tell households apart."}</Text>
+                  </View>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Edit household nickname" disabled={householdBusy || !startupCoreReady} onPress={() => setHouseholdNicknameEditor({ userId: user.id, householdId: activeHousehold.householdId })} style={[styles.householdRenameButton, { backgroundColor: c.primary + "16", borderColor: c.primary + "30" }]}>
                     <Feather name="edit-2" size={17} color={c.primary} />
                   </Pressable>
-                ) : null}
-              </View>
+                </View>
+              ) : null}
+              {user && activeHousehold && !budgetDemoMode && canManageHouseholdMembers(householdRole) ? (
+                <View style={styles.householdNicknameRow}>
+                  <View style={{ flex: 1, minWidth: 0 }}><Text style={[styles.householdPanelTitle, { color: c.foreground }]}>Shared household name</Text><Text style={[styles.switchDesc, { color: c.mutedForeground }]}>{activeHousehold.name}</Text></View>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Rename household" disabled={householdBusy || !startupCoreReady} onPress={() => setHouseholdNameEditor({ userId: user.id, householdId: activeHousehold.householdId, name: activeHousehold.name })} style={[styles.householdRenameButton, { backgroundColor: c.primary + "16", borderColor: c.primary + "30" }]}><Feather name="edit-2" size={17} color={c.primary} /></Pressable>
+                </View>
+              ) : null}
+              <HouseholdNicknameModal target={householdNicknameEditor} onClose={() => setHouseholdNicknameEditor(null)} />
               <HouseholdNameModal target={householdNameEditor} onClose={() => setHouseholdNameEditor(null)} />
 
               {households.length > 1 && (
@@ -2969,7 +2979,7 @@ export default function MoreScreen({
                       <Pressable
                         key={household.householdId}
                         accessibilityRole="button"
-                        accessibilityLabel={household.name}
+                        accessibilityLabel={householdDisplayName(household)}
                         accessibilityState={{ selected }}
                         onPress={async () => {
                           if (selected || householdBusy) return;
@@ -2978,7 +2988,7 @@ export default function MoreScreen({
                           try {
                             await switchHousehold(household.householdId);
                             setHouseholdMessage(
-                              `Switched to ${household.name}.`,
+                              `Switched to ${householdDisplayName(household)}.`,
                             );
                           } catch (error) {
                             const message =
@@ -3011,7 +3021,7 @@ export default function MoreScreen({
                             },
                           ]}
                         >
-                          {household.name}
+                          {householdDisplayName(household)}
                         </Text>
                       </Pressable>
                     );
@@ -3171,7 +3181,7 @@ export default function MoreScreen({
               {activeHousehold ? (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`Leave ${activeHousehold.name} household`}
+                  accessibilityLabel={`Leave ${householdDisplayName(activeHousehold)} household`}
                   disabled={householdBusy}
                   onPress={handleLeaveHousehold}
                   style={({ pressed }) => [
@@ -6331,6 +6341,7 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 12,
   },
+  householdNicknameRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10, marginBottom: 8 },
   householdRenameButton: { minWidth: 44, minHeight: 44, borderWidth: 1, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   householdChipWrap: {
     flexDirection: "row",
