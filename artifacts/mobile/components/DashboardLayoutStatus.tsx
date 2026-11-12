@@ -3,7 +3,7 @@ import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useColors } from "@/hooks/useColors";
 
-export function DashboardLayoutStatus({ loading, saving, saveError, loadError, retrySave, retryLoad }: {
+export function DashboardLayoutStatus({ loading, saveError, loadError, retrySave, retryLoad }: {
   loading?: boolean;
   saving?: boolean;
   saveError?: string | null;
@@ -13,11 +13,11 @@ export function DashboardLayoutStatus({ loading, saving, saveError, loadError, r
 }) {
   const c = useColors();
   const message = saveError || loadError;
-  if (!message && !loading && !saving) return null;
+  if (!message && !loading) return null;
   return (
     <View accessibilityRole={message ? "alert" : undefined} style={[styles.status, { borderColor: message ? c.warning + "66" : c.border, backgroundColor: c.card }]}>
       <Feather name={message ? "alert-circle" : "clock"} size={15} color={message ? c.warning : c.mutedForeground} />
-      <Text style={[styles.copy, { color: c.mutedForeground }]}>{message || (loading ? "Loading your dashboard layout…" : "Saving your dashboard layout…")}</Text>
+      <Text style={[styles.copy, { color: c.mutedForeground }]}>{message || "Loading your dashboard layout…"}</Text>
       {message ? <Pressable
         accessibilityRole="button"
         accessibilityLabel={saveError ? "Retry saving dashboard layout" : "Retry loading dashboard layout"}
