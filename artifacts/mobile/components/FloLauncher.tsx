@@ -8,7 +8,8 @@ import { FloLogo } from "@/components/FloLogo";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { useFloLauncherPreference } from "@/hooks/useFloLauncherPreference";
-import { createFloUndoPressGate } from "@/lib/floLauncherVisibility";
+import { createFloUndoPressGate, hideFloOnBudgetPage } from "@/lib/floLauncherVisibility";
+import { useBudget } from "@/context/BudgetContext";
 import * as Haptics from "@/lib/haptics";
 
 const UNDO_DURATION_MS = 5000;
@@ -78,6 +79,7 @@ export function FloLauncher({ desktop }: { desktop: boolean }) {
   const insets = useSafeAreaInsets();
   const { isFeatureLocked } = useMembership();
   const preference = useFloLauncherPreference();
+  const { settings } = useBudget();
   const currentScope = useRef(preference.scope);
   currentScope.current = preference.scope;
   const held = useRef(false);
@@ -94,6 +96,7 @@ export function FloLauncher({ desktop }: { desktop: boolean }) {
 
   if (
     !preference.ready ||
+    hideFloOnBudgetPage(pathname, settings.zeroBasedBudgetEnabled) ||
     isFeatureLocked("flo_basic") ||
     pathname.endsWith("/flo") ||
     (!preference.enabled && !showUndo)

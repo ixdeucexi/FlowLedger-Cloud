@@ -5,6 +5,8 @@ import { transpileModule, ModuleKind, ScriptTarget } from "typescript";
 import { remapCategoryBudgetMap } from "./categoryCatalog";
 import { createExactCategoryBudgetMemoryCache, parseCategoryBudgetCache, resolveGuardedRemoteValue } from "./categoryBudgetLoadPolicy";
 import * as categoryBudgetRules from "./categoryBudgetRules";
+import { buildCategoryPlan } from "./categoryPlanning";
+import { parseMoneyInput } from "./moneyFormInput";
 
 function storeHarness(failAt: string | null, delayedSelects: Array<Promise<unknown>> = [], rpcResults: unknown[] = []) {
   const source = readFileSync("lib/categoryBudgetStore.ts", "utf8");
@@ -137,7 +139,7 @@ function screenSaveHarness() {
     canEditHousehold: true, loadReady: true, busyRef: state.busyRef, scopeVersion: state.scopeVersion, dirtyRef: state.dirtyRef,
     budgetScope: { userId: "test-owner", householdId: "test-household", budgetId: "test-budget" }, month: 8, year: 2026,
     categoryBudgets: state.budgets, repeatChanges: true, budgetConflict: false,
-    currentScopeKey: "test-scope", activeScopeKeyRef: { current: "test-scope" }, refreshBudgetsRef: { current: () => {} },
+    currentScopeKey: "test-scope", activeScopeKeyRef: { current: "test-scope" }, loadedScopeKeyRef: { current: "test-scope" }, editingAllowedRef: { current: true }, refreshBudgetsRef: { current: () => {} },
     changedCategoryBudgets: categoryBudgetRules.changedCategoryBudgets,
     assertFinancialMutationOnline: () => {},
     saveMonthlyCategoryBudgetChanges: () => { calls++; return promise; },
@@ -148,8 +150,19 @@ function screenSaveHarness() {
   const js = transpileModule(body, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
   const save = new Function(...Object.keys(bindings), `${js}; return persistBudgets;`)(...Object.values(bindings));
   const finish = (result = { budgets: { Food: 200 } as Record<string, number>, recurringCategories: ["Food"] }) => resolveSave(result);
-  return { state, save, finish, reject, calls: () => calls };
+  return { state, save, finish, reject, calls: () => calls, loadedScopeKeyRef: bindings.loadedScopeKeyRef, editingAllowedRef: bindings.editingAllowedRef };
 }
+
+test("Save cannot start from a prior confirmed scope or after edit permission is lost", async () => {
+  const stale = screenSaveHarness();
+  stale.loadedScopeKeyRef.current = "previous-household";
+  assert.equal(await stale.save({ Food: 200 }), false);
+  assert.equal(stale.calls(), 0);
+  const viewer = screenSaveHarness();
+  viewer.editingAllowedRef.current = false;
+  assert.equal(await viewer.save({ Food: 200 }), false);
+  assert.equal(viewer.calls(), 0);
+});
 test("category screen guards rapid double save and waits for persistence before updating totals", async () => {
   const h = screenSaveHarness();
   const first = h.save({ Food: 200 });
@@ -383,4 +396,69 @@ test("a refreshed saved budget invalidates a pending restart without overwriting
   assert.deepEqual(h.state.drafts, { Housing: "1200" });
   assert.equal(h.state.repeat, true);
   assert.match(h.state.message, /Saved budgets changed.*Reload/);
+});
+
+function moveScreenHarness(pool = false) {
+  const source = readFileSync("app/(tabs)/category-budget.tsx", "utf8");
+  const body = source.slice(source.indexOf("  const applyMove ="), source.indexOf("  const assignRemaining ="));
+  const baseline = { Savings: 500, Food: 20, Other: 42.5 };
+  const state = {
+    drafts: { Savings: "100.00", Food: "20", Other: "50.00" } as Record<string, string>,
+    dirtyRef: { current: new Set(["Savings", "Other"]) }, repeat: true, message: "", error: "", target: "Food" as string | null,
+  };
+  const preview = { Savings: 100, Food: 20, Other: 50 };
+  const rows = buildCategoryPlan(Object.keys(preview), [], [{ category: "Food", amount: -25.37 }, { category: "Savings", amount: -10 }], Object.entries(preview).map(([category, amount]) => ({ category, amount })));
+  const bindings = {
+    editingAllowedRef: { current: true }, busyRef: { current: false }, activeScopeKeyRef: { current: "home/2026/10" }, scopeVersion: { current: 7 },
+    moveScopeRef: { current: { key: "home/2026/10", version: 7 } },
+    moveTarget: rows.find(row => row.category === "Food"),
+    moveSource: pool ? { kind: "unbudgeted" } : { kind: "category", category: "Savings" },
+    selectedMoveSource: { available: pool ? 30 : 90 }, drafts: state.drafts, dirtyRef: state.dirtyRef,
+    categoryBudgets: baseline, categoryPlan: rows, monthlyIncome: 200, moveAmount: "25.37",
+    parseCategoryBudgetChanges: categoryBudgetRules.parseCategoryBudgetChanges,
+    applyCategoryBudgetChanges: categoryBudgetRules.applyCategoryBudgetChanges,
+    buildCategoryBudgetMoveDraft: categoryBudgetRules.buildCategoryBudgetMoveDraft,
+    changedCategoryBudgets: categoryBudgetRules.changedCategoryBudgets, parseMoneyInput,
+    Keyboard: { dismiss: () => {} },
+    setDrafts: (update: (previous: Record<string, string>) => Record<string, string>) => { state.drafts = update(state.drafts); },
+    setRepeatChanges: (value: boolean) => { state.repeat = value; },
+    setSaveMessage: (value: string) => { state.message = value; },
+    setMoveError: (value: string) => { state.error = value; },
+    setMoveTarget: (value: null) => { state.target = value; },
+  };
+  const javascript = transpileModule(body, { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } }).outputText;
+  const move = new Function(...Object.keys(bindings), `${javascript}; return applyMove;`)(...Object.values(bindings));
+  return { state, bindings, baseline, move };
+}
+
+test("actual Move handler uses dirty previews, preserves unrelated edits and stages without persistence", () => {
+  const h = moveScreenHarness();
+  h.move();
+  assert.deepEqual(h.state.drafts, { Savings: "74.63", Food: "45.37", Other: "50.00" });
+  assert.deepEqual(h.baseline, { Savings: 500, Food: 20, Other: 42.5 });
+  assert.deepEqual([...h.state.dirtyRef.current].sort(), ["Food", "Other", "Savings"]);
+  assert.equal(h.state.repeat, false);
+  assert.equal(h.state.target, null);
+  assert.match(h.state.message, /month.*draft.*Save/);
+  assert.equal(h.state.error, "");
+});
+
+test("actual Move handler supports the distinct Left to budget source", () => {
+  const h = moveScreenHarness(true);
+  h.move();
+  assert.deepEqual(h.state.drafts, { Savings: "100.00", Food: "45.37", Other: "50.00" });
+  assert.deepEqual(h.baseline, { Savings: 500, Food: 20, Other: 42.5 });
+});
+
+test("stale, busy and view-only move actions cannot overwrite current drafts", () => {
+  for (const guard of ["scope", "version", "busy", "permission"] as const) {
+    const h = moveScreenHarness();
+    if (guard === "scope") h.bindings.activeScopeKeyRef.current = "other/2026/10";
+    if (guard === "version") h.bindings.scopeVersion.current++;
+    if (guard === "busy") h.bindings.busyRef.current = true;
+    if (guard === "permission") h.bindings.editingAllowedRef.current = false;
+    h.move();
+    assert.deepEqual(h.state.drafts, { Savings: "100.00", Food: "20", Other: "50.00" }, guard);
+    assert.equal(h.state.repeat, true, guard);
+  }
 });

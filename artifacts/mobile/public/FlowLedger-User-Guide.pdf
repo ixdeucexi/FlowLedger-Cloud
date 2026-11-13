@@ -132,7 +132,7 @@ endobj
 endobj
 16 0 obj
 <<
-/Author (FlowLedger) /CreationDate (D:20261113212704+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:30e96d7bd2f4c3a1e8d93a883cb99529202282794516300d519934f0d7584a65) /ModDate (D:20261113212704+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+/Author (FlowLedger) /CreationDate (D:20261113222913+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:01d8c27087a4a9d37af899c2ffd1adbc8d4e8ffe9f4088d00a3ca14adec9f8b6) /ModDate (D:20261113222913+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
   /Subject (Current Dashboard, Activity, Bills, Forecast, payoff, Flo, and Settings guidance) /Title (FlowLedger User Guide) /Trapped /False
 >>
 endobj
@@ -2293,7 +2293,7 @@ endstream
 endobj
 26 0 obj
 <<
-/Length 10343
+/Length 10342
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -2430,11 +2430,11 @@ BT /F2 9.5 Tf 11.4 TL ET
 BT 1 0 0 1 67 399 Tm (Categories and monthly budgets) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 384 Tm (Plan monthly income until Left to budget is $0. Add) Tj T* ET
-BT 1 0 0 1 56 373 Tm (remaining fills a category. Restart clears category amounts) Tj T* ET
-BT 1 0 0 1 56 362 Tm (in an unsaved draft for this month. Save applies your edits;) Tj T* ET
-BT 1 0 0 1 56 351 Tm (choose This month only or Every month. Forecast's Budget) Tj T* ET
-BT 1 0 0 1 56 340 Tm (opens that month.) Tj T* ET
+BT 1 0 0 1 56 384 Tm (Use Edit budget to change category amounts. Move budget) Tj T* ET
+BT 1 0 0 1 56 373 Tm (takes an amount from Left to budget or another category.) Tj T* ET
+BT 1 0 0 1 56 362 Tm (Save changes applies drafts; moves start as month-only) Tj T* ET
+BT 1 0 0 1 56 351 Tm (edits. Restart creates a $0 draft. Forecast's Budget opens) Tj T* ET
+BT 1 0 0 1 56 340 Tm (the selected month.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
@@ -3338,12 +3338,12 @@ xref
 0000042718 00000 n 
 0000050959 00000 n 
 0000057592 00000 n 
-0000067988 00000 n 
-0000074533 00000 n 
+0000067987 00000 n 
+0000074532 00000 n 
 trailer
 <<
 /ID 
-[<5a987b9c5acde7a9831f1e41d2d0bb68><5a987b9c5acde7a9831f1e41d2d0bb68>]
+[<3a0c1ba3b447b612e786d265c2163479><3a0c1ba3b447b612e786d265c2163479>]
 % ReportLab generated PDF document -- digest (opensource)
 
 /Info 16 0 R
@@ -3351,5 +3351,5 @@ trailer
 /Size 29
 >>
 startxref
-83986
+83985
 %%EOF

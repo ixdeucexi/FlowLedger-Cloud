@@ -2,7 +2,7 @@ import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as
 import Feather from "@expo/vector-icons/Feather";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Keyboard, Modal, Platform, ScrollView, StyleSheet } from "react-native";
+import { Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
@@ -12,11 +12,12 @@ import { useAuth } from "@/context/AuthContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
+import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
-import { applyCategoryBudgetMove, buildCategoryPlan, buildZeroBudgetSummary, categoryBudgetPeriod, type CategoryPlanRow } from "@/lib/categoryPlanning";
+import { buildCategoryPlan, buildZeroBudgetSummary, categoryBudgetPeriod, type CategoryPlanRow } from "@/lib/categoryPlanning";
 import { loadCategoryBudgetsExact, readCategoryBudgetCache, saveMonthlyCategoryBudgetChanges, subscribeCategoryBudgets, subscribeCategoryCatalog } from "@/lib/categoryBudgetStore";
-import { categoryMatches, remapCategoryBudgetMap, remapCategoryDrafts } from "@/lib/categoryCatalog";
-import { applyCategoryBudgetChanges, buildCategoryBudgetRestartDraft, changedCategoryBudgets, parseCategoryBudgetChanges } from "@/lib/categoryBudgetRules";
+import { categoryMatches, normalizeCategoryInput, remapCategoryBudgetMap, remapCategoryDrafts } from "@/lib/categoryCatalog";
+import { applyCategoryBudgetChanges, buildCategoryBudgetMoveDraft, buildCategoryBudgetRestartDraft, changedCategoryBudgets, isSpendingBudgetCategory, parseCategoryBudgetChanges, type CategoryBudgetMoveSource } from "@/lib/categoryBudgetRules";
 import { buildReviewQueue, transactionCategoryParts } from "@/lib/reviewCenter";
 import { unmatchedPendingTransactions } from "@/lib/pendingPlanMatches";
 import { assertFinancialMutationOnline } from "@/lib/networkStatus";
@@ -41,6 +42,7 @@ interface CategoryBudgetScreenProps {
 export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: CategoryBudgetScreenProps) {
   const c = useColors();
   const insets = useSafeAreaInsets();
+  const isDesktop = useDesktopExperience();
   const router = useRouter();
   const { user } = useAuth();
   const {
@@ -75,12 +77,17 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
   const busyRef = useRef(false);
   const dirtyRef = useRef(new Set<string>());
   const scopeVersion = useRef(0);
+  const loadedScopeKeyRef = useRef<string | null>(null);
   const [moveTarget, setMoveTarget] = useState<CategoryPlanRow | null>(null);
-  const [moveSource, setMoveSource] = useState("");
+  const [moveSource, setMoveSource] = useState<CategoryBudgetMoveSource | null>(null);
   const [moveAmount, setMoveAmount] = useState("");
   const [moveError, setMoveError] = useState("");
+  const moveScopeRef = useRef<{ key: string; version: number } | null>(null);
+  const categoryInputs = useRef(new Map<string, React.ElementRef<typeof TextInput>>());
   useBackDismiss(!!moveTarget, () => setMoveTarget(null));
-  const editableCategories = useMemo(() => categories, [categories]);
+  const editableCategories = useMemo(() => categories.filter(isSpendingBudgetCategory), [categories]);
+  const editableCategoryKeys = useMemo(() => new Set(editableCategories.map(category => normalizeCategoryInput(category).toLowerCase())), [editableCategories]);
+  const canEditCategory = (category: string) => editableCategoryKeys.has(normalizeCategoryInput(category).toLowerCase());
   const budgetScope = useMemo(() => ({
     userId: user?.id,
     householdId: activeHousehold?.householdId,
@@ -91,9 +98,13 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
   activeScopeKeyRef.current = currentScopeKey;
   const categoryBudgetsRef = useRef(categoryBudgets);
   categoryBudgetsRef.current = categoryBudgets;
-  const restartAllowed = settings.zeroBasedBudgetEnabled && canEditHousehold && categoriesReady && loadReady && !saving && !budgetConflict;
+  const restartAllowed = settings.zeroBasedBudgetEnabled && canEditHousehold && categoriesReady && loadReady
+    && loadedScopeKeyRef.current === currentScopeKey && !saving && !budgetConflict;
   const restartAllowedRef = useRef(restartAllowed);
   restartAllowedRef.current = restartAllowed;
+  const editingAllowedRef = useRef(false);
+  editingAllowedRef.current = canEditHousehold && categoriesReady && loadReady
+    && loadedScopeKeyRef.current === currentScopeKey && !saving && !budgetConflict;
   const refreshBudgetsRef = useRef<() => void>(() => {});
   const requestedPeriodKey = requestedPeriod ? `${requestedPeriod.year}/${requestedPeriod.month}` : "";
   const lastRequestedPeriodKey = useRef(requestedPeriodKey);
@@ -128,6 +139,8 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
     let cancelled = false;
     scopeVersion.current += 1;
     const version = scopeVersion.current;
+    const key = currentScopeKey;
+    loadedScopeKeyRef.current = null;
     dirtyRef.current.clear();
     setDrafts({});
     setSaveMessage("");
@@ -137,13 +150,14 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
     setBudgetConflict(false);
     setCategoryBudgets(readCategoryBudgetCache(month, year, budgetScope));
     void loadCategoryBudgetsExact(budgetScope, month, year).then(result => {
-      if (cancelled || version !== scopeVersion.current) return;
+      if (cancelled || version !== scopeVersion.current || activeScopeKeyRef.current !== key) return;
+      loadedScopeKeyRef.current = !result.error && (!budgetScope.userId || result.exact) ? key : null;
       setCategoryBudgets(result.value);
       setLoadReady(!result.error && (!budgetScope.userId || result.exact));
       setLoadError(result.error ?? "");
     });
     return () => { cancelled = true; scopeVersion.current += 1; };
-  }, [budgetScope, month, year, loadAttempt]);
+  }, [budgetScope, currentScopeKey, month, year, loadAttempt]);
 
   useEffect(() => {
     let active = true;
@@ -154,7 +168,8 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
       const currentRequest = ++request;
       void loadCategoryBudgetsExact(budgetScope, month, year).then(result => {
         if (!active || currentRequest !== request || activeScopeKeyRef.current !== key) return;
-        if (result.error) { setLoadError(result.error); setLoadReady(false); return; }
+        if (result.error) { loadedScopeKeyRef.current = null; setLoadError(result.error); setLoadReady(false); return; }
+        loadedScopeKeyRef.current = !budgetScope.userId || result.exact ? key : null;
         setLoadReady(!budgetScope.userId || result.exact);
         setLoadError("");
         if (dirtyRef.current.size && Object.keys(changedCategoryBudgets(categoryBudgetsRef.current, result.value)).length) {
@@ -171,11 +186,14 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
   }, [budgetScope, currentScopeKey, month, year]);
 
   useEffect(() => subscribeCategoryCatalog(change => {
+    if (activeScopeKeyRef.current !== currentScopeKey) return;
     if ((change.scope.budgetId ?? null) !== (budgetScope.budgetId ?? null)
       || (change.scope.householdId ?? null) !== (budgetScope.householdId ?? null)
       || (change.scope.userId ?? null) !== (budgetScope.userId ?? null)) return;
     scopeVersion.current += 1;
     const version = scopeVersion.current;
+    loadedScopeKeyRef.current = null;
+    setLoadReady(false);
     const wasDirty = [...dirtyRef.current].some(name => categoryMatches(name, change.oldName));
     dirtyRef.current = new Set([...dirtyRef.current].map(name => categoryMatches(name, change.oldName) ? change.newName : name));
     setDrafts(previous => remapCategoryDrafts(previous, change.oldName, change.newName));
@@ -183,22 +201,24 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
     setMoveTarget(null);
     if (wasDirty) setSaveMessage(settings.zeroBasedBudgetEnabled ? "Category updated. Review your unsaved edits before saving." : "Category updated. Your unsaved assignment moved with it; review it before saving.");
     void loadCategoryBudgetsExact(budgetScope, month, year).then(result => {
-      if (version !== scopeVersion.current) return;
+      if (version !== scopeVersion.current || activeScopeKeyRef.current !== currentScopeKey) return;
+      loadedScopeKeyRef.current = !result.error && (!budgetScope.userId || result.exact) ? currentScopeKey : null;
       setCategoryBudgets(result.value);
       setLoadReady(!result.error && (!budgetScope.userId || result.exact));
       setLoadError(result.error ?? "");
     });
-  }), [budgetScope, month, year, settings.zeroBasedBudgetEnabled]);
+  }), [budgetScope, currentScopeKey, month, year, settings.zeroBasedBudgetEnabled]);
 
   useEffect(() => {
     setDrafts(previous => Object.fromEntries(editableCategories.map(category => [category, dirtyRef.current.has(category) ? previous[category] ?? "" : Object.prototype.hasOwnProperty.call(categoryBudgets, category) ? String(categoryBudgets[category]) : ""])));
   }, [categoryBudgets, editableCategories]);
 
-  const previewBudgets = useMemo(() => {
+  const draftPreview = useMemo(() => {
     try {
-      return applyCategoryBudgetChanges(categoryBudgets, parseCategoryBudgetChanges(drafts, [...dirtyRef.current]));
-    } catch { return categoryBudgets; }
+      return { budgets: applyCategoryBudgetChanges(categoryBudgets, parseCategoryBudgetChanges(drafts, [...dirtyRef.current])), error: "" };
+    } catch (error) { return { budgets: categoryBudgets, error: error instanceof Error ? error.message : "Check your category amounts first." }; }
   }, [categoryBudgets, drafts]);
+  const previewBudgets = draftPreview.budgets;
 
   const categoryPlan = useMemo(() => {
     return buildCategoryPlan(
@@ -215,10 +235,23 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
   }, [previewBudgets, editableCategories, getBillMonthlyTotal, getMonthlyBills, getTransactionsForMonth, month, year, settings.zeroBasedBudgetEnabled]);
 
   const visibleRows = categoryPlan.filter(row => filter === "all" || row.status === filter);
-  const sourceOptions = categoryPlan.filter(row => moveTarget && row.category !== moveTarget.category && row.remaining > 0.005);
   const monthlyIncome = getMonthlyIncome(month, year);
   const zeroBudgetSummary = buildZeroBudgetSummary(monthlyIncome, categoryPlan);
   const unassigned = zeroBudgetSummary.leftToAssign;
+  const sourceOptions: { source: CategoryBudgetMoveSource; label: string; available: number }[] = [
+    ...(settings.zeroBasedBudgetEnabled && unassigned > 0 ? [{ source: { kind: "unbudgeted" as const }, label: "Left to budget", available: unassigned }] : []),
+    ...categoryPlan.filter(row => moveTarget && row.category !== moveTarget.category && row.remaining > 0.005
+      && canEditCategory(row.category))
+      .map(row => ({ source: { kind: "category" as const, category: row.category }, label: row.category, available: row.remaining })),
+  ];
+  const selectedMoveSource = sourceOptions.find(option => option.source.kind === moveSource?.kind
+    && (option.source.kind === "unbudgeted" || moveSource?.kind === "category" && option.source.category === moveSource.category));
+  const enteredMoveAmount = parseMoneyInput(moveAmount);
+  const moveInputError = draftPreview.error || (moveAmount.trim() && (enteredMoveAmount === null || enteredMoveAmount <= 0)
+    ? "Enter a positive amount with up to two decimal places."
+    : enteredMoveAmount !== null && selectedMoveSource && enteredMoveAmount > selectedMoveSource.available
+      ? `You can use up to ${money(selectedMoveSource.available)} from ${selectedMoveSource.label}.` : "");
+  const hasDirtyEdits = dirtyRef.current.size > 0;
   const overspentRows = categoryPlan.filter(row => row.hasBudget && row.remaining < -0.005);
   const overspentTotal = overspentRows.reduce((sum, row) => sum + Math.abs(row.remaining), 0);
   const budgetedTotal = categoryPlan.reduce((sum, row) => sum + row.budgeted, 0);
@@ -232,7 +265,8 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
   );
 
   const persistBudgets = async (next: Record<string, number>, changedCategories?: string[], repeat = repeatChanges) => {
-    if (!canEditHousehold || !loadReady || busyRef.current || budgetConflict) return false;
+    if (!canEditHousehold || !editingAllowedRef.current || !loadReady || busyRef.current || budgetConflict
+      || loadedScopeKeyRef.current !== currentScopeKey || activeScopeKeyRef.current !== currentScopeKey) return false;
     const differences = changedCategoryBudgets(categoryBudgets, next);
     const changed = changedCategories ?? Object.keys(differences);
     if (!changed.length) { setSaveMessage("Change a monthly budget before saving."); return false; }
@@ -284,36 +318,73 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
     } else change();
   };
 
+  const focusBudget = (row: CategoryPlanRow) => {
+    if (!editingAllowedRef.current || busyRef.current || activeScopeKeyRef.current !== currentScopeKey
+      || !canEditCategory(row.category)) return;
+    if (!dirtyRef.current.has(row.category)) {
+      setDrafts(previous => ({ ...previous, [row.category]: row.budgeted.toFixed(2) }));
+    }
+    categoryInputs.current.get(row.category)?.focus();
+  };
+
   const openMove = (row: CategoryPlanRow) => {
-    if (!loadReady || busyRef.current || budgetConflict) return;
-    if (dirtyRef.current.size) { setSaveMessage(settings.zeroBasedBudgetEnabled ? "Save your budget edits before moving amounts." : "Save your assignments before moving money."); return; }
-    const source = categoryPlan.filter(item => item.category !== row.category && item.remaining > 0.005).sort((a, b) => b.remaining - a.remaining)[0];
+    if (!editingAllowedRef.current || busyRef.current || activeScopeKeyRef.current !== currentScopeKey
+      || !canEditCategory(row.category)) return;
+    const source = categoryPlan.filter(item => item.category !== row.category && item.remaining > 0.005
+      && canEditCategory(item.category)).sort((a, b) => b.remaining - a.remaining)[0];
+    const available = settings.zeroBasedBudgetEnabled && unassigned > 0 ? unassigned : source?.remaining ?? 0;
+    Keyboard.dismiss();
+    moveScopeRef.current = { key: currentScopeKey, version: scopeVersion.current };
     setMoveTarget(row);
-    setMoveSource(source?.category ?? "");
-    setMoveAmount(row.remaining < 0 ? Math.abs(row.remaining).toFixed(2) : "");
+    setMoveSource(settings.zeroBasedBudgetEnabled && unassigned > 0 ? { kind: "unbudgeted" } : source ? { kind: "category", category: source.category } : null);
+    setMoveAmount(row.remaining < 0 && available > 0 ? Math.min(Math.abs(row.remaining), available).toFixed(2) : "");
     setMoveError("");
   };
 
-  const applyMove = async () => {
-    if (!moveTarget || !moveSource) return;
-    const amount = parseMoneyInput(moveAmount);
-    const source = categoryPlan.find(row => row.category === moveSource);
-    if (amount === null || amount <= 0 || amount > (source?.remaining ?? 0) + 0.005) {
-      setMoveError(`Enter up to ${money(Math.max(0, source?.remaining ?? 0))} from ${moveSource}, using no more than two decimal places.`);
+  const applyMove = () => {
+    if (!editingAllowedRef.current || busyRef.current) return;
+    if (moveScopeRef.current?.key !== activeScopeKeyRef.current || moveScopeRef.current?.version !== scopeVersion.current) {
+      setMoveTarget(null);
       return;
     }
-    if (await persistBudgets(applyCategoryBudgetMove(categoryBudgets, categoryPlan, moveSource, moveTarget.category, amount), undefined, false)) setMoveTarget(null);
-    else setMoveError(settings.zeroBasedBudgetEnabled ? "The budget adjustment was not saved. Try again." : "The move was not saved. Check your connection and try again.");
+    if (!moveTarget || !moveSource || !selectedMoveSource) {
+      setMoveError("Choose a source with an available amount.");
+      return;
+    }
+    try {
+      const changes = parseCategoryBudgetChanges(drafts, [...dirtyRef.current]);
+      const preview = applyCategoryBudgetChanges(categoryBudgets, changes);
+      const amount = parseMoneyInput(moveAmount);
+      if (amount === null) throw new Error("Enter a positive amount with up to two decimal places.");
+      const next = buildCategoryBudgetMoveDraft(preview, categoryPlan, monthlyIncome, moveSource, moveTarget.category, amount);
+      const edits = Object.entries(changedCategoryBudgets(preview, next));
+      edits.forEach(([category]) => dirtyRef.current.add(category));
+      setDrafts(previous => ({ ...previous, ...Object.fromEntries(edits.map(([category, value]) => [category, value!.toFixed(2)])) }));
+      setRepeatChanges(false);
+      setSaveMessage("Move added to this month’s draft. Save to apply.");
+      Keyboard.dismiss();
+      setMoveTarget(null);
+    } catch (error) { setMoveError(error instanceof Error ? error.message : "Check this budget adjustment and try again."); }
   };
 
   const assignRemaining = (row: CategoryPlanRow) => {
-    if (!canEditHousehold || !loadReady || busyRef.current || budgetConflict || unassigned <= 0) return;
+    if (!editingAllowedRef.current || activeScopeKeyRef.current !== currentScopeKey || busyRef.current || unassigned <= 0
+      || !canEditCategory(row.category)) return;
     try {
       parseCategoryBudgetChanges(drafts, [...dirtyRef.current]);
       dirtyRef.current.add(row.category);
       setDrafts(previous => ({ ...previous, [row.category]: (Math.round((row.budgeted + unassigned) * 100) / 100).toFixed(2) }));
       setSaveMessage(`Added ${money(unassigned)} to ${row.category}. Save to keep this budget.`);
     } catch (error) { setSaveMessage(error instanceof Error ? error.message : "Check your category amounts first."); }
+  };
+
+  const useBillAmounts = (row: CategoryPlanRow) => {
+    if (!editingAllowedRef.current || activeScopeKeyRef.current !== currentScopeKey || busyRef.current
+      || !canEditCategory(row.category)) return;
+    dirtyRef.current.add(row.category);
+    setDrafts(previous => ({ ...previous, [row.category]: "" }));
+    setSaveMessage(settings.zeroBasedBudgetEnabled ? "Save to use bill totals. Enter 0 to budget $0."
+      : repeatChanges ? "Save to clear this budget and stop repeating it." : "Save to clear this month’s budget.");
   };
 
   const navigateFromBudget = (navigate: () => void) => {
@@ -409,11 +480,11 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
   }
 
   return (
-    <View style={[styles.screen, { backgroundColor: c.background, paddingTop: insets.top + 10 }]}>
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={[styles.screen, { backgroundColor: c.background, paddingTop: insets.top + 10 }]}>
       <PremiumBackdrop variant="green" />
       <ScrollView
         style={styles.pageScroll}
-        contentContainerStyle={[styles.pageContent, { paddingBottom: insets.bottom + 96 }]}
+        contentContainerStyle={[styles.pageContent, { paddingBottom: hasDirtyEdits ? 20 : insets.bottom + 96 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -431,7 +502,7 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
           style={[styles.restartBtn, { backgroundColor: c.card, borderColor: c.border, opacity: restartAllowed ? 1 : 0.45 }]}>
           <Feather name="rotate-ccw" size={18} color={c.primary} />
         </Pressable> : null}
-        <Pressable accessibilityRole="button" accessibilityLabel="Save monthly budgets" disabled={!canEditHousehold || saving || !loadReady || budgetConflict} onPress={saveDrafts} style={[styles.saveBtn, { backgroundColor: c.primary, opacity: canEditHousehold && !saving && loadReady && !budgetConflict ? 1 : 0.5 }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Save monthly budgets" disabled={!editingAllowedRef.current} onPress={saveDrafts} style={[styles.saveBtn, { backgroundColor: c.primary, opacity: editingAllowedRef.current ? 1 : 0.5 }]}>
           <Text style={[styles.saveText, { color: c.primaryForeground }]}>{saving ? "Saving…" : "Save"}</Text>
         </Pressable>
         </View>
@@ -538,9 +609,10 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
 
       <View style={styles.rows}>
         {visibleRows.map(row => {
+          const rowEditable = canEditCategory(row.category);
           const color = !row.hasBudget ? c.mutedForeground : row.status === "over" ? c.destructive : row.status === "watch" ? c.warning : CAT_COLORS[row.category] ?? c.primary;
           return (
-            <View key={row.category} testID={`category-budget-${row.category}`} style={[styles.rowCard, { backgroundColor: c.card, borderColor: c.border }]}>
+            <View key={`${currentScopeKey}/${row.category}`} testID={`category-budget-${row.category}`} style={[styles.rowCard, { backgroundColor: c.card, borderColor: c.border }]}>
               <View style={styles.rowTop}>
                 <View style={[styles.icon, { backgroundColor: color + "18" }]}>
                   <Feather name={row.status === "over" ? "alert-triangle" : row.status === "watch" ? "eye" : "tag"} size={15} color={color} />
@@ -555,15 +627,27 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
                 <View style={[styles.fill, { backgroundColor: color, width: `${Math.min(100, row.percentUsed)}%` as any }]} />
               </View>
               <View style={styles.editLine}>
+                <View style={styles.editLabel}>
                   <Text style={[styles.inputLabel, { color: c.mutedForeground }]}>{settings.zeroBasedBudgetEnabled ? "Category budget" : "Monthly budget"}</Text>
-                <View style={[styles.inputWrap, { backgroundColor: c.muted }]}>
+                  {canEditHousehold && rowEditable ? <Pressable accessibilityRole="button" accessibilityLabel={`Edit budget for ${row.category}`}
+                    disabled={!editingAllowedRef.current} onPress={() => focusBudget(row)} style={[styles.editButton, { backgroundColor: c.primary + "18" }]}>
+                    <Feather name="edit-2" size={13} color={c.primary} /><Text style={[styles.actionText, { color: c.primary }]}>Edit budget</Text>
+                  </Pressable> : null}
+                </View>
+                <View style={[styles.inputWrap, { backgroundColor: c.muted, borderColor: c.border, borderWidth: 1 }]}>
                   <Text style={[styles.dollar, { color: c.mutedForeground }]}>$</Text>
                   <TextInput sensitive
+                    ref={input => { if (input) categoryInputs.current.set(row.category, input); else categoryInputs.current.delete(row.category); }}
                     accessibilityLabel={`Monthly budget for ${row.category}`}
                     value={Object.prototype.hasOwnProperty.call(drafts, row.category) ? drafts[row.category] : ""}
-                    onChangeText={value => { dirtyRef.current.add(row.category); setSaveMessage("Unsaved monthly budgets"); setDrafts(previous => ({ ...previous, [row.category]: value })); }}
-                    editable={canEditHousehold && !saving && loadReady && !budgetConflict}
+                    onChangeText={value => {
+                      if (!editingAllowedRef.current || activeScopeKeyRef.current !== currentScopeKey) return;
+                      dirtyRef.current.add(row.category); setSaveMessage("Unsaved monthly budgets"); setDrafts(previous => ({ ...previous, [row.category]: value }));
+                    }}
+                    editable={rowEditable && editingAllowedRef.current}
                     keyboardType="decimal-pad"
+                    returnKeyType="done"
+                    onSubmitEditing={Keyboard.dismiss}
                     placeholder={row.budgeted.toFixed(2)}
                     placeholderTextColor={c.mutedForeground}
                     style={[styles.input, { color: c.foreground }]}
@@ -571,21 +655,20 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
                 </View>
               </View>
               {settings.zeroBasedBudgetEnabled ? <Text style={[styles.rowSub, { color: c.mutedForeground }]}>Blank uses bill amounts. Enter 0 for no budget.</Text> : null}
-              {canEditHousehold && <View style={styles.actions}>
+              {!rowEditable ? <Text style={[styles.rowSub, { color: c.mutedForeground }]}>Historical category · manage active categories in Settings.</Text> : null}
+              {canEditHousehold && rowEditable && <View style={styles.actions}>
                 {settings.zeroBasedBudgetEnabled && unassigned > 0 ? <Pressable accessibilityRole="button" accessibilityLabel={`Add remaining to ${row.category}`}
-                  disabled={saving || !loadReady || budgetConflict} onPress={() => assignRemaining(row)} style={[styles.actionBtn, { backgroundColor: c.primary + "18" }]}>
+                  disabled={!editingAllowedRef.current} onPress={() => assignRemaining(row)} style={[styles.actionBtn, { backgroundColor: c.primary + "18" }]}>
                   <Text style={[styles.actionText, { color: c.primary }]}>Add remaining</Text>
                 </Pressable> : null}
                 <Pressable accessibilityRole="button" accessibilityLabel={settings.zeroBasedBudgetEnabled ? `Use planned bills for ${row.category}` : `Clear budget for ${row.category}`}
-                  disabled={saving || !loadReady || budgetConflict} onPress={() => { dirtyRef.current.add(row.category); setDrafts(previous => ({ ...previous, [row.category]: "" })); setSaveMessage(settings.zeroBasedBudgetEnabled ? "Save to use bill totals. Enter 0 to budget $0." : repeatChanges ? "Save to clear this budget and stop repeating it." : "Save to clear this month’s budget."); }}
+                  disabled={!editingAllowedRef.current} onPress={() => useBillAmounts(row)}
                   style={[styles.actionBtn, { backgroundColor: c.muted }]}>
                   <Text style={[styles.actionText, { color: c.mutedForeground }]}>{settings.zeroBasedBudgetEnabled ? "Use bill amounts" : "Clear budget"}</Text>
                 </Pressable>
-                <Pressable accessibilityRole="button" accessibilityLabel={settings.zeroBasedBudgetEnabled ? `Move budget to ${row.category}` : `Move money to ${row.category}`} onPress={() => openMove(row)} style={[styles.actionBtn, { backgroundColor: c.success + "18" }]}>
+                <Pressable accessibilityRole="button" accessibilityLabel={settings.zeroBasedBudgetEnabled ? `Move budget to ${row.category}` : `Move money to ${row.category}`}
+                  disabled={!editingAllowedRef.current} onPress={() => openMove(row)} style={[styles.actionBtn, { backgroundColor: c.success + "18" }]}>
                   <Text style={[styles.actionText, { color: c.success }]}>{settings.zeroBasedBudgetEnabled ? "Move budget" : "Move money"}</Text>
-                </Pressable>
-                <Pressable onPress={() => router.push({ pathname: "/(tabs)/flo", params: { prompt: row.remaining < 0 ? `Why is ${row.category} over?` : `How much do I have left for ${row.category}?` } } as any)} style={[styles.actionBtn, { backgroundColor: c.primary + "18" }]}>
-                  <Text style={[styles.actionText, { color: c.primary }]}>Ask Flo</Text>
                 </Pressable>
               </View>}
             </View>
@@ -594,31 +677,58 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
       </View>
       </ScrollView>
 
+      {hasDirtyEdits ? <View style={[styles.draftFooter, { backgroundColor: c.card, borderColor: c.border, marginBottom: isDesktop ? 16 : insets.bottom + 96 }]}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={[styles.actionText, { color: c.foreground }]}>Unsaved budget changes</Text>
+          <Text style={[styles.rowSub, { color: c.mutedForeground }]}>{repeatChanges ? `Repeats from ${MONTH_FULL[month]} ${year}` : `${MONTH_FULL[month]} ${year} only`}</Text>
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel="Save budget changes" disabled={!editingAllowedRef.current}
+          onPress={saveDrafts} style={[styles.footerSave, { backgroundColor: c.primary, opacity: editingAllowedRef.current ? 1 : 0.5 }]}>
+          <Text style={[styles.saveText, { color: c.primaryForeground }]}>{saving ? "Saving…" : "Save changes"}</Text>
+        </Pressable>
+      </View> : null}
+
       <Modal visible={!!moveTarget} transparent animationType="slide" onRequestClose={() => setMoveTarget(null)}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
         <Pressable style={styles.overlay} onPress={() => setMoveTarget(null)}>
           <Pressable style={[styles.sheet, { backgroundColor: c.card }]} onPress={() => {}}>
             <View style={[styles.handle, { backgroundColor: c.mutedForeground }]} />
             <Text style={[styles.sheetTitle, { color: c.foreground }]}>{settings.zeroBasedBudgetEnabled ? "Move budget to" : "Move money to"} {moveTarget?.category}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sourceScroller}>
-              {sourceOptions.map(row => (
-                <Pressable key={row.category} onPress={() => setMoveSource(row.category)} style={[styles.sourceChip, { backgroundColor: moveSource === row.category ? c.primary : c.muted, borderColor: moveSource === row.category ? c.primary : c.border }]}>
-                  <Text style={[styles.sourceName, { color: moveSource === row.category ? c.primaryForeground : c.foreground }]}>{row.category}</Text>
-                  <Text style={[styles.sourceMeta, { color: moveSource === row.category ? c.primaryForeground : c.mutedForeground }]}>{money(row.remaining)} left</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
+            <Text style={[styles.noticeText, { color: c.mutedForeground }]}>Choose a source. The adjustment stays in your draft until you Save changes.</Text>
+            {sourceOptions.length ? <ScrollView style={styles.sourceList} showsVerticalScrollIndicator contentContainerStyle={styles.sourceScroller} keyboardShouldPersistTaps="handled">
+              {sourceOptions.map(option => {
+                const selected = option.source.kind === moveSource?.kind
+                  && (option.source.kind === "unbudgeted" || moveSource?.kind === "category" && option.source.category === moveSource.category);
+                return <Pressable key={option.source.kind === "unbudgeted" ? "pool" : `category:${option.source.category}`}
+                  accessibilityRole="radio" accessibilityLabel={`Move from ${option.label}`} accessibilityState={{ checked: selected }}
+                  onPress={() => { setMoveSource(option.source); setMoveError(""); }}
+                  style={[styles.sourceChip, { backgroundColor: selected ? c.primary : c.muted, borderColor: selected ? c.primary : c.border }]}>
+                  <Text numberOfLines={2} style={[styles.sourceName, { color: selected ? c.primaryForeground : c.foreground }]}>{option.label}</Text>
+                  <Text style={[styles.sourceMeta, { color: selected ? c.primaryForeground : c.mutedForeground }]}>{money(option.available)} available</Text>
+                </Pressable>;
+              })}
+            </ScrollView> : <Text accessibilityRole="alert" style={[styles.noticeText, { color: c.mutedForeground }]}>No unspent budget is available to move. Edit category amounts or review income first.</Text>}
+            {sourceOptions.length ? <>
             <View style={[styles.inputWrap, { backgroundColor: c.muted, marginBottom: 8 }]}>
               <Text style={[styles.dollar, { color: c.mutedForeground }]}>$</Text>
-              <TextInput sensitive accessibilityLabel="Amount to move" value={moveAmount} onChangeText={setMoveAmount} keyboardType="decimal-pad" placeholder="Amount" placeholderTextColor={c.mutedForeground} style={[styles.input, { color: c.foreground }]} />
+              <TextInput sensitive accessibilityLabel="Amount to move" value={moveAmount} onChangeText={value => { setMoveAmount(value); setMoveError(""); }}
+                keyboardType="decimal-pad" returnKeyType="done" onSubmitEditing={Keyboard.dismiss} placeholder="Amount" placeholderTextColor={c.mutedForeground} style={[styles.input, { color: c.foreground }]} />
             </View>
-            {moveError ? <Text style={[styles.error, { color: c.destructive }]}>{moveError}</Text> : null}
-            <Pressable disabled={saving} onPress={applyMove} style={[styles.sheetPrimary, { backgroundColor: c.primary }]}>
-              <Text style={[styles.sheetPrimaryText, { color: c.primaryForeground }]}>{saving ? "Saving…" : "Apply move"}</Text>
+            </> : null}
+            {moveError || moveInputError ? <Text accessibilityRole="alert" style={[styles.error, { color: c.destructive }]}>{moveError || moveInputError}</Text> : null}
+            <Pressable accessibilityRole="button" accessibilityLabel="Add budget move to draft"
+              disabled={!editingAllowedRef.current || !selectedMoveSource || enteredMoveAmount === null || enteredMoveAmount <= 0 || Boolean(moveInputError)}
+              onPress={applyMove} style={[styles.sheetPrimary, { backgroundColor: c.primary, opacity: !editingAllowedRef.current || !selectedMoveSource || enteredMoveAmount === null || enteredMoveAmount <= 0 || Boolean(moveInputError) ? 0.5 : 1 }]}>
+              <Text style={[styles.sheetPrimaryText, { color: c.primaryForeground }]}>Add to draft</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close budget move" onPress={() => setMoveTarget(null)} style={styles.sheetClose}>
+              <Text style={[styles.actionText, { color: c.foreground }]}>Close</Text>
             </Pressable>
           </Pressable>
         </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -707,22 +817,28 @@ const styles = StyleSheet.create({
   track: { height: 7, borderRadius: 4, overflow: "hidden" },
   fill: { height: 7, borderRadius: 4 },
   editLine: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  editLabel: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
+  editButton: { minHeight: 44, borderRadius: 12, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 6 },
   inputLabel: { fontSize: 11, fontFamily: "Inter_700Bold", textTransform: "uppercase" },
   inputWrap: { height: 44, minWidth: 128, borderRadius: 12, flexDirection: "row", alignItems: "center", paddingHorizontal: 12 },
   dollar: { fontSize: 14, fontFamily: "Inter_700Bold", marginRight: 4 },
   input: { flex: 1, fontSize: 15, fontFamily: "Inter_700Bold" },
   actions: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  draftFooter: { marginTop: 8, marginHorizontal: 16, borderWidth: 1, borderRadius: 16, padding: 12, flexDirection: "row", alignItems: "center", gap: 12 },
+  footerSave: { minHeight: 44, borderRadius: 12, paddingHorizontal: 14, justifyContent: "center", alignItems: "center" },
   actionBtn: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   actionText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   overlay: { flex: 1, backgroundColor: "rgba(2,6,23,0.68)", justifyContent: "flex-end" },
-  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 18, gap: 12 },
+  sheet: { alignSelf: "center", width: "100%", maxWidth: 620, maxHeight: "95%", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 18, gap: 12 },
   handle: { alignSelf: "center", width: 48, height: 4, borderRadius: 999, opacity: 0.5 },
   sheetTitle: { fontSize: 20, fontFamily: "Inter_800ExtraBold", textAlign: "center" },
   sourceScroller: { gap: 8, paddingVertical: 2 },
-  sourceChip: { minWidth: 130, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10 },
-  sourceName: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  sourceList: { maxHeight: 180, flexShrink: 1 },
+  sourceChip: { minHeight: 48, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 12 },
+  sourceName: { flex: 1, minWidth: 0, fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   sourceMeta: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 3 },
   error: { fontSize: 12, fontFamily: "Inter_700Bold", textAlign: "center" },
   sheetPrimary: { minHeight: 48, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   sheetPrimaryText: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
+  sheetClose: { minHeight: 44, justifyContent: "center", alignItems: "center" },
 });

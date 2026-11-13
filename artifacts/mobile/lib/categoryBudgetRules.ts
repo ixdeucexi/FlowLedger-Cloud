@@ -1,5 +1,6 @@
 import { parseMoneyInput } from "./moneyFormInput";
 import { normalizeCategoryInput } from "./categoryCatalog";
+import { applyCategoryBudgetMove, buildZeroBudgetSummary, type CategoryPlanRow } from "./categoryPlanning";
 
 const MAX_MONTHLY_CATEGORY_BUDGET = 999_999_999_999.99;
 
@@ -152,4 +153,51 @@ export function buildCategoryBudgetRestartDraft(
   }
   if (names.size > 500) throw new Error("Start over supports up to 500 categories. Review your categories in Plan settings first.");
   return Object.fromEntries([...names].map(name => [name, "0.00"]));
+}
+
+export type CategoryBudgetMoveSource =
+  | { kind: "unbudgeted" }
+  | { kind: "category"; category: string };
+
+export function isSpendingBudgetCategory(category: string): boolean {
+  const name = normalizeCategoryInput(category).toLowerCase();
+  return Boolean(name) && name !== "income" && name !== "transfer";
+}
+
+/** Build an allocation edit from the current preview; callers still choose Save. */
+export function buildCategoryBudgetMoveDraft(
+  currentBudgets: Readonly<Record<string, number>>,
+  rows: CategoryPlanRow[],
+  plannedIncome: number,
+  source: CategoryBudgetMoveSource,
+  targetCategory: string,
+  amount: number,
+): Record<string, number> {
+  const amountCents = Math.round(amount * 100);
+  if (!Number.isFinite(amount) || !Number.isSafeInteger(amountCents)
+    || amountCents <= 0 || amountCents / 100 !== amount) {
+    throw new Error("Enter a positive amount with up to two decimal places.");
+  }
+  const target = rows.find(row => row.category === targetCategory);
+  if (!target || !isSpendingBudgetCategory(targetCategory) || !Number.isFinite(target.budgeted) || target.budgeted < 0) {
+    throw new Error("Choose an available category.");
+  }
+  const targetCents = Math.round(target.budgeted * 100);
+  if (!Number.isSafeInteger(targetCents + amountCents)
+    || (targetCents + amountCents) / 100 > MAX_MONTHLY_CATEGORY_BUDGET) {
+    throw new Error("Choose a smaller category amount.");
+  }
+  if (source.kind === "unbudgeted") {
+    const available = buildZeroBudgetSummary(plannedIncome, rows).leftToAssign;
+    if (amountCents > Math.round(available * 100)) {
+      throw new Error("This amount is more than is left to budget.");
+    }
+    return { ...currentBudgets, [targetCategory]: (targetCents + amountCents) / 100 };
+  }
+  if (!isSpendingBudgetCategory(source.category)) throw new Error("Choose a spending category as the source.");
+  const next = applyCategoryBudgetMove({ ...currentBudgets }, rows, source.category, targetCategory, amount);
+  if (!Object.keys(changedCategoryBudgets(currentBudgets, next)).length) {
+    throw new Error("Choose another category with enough unspent budget.");
+  }
+  return next;
 }

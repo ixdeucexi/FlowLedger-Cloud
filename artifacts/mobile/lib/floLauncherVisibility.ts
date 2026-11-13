@@ -5,6 +5,13 @@ export type FloLauncherPreferenceState = {
   error: string | null;
 };
 
+/** Page visibility is temporary and never changes the saved shortcut setting. */
+export function hideFloOnBudgetPage(pathname: string, zeroBudgetEnabled: boolean): boolean {
+  const path = pathname.split(/[?#]/, 1)[0]!.split("/")
+    .filter(segment => segment && !/^\([^/]+\)$/.test(segment)).join("/");
+  return path === "category-budget" || zeroBudgetEnabled && path === "transactions";
+}
+
 export function createFloUndoPressGate() {
   let started = false;
   return {

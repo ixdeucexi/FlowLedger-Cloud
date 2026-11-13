@@ -7,7 +7,32 @@ import {
   createFloUndoPressGate,
   scopedFloLauncherPreferenceStore,
   clearFloLauncherPreferenceStoresForUser,
+  hideFloOnBudgetPage,
 } from "./floLauncherVisibility";
+
+test("Flo hides only on the active category budget or zero-budget Activity page", () => {
+  for (const path of ["/category-budget", "/(tabs)/category-budget", "/category-budget/", "/category-budget?budgetMonth=10"]) {
+    assert.equal(hideFloOnBudgetPage(path, true), true, path);
+    assert.equal(hideFloOnBudgetPage(path, false), true, path);
+  }
+  for (const path of ["/transactions", "/(tabs)/transactions/", "/transactions#top"]) {
+    assert.equal(hideFloOnBudgetPage(path, true), true, path);
+    assert.equal(hideFloOnBudgetPage(path, false), false, path);
+  }
+  for (const path of ["/", "/bills", "/monthly", "/more", "/plan-simulator", "/accounts/category-budget", "/transactions-history"]) {
+    assert.equal(hideFloOnBudgetPage(path, true), false, path);
+  }
+});
+
+test("page suppression leaves the saved Flo preference unchanged when leaving the budget", async () => {
+  let writes = 0;
+  const store = createFloLauncherPreferenceStore(async () => ({ floLauncherEnabled: true }), async () => { writes++; });
+  await store.hydrate();
+  assert.equal(hideFloOnBudgetPage("/transactions", true), true);
+  assert.equal(hideFloOnBudgetPage("/", true), false);
+  assert.equal(store.getSnapshot().enabled, true);
+  assert.equal(writes, 0);
+});
 
 test("default on, persisted off, observable shared setting and persisted Undo", async () => {
   let saved: { floLauncherEnabled?: boolean } = {};

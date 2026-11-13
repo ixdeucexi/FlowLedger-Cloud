@@ -1,9 +1,55 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyCategoryBudgetChanges, buildCategoryBudgetRestartDraft, changedCategoryBudgets, parseCategoryBudgetChanges, resolveCategoryBudgetRules, type CategoryBudgetRule } from "./categoryBudgetRules";
+import { applyCategoryBudgetChanges, buildCategoryBudgetMoveDraft, buildCategoryBudgetRestartDraft, changedCategoryBudgets, isSpendingBudgetCategory, parseCategoryBudgetChanges, resolveCategoryBudgetRules, type CategoryBudgetRule } from "./categoryBudgetRules";
+import { buildCategoryPlan, buildZeroBudgetSummary } from "./categoryPlanning";
 
 const rule = (category: string, amount: number | null, effective_month: string, repeats = true): CategoryBudgetRule => ({
   category, amount, effective_month, repeats,
+});
+
+test("moves use edited preview amounts and conserve the assigned total", () => {
+  const saved = { Savings: 500, Food: 0, Kids: 20 };
+  const preview = applyCategoryBudgetChanges(saved, { Savings: 150, Kids: 45 });
+  const rows = buildCategoryPlan(Object.keys(preview), [], [{ category: "Savings", amount: -25.37 }], Object.entries(preview).map(([category, amount]) => ({ category, amount })));
+  const next = buildCategoryBudgetMoveDraft(preview, rows, 1000, { kind: "category", category: "Savings" }, "Food", 100.01);
+  assert.deepEqual(next, { Savings: 49.99, Food: 100.01, Kids: 45 });
+  assert.equal(Object.values(next).reduce((a, b) => a + b, 0), 195);
+  assert.deepEqual(saved, { Savings: 500, Food: 0, Kids: 20 });
+  assert.throws(() => buildCategoryBudgetMoveDraft(preview, rows, 1000, { kind: "category", category: "Savings" }, "Food", 124.64), /unspent/);
+});
+
+test("Left to budget can fund a category after restart without changing income or spending", () => {
+  const preview = { Food: 0, Savings: 0 };
+  const rows = buildCategoryPlan(Object.keys(preview), [], [{ category: "Food", amount: -10.25 }], Object.entries(preview).map(([category, amount]) => ({ category, amount })));
+  const next = buildCategoryBudgetMoveDraft(preview, rows, 425, { kind: "unbudgeted" }, "Food", 100.25);
+  assert.deepEqual(next, { Food: 100.25, Savings: 0 });
+  const updated = buildCategoryPlan(Object.keys(preview), [], [{ category: "Food", amount: -10.25 }], Object.entries(next).map(([category, amount]) => ({ category, amount })));
+  assert.equal(buildZeroBudgetSummary(425, updated).leftToAssign, 324.75);
+  assert.equal(updated.find(row => row.category === "Food")?.spent, 10.25);
+  assert.deepEqual(preview, { Food: 0, Savings: 0 });
+});
+
+test("move draft rejects invalid cents, unavailable sources and non-spending categories", () => {
+  const rows = buildCategoryPlan(["Food", "Savings", "Income", "Transfer"], [], [], [{ category: "Savings", amount: 100 }]);
+  for (const amount of [0, -1, NaN, Infinity, 1.001, 100.01]) {
+    assert.throws(() => buildCategoryBudgetMoveDraft({ Savings: 100 }, rows, 200, { kind: "unbudgeted" }, "Food", amount));
+  }
+  for (const category of ["Income", " income ", "TRANSFER", "Transfer"]) assert.equal(isSpendingBudgetCategory(category), false);
+  assert.throws(() => buildCategoryBudgetMoveDraft({ Savings: 100 }, rows, 200, { kind: "unbudgeted" }, "Income", 1), /available category/);
+  assert.throws(() => buildCategoryBudgetMoveDraft({ Savings: 100 }, rows, 200, { kind: "category", category: "Transfer" }, "Food", 1), /spending category/);
+  assert.throws(() => buildCategoryBudgetMoveDraft({ Savings: 100 }, rows, 200, { kind: "category", category: "Missing" }, "Food", 1), /unspent/);
+});
+
+test("typed pool source cannot collide with custom or prototype-shaped category names", () => {
+  const preview = Object.fromEntries([["Left to budget", 100], ["__proto__", 0], ["constructor", 0]]);
+  const rows = buildCategoryPlan(Object.keys(preview), [], [], Object.entries(preview).map(([category, amount]) => ({ category, amount })));
+  const categoryMove = buildCategoryBudgetMoveDraft(preview, rows, 300, { kind: "category", category: "Left to budget" }, "__proto__", 25);
+  assert.equal(categoryMove["Left to budget"], 75);
+  assert.equal(categoryMove.__proto__, 25);
+  const poolMove = buildCategoryBudgetMoveDraft(preview, rows, 300, { kind: "unbudgeted" }, "constructor", 25);
+  assert.equal(poolMove["Left to budget"], 100);
+  assert.equal(poolMove.constructor, 25);
+  assert.deepEqual(Object.keys(preview), ["Left to budget", "__proto__", "constructor"]);
 });
 
 test("monthly Gas and Kids allowances repeat from their effective month without writes", () => {
