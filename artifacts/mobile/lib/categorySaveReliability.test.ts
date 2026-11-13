@@ -313,3 +313,74 @@ test("budget confirmations revalidate their household, month, revision and busy 
     assert.equal(calls, invalidation === "none" ? 1 : 0, invalidation);
   }
 });
+
+function restartScreenHarness() {
+  const source = readFileSync("app/(tabs)/category-budget.tsx", "utf8");
+  const body = source.slice(source.indexOf("  const restartBudget ="), source.indexOf("  const copyPreviousMonth ="));
+  const state = {
+    drafts: { Housing: "1200" } as Record<string, string>, repeat: true, filter: "over", move: "Food" as string | null,
+    message: "", dirtyRef: { current: new Set(["Housing"]) }, restartAllowedRef: { current: true }, busyRef: { current: false },
+    baseline: { Housing: 1200, Savings: 500, Debt: 300 } as Record<string, number>,
+  };
+  const categoryBudgetsRef = { current: state.baseline };
+  const requested: Array<{ title: string; onConfirm: () => void }> = [];
+  const bindings = {
+    restartAllowedRef: state.restartAllowedRef, busyRef: state.busyRef,
+    buildCategoryBudgetRestartDraft: categoryBudgetRules.buildCategoryBudgetRestartDraft,
+    editableCategories: ["Housing", "Savings", "Debt"], categoryPlan: [{ category: "Housing", budgeted: 1200 }],
+    categoryBudgets: state.baseline, categoryBudgetsRef, changedCategoryBudgets: categoryBudgetRules.changedCategoryBudgets,
+    dirtyRef: state.dirtyRef, month: 10, year: 2026, MONTH_FULL: Array.from({ length: 12 }, (_, month) => month === 10 ? "November" : "Month"),
+    confirmBudgetAction: (options: { title: string; onConfirm: () => void }) => { requested.push(options); },
+    setDrafts: (value: Record<string, string>) => { state.drafts = value; },
+    setRepeatChanges: (value: boolean) => { state.repeat = value; },
+    setMoveTarget: (value: null) => { state.move = value; },
+    setFilter: (value: string) => { state.filter = value; },
+    setSaveMessage: (value: string) => { state.message = value; },
+  };
+  const javascript = transpileModule(body, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
+  const restart = new Function(...Object.keys(bindings), `${javascript}; return restartBudget;`)(...Object.values(bindings));
+  return { state, requested, restart, categoryBudgetsRef };
+}
+
+test("restart waits for confirmation, stages zeroes and keeps the saved baseline unchanged", () => {
+  const h = restartScreenHarness();
+  h.restart();
+  assert.equal(h.requested[0]?.title, "Start over for November 2026?");
+  assert.deepEqual(h.state.drafts, { Housing: "1200" });
+  assert.equal(h.state.repeat, true);
+  h.requested[0]!.onConfirm();
+  assert.deepEqual(h.state.drafts, { Housing: "0.00", Savings: "0.00", Debt: "0.00" });
+  assert.deepEqual([...h.state.dirtyRef.current], ["Housing", "Savings", "Debt"]);
+  assert.equal(h.state.repeat, false);
+  assert.equal(h.state.move, null);
+  assert.equal(h.state.filter, "all");
+  assert.deepEqual(h.state.baseline, { Housing: 1200, Savings: 500, Debt: 300 });
+  assert.match(h.state.message, /draft.*Save/);
+});
+
+test("restart rechecks permissions, loading, conflicts and busy state at request and confirmation", () => {
+  for (const guard of ["allowed", "busy"] as const) {
+    const closed = restartScreenHarness();
+    if (guard === "allowed") closed.state.restartAllowedRef.current = false;
+    else closed.state.busyRef.current = true;
+    closed.restart();
+    assert.equal(closed.requested.length, 0);
+    const deferred = restartScreenHarness();
+    deferred.restart();
+    if (guard === "allowed") deferred.state.restartAllowedRef.current = false;
+    else deferred.state.busyRef.current = true;
+    deferred.requested[0]!.onConfirm();
+    assert.deepEqual(deferred.state.drafts, { Housing: "1200" });
+    assert.equal(deferred.state.repeat, true);
+  }
+});
+
+test("a refreshed saved budget invalidates a pending restart without overwriting drafts", () => {
+  const h = restartScreenHarness();
+  h.restart();
+  h.categoryBudgetsRef.current = { Housing: 1250, Savings: 500, Debt: 300 };
+  h.requested[0]!.onConfirm();
+  assert.deepEqual(h.state.drafts, { Housing: "1200" });
+  assert.equal(h.state.repeat, true);
+  assert.match(h.state.message, /Saved budgets changed.*Reload/);
+});

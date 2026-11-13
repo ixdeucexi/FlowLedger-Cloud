@@ -1,4 +1,5 @@
 import { parseMoneyInput } from "./moneyFormInput";
+import { normalizeCategoryInput } from "./categoryCatalog";
 
 const MAX_MONTHLY_CATEGORY_BUDGET = 999_999_999_999.99;
 
@@ -123,4 +124,32 @@ export function changedCategoryBudgets(
   return Object.fromEntries([...new Set([...before.keys(), ...after.keys()])]
     .filter(category => before.get(category) !== after.get(category))
     .map(category => [category, after.get(category) ?? null]));
+}
+
+/** Stage explicit zeroes without clearing saved values or inheriting bill defaults. */
+export function buildCategoryBudgetRestartDraft(
+  categories: readonly string[],
+  rows: readonly { category: string; budgeted: number }[],
+  savedBudgets: Readonly<Record<string, number>>,
+): Record<string, string> {
+  const catalog = new Map<string, string>();
+  for (const category of categories) {
+    const name = normalizeCategoryInput(category);
+    const key = name.toLowerCase();
+    if (name && key !== "income" && key !== "transfer" && !catalog.has(key)) catalog.set(key, category);
+  }
+  const names = new Set(catalog.values());
+  for (const name of Object.keys(savedBudgets)) {
+    const canonical = catalog.get(normalizeCategoryInput(name).toLowerCase());
+    if (!canonical) throw new Error("Some saved categories are no longer available. Review categories in Plan settings before starting over.");
+    names.add(canonical);
+  }
+  for (const row of rows) {
+    const canonical = catalog.get(normalizeCategoryInput(row.category).toLowerCase());
+    if (canonical) names.add(canonical);
+    else if (row.budgeted > 0) throw new Error("Some planned categories are no longer available. Review categories in Plan settings before starting over.");
+    // Historical activity without a budget stays visible and is never rewritten.
+  }
+  if (names.size > 500) throw new Error("Start over supports up to 500 categories. Review your categories in Plan settings first.");
+  return Object.fromEntries([...names].map(name => [name, "0.00"]));
 }

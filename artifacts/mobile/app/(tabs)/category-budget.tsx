@@ -2,7 +2,7 @@ import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as
 import Feather from "@expo/vector-icons/Feather";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Keyboard, Modal, ScrollView, StyleSheet } from "react-native";
+import { Keyboard, Modal, Platform, ScrollView, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
@@ -16,7 +16,7 @@ import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
 import { applyCategoryBudgetMove, buildCategoryPlan, buildZeroBudgetSummary, categoryBudgetPeriod, type CategoryPlanRow } from "@/lib/categoryPlanning";
 import { loadCategoryBudgetsExact, readCategoryBudgetCache, saveMonthlyCategoryBudgetChanges, subscribeCategoryBudgets, subscribeCategoryCatalog } from "@/lib/categoryBudgetStore";
 import { categoryMatches, remapCategoryBudgetMap, remapCategoryDrafts } from "@/lib/categoryCatalog";
-import { applyCategoryBudgetChanges, changedCategoryBudgets, parseCategoryBudgetChanges } from "@/lib/categoryBudgetRules";
+import { applyCategoryBudgetChanges, buildCategoryBudgetRestartDraft, changedCategoryBudgets, parseCategoryBudgetChanges } from "@/lib/categoryBudgetRules";
 import { buildReviewQueue, transactionCategoryParts } from "@/lib/reviewCenter";
 import { unmatchedPendingTransactions } from "@/lib/pendingPlanMatches";
 import { assertFinancialMutationOnline } from "@/lib/networkStatus";
@@ -91,6 +91,9 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
   activeScopeKeyRef.current = currentScopeKey;
   const categoryBudgetsRef = useRef(categoryBudgets);
   categoryBudgetsRef.current = categoryBudgets;
+  const restartAllowed = settings.zeroBasedBudgetEnabled && canEditHousehold && categoriesReady && loadReady && !saving && !budgetConflict;
+  const restartAllowedRef = useRef(restartAllowed);
+  restartAllowedRef.current = restartAllowed;
   const refreshBudgetsRef = useRef<() => void>(() => {});
   const requestedPeriodKey = requestedPeriod ? `${requestedPeriod.year}/${requestedPeriod.month}` : "";
   const lastRequestedPeriodKey = useRef(requestedPeriodKey);
@@ -178,14 +181,14 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
     setDrafts(previous => remapCategoryDrafts(previous, change.oldName, change.newName));
     setCategoryBudgets(previous => remapCategoryBudgetMap(previous, change.oldName, change.newName));
     setMoveTarget(null);
-    if (wasDirty) setSaveMessage("Category updated. Your unsaved assignment moved with it; review it before saving.");
+    if (wasDirty) setSaveMessage(settings.zeroBasedBudgetEnabled ? "Category updated. Review your unsaved edits before saving." : "Category updated. Your unsaved assignment moved with it; review it before saving.");
     void loadCategoryBudgetsExact(budgetScope, month, year).then(result => {
       if (version !== scopeVersion.current) return;
       setCategoryBudgets(result.value);
       setLoadReady(!result.error && (!budgetScope.userId || result.exact));
       setLoadError(result.error ?? "");
     });
-  }), [budgetScope, month, year]);
+  }), [budgetScope, month, year, settings.zeroBasedBudgetEnabled]);
 
   useEffect(() => {
     setDrafts(previous => Object.fromEntries(editableCategories.map(category => [category, dirtyRef.current.has(category) ? previous[category] ?? "" : Object.prototype.hasOwnProperty.call(categoryBudgets, category) ? String(categoryBudgets[category]) : ""])));
@@ -283,7 +286,7 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
 
   const openMove = (row: CategoryPlanRow) => {
     if (!loadReady || busyRef.current || budgetConflict) return;
-    if (dirtyRef.current.size) { setSaveMessage("Save your assignments before moving money."); return; }
+    if (dirtyRef.current.size) { setSaveMessage(settings.zeroBasedBudgetEnabled ? "Save your budget edits before moving amounts." : "Save your assignments before moving money."); return; }
     const source = categoryPlan.filter(item => item.category !== row.category && item.remaining > 0.005).sort((a, b) => b.remaining - a.remaining)[0];
     setMoveTarget(row);
     setMoveSource(source?.category ?? "");
@@ -300,7 +303,7 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
       return;
     }
     if (await persistBudgets(applyCategoryBudgetMove(categoryBudgets, categoryPlan, moveSource, moveTarget.category, amount), undefined, false)) setMoveTarget(null);
-    else setMoveError("The move was not saved. Check your connection and try again.");
+    else setMoveError(settings.zeroBasedBudgetEnabled ? "The budget adjustment was not saved. Try again." : "The move was not saved. Check your connection and try again.");
   };
 
   const assignRemaining = (row: CategoryPlanRow) => {
@@ -309,8 +312,8 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
       parseCategoryBudgetChanges(drafts, [...dirtyRef.current]);
       dirtyRef.current.add(row.category);
       setDrafts(previous => ({ ...previous, [row.category]: (Math.round((row.budgeted + unassigned) * 100) / 100).toFixed(2) }));
-      setSaveMessage(`Assigned the remaining ${money(unassigned)} to ${row.category}. Save to keep this plan.`);
-    } catch (error) { setSaveMessage(error instanceof Error ? error.message : "Check your assignments first."); }
+      setSaveMessage(`Added ${money(unassigned)} to ${row.category}. Save to keep this budget.`);
+    } catch (error) { setSaveMessage(error instanceof Error ? error.message : "Check your category amounts first."); }
   };
 
   const navigateFromBudget = (navigate: () => void) => {
@@ -328,9 +331,36 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
 
   const reloadSavedBudgets = () => confirmBudgetAction({ title: "Reload saved budgets?", message: "Your unsaved edits will be discarded. The latest saved budgets will load.", cancelText: "Keep editing", confirmText: "Reload", destructive: true, onConfirm: () => setLoadAttempt(value => value + 1) });
 
+  const restartBudget = () => {
+    if (!restartAllowedRef.current || busyRef.current) return;
+    let nextDrafts: Record<string, string>;
+    try { nextDrafts = buildCategoryBudgetRestartDraft(editableCategories, categoryPlan, categoryBudgets); }
+    catch (error) { setSaveMessage(error instanceof Error ? error.message : "Review your categories before starting over."); return; }
+    if (!Object.keys(nextDrafts).length) { setSaveMessage("There are no category budgets to restart."); return; }
+    const baseline = { ...categoryBudgets };
+    confirmBudgetAction({
+      title: `Start over for ${MONTH_FULL[month]} ${year}?`,
+      message: "Set category budgets to zero in a new draft. Income, spending and bills stay as they are. Nothing is saved until you choose Save.",
+      cancelText: "Keep budget", confirmText: "Start over", destructive: true,
+      onConfirm: () => {
+        if (!restartAllowedRef.current || busyRef.current) return;
+        if (Object.keys(changedCategoryBudgets(baseline, categoryBudgetsRef.current)).length) {
+          setSaveMessage("Saved budgets changed. Reload them before starting over.");
+          return;
+        }
+        dirtyRef.current = new Set(Object.keys(nextDrafts));
+        setDrafts(nextDrafts);
+        setRepeatChanges(false);
+        setMoveTarget(null);
+        setFilter("all");
+        setSaveMessage("Category budgets are zero in this draft. Review and Save.");
+      },
+    });
+  };
+
   const copyPreviousMonth = async () => {
     if (!loadReady || busyRef.current) return;
-    if (dirtyRef.current.size) { setSaveMessage("Save your assignments before copying another month."); return; }
+    if (dirtyRef.current.size) { setSaveMessage(settings.zeroBasedBudgetEnabled ? "Save your budget edits before copying another month." : "Save your assignments before copying another month."); return; }
     const version = scopeVersion.current;
     const key = currentScopeKey;
     const previousDate = new Date(year, month - 1, 1);
@@ -363,7 +393,7 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
           ) : null}
           <View style={{ flex: 1 }}>
             {embedded ? <PlanViewSelector textStyle={styles.title} /> : <Text style={[styles.title, { color: c.foreground }]}>Category budgets</Text>}
-            <Text style={[styles.subtitle, { color: c.mutedForeground }]}>{settings.zeroBasedBudgetEnabled ? "Give your monthly income a job" : "Set a monthly amount for each category"}</Text>
+            <Text style={[styles.subtitle, { color: c.mutedForeground }]}>{settings.zeroBasedBudgetEnabled ? "Plan this month’s income" : "Set a monthly amount for each category"}</Text>
             <DataFreshnessLabel compact />
           </View>
         </View>
@@ -391,18 +421,26 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
         {!embedded && <Pressable onPress={() => navigateFromBudget(() => router.back())} style={[styles.backBtn, { backgroundColor: c.card }]}>
           <Feather name="chevron-left" size={20} color={c.foreground} />
         </Pressable>}
-        <View style={{ flex: 1, minWidth: 0 }}>
+        <View style={styles.headerCopy}>
           {embedded ? <PlanViewSelector textStyle={styles.title} /> : <Text style={[styles.title, { color: c.foreground }]}>{settings.zeroBasedBudgetEnabled ? "Zero-Based Budget" : "Category budgets"}</Text>}
-          <Text style={[styles.subtitle, { color: c.mutedForeground }]}>{settings.zeroBasedBudgetEnabled ? "Give your monthly income a job" : "Set a monthly amount for each category"}</Text>
+          <Text style={[styles.subtitle, { color: c.mutedForeground }]}>{settings.zeroBasedBudgetEnabled ? "Plan this month’s income" : "Set a monthly amount for each category"}</Text>
           <DataFreshnessLabel compact />
         </View>
+        <View style={styles.headerActions}>
+        {settings.zeroBasedBudgetEnabled ? <Pressable {...(Platform.OS === "web" ? { title: `Start over ${MONTH_FULL[month]} ${year} budget` } : {})} accessibilityRole="button" accessibilityLabel={`Start over ${MONTH_FULL[month]} ${year} budget`} accessibilityHint="Prepare a new draft with category budgets set to zero" disabled={!restartAllowed} onPress={restartBudget}
+          style={[styles.restartBtn, { backgroundColor: c.card, borderColor: c.border, opacity: restartAllowed ? 1 : 0.45 }]}>
+          <Feather name="rotate-ccw" size={18} color={c.primary} />
+        </Pressable> : null}
         <Pressable accessibilityRole="button" accessibilityLabel="Save monthly budgets" disabled={!canEditHousehold || saving || !loadReady || budgetConflict} onPress={saveDrafts} style={[styles.saveBtn, { backgroundColor: c.primary, opacity: canEditHousehold && !saving && loadReady && !budgetConflict ? 1 : 0.5 }]}>
           <Text style={[styles.saveText, { color: c.primaryForeground }]}>{saving ? "Saving…" : "Save"}</Text>
         </Pressable>
+        </View>
       </View>
-      {saveMessage ? <Text accessibilityLiveRegion="polite" style={[styles.subtitle, { color: c.foreground }]}>{saveMessage}</Text> : null}
-      {!loadReady ? <Text accessibilityLiveRegion="polite" style={[styles.subtitle, { color: c.mutedForeground }]}>{loadError ? "Could not confirm your saved budgets. Retry before editing." : "Loading saved budgets…"}</Text> : null}
-      {loadError ? <Pressable onPress={() => { if (dirtyRef.current.size) reloadSavedBudgets(); else setLoadAttempt(value => value + 1); }} style={styles.copyPreviousButton}><Text style={{ color: c.primary }}>Retry loading budgets</Text></Pressable> : null}
+      {saveMessage || !loadReady ? <View style={[styles.statusNotice, { backgroundColor: c.card, borderColor: c.border }]}>
+        {saveMessage ? <Text accessibilityLiveRegion="polite" style={[styles.noticeText, { color: c.foreground }]}>{saveMessage}</Text> : null}
+        {!loadReady ? <Text accessibilityLiveRegion="polite" style={[styles.noticeText, { color: c.mutedForeground }]}>{loadError ? "Could not confirm your saved budgets. Retry before editing." : "Loading saved budgets…"}</Text> : null}
+        {loadError ? <Pressable onPress={() => { if (dirtyRef.current.size) reloadSavedBudgets(); else setLoadAttempt(value => value + 1); }} style={styles.inlineButton}><Text style={{ color: c.primary }}>Retry loading budgets</Text></Pressable> : null}
+      </View> : null}
       {budgetConflict ? <View style={[styles.notice, { backgroundColor: c.warning + "14", borderColor: c.warning + "55" }]}>
         <Text accessibilityLiveRegion="polite" style={[styles.noticeText, { color: c.foreground }]}>Saved budgets changed. Your edits are still here. Reload before saving.</Text>
         <Pressable accessibilityRole="button" onPress={reloadSavedBudgets} style={styles.inlineButton}><Text style={[styles.actionText, { color: c.primary }]}>Reload saved budgets</Text></Pressable>
@@ -422,30 +460,30 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
         <View style={[styles.zeroSummary, { backgroundColor: c.card, borderColor: c.border }]}>
           <View style={styles.zeroSummaryHeader}>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[styles.inputLabel, { color: c.mutedForeground }]}>{monthlyIncome <= 0 ? "Plan your income" : unassigned < 0 ? "Overassigned" : "Left to assign"}</Text>
+              <Text style={[styles.inputLabel, { color: c.mutedForeground }]}>{monthlyIncome <= 0 ? "Plan your income" : unassigned < 0 ? "Budget exceeds income" : "Left to budget"}</Text>
               <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5} style={[styles.zeroAmount, { color: unassigned < 0 ? c.destructive : unassigned > 0 ? c.primary : c.success }]}>{money(Math.abs(unassigned))}</Text>
             </View>
             <Feather name={monthlyIncome > 0 && unassigned === 0 ? "check-circle" : "pie-chart"} size={28} color={monthlyIncome > 0 && unassigned === 0 ? c.success : c.primary} />
           </View>
-          <View style={styles.summaryRow}>
-            <SummaryBox label="Planned income" value={money(zeroBudgetSummary.plannedIncome)} color={c.success} />
-            <SummaryBox label="Assigned" value={money(zeroBudgetSummary.assigned)} color={c.primary} />
+          <View style={[styles.summaryRow, styles.zeroSummaryStats]}>
+            <SummaryBox label="Monthly income" value={money(zeroBudgetSummary.plannedIncome)} color={c.success} />
+            <SummaryBox label="Budgeted" value={money(zeroBudgetSummary.assigned)} color={c.primary} />
           </View>
           <Text style={[styles.noticeText, { color: c.mutedForeground }]}>{monthlyIncome <= 0
-            ? "Add expected income for this month, then assign it to spending, savings, and debt."
-            : unassigned < 0 ? `Reduce assignments by ${money(Math.abs(unassigned))} to fit your planned income.`
-              : unassigned > 0 ? "Choose a category below for the money still left to assign."
-                : "Every planned dollar has a job. Your bank balance stays separate."}</Text>
+            ? "Add monthly income, then set your category budgets."
+            : unassigned < 0 ? `Category budgets exceed monthly income by ${money(Math.abs(unassigned))}.`
+              : unassigned > 0 ? "Set category amounts below."
+                : "Your monthly income is fully budgeted."}</Text>
           <Pressable accessibilityRole="button" accessibilityLabel={monthlyIncome <= 0 ? "Add planned income" : "Review planned income"} onPress={openIncome} style={styles.inlineButton}>
             <Feather name="trending-up" size={14} color={c.primary} /><Text style={[styles.actionText, { color: c.primary }]}>{monthlyIncome <= 0 ? "Add income" : "Review income"}</Text>
           </Pressable>
         </View>
         {overspentRows.length ? <Pressable accessibilityRole="button" accessibilityLabel="Show overspent categories" onPress={() => setFilter("over")} style={[styles.notice, { backgroundColor: c.warning + "14", borderColor: c.warning + "55" }]}>
           <Feather name="alert-circle" size={18} color={c.warning} />
-          <View style={{ flex: 1 }}><Text style={[styles.actionText, { color: c.foreground }]}>{overspentRows.length} {overspentRows.length === 1 ? "category needs" : "categories need"} attention</Text><Text style={[styles.noticeText, { color: c.mutedForeground }]}>{money(overspentTotal)} over the assigned amounts. Move money or adjust your plan.</Text></View>
+          <View style={{ flex: 1 }}><Text style={[styles.actionText, { color: c.foreground }]}>{overspentRows.length} {overspentRows.length === 1 ? "category" : "categories"} over budget</Text><Text style={[styles.noticeText, { color: c.mutedForeground }]}>{money(overspentTotal)} above their budgets. Review the categories below.</Text></View>
           <Feather name="chevron-right" size={17} color={c.warning} />
         </Pressable> : null}
-        <Text style={[styles.totalsNote, { color: c.mutedForeground }]}>Based on expected income for the month. Assigning money does not spend it or move it between accounts.</Text>
+        <Text style={[styles.totalsNote, { color: c.mutedForeground }]}>Budget totals are separate from account balances.</Text>
       </> : <View style={styles.summaryRow}>
           <SummaryBox label="Budgeted" value={money(budgetedTotal)} color={c.primary} />
           <SummaryBox label="Spent" value={money(spentTotal)} color={c.mutedForeground} />
@@ -517,7 +555,7 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
                 <View style={[styles.fill, { backgroundColor: color, width: `${Math.min(100, row.percentUsed)}%` as any }]} />
               </View>
               <View style={styles.editLine}>
-                  <Text style={[styles.inputLabel, { color: c.mutedForeground }]}>{settings.zeroBasedBudgetEnabled ? "Assigned · blank uses bills" : "Monthly budget"}</Text>
+                  <Text style={[styles.inputLabel, { color: c.mutedForeground }]}>{settings.zeroBasedBudgetEnabled ? "Category budget" : "Monthly budget"}</Text>
                 <View style={[styles.inputWrap, { backgroundColor: c.muted }]}>
                   <Text style={[styles.dollar, { color: c.mutedForeground }]}>$</Text>
                   <TextInput sensitive
@@ -532,18 +570,19 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
                   />
                 </View>
               </View>
+              {settings.zeroBasedBudgetEnabled ? <Text style={[styles.rowSub, { color: c.mutedForeground }]}>Blank uses bill amounts. Enter 0 for no budget.</Text> : null}
               {canEditHousehold && <View style={styles.actions}>
-                {settings.zeroBasedBudgetEnabled && unassigned > 0 ? <Pressable accessibilityRole="button" accessibilityLabel={`Assign remaining money to ${row.category}`}
+                {settings.zeroBasedBudgetEnabled && unassigned > 0 ? <Pressable accessibilityRole="button" accessibilityLabel={`Add remaining to ${row.category}`}
                   disabled={saving || !loadReady || budgetConflict} onPress={() => assignRemaining(row)} style={[styles.actionBtn, { backgroundColor: c.primary + "18" }]}>
-                  <Text style={[styles.actionText, { color: c.primary }]}>Assign remaining</Text>
+                  <Text style={[styles.actionText, { color: c.primary }]}>Add remaining</Text>
                 </Pressable> : null}
                 <Pressable accessibilityRole="button" accessibilityLabel={settings.zeroBasedBudgetEnabled ? `Use planned bills for ${row.category}` : `Clear budget for ${row.category}`}
-                  disabled={saving || !loadReady || budgetConflict} onPress={() => { dirtyRef.current.add(row.category); setDrafts(previous => ({ ...previous, [row.category]: "" })); setSaveMessage(settings.zeroBasedBudgetEnabled ? "Save to use planned bill amounts. Enter 0 to assign nothing." : repeatChanges ? "Save to clear this budget and stop repeating it." : "Save to clear this month’s budget."); }}
+                  disabled={saving || !loadReady || budgetConflict} onPress={() => { dirtyRef.current.add(row.category); setDrafts(previous => ({ ...previous, [row.category]: "" })); setSaveMessage(settings.zeroBasedBudgetEnabled ? "Save to use bill totals. Enter 0 to budget $0." : repeatChanges ? "Save to clear this budget and stop repeating it." : "Save to clear this month’s budget."); }}
                   style={[styles.actionBtn, { backgroundColor: c.muted }]}>
                   <Text style={[styles.actionText, { color: c.mutedForeground }]}>{settings.zeroBasedBudgetEnabled ? "Use bill amounts" : "Clear budget"}</Text>
                 </Pressable>
-                <Pressable onPress={() => openMove(row)} style={[styles.actionBtn, { backgroundColor: c.success + "18" }]}>
-                  <Text style={[styles.actionText, { color: c.success }]}>Move money</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel={settings.zeroBasedBudgetEnabled ? `Move budget to ${row.category}` : `Move money to ${row.category}`} onPress={() => openMove(row)} style={[styles.actionBtn, { backgroundColor: c.success + "18" }]}>
+                  <Text style={[styles.actionText, { color: c.success }]}>{settings.zeroBasedBudgetEnabled ? "Move budget" : "Move money"}</Text>
                 </Pressable>
                 <Pressable onPress={() => router.push({ pathname: "/(tabs)/flo", params: { prompt: row.remaining < 0 ? `Why is ${row.category} over?` : `How much do I have left for ${row.category}?` } } as any)} style={[styles.actionBtn, { backgroundColor: c.primary + "18" }]}>
                   <Text style={[styles.actionText, { color: c.primary }]}>Ask Flo</Text>
@@ -559,7 +598,7 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
         <Pressable style={styles.overlay} onPress={() => setMoveTarget(null)}>
           <Pressable style={[styles.sheet, { backgroundColor: c.card }]} onPress={() => {}}>
             <View style={[styles.handle, { backgroundColor: c.mutedForeground }]} />
-            <Text style={[styles.sheetTitle, { color: c.foreground }]}>Move money to {moveTarget?.category}</Text>
+            <Text style={[styles.sheetTitle, { color: c.foreground }]}>{settings.zeroBasedBudgetEnabled ? "Move budget to" : "Move money to"} {moveTarget?.category}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sourceScroller}>
               {sourceOptions.map(row => (
                 <Pressable key={row.category} onPress={() => setMoveSource(row.category)} style={[styles.sourceChip, { backgroundColor: moveSource === row.category ? c.primary : c.muted, borderColor: moveSource === row.category ? c.primary : c.border }]}>
@@ -590,10 +629,11 @@ export default function CategoryBudgetRoute() {
 }
 
 function SummaryBox({ label, value, color }: { label: string; value: string; color: string }) {
+  const c = useColors();
   return (
     <View style={styles.summaryBox}>
       <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.55} style={[styles.summaryValue, { color }]}>{value}</Text>
-      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={[styles.summaryLabel, { color: c.mutedForeground }]}>{label}</Text>
     </View>
   );
 }
@@ -613,11 +653,14 @@ const styles = StyleSheet.create({
   pageScroll: { flex: 1 },
   pageContent: { flexGrow: 1 },
   rows: { padding: 16 },
-  header: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 20, paddingBottom: 14 },
+  header: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingBottom: 14 },
+  headerCopy: { flex: 1, minWidth: 150 },
+  headerActions: { flexDirection: "row", gap: 8, alignItems: "center", marginLeft: "auto" },
+  restartBtn: { width: 44, height: 44, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   backBtn: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
   title: { fontSize: 26, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.8 },
   subtitle: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
-  saveBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12 },
+  saveBtn: { minHeight: 44, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, justifyContent: "center" },
   saveText: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   monthCard: { marginHorizontal: 16, borderRadius: 20, padding: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)" },
   monthBtn: { padding: 6 },
@@ -625,6 +668,7 @@ const styles = StyleSheet.create({
   copyPreviousButton: { alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 6, minHeight: 36, paddingHorizontal: 12, marginTop: -6, marginBottom: 8 },
   copyPreviousText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   summaryRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 16, marginBottom: 10 },
+  zeroSummaryStats: { paddingHorizontal: 0, marginBottom: 0 },
   summaryBox: { flex: 1, minWidth: 80, borderRadius: 14, paddingHorizontal: 8, paddingVertical: 12, alignItems: "center", backgroundColor: "rgba(148,163,184,0.10)" },
   zeroSummary: { marginHorizontal: 16, marginBottom: 12, borderRadius: 22, padding: 16, borderWidth: 1, gap: 10 },
   zeroSummaryHeader: { flexDirection: "row", gap: 12, alignItems: "center" },
@@ -633,7 +677,8 @@ const styles = StyleSheet.create({
   noticeText: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 18 },
   inlineButton: { minHeight: 40, flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 6 },
   summaryValue: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
-  summaryLabel: { fontSize: 10, fontFamily: "Inter_700Bold", color: "#94a3b8", marginTop: 2, textTransform: "uppercase" },
+  summaryLabel: { fontSize: 10, fontFamily: "Inter_700Bold", marginTop: 2, textTransform: "uppercase" },
+  statusNotice: { marginHorizontal: 16, marginBottom: 12, padding: 12, borderWidth: 1, borderRadius: 14, gap: 6 },
   reviewLink: { marginHorizontal: 16, marginBottom: 10, borderWidth: 1, borderRadius: 18, padding: 12, flexDirection: "row", alignItems: "center", gap: 10 },
   reviewLinkIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   reviewLinkTitle: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
@@ -646,7 +691,7 @@ const styles = StyleSheet.create({
   modeGateText: { fontSize: 13, fontFamily: "Inter_500Medium", lineHeight: 19, textAlign: "center" },
   modeGateButton: { minHeight: 46, borderRadius: 14, alignItems: "center", justifyContent: "center", paddingHorizontal: 18, marginTop: 18 },
   modeGateButtonText: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
-  totalsNote: { marginHorizontal: 18, marginTop: -4, marginBottom: 12, fontSize: 11, lineHeight: 16, fontFamily: "Inter_400Regular" },
+  totalsNote: { marginHorizontal: 16, marginTop: -4, marginBottom: 12, fontSize: 11, lineHeight: 16, fontFamily: "Inter_400Regular" },
   applyCard: { borderWidth: 1, borderRadius: 18, padding: 14, marginHorizontal: 16, marginBottom: 14, gap: 8 },
   applyOptions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   applyOption: { minHeight: 42, borderRadius: 12, paddingHorizontal: 14, justifyContent: "center" },

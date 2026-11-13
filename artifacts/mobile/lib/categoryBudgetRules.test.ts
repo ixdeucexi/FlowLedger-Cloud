@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyCategoryBudgetChanges, changedCategoryBudgets, parseCategoryBudgetChanges, resolveCategoryBudgetRules, type CategoryBudgetRule } from "./categoryBudgetRules";
+import { applyCategoryBudgetChanges, buildCategoryBudgetRestartDraft, changedCategoryBudgets, parseCategoryBudgetChanges, resolveCategoryBudgetRules, type CategoryBudgetRule } from "./categoryBudgetRules";
 
 const rule = (category: string, amount: number | null, effective_month: string, repeats = true): CategoryBudgetRule => ({
   category, amount, effective_month, repeats,
@@ -135,4 +135,37 @@ test("changed-only edits preserve prototype-shaped names, removals, zero, and un
   assert.equal(Object.getPrototypeOf(next), Object.prototype);
   assert.equal(Object.hasOwn(next, "__proto__"), true);
   assert.deepEqual(applyCategoryBudgetChanges({}, Object.fromEntries([["__proto__", 12.34]])), Object.fromEntries([["__proto__", 12.34]]));
+});
+
+test("restart stages explicit zeroes for the catalog, plan and saved budgets without mutation", () => {
+  const categories = Object.freeze(["Housing", "Savings", "Debt"]);
+  const rows = Object.freeze([{ category: "Housing", budgeted: 1200 }, { category: "Savings", budgeted: 500 }]);
+  const saved = Object.freeze({ Housing: 1200, Debt: 300 });
+  const drafts = buildCategoryBudgetRestartDraft(categories, rows, saved);
+  assert.deepEqual(drafts, { Housing: "0.00", Savings: "0.00", Debt: "0.00" });
+  assert.deepEqual(parseCategoryBudgetChanges(drafts, Object.keys(drafts)), { Housing: 0, Savings: 0, Debt: 0 });
+  assert.deepEqual(saved, { Housing: 1200, Debt: 300 });
+  assert.deepEqual(rows, [{ category: "Housing", budgeted: 1200 }, { category: "Savings", budgeted: 500 }]);
+});
+
+test("restart preserves prototype-shaped category names as own draft fields", () => {
+  const saved = Object.fromEntries([["__proto__", 25], ["constructor", 50]]);
+  const drafts = buildCategoryBudgetRestartDraft(["__proto__", "constructor"], [], saved);
+  assert.equal(Object.getPrototypeOf(drafts), Object.prototype);
+  assert.deepEqual(Object.entries(drafts), [["__proto__", "0.00"], ["constructor", "0.00"]]);
+});
+
+test("restart resolves catalog spelling and blocks categories the existing save API cannot accept", () => {
+  assert.deepEqual(buildCategoryBudgetRestartDraft(["Kids / Activities", "Savings"], [{ category: "kids / activities", budgeted: 100 }], { "  kids / activities  ": 100 }), { "Kids / Activities": "0.00", Savings: "0.00" });
+  assert.throws(() => buildCategoryBudgetRestartDraft(["Savings"], [], { Archived: 50 }), /saved categories are no longer available/);
+  assert.throws(() => buildCategoryBudgetRestartDraft(["Savings"], [{ category: "Archived", budgeted: 50 }], {}), /planned categories are no longer available/);
+  assert.deepEqual(buildCategoryBudgetRestartDraft(["Savings"], [{ category: "Historical activity", budgeted: 0 }], {}), { Savings: "0.00" });
+  assert.deepEqual(buildCategoryBudgetRestartDraft(["Income", "Transfer", "Savings"], [], {}), { Savings: "0.00" });
+  assert.throws(() => buildCategoryBudgetRestartDraft(["Savings"], [], { Income: 50 }), /saved categories are no longer available/);
+});
+
+test("restart respects the existing monthly save category limit", () => {
+  const categories = Array.from({ length: 500 }, (_, index) => `Category ${index}`);
+  assert.equal(Object.keys(buildCategoryBudgetRestartDraft(categories, [], {})).length, 500);
+  assert.throws(() => buildCategoryBudgetRestartDraft([...categories, "One too many"], [], {}), /up to 500 categories/);
 });
