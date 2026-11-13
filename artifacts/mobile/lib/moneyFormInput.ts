@@ -10,8 +10,8 @@ export function parseCategoryAssignments(drafts: Record<string, string>): Record
   const next: Array<[string, number]> = [];
   for (const [category, raw] of Object.entries(drafts)) {
     if (!raw.trim()) continue;
-    const amount = Number(raw);
-    if (!Number.isFinite(amount) || amount < 0) throw new Error(`Enter a valid nonnegative assignment for ${category}, or leave it blank to use planned bills.`);
+    const amount = parseMoneyInput(raw);
+    if (amount === null) throw new Error(`Enter a valid nonnegative assignment for ${category} with up to two decimal places, or leave it blank to use planned bills.`);
     next.push([category, amount]);
   }
   return Object.fromEntries(next);

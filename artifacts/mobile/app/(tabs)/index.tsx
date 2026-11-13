@@ -1105,7 +1105,7 @@ zero_based_budget: (isCommandWide && settings.zeroBasedBudgetEnabled && (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Open this month's zero-based budget"
-          onPress={() => router.push("/(tabs)/category-budget" as any)}
+          onPress={() => router.push({ pathname: "/(tabs)/category-budget", params: { budgetMonth: String(currentMonth), budgetYear: String(currentYear) } } as any)}
           style={({ pressed }) => [styles.zeroBudgetDashboardCard, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.84 : 1 }]}
         >
           <View style={styles.zeroBudgetDashboardHeader}>
@@ -1114,18 +1114,18 @@ zero_based_budget: (isCommandWide && settings.zeroBasedBudgetEnabled && (
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.zeroBudgetDashboardTitle, { color: c.foreground }]}>Zero-Based Budget</Text>
-              <Text style={[styles.zeroBudgetDashboardSub, { color: c.mutedForeground }]}>{MONTH_FULL[currentMonth]} · ${postedIncome.toFixed(0)} received so far</Text>
+              <Text style={[styles.zeroBudgetDashboardSub, { color: c.mutedForeground }]}>{MONTH_FULL[currentMonth]} · ${postedIncome.toFixed(2)} received so far</Text>
             </View>
-            <View style={[styles.categoryPlanBadge, { backgroundColor: Math.abs(zeroBudgetLeftToAssign) <= 0.01 ? c.success + "18" : zeroBudgetLeftToAssign > 0 ? c.warning + "18" : c.destructive + "18" }]}>
-              <Text style={[styles.categoryPlanBadgeText, { color: Math.abs(zeroBudgetLeftToAssign) <= 0.01 ? c.success : zeroBudgetLeftToAssign > 0 ? c.warning : c.destructive }]}>
-                {Math.abs(zeroBudgetLeftToAssign) <= 0.01 ? "Balanced" : zeroBudgetLeftToAssign > 0 ? "To assign" : "Overassigned"}
+            <View style={[styles.categoryPlanBadge, { backgroundColor: zeroBudgetLeftToAssign === 0 ? c.success + "18" : zeroBudgetLeftToAssign > 0 ? c.warning + "18" : c.destructive + "18" }]}>
+              <Text style={[styles.categoryPlanBadgeText, { color: zeroBudgetLeftToAssign === 0 ? c.success : zeroBudgetLeftToAssign > 0 ? c.warning : c.destructive }]}>
+                {zeroBudgetIncome <= 0 ? "Add income" : zeroBudgetLeftToAssign === 0 ? "Balanced" : zeroBudgetLeftToAssign > 0 ? "To assign" : "Overassigned"}
               </Text>
             </View>
           </View>
           <View style={styles.zeroBudgetDashboardStats}>
             <ZeroBudgetStat label="Income" value={zeroBudgetIncome} color={c.success} />
             <ZeroBudgetStat label="Assigned" value={zeroBudgetSummary.assigned} color={c.primary} />
-            <ZeroBudgetStat label={zeroBudgetLeftToAssign < -0.01 ? "Over" : "Left"} value={Math.abs(zeroBudgetLeftToAssign)} color={Math.abs(zeroBudgetLeftToAssign) <= 0.01 ? c.success : zeroBudgetLeftToAssign > 0 ? c.warning : c.destructive} />
+            <ZeroBudgetStat label={zeroBudgetLeftToAssign < 0 ? "Over" : "Left"} value={Math.abs(zeroBudgetLeftToAssign)} color={zeroBudgetLeftToAssign === 0 ? c.success : zeroBudgetLeftToAssign > 0 ? c.warning : c.destructive} />
           </View>
           <View style={styles.zeroBudgetDashboardAction}>
             <Text style={[styles.categoryBudgetEditText, { color: c.primary }]}>{canEditHousehold ? "Assign or move money" : "View category assignments"}</Text>
@@ -2090,7 +2090,7 @@ function formatMonthDay(month: number, year: number, day: number | null | undefi
 function ZeroBudgetStat({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <View style={styles.zeroBudgetDashboardStat}>
-      <Text style={[styles.zeroBudgetDashboardValue, { color }]}>${value.toFixed(0)}</Text>
+      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.55} style={[styles.zeroBudgetDashboardValue, { color }]}>${value.toFixed(2)}</Text>
       <Text style={styles.zeroBudgetDashboardLabel}>{label}</Text>
     </View>
   );

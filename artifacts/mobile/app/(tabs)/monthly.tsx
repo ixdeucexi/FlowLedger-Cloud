@@ -1900,7 +1900,7 @@ export default function MonthlyScreen() {
         </View>
       ) : isDesktop ? (
         <DesktopCalendarPage
-          headerAccessory={<View style={styles.desktopForecastAccount}><AccountForecastPicker label="Forecast account" compact includeHousehold visibleOnly allowUnassigned={false} value={selectedForecastAccountRef} onChange={setSelectedForecastAccountRef} /></View>}
+          headerAccessory={<View style={styles.desktopForecastAccount}><View style={styles.forecastAccount}><AccountForecastPicker label="Forecast account" compact includeHousehold visibleOnly allowUnassigned={false} value={selectedForecastAccountRef} onChange={setSelectedForecastAccountRef} /></View>{settings.zeroBasedBudgetEnabled ? <Pressable accessibilityRole="button" accessibilityLabel={`Open ${MONTH_FULL[month]} ${selectedYear} zero-based budget`} onPress={() => router.push({ pathname: "/(tabs)/category-budget", params: { budgetMonth: String(month), budgetYear: String(selectedYear) } } as any)} style={[styles.budgetMonthButton, { borderColor: c.border, backgroundColor: c.card }]}><Feather name="pie-chart" size={16} color={c.primary} /><Text style={[styles.safetyDaysText, { color: c.foreground }]}>Budget</Text></Pressable> : null}</View>}
           month={month}
           year={selectedYear}
           resolveEventLabel={resolveDesktopEventLabel}
@@ -1996,6 +1996,7 @@ export default function MonthlyScreen() {
           <Feather name="shield" size={17} color={c.primary} />
           <Text style={[styles.safetyDaysText, { color: c.foreground }]}>Safety floor</Text>
         </Pressable>
+        {settings.zeroBasedBudgetEnabled ? <Pressable accessibilityRole="button" accessibilityLabel={`Open ${MONTH_FULL[month]} ${selectedYear} zero-based budget`} onPress={() => router.push({ pathname: "/(tabs)/category-budget", params: { budgetMonth: String(month), budgetYear: String(selectedYear) } } as any)} style={({ pressed }) => [styles.budgetMonthButton, { borderColor: c.border, backgroundColor: c.card, opacity: pressed ? 0.72 : 1 }]}><Feather name="pie-chart" size={17} color={c.primary} /><Text style={[styles.safetyDaysText, { color: c.foreground }]}>Budget</Text></Pressable> : null}
       </View>
       <DataFreshnessLabel inset compact />
 
@@ -2081,7 +2082,7 @@ export default function MonthlyScreen() {
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Open ${MONTH_FULL[month]} zero-based budget`}
-                    onPress={() => router.push("/(tabs)/category-budget" as any)}
+                    onPress={() => router.push({ pathname: "/(tabs)/category-budget", params: { budgetMonth: String(month), budgetYear: String(selectedYear) } } as any)}
                     style={({ pressed }) => [styles.zeroBudgetMonthlyLink, { backgroundColor: c.primary + "14", borderColor: c.primary + "35", opacity: pressed ? 0.78 : 1 }]}
                   >
                     <View style={[styles.zeroBudgetMonthlyIcon, { backgroundColor: c.primary + "18" }]}><Feather name="pie-chart" size={15} color={c.primary} /></View>
@@ -3548,7 +3549,8 @@ const styles = StyleSheet.create({
   forecastControls: { flexDirection: "row", alignItems: "stretch", gap: 8, marginHorizontal: 20, marginBottom: 8 },
   narrowForecastControls: { marginHorizontal: 14 },
   forecastAccount: { flex: 1, minWidth: 0 },
-  desktopForecastAccount: { maxWidth: 460, marginBottom: 14 },
+  desktopForecastAccount: { maxWidth: 580, minWidth: 320, marginBottom: 14, flexDirection: "row", alignItems: "stretch", gap: 8 },
+  budgetMonthButton: { minWidth: 60, minHeight: 60, borderWidth: 1, borderRadius: 14, paddingHorizontal: 8, paddingVertical: 8, alignItems: "center", justifyContent: "center", gap: 5 },
   safetyDaysButton: { minWidth: 86, maxWidth: 104, minHeight: 60, borderWidth: 1, borderRadius: 14, paddingHorizontal: 9, paddingVertical: 8, alignItems: "center", justifyContent: "center", gap: 5 },
   safetyDaysText: { textAlign: "center", fontSize: 10, lineHeight: 14, fontFamily: "Inter_600SemiBold" },
   calendarMonthBar: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginHorizontal: 20, marginTop: 0, marginBottom: 10, paddingVertical: 2, gap: 10 },

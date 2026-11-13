@@ -136,7 +136,8 @@ function screenSaveHarness() {
   const bindings = {
     canEditHousehold: true, loadReady: true, busyRef: state.busyRef, scopeVersion: state.scopeVersion, dirtyRef: state.dirtyRef,
     budgetScope: { userId: "test-owner", householdId: "test-household", budgetId: "test-budget" }, month: 8, year: 2026,
-    categoryBudgets: state.budgets, repeatChanges: true,
+    categoryBudgets: state.budgets, repeatChanges: true, budgetConflict: false,
+    currentScopeKey: "test-scope", activeScopeKeyRef: { current: "test-scope" }, refreshBudgetsRef: { current: () => {} },
     changedCategoryBudgets: categoryBudgetRules.changedCategoryBudgets,
     assertFinancialMutationOnline: () => {},
     saveMonthlyCategoryBudgetChanges: () => { calls++; return promise; },
@@ -284,4 +285,31 @@ test("category screen accepts server-confirmed unrelated changes instead of repl
   h.finish({ budgets: { Food: 200, Rent: 175 }, recurringCategories: ["Food"] });
   assert.equal(await pending, true);
   assert.deepEqual(h.state.budgets, { Food: 200, Rent: 175 });
+});
+
+test("budget confirmations revalidate their household, month, revision and busy state before acting", async () => {
+  const source = readFileSync("app/(tabs)/category-budget.tsx", "utf8");
+  const body = source.slice(source.indexOf("  const confirmBudgetAction ="), source.indexOf("  useEffect(() => { setRepeatChanges"));
+  const javascript = transpileModule(body, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
+  for (const invalidation of ["none", "scope", "revision", "busy"] as const) {
+    const activeScopeKeyRef = { current: "owner/household/budget/2026/10" };
+    const scopeVersion = { current: 3 };
+    const busyRef = { current: false };
+    let confirmation: { onConfirm: () => unknown } | undefined;
+    let calls = 0;
+    const bindings = {
+      currentScopeKey: activeScopeKeyRef.current, activeScopeKeyRef, scopeVersion, busyRef,
+      useCallback: (callback: unknown) => callback,
+      confirmAction: (options: { onConfirm: () => unknown }) => { confirmation = options; },
+    };
+    const confirm = new Function(...Object.keys(bindings), `${javascript}; return confirmBudgetAction;`)(...Object.values(bindings));
+    confirm({ title: "Reload saved budgets?", message: "Discard unsaved changes?", onConfirm: () => { calls++; } });
+    assert.ok(confirmation);
+    assert.equal(calls, 0, "requesting confirmation must not execute the action");
+    if (invalidation === "scope") activeScopeKeyRef.current = "owner/another-household/budget/2026/10";
+    if (invalidation === "revision") scopeVersion.current++;
+    if (invalidation === "busy") busyRef.current = true;
+    await confirmation.onConfirm();
+    assert.equal(calls, invalidation === "none" ? 1 : 0, invalidation);
+  }
 });

@@ -32,16 +32,19 @@ export interface ZeroBudgetSummary {
 }
 
 export function buildZeroBudgetSummary(plannedIncome: number, rows: CategoryPlanRow[]): ZeroBudgetSummary {
-  const income = Math.max(0, roundCurrency(Number(plannedIncome) || 0));
-  const assigned = roundCurrency(rows.reduce((sum, row) => sum + Math.max(0, Number(row.budgeted) || 0), 0));
-  const spent = roundCurrency(rows.reduce((sum, row) => sum + Math.max(0, Number(row.spent) || 0), 0));
-  const leftToAssign = roundCurrency(income - assigned);
+  const incomeCents = nonnegativeCents(plannedIncome);
+  const assignedCents = rows.reduce((sum, row) => sum + nonnegativeCents(row.budgeted), 0);
+  const spentCents = rows.reduce((sum, row) => sum + nonnegativeCents(row.spent), 0);
+  const income = incomeCents / 100;
+  const assigned = assignedCents / 100;
+  const spent = spentCents / 100;
+  const leftToAssign = (incomeCents - assignedCents) / 100;
   return {
     plannedIncome: income,
     assigned,
     spent,
     leftToAssign,
-    status: Math.abs(leftToAssign) <= 0.01 ? "balanced" : leftToAssign > 0 ? "to_assign" : "overassigned",
+    status: leftToAssign === 0 ? "balanced" : leftToAssign > 0 ? "to_assign" : "overassigned",
   };
 }
 
@@ -52,21 +55,44 @@ export function applyCategoryBudgetMove(
   toCategory: string,
   amount: number,
 ): Record<string, number> {
-  const transfer = Math.max(0, Number(amount) || 0);
-  if (!fromCategory || !toCategory || fromCategory === toCategory || transfer <= 0) {
+  const transferCents = Math.round(amount * 100);
+  if (!fromCategory || !toCategory || fromCategory === toCategory
+    || !Number.isFinite(amount) || !Number.isSafeInteger(transferCents)
+    || transferCents <= 0 || transferCents / 100 !== amount) {
     return { ...currentBudgets };
   }
 
   const fromRow = rows.find(row => row.category === fromCategory);
   const toRow = rows.find(row => row.category === toCategory);
-  const fromBudget = currentBudgets[fromCategory] ?? fromRow?.budgeted ?? 0;
-  const toBudget = currentBudgets[toCategory] ?? toRow?.budgeted ?? 0;
+  if (!fromRow || !toRow) return { ...currentBudgets };
+  const fromBudget = Object.hasOwn(currentBudgets, fromCategory) ? currentBudgets[fromCategory]! : fromRow.budgeted;
+  const toBudget = Object.hasOwn(currentBudgets, toCategory) ? currentBudgets[toCategory]! : toRow.budgeted;
+  if (![fromBudget, toBudget, fromRow.spent].every(value => Number.isFinite(value) && value >= 0
+    && Number.isSafeInteger(Math.round(value * 100)) && Math.round(value * 100) / 100 === value)) return { ...currentBudgets };
+  const fromCents = nonnegativeCents(fromBudget);
+  const toCents = nonnegativeCents(toBudget);
+  if (transferCents > fromCents - nonnegativeCents(fromRow.spent)
+    || !Number.isSafeInteger(toCents + transferCents)) return { ...currentBudgets };
 
   return {
     ...currentBudgets,
-    [fromCategory]: Math.max(0, roundCurrency(fromBudget - transfer)),
-    [toCategory]: roundCurrency(toBudget + transfer),
+    [fromCategory]: (fromCents - transferCents) / 100,
+    [toCategory]: (toCents + transferCents) / 100,
   };
+}
+
+/** Forecast links use zero-indexed months, with a bounded full year. */
+export function categoryBudgetPeriod(month: unknown, year: unknown): { month: number; year: number } | null {
+  if (typeof month !== "string" || !/^(?:[0-9]|1[01])$/.test(month)
+    || typeof year !== "string" || !/^\d{4}$/.test(year)) return null;
+  const parsedYear = Number(year);
+  return parsedYear >= 2000 && parsedYear <= 2200 ? { month: Number(month), year: parsedYear } : null;
+}
+
+function nonnegativeCents(value: number): number {
+  if (!Number.isFinite(value) || value < 0) return 0;
+  const cents = Math.round((value + Number.EPSILON) * 100);
+  return Number.isSafeInteger(cents) ? cents : 0;
 }
 
 export function buildCategoryPlan(
@@ -90,9 +116,9 @@ export function buildCategoryPlan(
     const budgeted = Math.max(0, roundCurrency(baseBudget));
     const spent = transactions
       .filter(transaction => (transaction.category || "Other") === category && transaction.amount < 0)
-      .reduce((sum, transaction) => sum + Math.abs(Number(transaction.amount) || 0), 0);
+      .reduce((sum, transaction) => sum + nonnegativeCents(Math.abs(Number(transaction.amount))), 0) / 100;
     const percentUsed = budgeted > 0 ? Math.round((spent / budgeted) * 100) : spent > 0 ? 100 : 0;
-    const remaining = budgeted - spent;
+    const remaining = roundCurrency(budgeted - spent);
     return {
       category,
       budgeted,

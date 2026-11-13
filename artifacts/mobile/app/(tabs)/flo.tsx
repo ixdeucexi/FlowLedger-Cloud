@@ -65,6 +65,7 @@ import { buildDecisionHistory } from "@/lib/decisionHistory";
 import { buildDecisionRiskAlerts } from "@/lib/decisionRisk";
 import { buildCategoryPlan } from "@/lib/categoryPlanning";
 import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
+import { transactionCategoryParts } from "@/lib/reviewCenter";
 import { DEFAULT_DECISION_HUB_SETTINGS } from "@/lib/decisionHubSettings";
 import { localDateString } from "@/lib/dateLabels";
 import { buildPaydayReviewPlan } from "@/lib/paydayReview";
@@ -486,20 +487,19 @@ export default function FloScreen() {
         category: bill.is_debt ? "Debt" : bill.category || "Other",
         amount: getBillMonthlyTotal(bill, month, year),
       }));
-    const monthTransactions = getTransactionsForMonth(month, year)
-      .filter(transaction => isCashFlowTransaction(transaction) && transaction.category !== "Income")
-      .map(transaction => ({ category: transaction.category || "Other", amount: transaction.amount }));
+    const transactionDetails = getTransactionsForMonth(month, year)
+      .flatMap(transaction => transactionCategoryParts(transaction).map(part => ({ ...part, date: transaction.date })))
+      .filter(part => part.category !== "Income");
+    const monthTransactions = transactionDetails;
     const rows = buildCategoryPlan(
       categories,
       monthBills,
       monthTransactions,
       Object.entries(categoryBudgets).map(([category, amount]) => ({ category, amount })),
     );
-    const transactionDetails = getTransactionsForMonth(month, year)
-      .filter(transaction => isCashFlowTransaction(transaction) && transaction.amount < 0 && transaction.category !== "Income");
     return rows.map(row => {
       const topTransaction = transactionDetails
-        .filter(transaction => (transaction.category || "Other") === row.category)
+        .filter(transaction => transaction.category === row.category)
         .sort((left, right) => Math.abs(right.amount) - Math.abs(left.amount))[0];
       return {
         category: row.category,
@@ -509,7 +509,7 @@ export default function FloScreen() {
         status: row.status,
         percentUsed: row.percentUsed,
         topTransaction: topTransaction ? {
-          name: topTransaction.note?.trim() || row.category,
+          name: topTransaction.label?.trim() || row.category,
           amount: topTransaction.amount,
           date: topTransaction.date,
         } : undefined,

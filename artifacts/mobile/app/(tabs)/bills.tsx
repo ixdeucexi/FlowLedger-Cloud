@@ -42,7 +42,7 @@ import {
   orderActiveDebtsForStrategy,
   sortDebtsWithPaidLast,
 } from "@/lib/debtOrder";
-import { loadCategoryBudgets } from "@/lib/categoryBudgetStore";
+import { loadCategoryBudgets, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
 import {
   buildOverdueBillOccurrences,
   groupOverdueBills,
@@ -214,15 +214,19 @@ export default function BillsScreen() {
       return;
     }
     let cancelled = false;
-    void loadCategoryBudgets(
-      categoryBudgetScope,
-      currentMonth,
-      currentYear,
-    ).then((budgets) => {
-      if (!cancelled) setCategoryBudgets(budgets);
-    });
+    let request = 0;
+    setCategoryBudgets({});
+    const refresh = () => {
+      const revision = ++request;
+      void loadCategoryBudgets(categoryBudgetScope, currentMonth, currentYear).then(budgets => {
+        if (!cancelled && revision === request) setCategoryBudgets(budgets);
+      });
+    };
+    refresh();
+    const unsubscribe = subscribeCategoryBudgets(refresh);
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, [
     categoryBudgetScope,
