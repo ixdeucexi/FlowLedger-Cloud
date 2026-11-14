@@ -5,7 +5,7 @@ import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as
 import { AppearanceSettings } from "@/components/AppearanceSettings";
 
 import { parseMoneyInput } from "@/lib/moneyFormInput";
-import { buildScheduledSubscriptionSummary, canCreateSubscriptionBill, subscriptionAmountLabel } from "@/lib/subscriptionPresentation";
+import { buildScheduledSubscriptionSummary, canCreateSubscriptionBill, subscriptionAmountLabel, subscriptionCandidateIsRegularBill } from "@/lib/subscriptionPresentation";
 import { parseBillCsv } from "@/lib/billCsv";
 
 import { StatementImportPanel, type StatementImportFeedback } from "@/components/StatementImportPanel";
@@ -1404,10 +1404,11 @@ export default function MoreScreen({
         : detectSubscriptions(growthTransactions)).filter(
         (item) => {
           if (subscriptionDecisions[subscriptionKey(item)] === "not_subscription") return false;
+          if (subscriptionCandidateIsRegularBill(item, transactions, bills, subscriptionBillLinks[subscriptionKey(item)])) return false;
           return subscriptionNeedsCleanup(item, transactions, subscriptionBillLinks[subscriptionKey(item)]);
         },
       ),
-    [growthTransactions, importedSubscriptions, newSubscriptionReviewsEnabled, subscriptionBillLinks, subscriptionDecisions, transactions],
+    [bills, growthTransactions, importedSubscriptions, newSubscriptionReviewsEnabled, subscriptionBillLinks, subscriptionDecisions, transactions],
   );
   const subscriptionBillMatches = useMemo(() => {
     const result = new Map<string, { transactionId: string; transactionName: string; target?: RankedReviewTarget }>();
@@ -1781,7 +1782,14 @@ export default function MoreScreen({
     subscription: SubscriptionCandidate,
   ) => {
     if (!subscriptionMutationsReady || subscriptionReviewLive.current.key !== subscriptionReviewScope) return;
-    if (!canCreateSubscriptionBill(subscription.cadence)) { router.push("/(tabs)/bills"); return; }
+    if (!canCreateSubscriptionBill(subscription.cadence)) {
+      router.push({ pathname: "/(tabs)/bills", params: {
+        view: "bills", addSubscription: "1", subscriptionName: subscription.merchant,
+        subscriptionAmount: String(subscription.averageAmount || subscription.lastAmount || ""),
+        subscriptionFrequency: subscription.cadence === "annual" ? "yearly" : "monthly",
+      } });
+      return;
+    }
     const imported = importedSubscriptionMetadata(subscription);
     if (imported?.evidenceOnly) return;
     const generation = subscriptionReviewLive.current.generation;

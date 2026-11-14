@@ -12,6 +12,10 @@ import {
   type PlannedTransferPatch,
 } from "./plannedAccountTransfers";
 
+// Conversion receipts intentionally keep their existing financial identity.
+// Display classification is unrelated to transferring a bill's future schedule.
+const TRANSFER_BILL_FIELDS = BILL_EDITABLE_FIELDS.filter(field => field !== "is_subscription");
+
 export function billTransferCutoff(firstDate: string): string {
   if (!validPlannedTransferDate(firstDate)) throw new Error("Choose a valid first transfer date.");
   const date = new Date(`${firstDate}T00:00:00Z`);
@@ -20,7 +24,7 @@ export function billTransferCutoff(firstDate: string): string {
 }
 
 export function billTransferExpected(bill: Bill): Record<string, unknown> {
-  return billEditableDbPatch(bill, BILL_EDITABLE_FIELDS);
+  return billEditableDbPatch(bill, TRANSFER_BILL_FIELDS);
 }
 
 /** This only checks the returned transaction; the database owns eligibility,
@@ -40,7 +44,7 @@ export function verifyBillTransferConversion(
   const bill = normalizeBillRow(rawBill);
   const expected: Record<string, unknown> = { ...billTransferExpected(source), end_date: billTransferCutoff(patch.start_date) };
   const actual = billTransferExpected(bill);
-  if (BILL_EDITABLE_FIELDS.some(field => !billEditableValuesEqual(field, actual[field], expected[field]))) return fail();
+  if (TRANSFER_BILL_FIELDS.some(field => !billEditableValuesEqual(field, actual[field], expected[field]))) return fail();
   let transfer: PlannedAccountTransfer;
   try { transfer = normalizePlannedTransfer(result.transfer); } catch { return fail(); }
   if (!/^bill-transfer-[a-f0-9]{32}$/.test(transfer.id)

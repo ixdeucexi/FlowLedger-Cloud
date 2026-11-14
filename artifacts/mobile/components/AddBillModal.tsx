@@ -48,6 +48,7 @@ export interface AddBillInitialValues {
   frequency?: Bill["frequency"];
   smartPriority?: BillImportance;
   fundingAccountRef?: ForecastAccountRef | null;
+  isSubscription?: boolean | null;
 }
 
 interface AddBillModalProps {
@@ -131,6 +132,8 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   const [confirmation, setConfirmation] = useState<ConfirmActionOptions | null>(null);
   const [actionMenuVisible, setActionMenuVisible] = useState(false);
   const [historyVisible, setHistoryVisible] = useState(false);
+  const [moreSettingsVisible, setMoreSettingsVisible] = useState(false);
+  const [isSubscription, setIsSubscription] = useState<boolean | null>(false);
   const [pauseVisible, setPauseVisible] = useState(false);
   const [editingPaymentPause, setEditingPaymentPause] = useState<DebtPaymentPause | undefined>();
   const [pauseDraftRevision, setPauseDraftRevision] = useState(0);
@@ -154,11 +157,12 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       return;
     }
     if (historyVisible) setHistoryVisible(false);
+    else if (moreSettingsVisible) setMoreSettingsVisible(false);
     else onClose();
   };
   // A refused browser Back has consumed its nested entry; a new revision
   // asks the existing controller to restore that owned entry while saving.
-  useBackDismiss(visible && !transferFlow, dismissLayer, true, pauseVisible ? (pauseDateField || pauseStep === "transfer" ? 2 : 1) + pauseBackRevision * 3 : historyVisible || frequencyOpen ? 1 : 0);
+  useBackDismiss(visible && !transferFlow, dismissLayer, true, pauseVisible ? (pauseDateField || pauseStep === "transfer" ? 2 : 1) + pauseBackRevision * 3 : (historyVisible || moreSettingsVisible ? 1 : 0) + (frequencyOpen ? 1 : 0));
 
   useEffect(() => {
     setPauseVisible(false);
@@ -254,7 +258,9 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
     setConfirmation(null);
     setActionMenuVisible(false);
     setHistoryVisible(false);
+    setMoreSettingsVisible(false);
     if (editBill) {
+      setIsSubscription(typeof editBill.is_subscription === "boolean" ? editBill.is_subscription : null);
       setName(editBill.name);
       setAmount(editBill.amount.toString());
       setCategory(editBill.is_debt ? "Other" : editBill.category);
@@ -276,6 +282,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       const paymentDate = initialValues?.nextPaymentDate ?? "";
       const [year, month, day] = paymentDate.split("-").map(Number);
       const hasValidPaymentDate = [year, month, day].every(Number.isFinite);
+      setIsSubscription(initialValues?.isSubscription !== undefined ? initialValues.isSubscription : false);
       setName(initialValues?.name ?? "");
       setAmount(initialValues?.amount ? initialValues.amount.toString() : "");
       setCategory(initialValues?.category ?? "Other");
@@ -327,20 +334,22 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       return;
     }
     if (fundingAccountRef && (!accountForecastReady || !forecastAccounts.some(account => account.ref === fundingAccountRef && account.active && !account.unavailableReason))) {
+      setMoreSettingsVisible(false);
       privacyAlerts.formError("Choose a payment account", "This account is unavailable. Choose an active account or leave it unassigned.");
       return;
     }
     const parsedAmount = parseMoneyInput(amount);
     const parsedBalance = balance.trim() ? parseMoneyInput(balance) : 0;
     const parsedRate = interestRate.trim() ? parseDecimalInput(interestRate, 4) : 0;
-    if (parsedAmount === null || parsedAmount <= 0 || (isDebt && (parsedBalance === null || parsedRate === null))) { privacyAlerts.formError("Check bill amounts", "Enter valid nonnegative amounts. Payment and balance allow up to two decimal places; interest rate allows up to four."); return; }
-    if (!name.trim()) return;
+    if (parsedAmount === null || parsedAmount <= 0 || (isDebt && (parsedBalance === null || parsedRate === null))) { setMoreSettingsVisible(false); privacyAlerts.formError("Check bill amounts", "Enter valid nonnegative amounts. Payment and balance allow up to two decimal places; interest rate allows up to four."); return; }
+    if (!name.trim()) { setMoreSettingsVisible(false); privacyAlerts.formError("Add a name", "Enter a name for this bill before saving."); return; }
     if (frequency === "yearly" && isDebt) {
       privacyAlerts.formError("Choose a debt payment frequency", "Yearly is available for bills. Choose another frequency before changing this bill to debt.");
       return;
     }
     if ((frequency === "quarterly" && !nextPaymentDate.trim())
       || (frequency === "yearly" && !dateOnlyToLocalDate(nextPaymentDate.trim()))) {
+      setMoreSettingsVisible(false);
       privacyAlerts.formError("Choose the first payment date", frequency === "yearly" ? "FlowLedger uses it to repeat this bill once a year." : "FlowLedger uses it to repeat this bill every 3 months.");
       return;
     }
@@ -349,7 +358,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       name: name.trim(),
       amount: parsedAmount,
       category: isDebt ? "Debt" : category,
-      priority: isDebt ? 0 : 99,
+      priority: editBill && editBill.is_debt === isDebt ? editBill.priority : isDebt ? 0 : 99,
       is_debt: isDebt,
       balance: isDebt ? (parsedBalance ?? 0) : 0,
       interest_rate: isDebt ? (parsedRate ?? 0) : 0,
@@ -363,6 +372,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       smart_priority: normalizeBillImportance(smartPriority, isDebt),
       include_in_snowball: isDebt ? includeInSnowball : false,
       funding_account_ref: fundingAccountRef,
+      is_subscription: isSubscription,
       ...(editBill ? { debt_payment_pauses: currentDebt?.debt_payment_pauses ?? editBill.debt_payment_pauses } : {}),
     };
     setSaving(true);
@@ -474,14 +484,14 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
         <View style={[styles.container, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_WIDE]}>
           <View style={[styles.handle, isDesktop && DESKTOP_MODAL_HANDLE]} />
           <View style={styles.header}>
-            {historyVisible ? <Pressable accessibilityRole="button" accessibilityLabel="Back to bill editor" onPress={() => setHistoryVisible(false)} style={styles.historyBack}>
+            {historyVisible || moreSettingsVisible ? <Pressable accessibilityRole="button" accessibilityLabel="Back to bill editor" onPress={() => { setHistoryVisible(false); setMoreSettingsVisible(false); }} style={styles.historyBack}>
               <Feather name="arrow-left" size={22} color={c.foreground} />
-              <Text style={[styles.title, { color: c.foreground }]}>Payment history</Text>
+              <Text style={[styles.title, { color: c.foreground }]}>{historyVisible ? "Payment history" : "Bill settings"}</Text>
             </Pressable> : <Text style={[styles.title, { color: c.foreground }]}>
               {historyOnly ? "Bill history" : title ?? (editBill ? `Edit ${noun}` : `Add ${noun}`)}
             </Text>}
             <View style={styles.headerActions}>
-              {editBill && !historyVisible && !historyOnly ? (
+              {editBill && !historyVisible && !moreSettingsVisible && !historyOnly ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="More bill actions"
@@ -500,7 +510,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
             </View>
           </View>
 
-          {editBill && actionMenuVisible && !historyVisible && !historyOnly ? (
+          {editBill && actionMenuVisible && !historyVisible && !moreSettingsVisible && !historyOnly ? (
             <View style={[styles.actionMenu, { backgroundColor: c.card, borderColor: c.border }]}>
               {editBill.end_date && onResume ? (
                 <Pressable
@@ -591,8 +601,9 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
               </Pressable> : null}
             </View>
             <BillPaymentHistoryPanel billId={editBill.id} billName={editBill.name} />
-          </ScrollView> : historyVisible && editBill ? <BillPaymentHistoryPanel billId={editBill.id} billName={editBill.name} /> : <ScrollView showsVerticalScrollIndicator={isDesktop} keyboardShouldPersistTaps="handled">
+          </ScrollView> : historyVisible && editBill ? <BillPaymentHistoryPanel billId={editBill.id} billName={editBill.name} /> : <ScrollView key={moreSettingsVisible ? "settings" : "editor"} showsVerticalScrollIndicator={isDesktop} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.formContent}>
 
+            {!moreSettingsVisible ? <>
             {editBill?.is_debt ? (
               <View
                 style={[
@@ -743,23 +754,6 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
             <AccountForecastPicker label="Paid from" value={fundingAccountRef} onChange={setFundingAccountRef}
               includeHousehold={false} allowUnassigned disabled={saving || pauseActionSaving || !canEditHousehold} />
 
-            {editBill ? (
-              <View style={[styles.transferCard, { backgroundColor: c.primary + "08", borderColor: c.primary + "25" }]}>
-                <View style={styles.transferCopy}>
-                  <Text style={[styles.actionMenuLabel, { color: c.foreground }]}>Transfer between accounts</Text>
-                  <Text style={[styles.actionMenuHelp, { color: c.mutedForeground }]}>
-                    {conversionUnavailable || "Use this when the payment goes to another account you own."}
-                  </Text>
-                </View>
-                {!conversionUnavailable ? <Pressable accessibilityRole="button" accessibilityLabel="Change to transfer"
-                  accessibilityState={{ disabled: saving || !canEditHousehold || !accountForecastReady }} disabled={saving || !canEditHousehold || !accountForecastReady}
-                  onPress={() => openTransfer(true)} style={[styles.transferAction, { borderColor: c.primary + "55" }]}>
-                  <Feather name="repeat" size={16} color={c.primary} />
-                  <Text style={[styles.entryChoiceText, { color: c.primary }]}>Change to transfer</Text>
-                </Pressable> : null}
-              </View>
-            ) : null}
-
             {/* Frequency */}
             <Text style={lbl}>Frequency</Text>
             <BillFrequencyPicker value={frequency} onChange={setFrequency} debt={Boolean(isDebt || forceDebt)}
@@ -888,60 +882,49 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
               </View>
             )}
 
-            {/* Optional date range */}
-            <DatePickerField
-              label="Start Date (optional)"
-              value={billStartDate}
-              onChange={setBillStartDate}
-              placeholder="No start date"
-              optional
-            />
-            <DatePickerField
-              label="End Date (optional)"
-              value={billEndDate}
-              onChange={setBillEndDate}
-              placeholder="No end date (indefinite)"
-              optional
-              minDate={billStartDate || undefined}
-            />
-
-            {Boolean(billStartDate.trim() || billEndDate.trim()) && (
-              <View style={[styles.infoBox, { backgroundColor: c.success + "12" }]}>
-                <Feather name="calendar" size={12} color={c.success} />
-                <Text style={[styles.infoText, { color: c.mutedForeground }]}>
-                  Bill only generates between{" "}
-                  {billStartDate || "any date"} → {billEndDate || "indefinitely"}.
-                </Text>
-              </View>
-            )}
-
-            {/* Debt toggle (hidden when forceDebt) */}
-            {!forceDebt && (
-              <View style={[styles.toggleCard, { backgroundColor: c.card }]}>
-                <View>
-                  <Text style={[styles.toggleLabel, { color: c.foreground }]}>This is a Debt</Text>
-                  <Text style={[styles.toggleSub, { color: c.mutedForeground }]}>Tracks balance, interest &amp; payoff</Text>
-                </View>
-                <Switch value={isDebt} onValueChange={value => {
-                  if (value && frequency === "yearly") {
-                    privacyAlerts.formError("Choose a debt payment frequency", "Choose another frequency before changing this yearly bill to debt.");
-                    return;
-                  }
-                  setIsDebt(value);
-                }}
-                  trackColor={{ false: c.muted, true: c.primary }} thumbColor="#fff" />
-              </View>
-            )}
-
-            {/* Debt-specific fields */}
-            {isDebt ? (
-              <>
+            {isDebt ? <>
                 <Text style={lbl}>Current Balance ($)</Text>
                 <TextInput sensitive style={inp} value={balance} onChangeText={setBalance}
                   placeholder="0.00" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
                 <Text style={lbl}>Interest Rate (% APR)</Text>
                 <TextInput style={inp} value={interestRate} onChangeText={setInterestRate}
                   placeholder="0.0" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
+            </> : null}
+            <Pressable accessibilityRole="button" accessibilityLabel="More bill settings"
+              onPress={() => { Keyboard.dismiss(); setFrequencyOpen(false); setShowDayPicker(false); setActionMenuVisible(false); setMoreSettingsVisible(true); }}
+              style={({ pressed }) => [styles.moreSettingsLink, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.75 : 1 }]}>
+              <Feather name="sliders" size={20} color={c.primary} />
+              <View style={styles.actionMenuCopy}>
+                <Text style={[styles.actionMenuLabel, { color: c.foreground }]}>More settings</Text>
+                <Text style={[styles.actionMenuHelp, { color: c.mutedForeground }]}>{isDebt ? "Dates, payoff options, and bill type" : `${isSubscription === null ? "Automatic" : isSubscription ? "Subscription" : "Regular bill"} · Category, dates, and more`}</Text>
+              </View>
+              <Feather name="chevron-right" size={18} color={c.mutedForeground} />
+            </Pressable>
+            </> : <>
+            <Text numberOfLines={2} style={[styles.settingsBillName, { color: c.mutedForeground }]}>{name.trim() || `New ${noun.toLowerCase()}`}</Text>
+            {!isDebt ? <>
+              <Text style={lbl}>Bill type</Text>
+              <Text style={[styles.settingsHelp, { color: c.mutedForeground }]}>Your choice takes priority. Automatic uses existing matches and merchant clues.</Text>
+              <View accessibilityRole="radiogroup" accessibilityLabel="Bill type" style={styles.billTypeChoices}>
+                {([
+                  { value: null, label: "Automatic", icon: "zap" },
+                  { value: false, label: "Regular bill", icon: "file-text" },
+                  { value: true, label: "Subscription", icon: "repeat" },
+                ] as const).map(option => {
+                  const selected = isSubscription === option.value;
+                  return <Pressable key={option.label} accessibilityRole="radio" accessibilityLabel={option.label}
+                    accessibilityState={{ checked: selected, disabled: saving || !canEditHousehold }} aria-checked={selected}
+                    disabled={saving || !canEditHousehold} onPress={() => setIsSubscription(option.value)}
+                    style={({ pressed }) => [styles.billTypeChoice, { borderColor: selected ? c.primary : c.border, backgroundColor: selected ? c.primary + "12" : c.card, opacity: pressed ? 0.75 : 1 }]}>
+                    <Feather name={option.icon} size={17} color={selected ? c.primary : c.mutedForeground} />
+                    <Text style={[styles.billTypeLabel, { color: selected ? c.primary : c.foreground }]}>{option.label}</Text>
+                    <Feather name={selected ? "check-circle" : "circle"} size={18} color={selected ? c.primary : c.mutedForeground} />
+                  </Pressable>;
+                })}
+              </View>
+              {!isRecurring && isSubscription === true ? <Text style={[styles.settingsHelp, { color: c.mutedForeground }]}>Only recurring bills appear in scheduled subscriptions.</Text> : null}
+            </> : null}
+            {isDebt ? <>
                 {settings.debtPayoffEnabled && <View style={[styles.toggleCard, { backgroundColor: c.card }]}>
                   <View style={{ flex: 1 }}>
                     <View style={styles.payoffLabelRow}>
@@ -968,9 +951,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
                     Snowball priority: smallest debt balance = #1.
                   </Text>
                 </View>}
-              </>
-            ) : (
-              <>
+            </> : <>
                 <Text style={lbl}>Category</Text>
                 <View style={styles.categoryGrid}>
                   {nonDebtCategories.map(cat => (
@@ -983,9 +964,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
                     </Pressable>
                   ))}
                 </View>
-              </>
-            )}
-
+            </>}
             {isDebt ? (
               <View style={[styles.infoBox, { backgroundColor: c.primary + "12" }]}>
                 <Feather name="shield" size={13} color={c.primary} />
@@ -1027,18 +1006,83 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
               </>
             )}
 
+            {/* Optional date range */}
+            <DatePickerField
+              label="Start Date (optional)"
+              value={billStartDate}
+              onChange={setBillStartDate}
+              placeholder="No start date"
+              optional
+            />
+            <DatePickerField
+              label="End Date (optional)"
+              value={billEndDate}
+              onChange={setBillEndDate}
+              placeholder="No end date (indefinite)"
+              optional
+              minDate={billStartDate || undefined}
+            />
+
+            {Boolean(billStartDate.trim() || billEndDate.trim()) && (
+              <View style={[styles.infoBox, { backgroundColor: c.success + "12" }]}>
+                <Feather name="calendar" size={12} color={c.success} />
+                <Text style={[styles.infoText, { color: c.mutedForeground }]}>
+                  Bill only generates between{" "}
+                  {billStartDate || "any date"} → {billEndDate || "indefinitely"}.
+                </Text>
+              </View>
+            )}
+
             {/* Recurring toggle — hidden for debt (debts are always recurring) */}
             {!isDebt && !forceDebt && (
               <View style={[styles.toggleCard, { backgroundColor: c.card, marginTop: 14 }]}>
-                <View>
+                <View style={styles.actionMenuCopy}>
                   <Text style={[styles.toggleLabel, { color: c.foreground }]}>Recurring</Text>
-                  <Text style={[styles.toggleSub, { color: c.mutedForeground }]}>Appears automatically each month</Text>
+                  <Text style={[styles.toggleSub, { color: c.mutedForeground }]}>Repeats using the frequency you chose</Text>
                 </View>
                 <Switch value={isRecurring} onValueChange={setIsRecurring}
                   trackColor={{ false: c.muted, true: c.primary }} thumbColor="#fff" />
               </View>
             )}
 
+            {/* Debt toggle (hidden when forceDebt) */}
+            {!forceDebt && (
+              <View style={[styles.toggleCard, { backgroundColor: c.card }]}>
+                <View style={styles.actionMenuCopy}>
+                  <Text style={[styles.toggleLabel, { color: c.foreground }]}>This is a Debt</Text>
+                  <Text style={[styles.toggleSub, { color: c.mutedForeground }]}>Tracks balance, interest &amp; payoff</Text>
+                </View>
+                <Switch value={isDebt} onValueChange={value => {
+                  if (value && frequency === "yearly") {
+                    privacyAlerts.formError("Choose a debt payment frequency", "Choose another frequency before changing this yearly bill to debt.");
+                    return;
+                  }
+                  setIsDebt(value);
+                }}
+                  trackColor={{ false: c.muted, true: c.primary }} thumbColor="#fff" />
+              </View>
+            )}
+
+            {editBill ? (
+              <View style={[styles.transferCard, { backgroundColor: c.primary + "08", borderColor: c.primary + "25" }]}>
+                <View style={styles.transferCopy}>
+                  <Text style={[styles.actionMenuLabel, { color: c.foreground }]}>Transfer between accounts</Text>
+                  <Text style={[styles.actionMenuHelp, { color: c.mutedForeground }]}>
+                    {conversionUnavailable || "Use this when the payment goes to another account you own."}
+                  </Text>
+                </View>
+                {!conversionUnavailable ? <Pressable accessibilityRole="button" accessibilityLabel="Change to transfer"
+                  accessibilityState={{ disabled: saving || !canEditHousehold || !accountForecastReady }} disabled={saving || !canEditHousehold || !accountForecastReady}
+                  onPress={() => openTransfer(true)} style={[styles.transferAction, { borderColor: c.primary + "55" }]}>
+                  <Feather name="repeat" size={16} color={c.primary} />
+                  <Text style={[styles.entryChoiceText, { color: c.primary }]}>Change to transfer</Text>
+                </Pressable> : null}
+              </View>
+            ) : null}
+
+            </>}
+          </ScrollView>}
+          {!historyVisible && !historyOnly ? <View style={[styles.saveFooter, { borderColor: c.border }]}>
             {/* Save */}
             <Pressable accessibilityRole="button" accessibilityLabel={saveLabel ?? (editBill ? `Update ${noun}` : `Add ${noun}`)} disabled={saving || pauseActionSaving || !canEditHousehold} onPress={handleSave}
               style={({ pressed }) => [styles.saveBtn, { backgroundColor: c.primary, borderRadius: colors.radius, opacity: saving || pauseActionSaving ? 0.55 : pressed ? 0.85 : 1 }]}
@@ -1048,7 +1092,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
               </Text>
             </Pressable>
 
-          </ScrollView>}
+          </View> : null}
         </View>
       </KeyboardAvoidingView>
       <ConfirmActionOverlay request={confirmation} onClose={() => setConfirmation(null)} />
@@ -1081,6 +1125,14 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
 }
 
 const styles = StyleSheet.create({
+  formContent: { paddingBottom: 8 },
+  saveFooter: { borderTopWidth: 1, paddingTop: 12, marginTop: 12 },
+  settingsBillName: { fontSize: 13, lineHeight: 19, fontFamily: "Inter_500Medium", marginBottom: 4 },
+  settingsHelp: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular", marginBottom: 8 },
+  billTypeChoices: { gap: 8 },
+  billTypeChoice: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 48, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12 },
+  billTypeLabel: { flex: 1, minWidth: 0, fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  moreSettingsLink: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 14, padding: 14, marginTop: 18 },
   entryChoices: { flexDirection: "row", gap: 10, marginTop: 4, marginBottom: 4 },
   entryChoice: { flex: 1, minWidth: 0, minHeight: 46, borderWidth: 1, borderRadius: 12, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8, padding: 10 },
   entryChoiceText: { fontFamily: "Inter_600SemiBold", fontSize: 13 },
@@ -1113,7 +1165,7 @@ const styles = StyleSheet.create({
   dowLabel: { fontSize: 12, fontFamily: "Inter_700Bold" },
   infoBox: { flexDirection: "row", alignItems: "flex-start", gap: 7, padding: 10, borderRadius: 8, marginTop: 8 },
   infoText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
-  toggleCard: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 14, borderRadius: 12, marginTop: 14 },
+  toggleCard: { gap: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 14, borderRadius: 12, marginTop: 14 },
   payoffLabelRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   toggleLabel: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
   toggleSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
@@ -1135,7 +1187,7 @@ const styles = StyleSheet.create({
   calGrid: { flexDirection: "row", flexWrap: "wrap" },
   calCell: { width: "14.285714%", height: 38, alignItems: "center", justifyContent: "center" },
   calCellText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  saveBtn: { height: 52, alignItems: "center", justifyContent: "center", marginTop: 24 },
+  saveBtn: { height: 52, alignItems: "center", justifyContent: "center" },
   saveBtnText: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
   deleteBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 48, borderWidth: 1.5, borderRadius: 12, marginTop: 12, marginBottom: 32 },
   deleteMistakeBtn: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 58, borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginTop: -20, marginBottom: 32 },

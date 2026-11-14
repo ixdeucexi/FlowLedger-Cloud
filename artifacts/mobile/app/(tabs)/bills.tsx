@@ -7,7 +7,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Modal, Platform, FlatList, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { AddBillModal } from "@/components/AddBillModal";
+import { AddBillModal, type AddBillInitialValues } from "@/components/AddBillModal";
 import { TransferPlansShortcut } from "@/components/TransferPlansShortcut";
 import { AccessibleIconButton } from "@/components/AccessiblePressable";
 import { CommandPlusButton } from "@/components/CommandPlusButton";
@@ -113,6 +113,10 @@ export default function BillsScreen() {
   const routeParams = useLocalSearchParams<{
     view?: string;
     debtId?: string;
+    addSubscription?: string;
+    subscriptionName?: string;
+    subscriptionAmount?: string;
+    subscriptionFrequency?: string;
   }>();
   const { user } = useAuth();
   const { dismissNotification, dismissedNotificationIds } = useAppDiscovery();
@@ -162,6 +166,21 @@ export default function BillsScreen() {
   }, [activeTab, isDesktop]);
   const [modalVisible, setModalVisible] = useState(false);
   const [editBill, setEditBill] = useState<Bill | null>(null);
+  const [subscriptionInitialValues, setSubscriptionInitialValues] = useState<AddBillInitialValues | undefined>();
+  useEffect(() => {
+    if (routeParams.addSubscription !== "1") return;
+    const amount = Number(routeParams.subscriptionAmount);
+    setSubscriptionInitialValues({
+      name: typeof routeParams.subscriptionName === "string" ? routeParams.subscriptionName.slice(0, 240) : "",
+      amount: Number.isFinite(amount) && amount > 0 ? amount : undefined,
+      frequency: routeParams.subscriptionFrequency === "yearly" ? "yearly" : "monthly",
+      isSubscription: true,
+    });
+    setActiveTab("bills");
+    setEditBill(null);
+    setModalVisible(true);
+    router.setParams({ addSubscription: "", subscriptionName: "", subscriptionAmount: "", subscriptionFrequency: "" } as never);
+  }, [routeParams.addSubscription, routeParams.subscriptionName, routeParams.subscriptionAmount, routeParams.subscriptionFrequency, router]);
   const [filter, setFilter] = useState<Filter>("all");
   const [billSearch, setBillSearch] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("priority");
@@ -1012,7 +1031,7 @@ export default function BillsScreen() {
     );
   };
 
-  if (isDesktop) return <DesktopBillsDebtsPage />;
+  if (isDesktop) return <DesktopBillsDebtsPage subscriptionDraft={subscriptionInitialValues} onCloseSubscriptionDraft={() => { setModalVisible(false); setSubscriptionInitialValues(undefined); }} />;
 
   return (
     <View style={[styles.screen, { backgroundColor: c.background }]}>
@@ -2163,6 +2182,7 @@ export default function BillsScreen() {
         onClose={() => {
           setModalVisible(false);
           setEditBill(null);
+          setSubscriptionInitialValues(undefined);
         }}
         onSave={handleSave}
         onDelete={deleteBill}
@@ -2171,6 +2191,7 @@ export default function BillsScreen() {
         onDeleteMistake={deleteBillMistake}
         editBill={editBill}
         forceDebt={activeTab === "debt"}
+        initialValues={subscriptionInitialValues}
       />
     </View>
   );

@@ -5,17 +5,18 @@ import React from "react";
 import ts from "typescript";
 import { buildForecastAccountCatalog, resolveForecastAccountReference } from "./accountForecasts";
 import { validPlannedTransferDate, plannedTransferOccurrenceDates, plannedTransferHasOutstandingReview } from "./plannedAccountTransfers";
+import { billEditablePatch, changedBillEditableFields } from "./billEditPersistence";
 import { parseMoneyInput, parseDecimalInput } from "./moneyFormInput";
 import { addDateOnlyDays, dateOnlyToLocalDate, MONTH_NAMES } from "./dateLabels";
 
 type Node = { type: any; props: any; children: Array<Node | string> };
 const sourceBill = { id: "bill-1", household_id: "home", budget_id: "budget", name: "Kids Transfer", amount: 50,
-  is_debt: false, is_recurring: true, frequency: "monthly", due_day: 4, start_date: "2026-07-04", end_date: null,
-  funding_account_ref: "manual:checking" };
+  is_debt: false, is_recurring: true, frequency: "monthly", due_day: 4, start_date: "2026-07-04", end_date: undefined,
+  funding_account_ref: "manual:checking", balance: 0, interest_rate: 0, category: "Other", priority: 99, day_of_week: 0, next_payment_date: undefined, smart_priority: "must", include_in_snowball: false, debt_payment_pauses: [], created_at: "2026-07-01" };
 function harness(props: any = {}, pending?: () => Promise<unknown>, component = "PlannedTransferModal") {
   let slots: any[] = [], index = 0;
   const effects: Array<() => void> = [];
-  const state = { user: { id: "actor" }, closed: 0, saved: 0, back: 0, calls: [] as any[],
+  const state = { user: { id: "actor" }, closed: 0, saved: 0, back: 0, backHandler: (() => {}) as () => void, errors: [] as string[], calls: [] as any[],
     budget: { activeHousehold: { householdId: "home", budgetId: "budget" }, canEditHousehold: true,
       bills: [sourceBill], categories: ["Other"], settings: { debtPayoffEnabled: false }, plannedAccountTransfers: [] as any[], plannedTransferOccurrences: [] as any[],
       accountForecastReady: true, plannedTransfersReady: true, plannedTransfersError: null as string | null, demoMode: false, retryBudgetLoad: () => state.calls.push({ type: "retry", args: [] }), householdTimeZone: "America/Chicago",
@@ -45,10 +46,10 @@ function harness(props: any = {}, pending?: () => Promise<unknown>, component = 
     "@/context/AuthContext": { useAuth: () => ({ user: state.user }) },
     "@/context/BudgetContext": { useBudget: () => ({ ...state.budget, savePlannedAccountTransfer: (...args: any[]) => mutation("save", ...args),
       convertBillToPlannedTransfer: (...args: any[]) => mutation("convert", ...args) }) },
-    "@/hooks/useBackDismiss": { useBackDismiss: () => {} }, "@/hooks/useColors": { useColors: () => ({ primary: "#a855f7", foreground: "#fff", mutedForeground: "#aaa", card: "#101528", border: "#334155", background: "#030712", success: "#22c55e", warning: "#ffb400", destructive: "#f43f5e" }) },
+    "@/hooks/useBackDismiss": { useBackDismiss: (_visible: boolean, handler: () => void) => { state.backHandler = handler; } }, "@/hooks/useColors": { useColors: () => ({ primary: "#a855f7", foreground: "#fff", mutedForeground: "#aaa", card: "#101528", border: "#334155", background: "#030712", success: "#22c55e", warning: "#ffb400", destructive: "#f43f5e" }) },
     "@/lib/accountForecasts": { resolveForecastAccountReference }, "@/lib/financialProjection": { safeLocalDateInTimeZone: () => "2026-11-12" },
     "@/lib/moneyFormInput": { parseMoneyInput, parseDecimalInput }, "@/lib/dateLabels": { addDateOnlyDays, dateOnlyToLocalDate, MONTH_NAMES },
-    "@/hooks/usePrivacyAlerts": { usePrivacyAlerts: () => ({ formError: () => {}, alert: () => {} }) },
+    "@/hooks/usePrivacyAlerts": { usePrivacyAlerts: () => ({ formError: (title: string) => state.errors.push(title), alert: (title: string) => state.errors.push(title) }) },
     "@/lib/haptics": { impactAsync: () => {}, ImpactFeedbackStyle: { Medium: "medium", Light: "light" } },
     "@/constants/colors": { radius: 12 }, "@/components/ConfirmActionModal": { ConfirmActionOverlay: () => null },
     "@/components/PlannedTransferModal": { PlannedTransferModal: primitive("TransferEditor") },
@@ -60,7 +61,7 @@ function harness(props: any = {}, pending?: () => Promise<unknown>, component = 
     "@/lib/dailyCheckingClose": { localDateInTimeZone: () => "2026-11-12" },
     "@/lib/debtPaymentPause": { activeDebtPaymentPause: () => undefined }, "@/lib/desktopModal": {},
     "@/lib/billImportance": { BILL_IMPORTANCE_OPTIONS: [], normalizeBillImportance: (v: unknown) => v ?? "must" },
-    "@/lib/billEditPersistence": { billEditablePatch: (v: unknown) => v, changedBillEditableFields: () => [] }, "@/lib/plannedAccountTransfers": { validPlannedTransferDate, plannedTransferOccurrenceDates, plannedTransferHasOutstandingReview },
+    "@/lib/billEditPersistence": { billEditablePatch, changedBillEditableFields }, "@/lib/plannedAccountTransfers": { validPlannedTransferDate, plannedTransferOccurrenceDates, plannedTransferHasOutstandingReview },
   };
   const code = ts.transpileModule(readFileSync(`components/${component}.tsx`, "utf8"), { compilerOptions: { target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, esModuleInterop: true } }).outputText;
@@ -122,10 +123,12 @@ test("actual Bill chooser suspends one modal and returns to its untouched draft 
 });
 test("actual saved Bill conversion captures its unchanged source and leaves unsupported schedules in Bill editor", () => {
   const h = harness({ editBill: sourceBill }, undefined, "AddBillModal"); h.find("Bill name").props.onChangeText("Updated transfer name"); h.render();
+  h.find("More bill settings").props.onPress(); h.render();
   h.find("Change to transfer").props.onPress(); h.render(); const editor = h.all().find(n => n.type === "TransferEditor")!;
-  assert.deepEqual(editor.props.conversionBill, sourceBill); assert.notEqual(editor.props.conversionBill, sourceBill); assert.equal(editor.props.initialValues.name, "Updated transfer name");
-  editor.props.onBackToBill(); h.render(); assert.equal(h.find("Bill name").props.value, "Updated transfer name"); assert.equal(h.state.calls.length, 0);
+  assert.deepEqual(editor.props.conversionBill, JSON.parse(JSON.stringify(sourceBill))); assert.notEqual(editor.props.conversionBill, sourceBill); assert.equal(editor.props.initialValues.name, "Updated transfer name");
+  editor.props.onBackToBill(); h.render(); h.find("Back to bill editor").props.onPress(); h.render(); assert.equal(h.find("Bill name").props.value, "Updated transfer name"); assert.equal(h.state.calls.length, 0);
   const unsupported = harness({ editBill: { ...sourceBill, frequency: "yearly" } }, undefined, "AddBillModal");
+  unsupported.find("More bill settings").props.onPress(); unsupported.render();
   assert.ok(!unsupported.all().some(n => n.props.accessibilityLabel === "Change to transfer")); assert.match(unsupported.text(), /monthly and one-time bills/);
 });
 test("converted source Bill is history-only even if the linked transfer is soft-deleted", () => {
@@ -207,4 +210,81 @@ test("transfer page loading disables create and failed reads offer a scoped retr
   assert.deepEqual(h.state.calls, [{ type: "retry", args: [] }]);
   h.state.budget.plannedTransfersReady = true; h.state.budget.plannedTransfersError = null; h.render();
   assert.equal(h.find("Plan a transfer").props.disabled, false);
+});
+
+
+test("bill settings retain drafts through Back and save only a deliberate classification", async () => {
+  const baseline = { ...sourceBill, is_subscription: null };
+  const h = harness({ editBill: baseline }, undefined, "AddBillModal");
+  assert.ok(!h.all().some(n => n.props.accessibilityLabel === "Bill type"));
+  h.find("Bill name").props.onChangeText("Custom studio"); h.render();
+  h.find("More bill settings").props.onPress(); h.render();
+  assert.equal(h.find("Automatic").props.accessibilityState.checked, true);
+  h.find("Subscription").props.onPress(); h.render();
+  h.state.backHandler(); h.render();
+  assert.equal(h.find("Bill name").props.value, "Custom studio");
+  assert.equal(h.find("Payment amount").props.value, "50");
+  h.find("More bill settings").props.onPress(); h.render();
+  assert.equal(h.find("Subscription").props.accessibilityState.checked, true);
+  await pressSave(h, "Update Bill");
+  assert.equal(h.state.calls.length, 1);
+  const [saved, fields, expected] = h.state.calls[0].args;
+  assert.equal(saved.is_subscription, true); assert.equal(expected.is_subscription, null);
+  assert.deepEqual(fields, ["name", "is_subscription"]);
+  assert.equal(saved.amount, baseline.amount); assert.equal(saved.due_day, baseline.due_day);
+  assert.equal(saved.start_date, baseline.start_date); assert.equal(saved.frequency, baseline.frequency);
+});
+
+test("an unrelated rename preserves Automatic; reopening discards unsubmitted settings", async () => {
+  const baseline = { ...sourceBill, is_subscription: undefined };
+  const h = harness({ editBill: baseline }, undefined, "AddBillModal");
+  h.find("More bill settings").props.onPress(); h.render();
+  h.find("Regular bill").props.onPress(); h.render();
+  h.find("Close bill editor").props.onPress();
+  h.state.props.visible = false; h.render(); h.state.props.visible = true; h.render();
+  assert.ok(!h.all().some(n => n.props.accessibilityLabel === "Bill type"));
+  h.find("Bill name").props.onChangeText("Renamed only"); h.render();
+  await pressSave(h, "Update Bill");
+  assert.equal(h.state.calls[0].args[0].is_subscription, null);
+  assert.deepEqual(h.state.calls[0].args[1], ["name"]);
+});
+
+test("new bills default Regular and subscription-origin drafts stay explicitly marked", () => {
+  for (const [initialValues, label] of [[undefined, "Regular bill"], [{ name: "Annual studio", amount: 120, frequency: "yearly", isSubscription: true }, "Subscription"]] as const) {
+    const h = harness({ initialValues }, undefined, "AddBillModal");
+    h.find("More bill settings").props.onPress(); h.render();
+    assert.equal(h.find(label).props.accessibilityState.checked, true);
+  }
+});
+
+test("settings save reveals invalid essentials and cannot persist across scope or viewer changes", async () => {
+  const h = harness({ editBill: { ...sourceBill, is_subscription: true } }, undefined, "AddBillModal");
+  h.find("Payment amount").props.onChangeText("bad"); h.render();
+  h.find("More bill settings").props.onPress(); h.render();
+  await pressSave(h, "Update Bill");
+  assert.ok(h.state.errors.includes("Check bill amounts")); assert.equal(h.state.calls.length, 0);
+  assert.ok(h.find("Payment amount"));
+  h.find("Payment amount").props.onChangeText("50"); h.render();
+  h.find("More bill settings").props.onPress(); h.render();
+  h.state.budget.canEditHousehold = false; h.render();
+  assert.equal(h.find("Regular bill").props.disabled, true);
+  assert.equal(h.find("Update Bill").props.disabled, true);
+  await pressSave(h, "Update Bill"); assert.equal(h.state.calls.length, 0);
+  h.state.budget.canEditHousehold = true;
+  h.state.budget.activeHousehold = { householdId: "other", budgetId: "other-budget" }; h.render();
+  await pressSave(h, "Update Bill"); assert.equal(h.state.calls.length, 0);
+  assert.ok(h.state.errors.includes("Reopen this editor"));
+});
+
+
+test("classification-only edits preserve legacy priority and nullable schedule fields", async () => {
+  const baseline = { ...sourceBill, priority: 3, end_date: null, next_payment_date: null, is_subscription: null };
+  const h = harness({ editBill: baseline }, undefined, "AddBillModal");
+  h.find("More bill settings").props.onPress(); h.render();
+  h.find("Regular bill").props.onPress(); h.render();
+  await pressSave(h, "Update Bill");
+  const [saved, fields, expected] = h.state.calls[0].args;
+  assert.equal(saved.priority, 3);
+  assert.deepEqual(fields, ["is_subscription"]);
+  assert.deepEqual(expected, { is_subscription: null });
 });

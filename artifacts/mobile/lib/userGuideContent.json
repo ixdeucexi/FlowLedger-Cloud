@@ -99,9 +99,9 @@
       {
         "title": "Bills",
         "items": [
-          { "title": "Keep the schedule current", "body": "Edit amount, next date, and frequency when they change.", "icon": "edit-3" },
+          { "title": "Keep the schedule current", "body": "Edit amount, account, and schedule. More settings holds category, importance, optional dates, and Bill type: Regular bill, Subscription, or Automatic.", "icon": "edit-3" },
           { "title": "Record manual payments", "body": "Mark a bill paid after you pay it outside FlowLedger.", "icon": "check" },
-          { "title": "Transfer between accounts", "body": "Choose Transfer when adding a bill, then pick From and To accounts, amount and schedule. Open the Transfers row in Bills to manage plans on their own page. For a monthly or one-time bill, Change to transfer preserves past history and replaces its future schedule after you confirm. Resolve any conflicting bill activity first.", "icon": "repeat" },
+          { "title": "Transfer between accounts", "body": "Choose Transfer when adding a bill, then pick From and To accounts, amount and schedule. Open the Transfers row in Bills to manage plans on their own page. For a monthly or one-time bill, More settings > Change to transfer preserves past history and replaces its future schedule after you confirm. Resolve any conflicting bill activity first.", "icon": "repeat" },
           { "title": "Close finished items", "body": "Inactive bills should stop creating reminders and occurrences.", "icon": "x-circle" }
         ]
       },

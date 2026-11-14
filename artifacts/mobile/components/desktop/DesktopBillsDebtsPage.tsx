@@ -5,7 +5,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet } from "react-native";
 
-import { AddBillModal } from "@/components/AddBillModal";
+import { AddBillModal, type AddBillInitialValues } from "@/components/AddBillModal";
 import { TransferPlansShortcut } from "@/components/TransferPlansShortcut";
 import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import {
@@ -121,7 +121,10 @@ type BillRow = {
   paid: number;
 };
 
-export function DesktopBillsDebtsPage() {
+export function DesktopBillsDebtsPage({ subscriptionDraft, onCloseSubscriptionDraft }: {
+  subscriptionDraft?: AddBillInitialValues;
+  onCloseSubscriptionDraft?: () => void;
+} = {}) {
   const params = useLocalSearchParams<{ view?: string; debtId?: string }>();
   const router = useRouter();
   const {
@@ -142,6 +145,11 @@ export function DesktopBillsDebtsPage() {
   const now = useMemo(() => new Date(), []);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingBill, setEditingBill] = useState<Bill | null>(null);
+  useEffect(() => {
+    if (!subscriptionDraft) return;
+    setEditingBill(null);
+    setModalVisible(true);
+  }, [subscriptionDraft]);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All Categories");
   const [statusFilter, setStatusFilter] = useState("All Status");
@@ -510,6 +518,7 @@ export function DesktopBillsDebtsPage() {
         onClose={() => {
           setModalVisible(false);
           setEditingBill(null);
+          onCloseSubscriptionDraft?.();
         }}
         onSave={saveBill}
         onDelete={deleteBill}
@@ -518,6 +527,7 @@ export function DesktopBillsDebtsPage() {
         onDeleteMistake={deleteBillMistake}
         editBill={editingBill}
         forceDebt={isDebt}
+        initialValues={subscriptionDraft}
       />
     </View>
   );

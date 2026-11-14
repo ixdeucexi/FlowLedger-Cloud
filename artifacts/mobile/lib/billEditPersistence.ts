@@ -19,6 +19,7 @@ export const BILL_EDITABLE_FIELDS = [
   "include_in_snowball",
   "debt_payment_pauses",
   "funding_account_ref",
+  "is_subscription",
 ] as const;
 
 export type BillEditableField = typeof BILL_EDITABLE_FIELDS[number];
@@ -31,6 +32,7 @@ const NULLABLE_BILL_FIELDS = new Set<BillEditableField>([
   "end_date",
   "smart_priority",
   "funding_account_ref",
+  "is_subscription",
 ]);
 
 export function changedBillEditableFields<T extends Partial<Record<BillEditableField, unknown>>>(
@@ -42,7 +44,7 @@ export function changedBillEditableFields<T extends Partial<Record<BillEditableF
 
 /** JSONB equality does not depend on array identity or object key order. */
 export function billEditableValuesEqual(field: BillEditableField, left: unknown, right: unknown): boolean {
-  if (field === "funding_account_ref") return (left ?? null) === (right ?? null);
+  if (NULLABLE_BILL_FIELDS.has(field)) return (left ?? null) === (right ?? null);
   return field === "debt_payment_pauses"
     ? JSON.stringify(normalizeDebtPaymentPauses(left)) === JSON.stringify(normalizeDebtPaymentPauses(right))
     : Object.is(left, right);

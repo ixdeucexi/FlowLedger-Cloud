@@ -1,4 +1,5 @@
 import { scheduleAnalysis } from "./analysisSchedule.ts";
+import { configuredSubscriptionBill } from "./analysisSubscriptionClassification.ts";
 import { analyticTransactions } from "./analysisSpending.ts";
 import { dayAdd, dollars, label, matches, monthStart, numeric, requireSources, round, shiftMonth, sum, validDate, type AnalysisRequest, type AnalysisResult, type AnalysisSnapshot } from "./analysisTypes.ts";
 
@@ -96,11 +97,12 @@ export function recurringAnalysis(snapshot:AnalysisSnapshot,request:AnalysisRequ
   base.text+=candidates.length?`\n\n${increased.length} of ${candidates.length} comparable recorded merchant patterns increased on their latest charge. This does not cover charges without enough repeated history.`:"\n\nThere is not enough repeated merchant-charge history to assess price increases. No observed comparison is not proof that prices stayed the same.";
   if(!candidates.length&&["compare","search"].includes(request.operation))base.missing.push("Repeated merchant-charge history is insufficient to assess changes or repeated-charge patterns");
   if(request.domain==="subscriptions") {
-    const configured=rows("bills").filter(b=>!b.is_debt&&b.is_recurring&&(!b.end_date||b.end_date>=snapshot.today)&&(!b.start_date||b.start_date<=snapshot.today)&&/subscription|entertainment|stream|software/i.test(b.category??"")&&matches(b.name,request.entity));
+    const configured=rows("bills").filter(b=>!b.is_debt&&b.is_recurring&&(!b.end_date||b.end_date>=snapshot.today)&&(!b.start_date||b.start_date<=snapshot.today)
+      &&configuredSubscriptionBill(b)&&matches(b.name,request.entity));
     const valid=configured.filter(b=>numeric(b.amount)!==null);
     const cost=sum(valid.map(b=>round(Number(b.amount)*(b.frequency==="weekly"?52/12:b.frequency==="biweekly"?26/12:b.frequency==="quarterly"?1/3:b.frequency==="yearly"?1/12:1))));
     base.facts.configuredSubscriptionMonthlyCost=cost;
-    base.text+=`\n\nConfigured subscription-category bills total about ${dollars(cost)}/month at their current rates. Canceling one would avoid its future charges only after the provider confirms cancellation; do not remove its next bill before then.`;
+    base.text+=`\n\nConfigured subscription bills total about ${dollars(cost)}/month at their current rates. Canceling one would avoid its future charges only after the provider confirms cancellation; do not remove its next bill before then.`;
     if(valid.length!==configured.length)base.missing.push("A configured subscription amount is missing");
     const names=new Map<string,number>();configured.forEach(b=>names.set(String(b.name).trim().toLowerCase(),(names.get(String(b.name).trim().toLowerCase())??0)+1));
     const repeated=[...names].filter(([,count])=>count>1);

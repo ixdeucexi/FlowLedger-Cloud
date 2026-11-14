@@ -71,6 +71,7 @@ export function normalizeSettingsRow(
 export function normalizeBillRow(bill: any): Bill {
   return {
     ...bill,
+    is_subscription: typeof bill.is_subscription === "boolean" ? bill.is_subscription : null,
     frequency: (bill.frequency ?? "monthly") as
       | "monthly"
       | "quarterly"

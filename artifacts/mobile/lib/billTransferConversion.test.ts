@@ -41,3 +41,16 @@ test("conversion publication only merges its authoritative cutoff and never resu
   assert.deepEqual(mergeConvertedBill([], source, saved), []);
   assert.equal(latest.end_date, undefined);
 });
+
+
+test("classification stays outside the unchanged transfer receipt contract and conversion publication", () => {
+  const keys = ["name", "amount", "category", "priority", "is_debt", "balance", "interest_rate", "due_day", "day_of_week", "next_payment_date", "start_date", "end_date", "is_recurring", "frequency", "smart_priority", "include_in_snowball", "debt_payment_pauses", "funding_account_ref"].sort();
+  for (const is_subscription of [true, false, null]) {
+    assert.deepEqual(Object.keys(billTransferExpected({ ...source, is_subscription })).sort(), keys);
+  }
+  const latest = { ...source, is_subscription: false };
+  const saved = { ...source, end_date: "2027-01-03", is_subscription: true };
+  assert.equal(mergeConvertedBill([latest], source, saved)[0].is_subscription, false);
+  const response = reply(); response.bill = { ...response.bill, is_subscription: true } as any;
+  assert.doesNotThrow(() => verifyBillTransferConversion(response, { ...source, is_subscription: false }, patch, scope));
+});

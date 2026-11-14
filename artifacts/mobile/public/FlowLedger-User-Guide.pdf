@@ -132,7 +132,7 @@ endobj
 endobj
 16 0 obj
 <<
-/Author (FlowLedger) /CreationDate (D:20261113222913+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:01d8c27087a4a9d37af899c2ffd1adbc8d4e8ffe9f4088d00a3ca14adec9f8b6) /ModDate (D:20261113222913+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+/Author (FlowLedger) /CreationDate (D:20261114052138+00'00') /Creator (anonymous) /Keywords (FlowLedgerGuideSourceSHA256:e684bbb63c965387230f24295117b13bb67e220b315260750a0a674713ada0db) /ModDate (D:20261114052138+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
   /Subject (Current Dashboard, Activity, Bills, Forecast, payoff, Flo, and Settings guidance) /Title (FlowLedger User Guide) /Trapped /False
 >>
 endobj
@@ -954,7 +954,7 @@ endstream
 endobj
 22 0 obj
 <<
-/Length 8944
+/Length 9119
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -1002,15 +1002,15 @@ BT 1 0 0 1 42 611 Tm (BILLS) Tj T* ET
 .160784 .207843 .321569 RG
 .8 w
 n
-58 544 m
-283 544 l
-291.8448 544 299 551.1552 299 560 c
+58 527 m
+283 527 l
+291.8448 527 299 534.1552 299 543 c
 299 577 l
 299 585.8448 291.8448 593 283 593 c
 58 593 l
 49.1552 593 42 585.8448 42 577 c
-42 560 l
-42 551.1552 49.1552 544 58 544 c
+42 543 l
+42 534.1552 49.1552 527 58 527 c
 h
 B*
 .960784 .721569 .180392 rg
@@ -1026,100 +1026,102 @@ BT /F2 9.5 Tf 11.4 TL ET
 BT 1 0 0 1 67 578 Tm (Keep the schedule current) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 563 Tm (Edit amount, next date, and frequency when they change.) Tj T* ET
+BT 1 0 0 1 56 563 Tm (Edit amount, account, and schedule. More settings holds) Tj T* ET
+BT 1 0 0 1 56 552 Tm (category, importance, optional dates, and Bill type: Regular) Tj T* ET
+BT 1 0 0 1 56 541 Tm (bill, Subscription, or Automatic.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-58 488 m
-283 488 l
-291.8448 488 299 495.1552 299 504 c
-299 521 l
-299 529.8448 291.8448 537 283 537 c
-58 537 l
-49.1552 537 42 529.8448 42 521 c
-42 504 l
-42 495.1552 49.1552 488 58 488 c
+58 471 m
+283 471 l
+291.8448 471 299 478.1552 299 487 c
+299 504 l
+299 512.8448 291.8448 520 283 520 c
+58 520 l
+49.1552 520 42 512.8448 42 504 c
+42 487 l
+42 478.1552 49.1552 471 58 471 c
 h
 B*
 .960784 .721569 .180392 rg
 n
-60 520 m
-60 522.2091 58.20914 524 56 524 c
-53.79086 524 52 522.2091 52 520 c
-52 517.7909 53.79086 516 56 516 c
-58.20914 516 60 517.7909 60 520 c
+60 503 m
+60 505.2091 58.20914 507 56 507 c
+53.79086 507 52 505.2091 52 503 c
+52 500.7909 53.79086 499 56 499 c
+58.20914 499 60 500.7909 60 503 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 67 522 Tm (Record manual payments) Tj T* ET
+BT 1 0 0 1 67 505 Tm (Record manual payments) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 507 Tm (Mark a bill paid after you pay it outside FlowLedger.) Tj T* ET
+BT 1 0 0 1 56 490 Tm (Mark a bill paid after you pay it outside FlowLedger.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-58 382 m
-283 382 l
-291.8448 382 299 389.1552 299 398 c
-299 465 l
-299 473.8448 291.8448 481 283 481 c
-58 481 l
-49.1552 481 42 473.8448 42 465 c
-42 398 l
-42 389.1552 49.1552 382 58 382 c
+58 365 m
+283 365 l
+291.8448 365 299 372.1552 299 381 c
+299 448 l
+299 456.8448 291.8448 464 283 464 c
+58 464 l
+49.1552 464 42 456.8448 42 448 c
+42 381 l
+42 372.1552 49.1552 365 58 365 c
 h
 B*
 .960784 .721569 .180392 rg
 n
-60 464 m
-60 466.2091 58.20914 468 56 468 c
-53.79086 468 52 466.2091 52 464 c
-52 461.7909 53.79086 460 56 460 c
-58.20914 460 60 461.7909 60 464 c
+60 447 m
+60 449.2091 58.20914 451 56 451 c
+53.79086 451 52 449.2091 52 447 c
+52 444.7909 53.79086 443 56 443 c
+58.20914 443 60 444.7909 60 447 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 67 466 Tm (Transfer between accounts) Tj T* ET
+BT 1 0 0 1 67 449 Tm (Transfer between accounts) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 451 Tm (Choose Transfer when adding a bill, then pick From and To) Tj T* ET
-BT 1 0 0 1 56 440 Tm (accounts, amount and schedule. Open the Transfers row in) Tj T* ET
-BT 1 0 0 1 56 429 Tm (Bills to manage plans on their own page. For a monthly or) Tj T* ET
-BT 1 0 0 1 56 418 Tm (one-time bill, Change to transfer preserves past history and) Tj T* ET
-BT 1 0 0 1 56 407 Tm (replaces its future schedule after you confirm. Resolve any) Tj T* ET
-BT 1 0 0 1 56 396 Tm (conflicting bill activity first.) Tj T* ET
+BT 1 0 0 1 56 434 Tm (Choose Transfer when adding a bill, then pick From and To) Tj T* ET
+BT 1 0 0 1 56 423 Tm (accounts, amount and schedule. Open the Transfers row in) Tj T* ET
+BT 1 0 0 1 56 412 Tm (Bills to manage plans on their own page. For a monthly or) Tj T* ET
+BT 1 0 0 1 56 401 Tm (one-time bill, More settings > Change to transfer preserves) Tj T* ET
+BT 1 0 0 1 56 390 Tm (past history and replaces its future schedule after you) Tj T* ET
+BT 1 0 0 1 56 379 Tm (confirm. Resolve any conflicting bill activity first.) Tj T* ET
 .070588 .113725 .203922 rg
 .160784 .207843 .321569 RG
 .8 w
 n
-58 320 m
-283 320 l
-291.8448 320 299 327.1552 299 336 c
-299 359 l
-299 367.8448 291.8448 375 283 375 c
-58 375 l
-49.1552 375 42 367.8448 42 359 c
-42 336 l
-42 327.1552 49.1552 320 58 320 c
+58 303 m
+283 303 l
+291.8448 303 299 310.1552 299 319 c
+299 342 l
+299 350.8448 291.8448 358 283 358 c
+58 358 l
+49.1552 358 42 350.8448 42 342 c
+42 319 l
+42 310.1552 49.1552 303 58 303 c
 h
 B*
 .960784 .721569 .180392 rg
 n
-60 358 m
-60 360.2091 58.20914 362 56 362 c
-53.79086 362 52 360.2091 52 358 c
-52 355.7909 53.79086 354 56 354 c
-58.20914 354 60 355.7909 60 358 c
+60 341 m
+60 343.2091 58.20914 345 56 345 c
+53.79086 345 52 343.2091 52 341 c
+52 338.7909 53.79086 337 56 337 c
+58.20914 337 60 338.7909 60 341 c
 f*
 BT /F2 9.5 Tf 11.4 TL ET
 1 1 1 rg
-BT 1 0 0 1 67 360 Tm (Close finished items) Tj T* ET
+BT 1 0 0 1 67 343 Tm (Close finished items) Tj T* ET
 BT /F1 8.6 Tf 10.32 TL ET
 .666667 .701961 .784314 rg
-BT 1 0 0 1 56 345 Tm (Inactive bills should stop creating reminders and) Tj T* ET
-BT 1 0 0 1 56 334 Tm (occurrences.) Tj T* ET
+BT 1 0 0 1 56 328 Tm (Inactive bills should stop creating reminders and) Tj T* ET
+BT 1 0 0 1 56 317 Tm (occurrences.) Tj T* ET
 .960784 .721569 .180392 rg
 BT /F2 9 Tf 10.8 TL ET
 BT 1 0 0 1 313 611 Tm (DEBT PAYOFF PLANNER) Tj T* ET
@@ -3334,16 +3336,16 @@ xref
 0000013136 00000 n 
 0000017696 00000 n 
 0000022682 00000 n 
-0000031678 00000 n 
-0000042718 00000 n 
-0000050959 00000 n 
-0000057592 00000 n 
-0000067987 00000 n 
-0000074532 00000 n 
+0000031853 00000 n 
+0000042893 00000 n 
+0000051134 00000 n 
+0000057767 00000 n 
+0000068162 00000 n 
+0000074707 00000 n 
 trailer
 <<
 /ID 
-[<3a0c1ba3b447b612e786d265c2163479><3a0c1ba3b447b612e786d265c2163479>]
+[<136e36fc3139cc6493e45c7e22f6e4a1><136e36fc3139cc6493e45c7e22f6e4a1>]
 % ReportLab generated PDF document -- digest (opensource)
 
 /Info 16 0 R
@@ -3351,5 +3353,5 @@ trailer
 /Size 29
 >>
 startxref
-83985
+84160
 %%EOF

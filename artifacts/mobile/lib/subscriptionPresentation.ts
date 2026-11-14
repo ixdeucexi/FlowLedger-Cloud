@@ -11,6 +11,7 @@ export interface ScheduledSubscriptionBill {
   category?: string | null;
   frequency?: string | null;
   is_recurring?: boolean;
+  is_subscription?: boolean | null;
   is_debt?: boolean;
   start_date?: string | null;
   end_date?: string | null;
@@ -57,6 +58,7 @@ export function subscriptionCadenceLabel(frequency?: string | null): string {
 
 export function isSubscriptionStyleBill(bill: ScheduledSubscriptionBill): boolean {
   if (bill.is_recurring === false || bill.is_debt) return false;
+  if (typeof bill.is_subscription === "boolean") return bill.is_subscription;
   const text = `${bill.name} ${bill.category ?? ""}`.toLowerCase();
   return SUBSCRIPTION_BILL_WORDS.some(word => text.includes(word));
 }
@@ -71,7 +73,7 @@ export function buildScheduledSubscriptionSummary<T extends ScheduledSubscriptio
   const unique = new Map<string, T>();
   const linkedIds = new Set(linkedBillIds);
   for (const bill of bills) {
-    if (!bill.id || unique.has(bill.id) || bill.is_recurring === false || bill.is_debt
+    if (!bill.id || unique.has(bill.id) || bill.is_recurring === false || bill.is_debt || bill.is_subscription === false
       || (!linkedIds.has(bill.id) && !isSubscriptionStyleBill(bill))) continue;
     if (bill.start_date && (!isIsoDay(bill.start_date) || bill.start_date > today)) continue;
     if (bill.end_date && (!isIsoDay(bill.end_date) || bill.end_date < today)) continue;
@@ -92,6 +94,27 @@ export function buildScheduledSubscriptionSummary<T extends ScheduledSubscriptio
     monthlyEstimate: unavailableCount || !Number.isSafeInteger(totalCents) ? null : totalCents / 100,
     unavailableCount,
   };
+}
+
+/** Only confirmed bill identities can suppress a suggestion. Never guess by vendor name. */
+export function subscriptionCandidateIsRegularBill(
+  candidate: { transactionIds: readonly string[] },
+  transactions: readonly { id: string; linked_bill_id?: string | null; debt_applied_bill_id?: string | null }[],
+  bills: readonly Pick<ScheduledSubscriptionBill, "id" | "is_subscription">[],
+  savedBillId?: string | null,
+): boolean {
+  const billById = new Map(bills.map(bill => [bill.id, bill]));
+  const sources = transactions.filter(transaction => candidate.transactionIds.includes(transaction.id));
+  const associated = new Set<string>();
+  for (const transaction of sources) {
+    if (transaction.linked_bill_id) associated.add(transaction.linked_bill_id);
+    if (transaction.debt_applied_bill_id) associated.add(transaction.debt_applied_bill_id);
+  }
+  if (savedBillId) associated.add(savedBillId);
+  if (!associated.size || [...associated].some(id => billById.get(id)?.is_subscription !== false)) return false;
+  // A saved vendor preference alone cannot classify unrelated, unlinked service charges.
+  return sources.length === candidate.transactionIds.length && sources.length > 0
+    && sources.every(transaction => Boolean(transaction.linked_bill_id || transaction.debt_applied_bill_id));
 }
 
 /** The existing subscription conversion RPC only supports these two cadences. */

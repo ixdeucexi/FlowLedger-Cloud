@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { ModuleKind, transpileModule } from "typescript";
-import { buildScheduledSubscriptionSummary, canCreateSubscriptionBill, subscriptionAmountLabel, subscriptionCadenceLabel, subscriptionMonthlyEquivalent, type ScheduledSubscriptionBill } from "./subscriptionPresentation";
+import { buildScheduledSubscriptionSummary, canCreateSubscriptionBill, subscriptionCandidateIsRegularBill, subscriptionAmountLabel, subscriptionCadenceLabel, subscriptionMonthlyEquivalent, type ScheduledSubscriptionBill } from "./subscriptionPresentation";
 
 const bill = (id: string, amount: number, overrides: Partial<ScheduledSubscriptionBill> = {}): ScheduledSubscriptionBill => ({
   id, name: `Netflix ${id}`, amount, frequency: "monthly", is_recurring: true, is_debt: false, due_day: 8, ...overrides,
@@ -135,12 +135,14 @@ test("viewer or unverified screen cannot enter any subscription mutation handler
 });
 
 test("actual annual create entry routes to manual Bills setup without a conversion or confirmation", async () => {
-  const destinations: string[] = [];
+  const destinations: unknown[] = [];
   const create = screenHandler("handleCreateBillFromSubscription", "openSubscriptionInReview", {
-    ...reviewBindings(), canCreateSubscriptionBill, router: { push: (path: string) => destinations.push(path) },
+    ...reviewBindings(), canCreateSubscriptionBill, router: { push: (path: unknown) => destinations.push(path) },
   });
   await create({ merchant: "Fictional Service", cadence: "annual", averageAmount: 120 });
-  assert.deepEqual(destinations, ["/(tabs)/bills"]);
+  assert.deepEqual(destinations, [{ pathname: "/(tabs)/bills", params: {
+    view: "bills", addSubscription: "1", subscriptionName: "Fictional Service", subscriptionAmount: "120", subscriptionFrequency: "yearly",
+  } }]);
 });
 
 test("deferred create confirmation cannot submit after household or edit scope changes", async () => {
@@ -176,4 +178,35 @@ test("legacy decision completion cannot replace another household's local choice
   finish({ error: null });
   await pending;
   assert.equal(localSaves, 0);
+});
+
+
+test("manual bill types override keywords and linked IDs without changing saved financial fields", () => {
+  const rows = [
+    bill("regular", 110, { name: "Google Internet", category: "Subscriptions", is_subscription: false }),
+    bill("custom", 25, { name: "Laurel Studio", category: "Other", is_subscription: true }),
+    bill("legacy", 35, { name: "Netflix", is_subscription: null }),
+    bill("linked", 10, { name: "Other custom", is_subscription: null }),
+    bill("debt", 900, { is_debt: true, is_subscription: true }),
+    bill("once", 100, { is_recurring: false, is_subscription: true }),
+  ];
+  const before = structuredClone(rows);
+  const result = buildScheduledSubscriptionSummary(rows, "2026-11-14", ["regular", "linked"]);
+  assert.deepEqual(result.rows.map(row => row.bill.id).sort(), ["custom", "legacy", "linked"]);
+  assert.equal(result.monthlyEstimate, 70);
+  assert.deepEqual(rows, before);
+  assert.equal(buildScheduledSubscriptionSummary([{ ...rows[0], is_subscription: null }], "2026-11-14").monthlyEstimate, 110);
+});
+
+test("review suppression uses confirmed bill IDs, preserves ambiguous and shared-vendor services", () => {
+  const bills = [{ id: "internet", is_subscription: false }, { id: "music", is_subscription: true }, { id: "auto", is_subscription: null }];
+  const sources = [{ id: "a", linked_bill_id: "internet" }, { id: "b", linked_bill_id: "music" }, { id: "c" }, { id: "d", linked_bill_id: "auto" }];
+  assert.equal(subscriptionCandidateIsRegularBill({ transactionIds: ["a"] }, sources, bills, "internet"), true);
+  assert.equal(subscriptionCandidateIsRegularBill({ transactionIds: ["b"] }, sources, bills), false);
+  assert.equal(subscriptionCandidateIsRegularBill({ transactionIds: ["a", "b"] }, sources, bills, "internet"), false);
+  assert.equal(subscriptionCandidateIsRegularBill({ transactionIds: ["a", "c"] }, sources, bills, "internet"), false);
+  assert.equal(subscriptionCandidateIsRegularBill({ transactionIds: ["c"] }, sources, bills, "internet"), false);
+  assert.equal(subscriptionCandidateIsRegularBill({ transactionIds: ["missing"] }, sources, bills, "internet"), false);
+  assert.equal(subscriptionCandidateIsRegularBill({ transactionIds: ["d"] }, sources, bills), false);
+  assert.equal(subscriptionCandidateIsRegularBill({ transactionIds: ["a"] }, sources, [], "internet"), false);
 });

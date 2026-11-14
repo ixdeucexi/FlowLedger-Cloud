@@ -26,6 +26,8 @@ export interface Bill {
   start_date?: string;
   end_date?: string;
   is_recurring: boolean;
+  /** null keeps automatic clues; explicit choices control subscription display. */
+  is_subscription?: boolean | null;
   frequency: "monthly" | "quarterly" | "yearly" | "biweekly" | "weekly";
   created_at: string;
   smart_priority?: BillImportance;

@@ -203,7 +203,7 @@ test("history is on-demand within the original editor modal; Back does not save/
   const editor = readFileSync(path.join(root, "components/AddBillModal.tsx"), "utf8");
   const panel = readFileSync(path.join(root, "components/BillPaymentHistoryPanel.tsx"), "utf8");
   assert.equal((editor.match(/<Modal\s/g) ?? []).length, 1); assert.doesNotMatch(panel, /<Modal\s/);
-  assert.match(editor, /historyVisible && editBill \? <BillPaymentHistoryPanel/); assert.match(editor, /onPress=\{\(\) => setHistoryVisible\(false\)\}/);
+  assert.match(editor, /historyVisible && editBill \? <BillPaymentHistoryPanel/); assert.match(editor, /onPress=\{\(\) => \{ setHistoryVisible\(false\); setMoreSettingsVisible\(false\); \}\}/);
   assert.match(editor, /Keyboard\.dismiss\(\)/); assert.match(panel, /scopeKey !== openedScope/); assert.match(panel, /state\.key === scopeKey/);
   assert.match(panel, /activeHousehold\?\.isPersonal/); assert.match(panel, /current = false; controller\.abort\(\)/); assert.match(panel, /flexShrink: 1, minHeight: 0/);
   assert.doesNotMatch(panel, /\.(insert|update|delete|upsert|rpc)\(/);

@@ -100,3 +100,15 @@ test("request gate rejects old page and old household completions, including sco
   gate.setScope(null);
   assert.equal(gate.isCurrent(gate.begin()), false);
 });
+
+
+test("bill classification audit explains Automatic and explicit choices without expanding undo", () => {
+  const row = item({ entityType: "bill", route: RECENT_CHANGE_ROUTES.bill, canUndo: false, undoReason: "Use the bill editor", changes: [{ key: "is_subscription", label: "Is Subscription", kind: "text", before: null, after: false }] });
+  const field = parseRecentChangesPage(page(row), scope).items[0].changes[0];
+  assert.equal(field.label, "Bill type");
+  assert.equal(formatRecentChangeValue(field, field.before), "Automatic");
+  assert.equal(formatRecentChangeValue(field, field.after), "Regular bill");
+  const yes = parseRecentChangesPage(page({ ...row, changes: [{ ...row.changes[0], before: false, after: true }] }), scope).items[0];
+  assert.equal(yes.changes[0].after, "Subscription");
+  assert.equal(yes.canUndo, false);
+});

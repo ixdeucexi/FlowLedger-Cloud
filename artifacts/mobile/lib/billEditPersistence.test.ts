@@ -40,6 +40,7 @@ function bill(overrides: Partial<EditableBill> = {}): EditableBill {
     include_in_snowball: true,
     debt_payment_pauses: [],
     funding_account_ref: null,
+    is_subscription: null,
     ...overrides,
   };
 }
@@ -563,5 +564,26 @@ test("queued edits recheck edit access and scope and roll back only owned pause 
       assert.deepEqual(harness.state.bills[0].debt_payment_pauses, [selected], reason);
       assert.equal(harness.state.bills[0].name, "Renamed while queued", reason);
     }
+  }
+});
+
+
+test("bill type preserves legacy null, explicit false, sparse conflicts and Automatic clearing", () => {
+  assert.deepEqual(changedBillEditableFields(bill({ is_subscription: undefined }), bill({ is_subscription: null })), []);
+  for (const value of [true, false, null]) {
+    const baseline = bill({ is_subscription: value });
+    const renamed = bill({ name: "Renamed", is_subscription: value });
+    assert.deepEqual(changedBillEditableFields(baseline, renamed), ["name"]);
+    assert.deepEqual(billEditableDbPatch(renamed, ["name"]), { name: "Renamed" });
+    assert.equal(normalizeBillRow({ ...baseline, id: "b" }).is_subscription, value);
+  }
+  const baseline = bill({ is_subscription: false });
+  const automatic = bill({ is_subscription: null });
+  assert.deepEqual(changedBillEditableFields(baseline, automatic), ["is_subscription"]);
+  assert.deepEqual(billEditableDbPatch(baseline, ["is_subscription"]), { is_subscription: false });
+  assert.deepEqual(billEditableDbPatch(automatic, ["is_subscription"]), { is_subscription: null });
+  assert.deepEqual(billEditableDbPatch({}, ["is_subscription"]), { is_subscription: null });
+  for (const value of [undefined, "false", "true", 0, 1]) {
+    assert.equal(normalizeBillRow({ is_subscription: value }).is_subscription, null);
   }
 });

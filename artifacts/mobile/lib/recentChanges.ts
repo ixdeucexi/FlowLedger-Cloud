@@ -63,6 +63,7 @@ export function validRecentChangesCursor(value: unknown): value is string {
 function validField(value: unknown): value is RecentChangeField {
   if (!object(value) || !text(value.key, 100) || !text(value.label, 160) || !kinds.includes(String(value.kind)) || !primitive(value.before) || !primitive(value.after)) return false;
   const values = [value.before, value.after].filter(v => v !== null);
+  if (value.key === "is_subscription") return (value.kind === "text" || value.kind === "boolean") && values.every(v => typeof v === "boolean");
   if (value.key === "debt_payment_pauses") return value.kind === "text" && values.every(v => typeof v === "string");
   if (value.kind === "money" || value.kind === "number") return values.every(v => typeof v === "number");
   if (value.kind === "boolean") return values.every(v => typeof v === "boolean");
@@ -96,12 +97,20 @@ export function parseRecentChangesPage(value: unknown, scope: RecentChangesScope
     previous = Number(candidate.sequence);
     const item = candidate as unknown as RecentChange;
     const hasPaymentPause = item.changes.some(field => field.key === "debt_payment_pauses");
-    items.push(hasPaymentPause ? {
+    const withBillType = item.changes.some(field => field.key === "is_subscription") ? {
       ...item,
-      changes: item.changes.map(field => field.key === "debt_payment_pauses" ? { ...field, label: "Payment pauses" } : field),
+      changes: item.changes.map(field => field.key === "is_subscription" ? {
+        ...field, label: "Bill type", kind: "text" as const,
+        before: field.before === null ? "Automatic" : field.before === true ? "Subscription" : "Regular bill",
+        after: field.after === null ? "Automatic" : field.after === true ? "Subscription" : "Regular bill",
+      } : field),
+    } : item;
+    items.push(hasPaymentPause ? {
+      ...withBillType,
+      changes: withBillType.changes.map(field => field.key === "debt_payment_pauses" ? { ...field, label: "Payment pauses" } : field),
       canUndo: false,
       undoReason: item.undoReason ?? "Manage payment pauses from the debt.",
-    } : item);
+    } : withBillType);
   }
   if (value.nextCursor !== null && (!items.length || value.nextCursor !== String(items[items.length - 1].sequence))) throw invalid();
   return { items, nextCursor: value.nextCursor as string | null };
