@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { ModuleKind, transpileModule } from "typescript";
+import * as ts from "typescript";
 import { buildScheduledSubscriptionSummary, canCreateSubscriptionBill, subscriptionCandidateIsRegularBill, subscriptionAmountLabel, subscriptionCadenceLabel, subscriptionMonthlyEquivalent, type ScheduledSubscriptionBill } from "./subscriptionPresentation";
 
 const bill = (id: string, amount: number, overrides: Partial<ScheduledSubscriptionBill> = {}): ScheduledSubscriptionBill => ({
@@ -209,4 +210,42 @@ test("review suppression uses confirmed bill IDs, preserves ambiguous and shared
   assert.equal(subscriptionCandidateIsRegularBill({ transactionIds: ["missing"] }, sources, bills, "internet"), false);
   assert.equal(subscriptionCandidateIsRegularBill({ transactionIds: ["d"] }, sources, bills), false);
   assert.equal(subscriptionCandidateIsRegularBill({ transactionIds: ["a"] }, sources, [], "internet"), false);
+});
+
+
+test("rendered Set up in Bills button opens the guarded annual or unknown draft and blocks unavailable controls", async () => {
+  const source = readFileSync("app/(tabs)/more.tsx", "utf8");
+  const ast = ts.createSourceFile("more.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let button: ts.JsxOpeningElement | undefined;
+  const visit = (node: ts.Node) => {
+    if (ts.isJsxElement(node) && node.openingElement.tagName.getText(ast) === "Pressable"
+      && node.openingElement.attributes.properties.some(attr => ts.isJsxAttribute(attr)
+        && attr.name.getText(ast) === "accessibilityLabel" && attr.initializer?.getText(ast).includes("Set up ${subscription.merchant} in Bills"))) button = node.openingElement;
+    node.forEachChild(visit);
+  };
+  visit(ast);
+  assert.ok(button, "actual manual setup control exists");
+  const expression = (key: string) => {
+    const attr = button!.attributes.properties.find(attr => ts.isJsxAttribute(attr) && attr.name.getText(ast) === key);
+    assert.ok(attr && ts.isJsxAttribute(attr) && attr.initializer && ts.isJsxExpression(attr.initializer) && attr.initializer.expression, key);
+    return (attr as ts.JsxAttribute).initializer as ts.JsxExpression;
+  };
+  const onPress = expression("onPress").expression!.getText(ast);
+  const disabled = expression("disabled").expression!.getText(ast);
+  for (const cadence of ["annual", "unknown"] as const) {
+    for (const state of [{ importedReadOnly: false, importedBusy: false, matching: false }, { importedReadOnly: true, importedBusy: false, matching: false }, { importedReadOnly: false, importedBusy: true, matching: false }, { importedReadOnly: false, importedBusy: false, matching: true }]) {
+      const destinations: unknown[] = [];
+      const create = screenHandler("handleCreateBillFromSubscription", "openSubscriptionInReview", {
+        ...reviewBindings(), subscriptionMutationsReady: !state.importedReadOnly,
+        canCreateSubscriptionBill, router: { push: (path: unknown) => destinations.push(path) },
+      });
+      const subscription = { merchant: "Fictional Studio", cadence, averageAmount: 240 };
+      const unavailable = new Function(...Object.keys(state), `return (${disabled});`)(...Object.values(state));
+      const press = new Function("subscription", "handleCreateBillFromSubscription", `return (${onPress});`)(subscription, create);
+      if (!unavailable) await press();
+      assert.deepEqual(destinations, unavailable ? [] : [{ pathname: "/(tabs)/bills", params: {
+        view: "bills", addSubscription: "1", subscriptionName: "Fictional Studio", subscriptionAmount: "240", subscriptionFrequency: cadence === "annual" ? "yearly" : "monthly",
+      } }]);
+    }
+  }
 });

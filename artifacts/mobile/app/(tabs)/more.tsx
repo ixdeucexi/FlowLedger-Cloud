@@ -4367,7 +4367,10 @@ export default function MoreScreen({
                             </Text>
                           </Pressable>
                         ) : null}
-                        {!linkedBillId && !canCreateSubscriptionBill(subscription.cadence) ? <Pressable accessibilityRole="button" accessibilityLabel={`Set up ${subscription.merchant} in Bills`} onPress={() => router.push("/(tabs)/bills")} style={[styles.growthPillButton, { backgroundColor: c.primary + "18", borderColor: c.primary + "44" }]}>
+                        {!linkedBillId && !canCreateSubscriptionBill(subscription.cadence) ? <Pressable accessibilityRole="button" accessibilityLabel={`Set up ${subscription.merchant} in Bills`}
+                          accessibilityState={{ disabled: importedReadOnly || importedBusy || matching }} disabled={importedReadOnly || importedBusy || matching}
+                          onPress={() => handleCreateBillFromSubscription(subscription)}
+                          style={[styles.growthPillButton, { backgroundColor: c.primary + "18", borderColor: c.primary + "44", opacity: importedReadOnly || importedBusy || matching ? 0.5 : 1 }]}>
                           <Text style={[styles.growthPillButtonText, { color: c.primary }]}>Set up in Bills</Text>
                         </Pressable> : null}
                         <Pressable
