@@ -387,5 +387,3 @@ AS $function$
       then coalesce(nullif(p_before->k,'null'::jsonb),'[]'::jsonb) is distinct from coalesce(nullif(p_after->k,'null'::jsonb),'[]'::jsonb)
       else coalesce(p_before->k,'null'::jsonb) is distinct from coalesce(p_after->k,'null'::jsonb) end;
 $function$;
-
-
