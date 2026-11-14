@@ -331,6 +331,7 @@
     ,"lib/recentChangesUndo.test.ts"
     ,"lib/bankConnectionManagement.test.ts"
     ,"lib/importedSubscriptionCandidates.test.ts"
+    ,"lib/subscriptionPresentation.test.ts"
     ,"lib/bankConnectionManager.test.ts"
     ,"lib/feedbackUpdateCenterCopy.test.ts"
   ]

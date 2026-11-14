@@ -5,6 +5,7 @@ import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyTextInput as
 import { AppearanceSettings } from "@/components/AppearanceSettings";
 
 import { parseMoneyInput } from "@/lib/moneyFormInput";
+import { buildScheduledSubscriptionSummary, canCreateSubscriptionBill, subscriptionAmountLabel } from "@/lib/subscriptionPresentation";
 import { parseBillCsv } from "@/lib/billCsv";
 
 import { StatementImportPanel, type StatementImportFeedback } from "@/components/StatementImportPanel";
@@ -111,7 +112,6 @@ import {
   getForecastSafetyLayout,
   isCompactSettingsLayout,
   shouldStackAccountControls,
-  shouldStackSettingsMetrics,
 } from "@/lib/settingsLayout";
 import {
   SETTINGS_SECTIONS,
@@ -324,45 +324,6 @@ function formatActivityTime(value: string) {
     day: "numeric",
     year: "numeric",
   });
-}
-
-const SUBSCRIPTION_BILL_WORDS = [
-  "subscription",
-  "netflix",
-  "hulu",
-  "spotify",
-  "disney",
-  "apple",
-  "google",
-  "youtube",
-  "prime",
-  "peacock",
-  "paramount",
-  "max",
-  "hbo",
-  "chatgpt",
-  "gym",
-  "fitness",
-  "membership",
-  "streaming",
-];
-
-function isSubscriptionStyleBill(bill: {
-  name: string;
-  category?: string | null;
-  is_recurring?: boolean;
-  is_debt?: boolean;
-  end_date?: string | null;
-}) {
-  if (bill.is_recurring === false || bill.is_debt) return false;
-  const text = `${bill.name} ${bill.category ?? ""}`.toLowerCase();
-  return SUBSCRIPTION_BILL_WORDS.some((word) => text.includes(word));
-}
-
-function recurringBillCadenceLabel(frequency?: string | null) {
-  if (frequency === "weekly") return "weekly";
-  if (frequency === "biweekly") return "biweekly";
-  return "monthly";
 }
 
 export default function MoreScreen({
@@ -678,7 +639,14 @@ export default function MoreScreen({
   const [goalCushionReview, setGoalCushionReview] = useState<{ revision: unknown; date: string; householdId?: string; safetyFloor: number; amount: number | null; endDate: string } | null>(null);
   const subscriptionCreateInFlightRef = useRef(false);
   const goalContributionInFlightRef = useRef(false);
-  const [subscriptionBillLinks, setSubscriptionBillLinks] = useState<Record<string, string>>({});
+  const [savedSubscriptionBillLinks, setSubscriptionBillLinks] = useState<Record<string, string>>({});
+  const [subscriptionLinksStatus, setSubscriptionLinksStatus] = useState({ scope: subscriptionReviewScope, loading: true, error: "" });
+  const [subscriptionLinksReload, setSubscriptionLinksReload] = useState(0);
+  const subscriptionLinksRevision = useRef(0);
+  const subscriptionBillLinks = subscriptionLinksStatus.scope === subscriptionReviewScope ? savedSubscriptionBillLinks : {};
+  const [subscriptionExpansion, setSubscriptionExpansion] = useState({ scope: subscriptionReviewScope, scheduled: false, review: false });
+  const showAllScheduledSubscriptions = subscriptionExpansion.scope === subscriptionReviewScope && subscriptionExpansion.scheduled;
+  const showAllSubscriptionReviews = subscriptionExpansion.scope === subscriptionReviewScope && subscriptionExpansion.review;
   const [subscriptionLinkCandidate, setSubscriptionLinkCandidate] = useState<SubscriptionCandidate | null>(null);
   const subscriptionLinkScope = useRef<{ scope: string; generation: number } | null>(null);
   useEffect(() => {
@@ -919,28 +887,33 @@ export default function MoreScreen({
 
   useEffect(() => {
     let cancelled = false;
+    const scope = subscriptionReviewScope;
+    const revision = subscriptionLinksRevision.current;
+    setSubscriptionLinksStatus({ scope, loading: true, error: "" });
+    if (subscriptionLinksStatus.scope !== scope) setSubscriptionBillLinks({});
     if (!user?.id || !activeHousehold?.householdId) {
       setSubscriptionBillLinks({});
+      setSubscriptionLinksStatus({ scope, loading: false, error: "Select a household to load subscriptions." });
       return () => { cancelled = true; };
     }
-    void supabase
-      .from("subscription_bill_links")
-      .select("merchant_key,bill_id")
+    const failed = () => {
+      if (!cancelled && subscriptionReviewLive.current.key === scope) setSubscriptionLinksStatus({ scope, loading: false, error: "Could not load saved bill links. Retry to confirm the full estimate." });
+    };
+    void supabase.from("subscription_bill_links").select("merchant_key,bill_id")
       .eq("household_id", activeHousehold.householdId)
       .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error) {
-          setSubscriptionBillLinks({});
-          return;
+        if (cancelled || subscriptionReviewLive.current.key !== scope) return;
+        if (error || !Array.isArray(data)) { failed(); return; }
+        if (subscriptionLinksRevision.current === revision) {
+          setSubscriptionBillLinks(Object.fromEntries(data.flatMap(row => {
+            const link = row as SubscriptionBillLinkRow;
+            return link.merchant_key && link.bill_id ? [[link.merchant_key, link.bill_id]] : [];
+          })));
         }
-        setSubscriptionBillLinks((data ?? []).reduce<Record<string, string>>((acc, row) => {
-          const link = row as SubscriptionBillLinkRow;
-          if (link.merchant_key && link.bill_id) acc[link.merchant_key] = link.bill_id;
-          return acc;
-        }, {}));
-      });
+        setSubscriptionLinksStatus({ scope, loading: false, error: "" });
+      }, failed);
     return () => { cancelled = true; };
-  }, [activeHousehold?.householdId, user?.id]);
+  }, [activeHousehold?.householdId, user?.id, subscriptionReviewScope, subscriptionLinksReload]);
 
   useEffect(() => {
     if (inviteRoles.length > 0 && !inviteRoles.includes(householdInviteRole)) {
@@ -1501,14 +1474,23 @@ export default function MoreScreen({
         ),
     );
   }, [bills, subscriptionDecisions, subscriptions]);
-  const subscriptionBillHints = useMemo(
-    () =>
-      bills
-        .filter((bill) => !(bill.end_date && bill.end_date < todayIso))
-        .filter(isSubscriptionStyleBill)
-        .sort((a, b) => a.due_day - b.due_day || a.name.localeCompare(b.name)),
-    [bills, todayIso],
+  const scheduledSubscriptions = useMemo(
+    () => buildScheduledSubscriptionSummary(bills, todayIso, Object.values(subscriptionBillLinks)),
+    [bills, todayIso, subscriptionBillLinks],
   );
+  const subscriptionPlanReady = startupCoreReady && !budgetLoading && !budgetLoadError;
+  const subscriptionLinksReady = subscriptionLinksStatus.scope === subscriptionReviewScope
+    && !subscriptionLinksStatus.loading && !subscriptionLinksStatus.error;
+  const subscriptionSuggestionsLoading = newSubscriptionReviewsEnabled
+    && (importedSubscriptionState.scope !== subscriptionReviewScope || importedSubscriptionState.loading !== false);
+  const subscriptionSuggestionsError = newSubscriptionReviewsEnabled && importedSubscriptionState.scope === subscriptionReviewScope
+    ? importedSubscriptionState.error : "";
+  const subscriptionReviewReady = subscriptionPlanReady && subscriptionLinksReady
+    && !subscriptionSuggestionsLoading && !subscriptionSuggestionsError;
+  const subscriptionMutationsReady = subscriptionPlanReady && subscriptionLinksReady && canEditHousehold;
+  const visibleSubscriptionReviews = showAllSubscriptionReviews ? subscriptions : subscriptions.slice(0, 10);
+  const visibleScheduledSubscriptions = showAllScheduledSubscriptions ? scheduledSubscriptions.rows : scheduledSubscriptions.rows.slice(0, 8);
+  const subscriptionPriceChanges = subscriptions.filter(item => item.priceIncrease).length;
   const goalFundingPlans = useMemo(
     () => buildGoalFundingPlans(growthGoals, new Date(`${todayIso}T12:00:00`)),
     [growthGoals, todayIso],
@@ -1740,6 +1722,7 @@ export default function MoreScreen({
     subscription: SubscriptionCandidate,
     decision: SubscriptionDecision,
   ) => {
+    if (!subscriptionMutationsReady || subscriptionReviewLive.current.key !== subscriptionReviewScope) return;
     const imported = importedSubscriptionMetadata(subscription);
     if (imported) {
       if (!user?.id || !activeHousehold?.householdId) return;
@@ -1764,6 +1747,7 @@ export default function MoreScreen({
       } finally { action.finish(); }
       return;
     }
+    const generation = subscriptionReviewLive.current.generation;
     const nextDecisions = {
       ...subscriptionDecisions,
       [subscriptionKey(subscription)]: decision,
@@ -1789,28 +1773,26 @@ export default function MoreScreen({
       });
       if (error) throw new Error(`Save subscription decision: ${error.message}`);
     }
+    if (!subscriptionReviewMounted.current || subscriptionReviewLive.current.key !== subscriptionReviewScope || subscriptionReviewLive.current.generation !== generation) return;
     await saveSubscriptionDecisions(nextDecisions);
   };
 
   const handleCreateBillFromSubscription = async (
     subscription: SubscriptionCandidate,
   ) => {
+    if (!subscriptionMutationsReady || subscriptionReviewLive.current.key !== subscriptionReviewScope) return;
+    if (!canCreateSubscriptionBill(subscription.cadence)) { router.push("/(tabs)/bills"); return; }
     const imported = importedSubscriptionMetadata(subscription);
     if (imported?.evidenceOnly) return;
     const generation = subscriptionReviewLive.current.generation;
     let importedAction: ReturnType<typeof beginImportedSubscriptionAction> = null;
-    const importedScopeCurrent = () => !imported || (importedAction ? importedAction.current() : subscriptionReviewMounted.current && newSubscriptionReviewsEnabled && !demoMode && subscriptionReviewLive.current.key === subscriptionReviewScope && subscriptionReviewLive.current.generation === generation);
+    const importedScopeCurrent = () => importedAction ? importedAction.current() : subscriptionReviewMounted.current && canEditHousehold && subscriptionReviewLive.current.key === subscriptionReviewScope && subscriptionReviewLive.current.generation === generation && (!imported || (newSubscriptionReviewsEnabled && !demoMode));
     const householdId = activeHousehold?.householdId;
     const key = subscriptionKey(subscription);
     if (!user?.id || !householdId || !canEditHousehold || subscriptionMatchBusy) {
       return;
     }
-    const rawAmount = Math.max(
-      0,
-      subscription.cadence === "annual"
-        ? subscription.yearlyEquivalent / 12
-        : subscription.averageAmount || subscription.lastAmount,
-    );
+    const rawAmount = Math.max(0, subscription.averageAmount || subscription.lastAmount);
     const amount = Math.round((rawAmount + Number.EPSILON) * 100) / 100;
     if (!Number.isFinite(amount) || amount <= 0) {
       privacyAlert("Check subscription", "A finite positive bill amount is required.");
@@ -1825,7 +1807,7 @@ export default function MoreScreen({
     );
     confirmAction({
       title: "Create subscription bill?",
-      message: `I’ll add ${subscription.merchant} as a recurring bill for about $${amount.toFixed(2)} due around the ${dueDay}.`,
+      message: `Add ${subscription.merchant} as a recurring bill for $${amount.toFixed(2)}, due around day ${dueDay}?`,
       confirmText: "Create bill",
       onConfirm: async () => {
         if (subscriptionCreateInFlightRef.current || !importedScopeCurrent()) return;
@@ -1865,10 +1847,8 @@ export default function MoreScreen({
             [key]: "bill_created",
           });
           if (!importedScopeCurrent()) return;
-          setSubscriptionBillLinks((current) => ({
-            ...current,
-            [key]: billId,
-          }));
+          subscriptionLinksRevision.current += 1;
+          setSubscriptionBillLinks((current) => ({ ...current, [key]: billId }));
           await retryBudgetLoad();
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (error) {
@@ -1896,6 +1876,7 @@ export default function MoreScreen({
     subscription: SubscriptionCandidate,
     match: { transactionId: string; transactionName: string; target?: RankedReviewTarget },
   ) => {
+    if (!subscriptionMutationsReady || subscriptionReviewLive.current.key !== subscriptionReviewScope) return;
     const imported = importedSubscriptionMetadata(subscription);
     if (imported?.evidenceOnly) return;
     const importedAction = imported ? beginImportedSubscriptionAction(subscription) : null;
@@ -1937,22 +1918,23 @@ export default function MoreScreen({
   };
 
   const openSubscriptionBillPicker = (subscription: SubscriptionCandidate) => {
+    if (!subscriptionMutationsReady || subscriptionReviewLive.current.key !== subscriptionReviewScope) return;
     const imported = importedSubscriptionMetadata(subscription);
-    if (imported) {
-      if (!subscriptionReviewMounted.current || subscriptionReviewLive.current.key !== subscriptionReviewScope || !newSubscriptionReviewsEnabled || demoMode || !canEditHousehold || importedSubscriptionActionBusy || !importedSubscriptions.some(candidate => candidate.savedCandidateId === imported.savedCandidateId)) return;
-      subscriptionLinkScope.current = { scope: subscriptionReviewScope, generation: subscriptionReviewLive.current.generation };
-    } else subscriptionLinkScope.current = null;
+    if (imported && (!subscriptionReviewMounted.current || subscriptionReviewLive.current.key !== subscriptionReviewScope || !newSubscriptionReviewsEnabled || demoMode || !canEditHousehold || importedSubscriptionActionBusy || !importedSubscriptions.some(candidate => candidate.savedCandidateId === imported.savedCandidateId))) return;
+    subscriptionLinkScope.current = { scope: subscriptionReviewScope, generation: subscriptionReviewLive.current.generation };
     setSubscriptionLinkCandidate(subscription);
   };
 
   const handleLinkSubscriptionBill = async (billId: string) => {
     const subscription = subscriptionLinkCandidate;
     const householdId = activeHousehold?.householdId;
-    if (!subscription || !user?.id || !householdId || subscriptionMatchBusy) return;
+    if (!subscription || !user?.id || !householdId || subscriptionMatchBusy || !subscriptionMutationsReady || subscriptionReviewLive.current.key !== subscriptionReviewScope) return;
     const imported = importedSubscriptionMetadata(subscription);
-    if (imported && (!subscriptionReviewMounted.current || subscriptionReviewLive.current.key !== subscriptionReviewScope || !subscriptionLinkScope.current || subscriptionLinkScope.current.scope !== subscriptionReviewScope || subscriptionLinkScope.current.generation !== subscriptionReviewLive.current.generation)) return;
+    if (!subscriptionReviewMounted.current || !subscriptionLinkScope.current || subscriptionLinkScope.current.scope !== subscriptionReviewScope || subscriptionLinkScope.current.generation !== subscriptionReviewLive.current.generation) return;
     const importedAction = imported ? beginImportedSubscriptionAction(subscription) : null;
     if (imported && !importedAction) return;
+    const generation = subscriptionReviewLive.current.generation;
+    const scopeCurrent = () => subscriptionReviewMounted.current && subscriptionReviewLive.current.key === subscriptionReviewScope && subscriptionReviewLive.current.generation === generation;
     if (!canEditHousehold) {
       privacyAlert("View only", "You need household edit access to link a subscription to a bill.");
       importedAction?.finish();
@@ -1969,9 +1951,10 @@ export default function MoreScreen({
         bill_id: billId,
         updated_at: new Date().toISOString(),
       }, { onConflict: "household_id,merchant_key" });
-      if (importedAction && !importedAction.current()) return;
+      if (!scopeCurrent() || (importedAction && !importedAction.current())) return;
       if (error) throw error;
       subscriptionLinkScope.current = null;
+      subscriptionLinksRevision.current += 1;
       setSubscriptionBillLinks(current => ({ ...current, [key]: billId }));
       setSubscriptionLinkCandidate(null);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1983,7 +1966,7 @@ export default function MoreScreen({
         privacyAlert("Bill linked", `Future ${subscription.merchant} charges will suggest ${billName} first.`);
       }
     } catch (error) {
-      if (importedAction && !importedAction.current()) return;
+      if (!scopeCurrent() || (importedAction && !importedAction.current())) return;
       privacyAlert("Couldn’t link bill", error instanceof Error ? error.message : "Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
@@ -4173,94 +4156,47 @@ export default function MoreScreen({
         {activeSettingsSection === "subscriptions" && (
           <>
             <PlanFeatureGate feature="connected_insights" compact>
-              <SLabel c={c} text="Subscription Cleanup" />
-              {newSubscriptionReviewsEnabled ? <View style={{ gap: 8, marginBottom: 12 }}>
-                <Pressable accessibilityRole="button" accessibilityLabel="Reload subscription suggestions" disabled={importedSubscriptionState.scope === subscriptionReviewScope && importedSubscriptionState.loading === true} onPress={() => setImportedSubscriptionReload(previous => previous + 1)} style={[styles.growthPillButton, { alignSelf: "flex-start", backgroundColor: c.primary + "18", borderColor: c.primary + "44" }]}>
-                  <Text style={[styles.growthPillButtonText, { color: c.primary }]}>{importedSubscriptionState.loading ? "Loading…" : "Reload suggestions"}</Text>
-                </Pressable>
-                {importedSubscriptionState.scope === subscriptionReviewScope && importedSubscriptionState.error ? <Text accessibilityRole="alert" style={{ color: c.destructive }}>{importedSubscriptionState.error}</Text> : null}
-              </View> : null}
-              <View
-                style={[
-                  styles.card,
-                  { backgroundColor: c.card, borderRadius: colors.radius },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.priorityNote,
-                    {
-                      backgroundColor: c.warning + "12",
-                      borderRadius: 10,
-                      marginTop: 0,
-                      marginBottom: 12,
-                    },
-                  ]}
-                >
-                  <Feather name="repeat" size={14} color={c.warning} />
-                  <Text
-                    style={[
-                      styles.priorityNoteText,
-                      { color: c.mutedForeground },
-                    ]}
-                  >
-                    Recurring bank charges are compared with your existing bills
-                    first. Exact matches can be confirmed here; amount differences
-                    open Review Center so you can decide where the remainder goes.
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.growthMetricGrid,
-                    shouldStackSettingsMetrics(viewportWidth) &&
-                      styles.growthMetricGridCompact,
-                  ]}
-                >
-                  <View
-                    style={[styles.growthMetric, { backgroundColor: c.muted }]}
-                  >
-                    <Text
-                      style={[styles.growthMetricValue, { color: c.primary }]}
-                    >
-                      $
-                      {subscriptions
-                        .reduce((sum, item) => sum + item.monthlyEquivalent, 0)
-                        .toFixed(0)}
+              <View style={styles.subscriptionIntro}>
+                <Text style={[styles.subscriptionIntroText, { color: c.mutedForeground }]}>Your scheduled subscriptions and new charges to review.</Text>
+                {newSubscriptionReviewsEnabled ? <Pressable accessibilityRole="button" accessibilityLabel="Reload subscription suggestions"
+                  disabled={subscriptionSuggestionsLoading} onPress={() => { setImportedSubscriptionReload(previous => previous + 1); setSubscriptionLinksReload(previous => previous + 1); }}
+                  style={[styles.subscriptionRefresh, { borderColor: c.border }]}>
+                  <Feather name="refresh-cw" size={18} color={c.primary} />
+                </Pressable> : null}
+              </View>
+              <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+                <View style={styles.subscriptionMetrics}>
+                  <View style={[styles.subscriptionMetric, { backgroundColor: c.muted }]}>
+                    <Text testID="subscriptions-monthly-estimate" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.55} style={[styles.subscriptionMetricValue, { color: c.primary }]}>
+                      {subscriptionAmountLabel(subscriptionPlanReady && subscriptionLinksReady ? scheduledSubscriptions.monthlyEstimate : null)}
                     </Text>
-                    <Text
-                      style={[
-                        styles.growthMetricLabel,
-                        { color: c.mutedForeground },
-                      ]}
-                    >
-                      Monthly
-                    </Text>
+                    <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>Monthly estimate</Text>
                   </View>
-                  <View
-                    style={[styles.growthMetric, { backgroundColor: c.muted }]}
-                  >
-                    <Text
-                      style={[styles.growthMetricValue, { color: c.warning }]}
-                    >
-                      {
-                        subscriptions.filter((item) => item.priceIncrease)
-                          .length
-                      }
-                    </Text>
-                    <Text
-                      style={[
-                        styles.growthMetricLabel,
-                        { color: c.mutedForeground },
-                      ]}
-                    >
-                      Price changes
-                    </Text>
+                  <View style={[styles.subscriptionMetric, { backgroundColor: c.muted }]}>
+                    <Text testID="subscriptions-review-count" numberOfLines={1} style={[styles.subscriptionMetricValue, { color: c.warning }]}>{subscriptionReviewReady ? subscriptions.length : "—"}</Text>
+                    <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>To review</Text>
                   </View>
                 </View>
-                {subscriptions.slice(0, 10).map((subscription, index) => {
+                <Text style={[styles.subscriptionHint, { color: c.mutedForeground }]}>Estimate from active saved bills. Weekly and yearly costs are averaged monthly.</Text>
+                {!subscriptionPlanReady ? <View style={styles.subscriptionState}>
+                  <Text accessibilityRole={budgetLoadError ? "alert" : undefined} style={{ color: budgetLoadError ? c.warning : c.mutedForeground }}>{budgetLoadError ? "Could not load your saved plan." : "Loading subscriptions…"}</Text>
+                  {budgetLoadError ? <Pressable accessibilityRole="button" accessibilityLabel="Retry loading subscriptions" onPress={() => { void retryBudgetLoad(); }} style={styles.subscriptionTextButton}><Text style={{ color: c.primary }}>Try again</Text></Pressable> : null}
+                </View> : <>
+                {subscriptionLinksStatus.scope === subscriptionReviewScope && subscriptionLinksStatus.error ? <View style={styles.subscriptionState}>
+                  <Text accessibilityRole="alert" style={{ color: c.warning }}>{subscriptionLinksStatus.error}</Text>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Retry saved subscription links" onPress={() => setSubscriptionLinksReload(previous => previous + 1)} style={styles.subscriptionTextButton}><Text style={{ color: c.primary }}>Try again</Text></Pressable>
+                </View> : !subscriptionLinksReady ? <Text accessibilityLiveRegion="polite" style={[styles.subscriptionHint, { color: c.mutedForeground }]}>Loading saved bill links…</Text> : scheduledSubscriptions.monthlyEstimate === null ? <Text accessibilityRole="alert" style={[styles.subscriptionHint, { color: c.warning }]}>Check unavailable bill amounts or frequencies in Bills.</Text> : null}
+                {subscriptionSuggestionsError ? <View style={styles.subscriptionState}><Text accessibilityRole="alert" style={{ color: c.warning }}>{subscriptionSuggestionsError}</Text></View> : subscriptionSuggestionsLoading ? <Text accessibilityLiveRegion="polite" style={[styles.subscriptionHint, { color: c.mutedForeground }]}>Loading subscription suggestions…</Text> : null}
+                {subscriptions.length ? <View style={styles.subscriptionSectionHeader}>
+                  <Text style={[styles.subscriptionSectionTitle, { color: c.foreground }]}>To review ({subscriptions.length})</Text>
+                  {subscriptionPriceChanges ? <Text style={[styles.subscriptionBadge, { color: c.warning, backgroundColor: c.warning + "14" }]}>{subscriptionPriceChanges} price {subscriptionPriceChanges === 1 ? "change" : "changes"}</Text> : null}
+                </View> : subscriptionReviewReady ? <View style={styles.subscriptionClearState}>
+                  <Feather name="check-circle" size={18} color={c.success} /><Text style={[styles.subscriptionHint, { color: c.mutedForeground, marginBottom: 0 }]}>No charges to review.</Text>
+                </View> : null}
+                {visibleSubscriptionReviews.map((subscription, index) => {
                   const key = subscriptionKey(subscription);
                   const imported = importedSubscriptionMetadata(subscription);
-                  const importedReadOnly = Boolean(imported) && (!canEditHousehold || demoMode || !newSubscriptionReviewsEnabled);
+                  const importedReadOnly = !subscriptionMutationsReady || (Boolean(imported) && (demoMode || !newSubscriptionReviewsEnabled));
                   const importedBusy = Boolean(imported) && (importedSubscriptionActionBusy || subscriptionMatchBusy !== null);
                   const match = subscriptionBillMatches.get(key);
                   const linkedBillId = subscriptionBillLinks[key];
@@ -4316,16 +4252,16 @@ export default function MoreScreen({
                           ? "Possible price increase. "
                           : ""}
                         {imported?.evidenceOnly
-                          ? "Review this in bank history, then choose Keep or Not a subscription."
+                          ? "Bank history only. Review before creating a bill."
                           : linkedBill
-                          ? `Linked to ${linkedBill.name}. Future charges will suggest this bill first.`
+                          ? `Linked to ${linkedBill.name}.`
                           : match?.target
-                          ? `Likely bill: ${match.target.name}. ${match.target.reasons.slice(0, 2).join(" · ")}`
+                          ? `Suggested bill: ${match.target.name}.`
                           : match
-                            ? "No confident match yet. Choose the correct bill manually."
+                            ? "Choose the bill this charge covers."
                           : subscription.duplicateRisk
-                            ? "A similar recurring charge exists. Review it before creating another bill."
-                            : "No confident bill match yet. You can create one or classify this charge."}
+                            ? "Check for a duplicate before creating a bill."
+                            : "Link an existing bill or review this charge."}
                       </Text>
                       <View style={styles.subscriptionActionRow}>
                         {match?.target && !imported?.evidenceOnly ? (
@@ -4355,7 +4291,7 @@ export default function MoreScreen({
                         <Pressable
                           accessibilityRole="button"
                           accessibilityLabel={`${linkedBill ? "Change" : "Link"} bill for ${subscription.merchant}`}
-                          disabled={matching || importedBusy || !canEditHousehold}
+                          disabled={matching || importedBusy || importedReadOnly}
                           onPress={() => openSubscriptionBillPicker(subscription)}
                           style={({ pressed }) => [
                             styles.growthPillButton,
@@ -4373,7 +4309,7 @@ export default function MoreScreen({
                         <Pressable
                           accessibilityRole="button"
                           accessibilityLabel={`Keep ${subscription.merchant}`}
-                          disabled={Boolean(imported) && (importedReadOnly || importedBusy || matching)}
+                          disabled={importedReadOnly || importedBusy || matching}
                           onPress={() =>
                             handleMarkSubscription(subscription, "keep")
                           }
@@ -4395,7 +4331,7 @@ export default function MoreScreen({
                             Keep
                           </Text>
                         </Pressable>
-                        {!linkedBillId ? (
+                        {!linkedBillId && canCreateSubscriptionBill(subscription.cadence) ? (
                           <Pressable
                             accessibilityRole="button"
                             accessibilityLabel={`Create recurring bill for ${subscription.merchant}`}
@@ -4423,10 +4359,13 @@ export default function MoreScreen({
                             </Text>
                           </Pressable>
                         ) : null}
+                        {!linkedBillId && !canCreateSubscriptionBill(subscription.cadence) ? <Pressable accessibilityRole="button" accessibilityLabel={`Set up ${subscription.merchant} in Bills`} onPress={() => router.push("/(tabs)/bills")} style={[styles.growthPillButton, { backgroundColor: c.primary + "18", borderColor: c.primary + "44" }]}>
+                          <Text style={[styles.growthPillButtonText, { color: c.primary }]}>Set up in Bills</Text>
+                        </Pressable> : null}
                         <Pressable
                           accessibilityRole="button"
                           accessibilityLabel={`Not a subscription: ${subscription.merchant}`}
-                          disabled={Boolean(imported) && (importedReadOnly || importedBusy || matching)}
+                          disabled={importedReadOnly || importedBusy || matching}
                           onPress={() =>
                             handleMarkSubscription(
                               subscription,
@@ -4453,8 +4392,8 @@ export default function MoreScreen({
                         </Pressable>
                         <Pressable
                           accessibilityRole="button"
-                          accessibilityLabel={`Mark ${subscription.merchant} for manual cancellation`}
-                          disabled={Boolean(imported) && (importedReadOnly || importedBusy || matching)}
+                          accessibilityLabel={`Mark ${subscription.merchant} cancelled`}
+                          disabled={importedReadOnly || importedBusy || matching}
                           onPress={() =>
                             handleMarkSubscription(subscription, "cancelled")
                           }
@@ -4473,7 +4412,7 @@ export default function MoreScreen({
                               { color: c.destructive },
                             ]}
                           >
-                            Cancel
+                            Mark cancelled
                           </Text>
                         </Pressable>
                       </View>
@@ -4481,124 +4420,28 @@ export default function MoreScreen({
                     </View>
                   );
                 })}
-                {subscriptionBillHints.length ? (
-                  <View style={{ marginTop: subscriptions.length ? 14 : 4 }}>
-                    <Text
-                      style={[
-                        styles.dataLabel,
-                        { color: c.foreground, marginBottom: 6 },
-                      ]}
-                    >
-                      Already scheduled as bills
-                    </Text>
-                    {subscriptionBillHints.slice(0, 8).map((bill, index) => (
-                      <View
-                        key={bill.id}
-                        style={[
-                          styles.growthListRow,
-                          {
-                            borderTopWidth: index ? 1 : 0,
-                            borderTopColor: c.border,
-                          },
-                        ]}
-                      >
-                        <View
-                          style={[
-                            styles.dataIcon,
-                            { backgroundColor: c.primary + "18" },
-                          ]}
-                        >
-                          <Feather
-                            name="calendar"
-                            size={17}
-                            color={c.primary}
-                          />
-                        </View>
-                        <View style={styles.dataBody}>
-                          <Text
-                            style={[styles.dataLabel, { color: c.foreground }]}
-                            numberOfLines={1}
-                          >
-                            {bill.name}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.dataDesc,
-                              { color: c.mutedForeground },
-                            ]}
-                          >
-                            ${Math.max(0, bill.amount).toFixed(2)} •{" "}
-                            {recurringBillCadenceLabel(bill.frequency)} • due
-                            day {bill.due_day}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.growthTinyText,
-                              { color: c.mutedForeground },
-                            ]}
-                          >
-                            This is already in Bills, so I won’t ask you to
-                            create it again.
-                          </Text>
-                        </View>
-                      </View>
-                    ))}
-                    <Pressable
-                      onPress={() => router.push("/(tabs)/bills")}
-                      style={({ pressed }) => [
-                        styles.balanceSaveFullBtn,
-                        {
-                          backgroundColor: c.primary,
-                          opacity: pressed ? 0.78 : 1,
-                          marginTop: 10,
-                        },
-                      ]}
-                    >
-                      <Feather
-                        name="file-text"
-                        size={15}
-                        color={c.primaryForeground}
-                      />
-                      <Text
-                        style={[
-                          styles.balanceSaveBtnText,
-                          { color: c.primaryForeground },
-                        ]}
-                      >
-                        Open Bills
-                      </Text>
-                    </Pressable>
+                {subscriptions.length > 10 ? <Pressable accessibilityRole="button" accessibilityLabel={showAllSubscriptionReviews ? "Show fewer subscription suggestions" : `Show all ${subscriptions.length} subscription suggestions`}
+                  onPress={() => setSubscriptionExpansion(previous => ({ scope: subscriptionReviewScope, scheduled: previous.scope === subscriptionReviewScope && previous.scheduled, review: !showAllSubscriptionReviews }))}
+                  style={styles.subscriptionTextButton}><Text style={{ color: c.primary }}>{showAllSubscriptionReviews ? "Show fewer" : `Show all ${subscriptions.length}`}</Text></Pressable> : null}
+                {subscriptions.length ? <Text style={[styles.subscriptionHint, { color: c.mutedForeground }]}>Cancel with your provider first, then choose Mark cancelled.</Text> : null}
+                <View style={[styles.subscriptionSectionHeader, { marginTop: 16 }]}>
+                  <Text style={[styles.subscriptionSectionTitle, { color: c.foreground }]}>Scheduled ({scheduledSubscriptions.rows.length})</Text>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Manage subscription bills" onPress={() => router.push("/(tabs)/bills")} style={styles.subscriptionTextButton}><Text style={[styles.growthPillButtonText, { color: c.primary }]}>Manage bills</Text><Feather name="chevron-right" size={15} color={c.primary} /></Pressable>
+                </View>
+                {visibleScheduledSubscriptions.map(({ bill, chargeAmount, monthlyEquivalent, cadenceLabel }, index) => <View key={bill.id} testID={`scheduled-subscription-${bill.id}`} style={[styles.subscriptionScheduledRow, { borderTopWidth: index ? 1 : 0, borderTopColor: c.border }]}>
+                  <View style={[styles.subscriptionScheduledIcon, { backgroundColor: c.primary + "14" }]}><Feather name="repeat" size={17} color={c.primary} /></View>
+                  <View style={styles.subscriptionScheduledBody}>
+                    <Text numberOfLines={1} accessibilityLabel={bill.name} style={[styles.dataLabel, { color: c.foreground }]}>{bill.name}</Text>
+                    <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{cadenceLabel}{bill.frequency && bill.frequency !== "monthly" && monthlyEquivalent !== null ? ` · ${subscriptionAmountLabel(monthlyEquivalent)}/mo estimate` : ""}</Text>
                   </View>
-                ) : null}
-                {!subscriptions.length && !subscriptionBillHints.length && (
-                  <View
-                    style={[
-                      styles.priorityNote,
-                      {
-                        backgroundColor: c.muted,
-                        borderRadius: 10,
-                        marginTop: 12,
-                      },
-                    ]}
-                  >
-                    <Feather
-                      name="search"
-                      size={14}
-                      color={c.mutedForeground}
-                    />
-                    <Text
-                      style={[
-                        styles.priorityNoteText,
-                        { color: c.mutedForeground },
-                      ]}
-                    >
-                      I have not found subscription patterns yet. Repeated
-                      monthly or weekly Activity entries will appear here, and
-                      subscription-style recurring bills will show here once you
-                      add them.
-                    </Text>
-                  </View>
-                )}
+                  <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.55} style={[styles.subscriptionScheduledAmount, { color: c.foreground }]}>{subscriptionAmountLabel(chargeAmount)}</Text>
+                </View>)}
+                {scheduledSubscriptions.rows.length > 8 ? <Pressable accessibilityRole="button" accessibilityLabel={showAllScheduledSubscriptions ? "Show fewer scheduled subscriptions" : `Show all ${scheduledSubscriptions.rows.length} scheduled subscriptions`}
+                  onPress={() => setSubscriptionExpansion(previous => ({ scope: subscriptionReviewScope, review: previous.scope === subscriptionReviewScope && previous.review, scheduled: !showAllScheduledSubscriptions }))}
+                  style={styles.subscriptionTextButton}><Text style={{ color: c.primary }}>{showAllScheduledSubscriptions ? "Show fewer" : `Show all ${scheduledSubscriptions.rows.length}`}</Text></Pressable> : null}
+                {!scheduledSubscriptions.rows.length && subscriptionLinksReady ? <Text style={[styles.subscriptionHint, { color: c.mutedForeground }]}>No active subscriptions scheduled in Bills.</Text> : null}
+                </>}
+
               </View>
             </PlanFeatureGate>
           </>
@@ -6715,6 +6558,24 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     lineHeight: 17,
   },
+
+  subscriptionIntro: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
+  subscriptionIntroText: { flex: 1, minWidth: 0, fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 19 },
+  subscriptionRefresh: { minHeight: 44, minWidth: 44, borderWidth: 1, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  subscriptionMetrics: { flexDirection: "row", gap: 10, marginBottom: 10 },
+  subscriptionMetric: { flex: 1, minWidth: 0, borderRadius: 14, padding: 12 },
+  subscriptionMetricValue: { fontSize: 24, fontFamily: "Inter_800ExtraBold" },
+  subscriptionHint: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 18, marginBottom: 10 },
+  subscriptionState: { gap: 6, marginBottom: 10 },
+  subscriptionClearState: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8 },
+  subscriptionSectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 4 },
+  subscriptionSectionTitle: { fontSize: 16, fontFamily: "Inter_700Bold" },
+  subscriptionBadge: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5, fontSize: 11, fontFamily: "Inter_700Bold" },
+  subscriptionTextButton: { alignSelf: "flex-start", minHeight: 44, flexDirection: "row", alignItems: "center", gap: 4, justifyContent: "center" },
+  subscriptionScheduledRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 13 },
+  subscriptionScheduledIcon: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  subscriptionScheduledBody: { flex: 1, minWidth: 0 },
+  subscriptionScheduledAmount: { maxWidth: "42%", minWidth: 0, flexShrink: 1, fontSize: 16, fontFamily: "Inter_700Bold", textAlign: "right" },
 
   growthMetricGrid: { flexDirection: "row", gap: 10, marginBottom: 12 },
   growthMetricGridCompact: { flexDirection: "column" },

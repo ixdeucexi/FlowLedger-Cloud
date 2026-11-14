@@ -106,7 +106,7 @@ test("clients call atomic RPCs instead of sequential durable writes", () => {
   assert.match(contracts, /function dateOnly/);
   assert.match(contracts, /could not be verified/);
   assert.match(more, /createSubscriptionBillAtomically\(/);
-  assert.match(more, /!linkedBillId \? \([\s\S]+Create bill/);
+  assert.match(more, /!linkedBillId && canCreateSubscriptionBill\(subscription\.cadence\) \? \([\s\S]+Create bill/);
   assert.match(more, /fundGoalAtomically\(/);
   assert.match(review, /createForgottenBillAndReconcile\(/);
   assert.match(review, /adjacentBillMatchCandidates\(/);
