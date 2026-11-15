@@ -1594,7 +1594,7 @@ const styles = StyleSheet.create({
   accountCard: { flex: 1, padding: 22 },
   accountHeader: { flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", gap: 14 },
   cardEyebrow: {
-    color: "#a8b5ca",
+    color: "#fb923c",
     fontSize: 11,
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: 0.8,

@@ -97,6 +97,7 @@ const DASHBOARD_THEMES = {
     heroShadowOpacity: 0.24,
     text: "#f8fafc",
     mutedText: "#cbd5e1",
+    checkingLabel: "#fb923c",
     subtleText: "#94a3b8",
     amount: "#ffffff",
     purpleText: "#c4b5fd",
@@ -119,6 +120,7 @@ const DASHBOARD_THEMES = {
     heroShadowOpacity: 0.14,
     text: "#0f172a",
     mutedText: "#334155",
+    checkingLabel: "#c2410c",
     subtleText: "#64748b",
     amount: "#0f172a",
     purpleText: "#6d28d9",
@@ -1188,7 +1190,7 @@ overview: (<View style={styles.referenceCommandHeroFlipShell}>
               </View>
               <View style={styles.referenceHeroPrimaryRow}>
                 <View style={styles.referenceBalanceAmount}>
-                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}><AppText tone="label" style={[styles.referenceHeroLabel, { flex: 1, minWidth: 0, color: dashboardTheme.mutedText }]}>Checking balance</AppText><MoneyPrivacyToggle /></View>
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}><AppText tone="label" style={[styles.referenceHeroLabel, { flex: 1, minWidth: 0, color: dashboardTheme.checkingLabel }]}>Checking balance</AppText><MoneyPrivacyToggle /></View>
                   <DashboardFittedAmount value={formatDashboardCurrency(dashboardCheckingBalance)} maxFontSize={42} style={[styles.referenceHeroAmount, { color: dashboardTheme.amount, textShadowColor: "transparent" }]} />
                   {pendingCheckingSummary && pendingCheckingSummary.pendingCount > 0 ? (
                     <Pressable
