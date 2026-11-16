@@ -2,6 +2,7 @@ const NOTIFICATION_PREFERENCE_KEYS = Object.freeze([
   "pending_transactions",
   "posted_transactions",
   "overdue_bills",
+  "account_tips",
   "feedback_updates",
   "admin_feedback",
 ]);

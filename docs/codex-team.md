@@ -181,7 +181,7 @@ ATLAS -> FORGE -> SENTINEL.
 ATLAS -> FORGE -> SENTINEL, with DRAFTER and/or PULSE added only where useful.
 
 ## Release gate
-No agent may interpret its own confidence as user approval. Production release remains a human decision.
+Honor the owner's standing production-release directive in AGENTS.md. Agent confidence alone does not authorize expanding scope or skipping verification and rollback safeguards.
 
 ## Definition of done
 A task is not done because code was written. It is done when:

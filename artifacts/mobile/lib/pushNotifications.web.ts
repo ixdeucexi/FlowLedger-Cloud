@@ -11,28 +11,8 @@ import {
 
 export type PushNotificationStatus = "checking" | "unsupported" | "blocked" | "disabled" | "enabled" | "degraded";
 
-export type NotificationPreferenceKey =
-  | "pending_transactions"
-  | "posted_transactions"
-  | "overdue_bills"
-  | "feedback_updates"
-  | "admin_feedback";
-
-export interface NotificationPreferences {
-  pending_transactions: boolean;
-  posted_transactions: boolean;
-  overdue_bills: boolean;
-  feedback_updates: boolean;
-  admin_feedback: boolean;
-}
-
-export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
-  pending_transactions: true,
-  posted_transactions: true,
-  overdue_bills: true,
-  feedback_updates: true,
-  admin_feedback: true,
-};
+import { emitNotificationPreferencesChanged, normalizeNotificationPreferences, type NotificationPreferenceKey, type NotificationPreferences } from "@/lib/notificationPreferences";
+export { DEFAULT_NOTIFICATION_PREFERENCES, type NotificationPreferenceKey, type NotificationPreferences } from "@/lib/notificationPreferences";
 
 type ApiError = { message?: string };
 
@@ -204,16 +184,15 @@ export async function getNotificationPreferences(accessToken: string) {
     cache: "no-store",
   });
   if (!response.ok) throw new Error(await apiMessage(response, "Could not load notification choices."));
-  return parseNotificationJson<{
-    preferences: NotificationPreferences;
-    isFeedbackAdmin: boolean;
-  }>(response, "Could not load notification choices.");
+  const payload = await parseNotificationJson<{ preferences: unknown; isFeedbackAdmin: boolean }>(response, "Could not load notification choices.");
+  return { preferences: normalizeNotificationPreferences(payload.preferences), isFeedbackAdmin: payload.isFeedbackAdmin === true };
 }
 
 export async function updateNotificationPreference(
   accessToken: string,
   key: NotificationPreferenceKey,
   enabled: boolean,
+  userId?: string,
 ) {
   const response = await apiFetch("/api/notifications/preferences", {
     method: "PATCH",
@@ -225,5 +204,7 @@ export async function updateNotificationPreference(
     response,
     "Could not update that notification choice.",
   );
-  return payload.preferences;
+  const preferences = normalizeNotificationPreferences(payload.preferences);
+  if (userId) emitNotificationPreferencesChanged({ userId, preferences });
+  return preferences;
 }

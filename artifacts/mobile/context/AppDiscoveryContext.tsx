@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import { useAuth } from "@/context/AuthContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useMembership } from "@/context/MembershipContext";
+import { useWeeklyAccountTipNotification } from "@/hooks/useWeeklyAccountTipNotification";
 import { localDateInTimeZone } from "@/lib/dailyCheckingClose";
 import { buildForecastBillNotifications } from "@/lib/forecastBillNotifications";
 import { readInterfacePreferences, updateInterfacePreferences } from "@/lib/interfacePreferences";
@@ -89,10 +90,11 @@ async function saveNotificationCenterStateWithRetry(householdId: string, state: 
 
 export function AppDiscoveryProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { user, demoMode } = useAuth();
+  const { user, session, demoMode } = useAuth();
   const { isAdmin } = useMembership();
   const {
     activeHousehold,
+    startupCoreReady,
     householdTimeZone,
     bills,
     incomes,
@@ -115,6 +117,7 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
   const [remoteLoading, setRemoteLoading] = useState(false);
   const [notificationsVisible, setNotificationsVisible] = useState(false);
   const [notificationState, setNotificationState] = useState<NotificationCenterState>(EMPTY_NOTIFICATION_STATE);
+  const [notificationStateScope, setNotificationStateScope] = useState<string | null>(null);
   const notificationStateRef = useRef(notificationState);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const remoteSearchCacheRef = useRef(new Map<string, UniversalSearchResult[]>());
@@ -122,6 +125,13 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
 
   const userId = user?.id ?? null;
   const householdId = activeHousehold?.householdId ?? null;
+  const accountTip = useWeeklyAccountTipNotification({
+    userId,
+    householdId,
+    accessToken: session?.access_token ?? null,
+    ready: startupCoreReady && notificationStateScope === `${userId}:${householdId}`,
+    demoMode,
+  });
 
   const openSearch = useCallback(() => {
     setMode("search");
@@ -159,6 +169,7 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
     remoteSearchCacheRef.current.clear();
     notificationStateRef.current = EMPTY_NOTIFICATION_STATE;
     setNotificationState(EMPTY_NOTIFICATION_STATE);
+    setNotificationStateScope(null);
     if (!userId || !householdId) return () => { cancelled = true; };
 
     void (async () => {
@@ -179,6 +190,7 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
       if (cancelled) return;
       notificationStateRef.current = next;
       setNotificationState(next);
+      setNotificationStateScope(`${userId}:${householdId}`);
       void updateInterfacePreferences(userId, householdId, { notifications: next });
     })();
     return () => { cancelled = true; };
@@ -293,7 +305,7 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
     [localResults, mode, remoteResults],
   );
 
-  const generatedNotifications = useMemo<InAppNotification[]>(() => {
+  const financialNotifications = useMemo<InAppNotification[]>(() => {
     const now = new Date();
     const todayDate = localDateInTimeZone(now, householdTimeZone);
     const [year, monthNumber, today] = todayDate.split("-").map(Number);
@@ -331,6 +343,11 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
 
     return result.filter(item => !Number.isNaN(new Date(item.timestamp).getTime()));
   }, [bills, getDailyBalances, getDebtMonthSettlements, goals, householdTimeZone, notificationsVisible, pendingBankTransactions, pendingPlanMatches, settings.safety_floor, transactions]);
+
+  const generatedNotifications = useMemo(
+    () => accountTip ? [...financialNotifications, accountTip] : financialNotifications,
+    [accountTip, financialNotifications],
+  );
 
   const notifications = useMemo(
     () => visibleNotifications(generatedNotifications, notificationState),

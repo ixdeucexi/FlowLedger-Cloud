@@ -26,6 +26,7 @@ const ICONS: Record<InAppNotification["type"], React.ComponentProps<typeof Feath
   goal: "target",
   debt: "credit-card",
   review: "check-square",
+  tip: "book-open",
 };
 
 function timestampLabel(value: string) {
@@ -113,7 +114,7 @@ export function NotificationCenterModal({ visible, notifications, readIds, onOpe
                         {isUnread ? <View accessibilityLabel="Unread" style={[styles.unreadDot, { backgroundColor: c.primary }]} /> : null}
                       </View>
                       <Text style={[styles.itemBody, { color: c.mutedForeground }]}>{notification.body}</Text>
-                      <Text style={[styles.itemTime, { color }]}>{timestampLabel(notification.timestamp)}</Text>
+                      <Text style={[styles.itemTime, { color }]}>{notification.type === "tip" ? "Account tip · " : ""}{timestampLabel(notification.timestamp)}</Text>
                     </View>
                     <Feather name="chevron-right" size={17} color={c.mutedForeground} />
                   </Pressable>
@@ -125,7 +126,7 @@ export function NotificationCenterModal({ visible, notifications, readIds, onOpe
               <View style={styles.empty}>
                 <View style={[styles.emptyIcon, { backgroundColor: c.success + "16" }]}><Feather name="check-circle" size={26} color={c.success} /></View>
                 <Text style={[styles.emptyTitle, { color: c.foreground }]}>You&apos;re all caught up</Text>
-                <Text style={[styles.emptyBody, { color: c.mutedForeground }]}>New bill reminders, forecast warnings, milestones, and Review Center items will appear here.</Text>
+                <Text style={[styles.emptyBody, { color: c.mutedForeground }]}>New bill reminders, forecast warnings, milestones, Review Center items, and enabled account tips will appear here.</Text>
               </View>
             ) : null}
           </ScrollView>

@@ -20,6 +20,13 @@ const NOTIFICATION_TEST_PAYLOADS = Object.freeze({
     tag: "flowledger-test-overdue",
     badgeCount: 1,
   }),
+  account_tips: Object.freeze({
+    title: "Test: Account tip",
+    body: "Check what is already planned for bills before spending from your checking balance.",
+    url: "/(tabs)",
+    tag: "flowledger-test-account-tip",
+    quiet: true,
+  }),
   feedback_updates: Object.freeze({
     title: "Test: Feedback update",
     body: "FlowLedger replied to feedback you sent.",

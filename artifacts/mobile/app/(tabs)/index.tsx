@@ -448,9 +448,11 @@ function MobileDashboardContent({
   // ── Hero card flip ──────────────────────────────────────────────────────────
   const flipAnim   = useRef(new Animated.Value(0)).current;
   const [flipped, setFlipped] = useState(false);
+  const [savingsBucketsExpanded, setSavingsBucketsExpanded] = useState(false);
 
   const doFlip = () => {
     const toValue = flipped ? 0 : 1;
+    if (!flipped) setSavingsBucketsExpanded(false);
     Animated.spring(flipAnim, { toValue, friction: 8, tension: 10, useNativeDriver: true }).start();
     setFlipped(f => !f);
   };
@@ -1321,11 +1323,21 @@ overview: (<View style={styles.referenceCommandHeroFlipShell}>
               )}
             </View>
             <View style={styles.referenceGoalsHeader}>
-              <AppText tone="title" style={[styles.referenceGoalsTitle, { color: dashboardTheme.text }]}>Current goals</AppText>
-              <Pressable onPress={() => { setEditGoal(null); setGoalModalVisible(true); }} accessibilityLabel="Add goal" style={styles.referenceGoalAddButton}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Goals and buckets, ${currentGoals.length} ${currentGoals.length === 1 ? "item" : "items"}`}
+                accessibilityState={{ expanded: savingsBucketsExpanded }}
+                onPress={() => setSavingsBucketsExpanded(expanded => !expanded)}
+                style={styles.referenceGoalsToggle}
+              >
+                <AppText tone="title" style={[styles.referenceGoalsTitle, { color: dashboardTheme.text }]}>Goals & buckets ({currentGoals.length})</AppText>
+                <Feather name={savingsBucketsExpanded ? "chevron-up" : "chevron-down"} size={16} color={dashboardTheme.mutedText} />
+              </Pressable>
+              <Pressable accessibilityRole="button" onPress={() => { setEditGoal(null); setGoalModalVisible(true); }} accessibilityLabel="Add goal" style={styles.referenceGoalAddButton}>
                 <Feather name="plus" size={14} color="#f8fafc" />
               </Pressable>
             </View>
+            {savingsBucketsExpanded ? <>
             {currentGoals.length > 0 && bucketPersonalization.unavailableReason ? <AppText style={{ color: dashboardTheme.mutedText, fontSize: 12 }}>{bucketPersonalization.unavailableReason}</AppText> : null}
             {currentGoals.length > 0 ? (
               <View style={styles.referenceGoalsList}>
@@ -1358,6 +1370,7 @@ overview: (<View style={styles.referenceCommandHeroFlipShell}>
                 <AppText style={[styles.referenceGoalsEmptyText, { color: dashboardTheme.mutedText }]}>No goals yet.</AppText>
               </Pressable>
             )}
+            </> : null}
           </Animated.View>
       </View>),
 accounts: (<AccountBalancesCard
@@ -2225,6 +2238,7 @@ const styles = StyleSheet.create({
   referenceSavingsEmpty: { minHeight: 36, borderRadius: 10, borderWidth: 1, borderStyle: "dashed", alignItems: "center", justifyContent: "center", paddingHorizontal: 9 },
   referenceSavingsEmptyText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
   referenceGoalsHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8, marginBottom: 5 },
+  referenceGoalsToggle: { flex: 1, minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, paddingRight: 12 },
   referenceGoalsTitle: { color: "#f8fafc", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   referenceGoalAddButton: { width: 28, height: 28, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.42)", borderWidth: 1, borderColor: "rgba(196,181,253,0.28)" },
   referenceGoalsList: { marginBottom: 2, paddingBottom: 2 },

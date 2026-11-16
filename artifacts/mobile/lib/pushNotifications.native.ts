@@ -11,9 +11,9 @@ import { pushPreferenceStorageKey } from "@/lib/pushNotificationPreference";
 import { reconcileNativePushStatus } from "@/lib/nativePushStatusPolicy";
 
 export type PushNotificationStatus = "checking" | "unsupported" | "blocked" | "disabled" | "enabled" | "degraded";
-export type NotificationPreferenceKey = "pending_transactions" | "posted_transactions" | "overdue_bills" | "feedback_updates" | "admin_feedback";
-export interface NotificationPreferences { pending_transactions: boolean; posted_transactions: boolean; overdue_bills: boolean; feedback_updates: boolean; admin_feedback: boolean }
-export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = { pending_transactions: true, posted_transactions: true, overdue_bills: true, feedback_updates: true, admin_feedback: true };
+import { emitNotificationPreferencesChanged, normalizeNotificationPreferences, type NotificationPreferenceKey } from "@/lib/notificationPreferences";
+export { DEFAULT_NOTIFICATION_PREFERENCES, type NotificationPreferenceKey, type NotificationPreferences } from "@/lib/notificationPreferences";
+
 const registrationGate = new SerializedLatestOperation();
 
 function authorization(accessToken: string) { return { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" }; }
@@ -41,6 +41,13 @@ async function ensureAndroidChannel() {
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 200, 120, 200],
       lightColor: "#9B5CFF",
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
+    });
+    await Notifications.setNotificationChannelAsync("flowledger-tips", {
+      name: "FlowLedger account tips",
+      importance: Notifications.AndroidImportance.LOW,
+      sound: null,
+      enableVibrate: false,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
     });
   }
@@ -151,12 +158,16 @@ export async function sendTestPushNotification(accessToken: string, type: Notifi
 export async function getNotificationPreferences(accessToken: string) {
   const response = await apiFetch("/api/notifications/preferences", { headers: authorization(accessToken), cache: "no-store" });
   if (!response.ok) throw new Error(await apiMessage(response, "Could not load notification choices."));
-  return response.json() as Promise<{ preferences: NotificationPreferences; isFeedbackAdmin: boolean }>;
+  const payload = await response.json() as { preferences: unknown; isFeedbackAdmin: boolean };
+  return { preferences: normalizeNotificationPreferences(payload.preferences), isFeedbackAdmin: payload.isFeedbackAdmin === true };
 }
-export async function updateNotificationPreference(accessToken: string, key: NotificationPreferenceKey, enabled: boolean) {
+export async function updateNotificationPreference(accessToken: string, key: NotificationPreferenceKey, enabled: boolean, userId?: string) {
   const response = await apiFetch("/api/notifications/preferences", { method: "PATCH", headers: authorization(accessToken), body: JSON.stringify({ [key]: enabled }) });
   if (!response.ok) throw new Error(await apiMessage(response, "Could not update that notification choice."));
-  return (await response.json() as { preferences: NotificationPreferences }).preferences;
+  const payload = await response.json() as { preferences: unknown };
+  const preferences = normalizeNotificationPreferences(payload.preferences);
+  if (userId) emitNotificationPreferencesChanged({ userId, preferences });
+  return preferences;
 }
 
 export function configureNativeNotificationPresentation() {

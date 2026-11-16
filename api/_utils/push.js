@@ -2,6 +2,8 @@ const webpush = require("web-push");
 const { optional, pushEnvironment, required } = require("./env");
 const { notificationPreferenceEnabled } = require("./notificationPreferences");
 const { serviceSupabase, safeError } = require("./supabase");
+const { getWeeklyAccountTip } = require("../../artifacts/mobile/lib/accountTips");
+const { accountTipPayload, currentTipForEvent, accountTipEligible } = require("./accountTipNotifications");
 
 function vapidDetails() {
   return {
@@ -41,9 +43,9 @@ async function sendExpoNotification(db, device, payload, householdId, eventIds =
       title: String(payload.title || "FlowLedger update").slice(0, 80),
       body: String(payload.body || "Open FlowLedger to review your plan.").slice(0, 180),
       data: { route: allowlistedNativeRoute(payload.url), ...(typeof householdId === "string" ? { householdId } : {}) },
-      sound: "default",
-      priority: "high",
-      channelId: "flowledger-alerts",
+      sound: payload.quiet ? null : "default",
+      priority: payload.quiet ? "normal" : "high",
+      channelId: payload.quiet ? "flowledger-tips" : "flowledger-alerts",
     }),
   });
   const body = await response.json().catch(() => ({}));
@@ -116,7 +118,7 @@ async function sendPushToUser(userId, payload, preferenceKey, householdId, event
         JSON.stringify(payload),
         {
           TTL: 60 * 60 * 12,
-          urgency: "high",
+          urgency: payload.quiet ? "normal" : "high",
           topic: String(payload.tag || "flowledger-activity").slice(0, 32),
           vapidDetails: vapidDetails(),
         },
@@ -201,8 +203,10 @@ async function recordDeliveryResult(db, events, result) {
   if (error) throw error;
 }
 
-async function deliverPendingNotifications(userId) {
-  const db = serviceSupabase();
+async function deliverPendingNotifications(userId, options = {}) {
+  const db = options.db || serviceSupabase();
+  const now = options.now || new Date();
+  const send = options.sendPush || sendPushToUser;
   const { data: events, error } = await db.rpc("claim_push_notification_events", { p_user_id: userId, p_limit: 50 });
   if (error) throw error;
   if (!events?.length) return { delivered: 0, events: 0 };
@@ -211,13 +215,24 @@ async function deliverPendingNotifications(userId) {
   const groups = new Map();
   for (const event of events) {
     const eventType = event.event_type || "posted";
-    const key = `${eventType}:${event.household_id || "legacy"}`;
+    const key = eventType === "account_tip" ? `account_tip:${event.id}` : `${eventType}:${event.household_id || "legacy"}`;
     if (!groups.has(key)) groups.set(key, { eventType, householdId: event.household_id || null, events: [] });
     groups.get(key).events.push(event);
   }
   for (const group of groups.values()) {
     const { eventType, householdId, events: matching } = group;
     if (!matching.length) continue;
+    if (eventType === "account_tip") {
+      const tip = currentTipForEvent(matching[0], now);
+      if (!tip || !await accountTipEligible(db, userId, householdId, tip)) {
+        await recordDeliveryResult(db, matching, { delivered: 0, accepted: 0, activeSubscriptions: 0, errors: [], skipped: true });
+        continue;
+      }
+      const result = await send(userId, accountTipPayload(tip), "account_tips", householdId, matching.map(event => event.id));
+      delivered += result.delivered;
+      await recordDeliveryResult(db, matching, result);
+      continue;
+    }
     const count = eventType === "overdue_bill"
       ? new Set(matching.map(event => event.bill_id).filter(Boolean)).size
       : matching.length;
@@ -257,12 +272,32 @@ async function deliverPendingNotifications(userId) {
       await recordDeliveryResult(db, matching, { delivered: 0, accepted: 0, activeSubscriptions: 0, errors: [], skipped: true });
       continue;
     }
-    const result = await sendPushToUser(userId, payload, preferenceKey, householdId, matching.map(event => event.id));
+    const result = await send(userId, payload, preferenceKey, householdId, matching.map(event => event.id));
     delivered += result.delivered;
     await recordDeliveryResult(db, matching, result);
   }
 
   return { delivered, events: events.length };
+}
+
+async function queueAccountTipNotification(userId, householdId, now = new Date(), options = {}) {
+  const db = options.db || serviceSupabase();
+  const tip = getWeeklyAccountTip(now);
+  if (!await accountTipEligible(db, userId, householdId, tip)) return { delivered: 0, events: 0 };
+  if (!await hasPushDestination(db, userId, householdId)) return { delivered: 0, events: 0 };
+  const { error } = await db.from("push_notification_events").upsert({
+    user_id: userId,
+    household_id: householdId,
+    transaction_id: null,
+    plaid_transaction_id: null,
+    bill_id: null,
+    occurrence_date: tip.week,
+    event_type: "account_tip",
+    // Deliberately excludes household: switching households must not create another weekly push.
+    event_key: `account-tip:${tip.week}`,
+  }, { onConflict: "user_id,event_key", ignoreDuplicates: true });
+  if (error) throw error;
+  return deliverPendingNotifications(userId, { ...options, db, now });
 }
 
 async function queuePostedTransactionNotifications(userId, householdId, transactionIds) {
@@ -409,6 +444,7 @@ module.exports = {
   deliverPendingNotifications,
   deliverPendingPostedTransactionNotifications,
   queueOverdueBillNotifications,
+  queueAccountTipNotification,
   queuePendingTransactionNotifications,
   queuePostedTransactionNotifications,
   sendPushToUser,

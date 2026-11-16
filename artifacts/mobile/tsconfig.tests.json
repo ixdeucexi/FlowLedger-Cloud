@@ -242,6 +242,8 @@
     ,"lib/universalSearch.test.ts"
     ,"lib/notificationCenter.ts"
     ,"lib/notificationCenter.test.ts"
+    ,"lib/accountTipNotifications.test.ts"
+    ,"lib/notificationPreferences.test.ts"
     ,"lib/resumePolicy.ts"
     ,"lib/resumePolicy.test.ts"
     ,"lib/planSimulator.ts"

@@ -133,9 +133,9 @@ FULL CORE workflow:
 Do not run FORGE and SENTINEL as parallel writers.
 
 ## Branch and release policy
-- Work from `dev` unless the user explicitly instructs otherwise.
-- A request that says only `fix`, `implement`, `change`, or similar means complete and verify the work on `dev`; it does not authorize production deployment.
-- A request that explicitly includes `go live`, `deploy`, `push live`, `make it live`, or equivalent authorizes the production release workflow after the required FAST PATH or FULL CORE verification passes.
+- The owner has given a standing directive: **always go live; do not use `dev` as the delivery destination.** Completed change requests authorize production release after the required FAST PATH or FULL CORE verification passes, unless the owner explicitly asks to hold or preview a change.
+- Base work on the currently live production commit. Use a narrowly scoped `release/*` branch when needed to keep the release source reviewable; do not promote unrelated changes from `dev` or an outdated `main`.
+- Complete implementation and verification, save the rollback point below, and deploy the exact verified commit to the canonical production project. Do not stop at a development branch or request release permission already provided by this standing directive.
 - Before every production/live deployment, create and clearly name a rollback point that captures the currently live production state before the new release is applied.
 - The rollback point must be created before production is changed, and the release report must state its exact branch/tag/commit reference.
 - Prefer rollback naming such as `rollback/prod-before-<short-change-name>-YYYYMMDD-HHMM`.

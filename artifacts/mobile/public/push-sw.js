@@ -29,7 +29,7 @@ self.addEventListener("push", event => {
   const badgeCount = Number.isFinite(Number(payload.badgeCount))
     ? Math.max(1, Math.trunc(Number(payload.badgeCount)))
     : 1;
-  const updateBadge = self.navigator?.setAppBadge
+  const updateBadge = payload.quiet !== true && self.navigator?.setAppBadge
     ? self.navigator.setAppBadge(badgeCount).catch(() => undefined)
     : Promise.resolve();
   event.waitUntil(Promise.all([
@@ -39,6 +39,7 @@ self.addEventListener("push", event => {
       badge: "/notification-icon.png",
       tag: payload.tag || "flowledger-review",
       renotify: false,
+      ...(payload.quiet === true ? { silent: true } : {}),
       data: { url: payload.url || "/more?section=review" },
     }),
     updateBadge,

@@ -4,7 +4,7 @@ export type InAppNotificationTone = "safe" | "watch" | "risk" | "info";
 
 export type InAppNotification = {
   id: string;
-  type: "bill" | "forecast" | "goal" | "debt" | "review";
+  type: "bill" | "forecast" | "goal" | "debt" | "review" | "tip";
   title: string;
   body: string;
   timestamp: string;

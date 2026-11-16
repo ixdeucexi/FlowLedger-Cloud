@@ -1,6 +1,6 @@
 import { PrivacyPressable as Pressable, PrivacyText as Text, PrivacyView as View } from "@/components/privacy/PrivacyPrimitives";
 import Feather from "@expo/vector-icons/Feather";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, Switch, useWindowDimensions } from "react-native";
 
 import { useAuth } from "@/context/AuthContext";
@@ -8,6 +8,7 @@ import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { desktopPalette as palette } from "@/components/desktop/DesktopUI";
 import { isCompactSettingsLayout } from "@/lib/settingsLayout";
+import { NotificationPreferenceRequestGate } from "@/lib/notificationPreferences";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   disablePushNotifications,
@@ -50,6 +51,12 @@ const ALERT_OPTIONS: AlertOption[] = [
     title: "Past-due bills",
     description:
       "When a planned bill passes its due date with money still left to pay.",
+  },
+  {
+    key: "account_tips",
+    icon: "book-open",
+    title: "Account tips",
+    description: "A weekly account tip in your notification bell and on enabled devices.",
   },
   {
     key: "feedback_updates",
@@ -97,6 +104,12 @@ export function NotificationSettings({
   const compactLayout = isCompactSettingsLayout(viewportWidth);
   const { session, user } = useAuth();
   const { activeHousehold } = useBudget();
+  const userId = user?.id ?? null;
+  const scopeId = userId ? `${userId}:${activeHousehold?.householdId ?? ""}` : "";
+  const scopeRef = useRef(scopeId);
+  scopeRef.current = scopeId;
+  const preferenceRequests = useRef(new NotificationPreferenceRequestGate());
+  const [loadedPreferencesScope, setLoadedPreferencesScope] = useState<string | null>(null);
   const [status, setStatus] = useState<PushNotificationStatus>("checking");
   const [preferences, setPreferences] = useState<NotificationPreferences>(
     DEFAULT_NOTIFICATION_PREFERENCES,
@@ -111,39 +124,62 @@ export function NotificationSettings({
     useState<NotificationPreferenceKey | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
+  useEffect(() => {
+    scopeRef.current = scopeId;
+    setSavingKey(null);
+    setTestingKey(null);
+    setDeviceBusy(false);
+    setMessage(null);
+    setStatus("checking");
+    setIsFeedbackAdmin(false);
+    return () => {
+      scopeRef.current = "";
+      preferenceRequests.current.invalidate();
+    };
+  }, [scopeId]);
+
   const refreshStatus = useCallback(async () => {
+    const requestScope = scopeId;
     if (!user?.id) {
       setStatus("disabled");
       return;
     }
     try {
-      setStatus(await getPushNotificationStatus(user.id, session?.access_token, activeHousehold?.householdId));
+      const nextStatus = await getPushNotificationStatus(user.id, session?.access_token, activeHousehold?.householdId);
+      if (scopeRef.current === requestScope) setStatus(nextStatus);
     } catch (error) {
+      if (scopeRef.current !== requestScope) return;
       setStatus("degraded");
       setMessage(error instanceof Error ? error.message : "Notification registration could not be confirmed. Retry when the service is available.");
     }
-  }, [activeHousehold?.householdId, session?.access_token, user?.id]);
+  }, [activeHousehold?.householdId, scopeId, session?.access_token, user?.id]);
 
   const refreshPreferences = useCallback(async () => {
-    if (!session?.access_token) {
+    const requestScope = scopeId;
+    const isCurrentRead = preferenceRequests.current.beginRead();
+    setLoadedPreferencesScope(null);
+    if (!session?.access_token || !userId) {
       setPreferencesLoading(false);
       return;
     }
     setPreferencesLoading(true);
     try {
       const result = await getNotificationPreferences(session.access_token);
+      if (scopeRef.current !== requestScope || !isCurrentRead()) return;
       setPreferences(result.preferences);
       setIsFeedbackAdmin(result.isFeedbackAdmin);
+      setLoadedPreferencesScope(requestScope);
     } catch (error) {
+      if (scopeRef.current !== requestScope || !isCurrentRead()) return;
       setMessage(
         error instanceof Error
           ? error.message
           : "Could not load notification choices.",
       );
     } finally {
-      setPreferencesLoading(false);
+      if (scopeRef.current === requestScope && isCurrentRead()) setPreferencesLoading(false);
     }
-  }, [session?.access_token]);
+  }, [scopeId, session?.access_token, userId]);
 
   useEffect(() => {
     void refreshStatus();
@@ -162,18 +198,22 @@ export function NotificationSettings({
 
   const toggleDevice = async (enabled: boolean) => {
     if (!session?.access_token || !user?.id || deviceBusy) return;
+    const requestScope = scopeId;
     setDeviceBusy(true);
     setMessage(null);
     try {
       if (enabled) {
         await enablePushNotifications(session.access_token, user.id, activeHousehold?.householdId);
+        if (scopeRef.current !== requestScope) return;
         setMessage("Phone notifications are on for this device.");
       } else {
         await disablePushNotifications(session.access_token, user.id);
+        if (scopeRef.current !== requestScope) return;
         setMessage("Phone notifications are off for this device.");
       }
       await refreshStatus();
     } catch (error) {
+      if (scopeRef.current !== requestScope) return;
       setMessage(
         error instanceof Error
           ? error.message
@@ -181,7 +221,7 @@ export function NotificationSettings({
       );
       await refreshStatus();
     } finally {
-      setDeviceBusy(false);
+      if (scopeRef.current === requestScope) setDeviceBusy(false);
     }
   };
 
@@ -189,7 +229,9 @@ export function NotificationSettings({
     key: NotificationPreferenceKey,
     enabled: boolean,
   ) => {
-    if (!session?.access_token || savingKey) return;
+    if (!session?.access_token || !userId || loadedPreferencesScope !== scopeId || savingKey) return;
+    const requestScope = scopeId;
+    const isCurrentSave = preferenceRequests.current.beginSave();
     setSavingKey(key);
     setMessage(null);
     try {
@@ -197,35 +239,44 @@ export function NotificationSettings({
         session.access_token,
         key,
         enabled,
+        userId,
       );
+      if (scopeRef.current !== requestScope || !isCurrentSave()) return;
+      preferenceRequests.current.invalidateReads();
       setPreferences(saved);
+      setLoadedPreferencesScope(requestScope);
+      setPreferencesLoading(false);
       setMessage("Notification choices saved.");
     } catch (error) {
+      if (scopeRef.current !== requestScope || !isCurrentSave()) return;
       setMessage(
         error instanceof Error
           ? error.message
           : "Could not save that notification choice.",
       );
     } finally {
-      setSavingKey(null);
+      if (scopeRef.current === requestScope && isCurrentSave()) setSavingKey(null);
     }
   };
 
   const sendTest = async (option: AlertOption) => {
-    if (!session?.access_token || deviceBusy || testingKey) return;
+    if (!session?.access_token || loadedPreferencesScope !== scopeId || deviceBusy || testingKey) return;
+    const requestScope = scopeId;
     setTestingKey(option.key);
     setMessage(null);
     try {
       await sendTestPushNotification(session.access_token, option.key, activeHousehold?.householdId);
+      if (scopeRef.current !== requestScope) return;
       setMessage(`${option.title} test sent. Check your phone notifications.`);
     } catch (error) {
+      if (scopeRef.current !== requestScope) return;
       setMessage(
         error instanceof Error
           ? error.message
           : "Could not send the test notification.",
       );
     } finally {
-      setTestingKey(null);
+      if (scopeRef.current === requestScope) setTestingKey(null);
     }
   };
 
@@ -241,7 +292,7 @@ export function NotificationSettings({
         : "Allow this device to receive the alerts you choose below.";
 
   const options = ALERT_OPTIONS.filter((option) =>
-    scope === "admin" ? option.adminOnly && isFeedbackAdmin : !option.adminOnly,
+    scope === "admin" ? option.adminOnly && isFeedbackAdmin && loadedPreferencesScope === scopeId : !option.adminOnly,
   );
 
   return (
@@ -331,6 +382,7 @@ export function NotificationSettings({
                   accessibilityRole="button"
                   accessibilityLabel={`Test ${option.title} notification`}
                   disabled={
+                    loadedPreferencesScope !== scopeId ||
                     !preferences[option.key] ||
                     testingKey !== null ||
                     savingKey !== null
@@ -342,6 +394,7 @@ export function NotificationSettings({
                       borderColor: primaryBorder,
                       backgroundColor: primaryFaint,
                       opacity:
+                        loadedPreferencesScope !== scopeId ||
                         !preferences[option.key] ||
                         testingKey !== null ||
                         savingKey !== null
@@ -362,7 +415,7 @@ export function NotificationSettings({
             <Switch
               accessibilityLabel={`${option.title} notifications`}
               disabled={
-                preferencesLoading || savingKey !== null || testingKey !== null
+                preferencesLoading || loadedPreferencesScope !== scopeId || savingKey !== null || testingKey !== null
               }
               value={preferences[option.key]}
               onValueChange={(value) =>
