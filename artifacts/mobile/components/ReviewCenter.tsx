@@ -24,6 +24,7 @@ import { UnplannedChargeModal } from "@/components/UnplannedChargeModal";
 import type { Bill, Goal, ReconcileTransactionInput, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
+import { postedBudgetMatchingRows, type BudgetMatchingAccount, type BudgetMatchingPeriod } from "@/lib/budgetMatching";
 import { manualActivityMatchCandidates } from "@/lib/billMatching";
 import { adjacentBillMatchCandidates } from "@/lib/billMatchCandidates";
 import { resolveBillOccurrencePayment } from "@/lib/billOccurrencePayment";
@@ -92,6 +93,8 @@ function dateOnlyDistanceDays(left: string, right: string) {
 }
 
 type ReviewCenterProps = {
+  matchingPeriod?: BudgetMatchingPeriod;
+  matchingAccountFilter?: BudgetMatchingAccount;
   viewMode?: "review" | "buckets";
   focusTransactionId?: string;
   closeBucketId?: string;
@@ -111,7 +114,7 @@ type BucketClosePrompt = {
   fromReview?: boolean;
 };
 
-export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketScope, closeBucketRequest, onCloseBucketRequestHandled, focusTransactionId, initialFilter = "all", onManageBuckets, onBucketOverlayChange, subscriptionBillLinks = EMPTY_SUBSCRIPTION_BILL_LINKS }: ReviewCenterProps = {}) {
+export function ReviewCenter({ matchingPeriod, matchingAccountFilter = null, viewMode = "review", closeBucketId, closeBucketScope, closeBucketRequest, onCloseBucketRequestHandled, focusTransactionId, initialFilter = "all", onManageBuckets, onBucketOverlayChange, subscriptionBillLinks = EMPTY_SUBSCRIPTION_BILL_LINKS }: ReviewCenterProps = {}) {
   const { alert: privacyAlert, formError: privacyFormError } = usePrivacyAlerts();
 
   const c = useColors();
@@ -140,12 +143,14 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
     return () => { mountedBucketScopeRef.current = null; };
   }, [bucketScope]);
   useEffect(() => {
-    if (!bucketsOnly) void refreshBankData();
-  }, [bucketsOnly, refreshBankData]);
+    if (!bucketsOnly) void refreshBankData(matchingPeriod ? { savedOnly: true } : undefined);
+  }, [bucketsOnly, refreshBankData, matchingPeriod?.month, matchingPeriod?.year]);
   const localDay = useLocalDay();
   const fullQueue = useMemo(
-    () => bucketsOnly ? [] : buildReviewQueue(transactions, localDay, focusTransactionId),
-    [bucketsOnly, focusTransactionId, transactions, localDay],
+    () => bucketsOnly ? [] : matchingPeriod
+      ? postedBudgetMatchingRows(transactions, matchingPeriod, matchingAccountFilter, resolveTransactionAccountRef)
+      : buildReviewQueue(transactions, localDay, focusTransactionId),
+    [bucketsOnly, focusTransactionId, transactions, localDay, matchingPeriod?.month, matchingPeriod?.year, matchingAccountFilter, resolveTransactionAccountRef],
   );
   const [reviewAccountRef, setReviewAccountRef] = useState<ForecastAccountRef | null>(null);
   const [showOtherAccounts, setShowOtherAccounts] = useState(false);
@@ -634,7 +639,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
   };
 
   const completeReview = async (input: ReconcileTransactionInput, notice?: string) => {
-    if (!current || saving || reviewInFlightRef.current) throw new Error("This transaction is no longer available for review.");
+    if (!current || saving || reviewInFlightRef.current || !canManageCurrentBuckets() || !startupCoreReady) throw new Error("This transaction is no longer available for review.");
     reviewInFlightRef.current = true;
     const reviewed = current;
     setSaving(true);
@@ -944,7 +949,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
 
   return (
     <>
-      {!bucketsOnly ? <AccountForecastPicker value={reviewAccountRef} onChange={setReviewAccountRef} includeHousehold label="Review account" /> : null}
+      {!bucketsOnly && !matchingPeriod ? <AccountForecastPicker value={reviewAccountRef} onChange={setReviewAccountRef} includeHousehold label="Review account" /> : null}
       {!bucketsOnly ? <>
       <View style={styles.filterRow}>
         {([
@@ -983,7 +988,7 @@ export function ReviewCenter({ viewMode = "review", closeBucketId, closeBucketSc
 
       </> : null}
 
-      {bucketsOnly || spendingBuckets.length || archivedBuckets.length ? (
+      {!matchingPeriod && (bucketsOnly || spendingBuckets.length || archivedBuckets.length) ? (
         <View style={[styles.bucketManager, { backgroundColor: c.card, borderColor: c.border }]}>
           {bucketPersonalization.unavailableReason ? <Text accessibilityLiveRegion="polite" style={[styles.optionDescription, { color: c.mutedForeground }]}>{bucketPersonalization.unavailableReason}</Text> : null}
           <View style={styles.bucketManagerHeader}>

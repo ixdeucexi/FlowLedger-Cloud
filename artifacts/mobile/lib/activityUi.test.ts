@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const mobileActivity = readFileSync("app/(tabs)/transactions.tsx", "utf8");
+const mobileActivity = readFileSync("components/ActivityScreen.tsx", "utf8");
 const desktopActivity = readFileSync(
   "components/desktop/DesktopActivityPage.tsx",
   "utf8",

@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { DataFreshnessLabel } from "@/components/DataFreshnessLabel";
 import { PlanViewSelector } from "@/components/PlanViewSelector";
+import { ActivityScreen } from "@/components/ActivityScreen";
 import { useAuth } from "@/context/AuthContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
@@ -18,10 +19,8 @@ import { buildCategoryPlan, buildZeroBudgetSummary, categoryBudgetPeriod, type C
 import { loadCategoryBudgetsExact, readCategoryBudgetCache, saveMonthlyCategoryBudgetChanges, subscribeCategoryBudgets, subscribeCategoryCatalog } from "@/lib/categoryBudgetStore";
 import { categoryMatches, normalizeCategoryInput, remapCategoryBudgetMap, remapCategoryDrafts } from "@/lib/categoryCatalog";
 import { applyCategoryBudgetChanges, buildCategoryBudgetMoveDraft, buildCategoryBudgetRestartDraft, changedCategoryBudgets, isSpendingBudgetCategory, parseCategoryBudgetChanges, type CategoryBudgetMoveSource } from "@/lib/categoryBudgetRules";
-import { buildReviewQueue, transactionCategoryParts } from "@/lib/reviewCenter";
-import { unmatchedPendingTransactions } from "@/lib/pendingPlanMatches";
+import { transactionCategoryParts } from "@/lib/reviewCenter";
 import { assertFinancialMutationOnline } from "@/lib/networkStatus";
-import { useLocalDay } from "@/hooks/useLocalDay";
 import { parseMoneyInput } from "@/lib/moneyFormInput";
 import { confirmAction, type ConfirmActionOptions } from "@/lib/confirmAction";
 
@@ -52,16 +51,12 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
     getBillMonthlyTotal,
     getMonthlyIncome,
     getTransactionsForMonth,
-    transactions,
-    pendingBankTransactions,
-    pendingPlanMatches,
     selectedYear,
     settings,
     activeHousehold,
     canEditHousehold,
   } = useBudget();
   const now = new Date();
-  const localDay = useLocalDay();
   const [month, setMonth] = useState(requestedPeriod?.month ?? now.getMonth());
   const [year, setYear] = useState(requestedPeriod?.year ?? (selectedYear || now.getFullYear()));
   const [filter, setFilter] = useState<Filter>("all");
@@ -256,13 +251,6 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
   const overspentTotal = overspentRows.reduce((sum, row) => sum + Math.abs(row.remaining), 0);
   const budgetedTotal = categoryPlan.reduce((sum, row) => sum + row.budgeted, 0);
   const spentTotal = categoryPlan.reduce((sum, row) => sum + (row.hasBudget ? row.spent : 0), 0);
-  const reviewCount = useMemo(() => {
-    return buildReviewQueue(transactions, localDay).length;
-  }, [transactions, localDay]);
-  const pendingReviewCount = useMemo(
-    () => unmatchedPendingTransactions(pendingPlanMatches, pendingBankTransactions).length,
-    [pendingBankTransactions, pendingPlanMatches],
-  );
 
   const persistBudgets = async (next: Record<string, number>, changedCategories?: string[], repeat = repeatChanges) => {
     if (!canEditHousehold || !editingAllowedRef.current || !loadReady || busyRef.current || budgetConflict
@@ -583,21 +571,11 @@ export function CategoryBudgetScreen({ embedded = false, requestedPeriod }: Cate
         {!canEditHousehold ? <Text style={[styles.rowSub, { color: c.mutedForeground }]}>You have view-only access to this household.</Text> : null}
       </View>
 
-      {embedded && <Pressable
-        onPress={() => router.push({ pathname: "/(tabs)/more", params: { section: "review" } } as any)}
-        style={({ pressed }) => [styles.reviewLink, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.78 : 1 }]}
-      >
-        <View style={[styles.reviewLinkIcon, { backgroundColor: c.primary + "18" }]}>
-          <Feather name="check-square" size={17} color={c.primary} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.reviewLinkTitle, { color: c.foreground }]}>Review bank activity</Text>
-          <Text style={[styles.reviewLinkText, { color: c.mutedForeground }]}>Categorize posted transactions here, then this budget updates automatically.</Text>
-        </View>
-        <View style={[styles.reviewCount, { backgroundColor: reviewCount + pendingReviewCount > 0 ? c.destructive : c.success }]}>
-          <Text style={styles.reviewCountText}>{reviewCount + pendingReviewCount}</Text>
-        </View>
-      </Pressable>}
+      {settings.zeroBasedBudgetEnabled ? <ActivityScreen
+        key={`${currentScopeKey}:${canEditHousehold ? "editor" : "viewer"}`}
+        presentation="matching"
+        matchingPeriod={{ month, year }}
+      /> : null}
 
       <View style={styles.filterRow}>
         {(["all", "over", "watch", "available"] as Filter[]).map(item => (

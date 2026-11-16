@@ -40,7 +40,7 @@ test("guided tour starts and resumes on native as well as web", () => {
 });
 
 test("Activity and Settings expose real tour targets and sign-out clears progress", () => {
-  const activity = readFileSync("app/(tabs)/transactions.tsx", "utf8");
+  const activity = readFileSync("components/ActivityScreen.tsx", "utf8");
   const desktopActivity = readFileSync("components/desktop/DesktopActivityPage.tsx", "utf8");
   const settings = readFileSync("app/(tabs)/more.tsx", "utf8");
   const settingsHub = readFileSync("components/settings/MoreHub.tsx", "utf8");

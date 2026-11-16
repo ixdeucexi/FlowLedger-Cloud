@@ -1097,9 +1097,20 @@ test("the dashboard flip keeps Flow Score on the animated checking face", () => 
   assert.ok(scorePanel > checkingFace);
   assert.ok(scorePanel < savingsFace);
   assert.ok(savingsCard > savingsFace);
-  assert.match(mobileDashboard.slice(checkingFace, savingsFace), /flipped && styles\.referenceCommandHeroInactiveFace/);
-  assert.match(mobileDashboard.slice(savingsFace), /!flipped && styles\.referenceCommandHeroInactiveFace/);
-  assert.match(mobileDashboard, /referenceCommandHeroInactiveFace:\s*\{\s*\.\.\.StyleSheet\.absoluteFillObject/);
+  // Checking owns the responsive shell height even while its backface is hidden.
+  const accounts = mobileDashboard.indexOf("accounts: (<AccountBalancesCard", savingsFace);
+  assert.ok(accounts > savingsFace);
+  const checkingMarkup = mobileDashboard.slice(checkingFace, savingsFace);
+  const savingsMarkup = mobileDashboard.slice(savingsFace, accounts);
+  assert.match(checkingMarkup, /isCommandWide \? styles\.referenceHeroFrontWide : styles\.referenceHeroFaceCompact/);
+  assert.doesNotMatch(checkingMarkup, /referenceSavingsFace|referenceCommandHeroInactiveFace|absoluteFillObject/);
+  assert.match(checkingMarkup, /aria-hidden=\{flipped\}/);
+  assert.match(savingsMarkup, /styles\.referenceSavingsFace/);
+  assert.match(savingsMarkup, /<ScrollView style=\{styles\.referenceSavingsScroll\} nestedScrollEnabled>/);
+  assert.match(mobileDashboard, /referenceSavingsFace:\s*\{\s*\.\.\.StyleSheet\.absoluteFillObject, minHeight: 0/);
+  assert.match(mobileDashboard, /referenceSavingsScroll:\s*\{ flex: 1, minHeight: 0 \}/);
+  assert.match(mobileDashboard, /referenceCommandHeroFlipShell:\s*\{ width: "100%", position: "relative", marginBottom: 6 \}/);
+  assert.doesNotMatch(mobileDashboard, /referenceCommandHeroInactiveFace/);
 });
 
 test("the dashboard and review center link to the existing spending bucket manager", () => {
@@ -1150,7 +1161,7 @@ test("desktop dashboard presents the debt payoff planner as a first-class card",
 
 test("activity surfaces use Inflows and Outflows wording across layouts", () => {
   const activitySources = [
-    readFileSync("app/(tabs)/transactions.tsx", "utf8"),
+    readFileSync("components/ActivityScreen.tsx", "utf8"),
     readFileSync("components/ReportsInsightsView.tsx", "utf8"),
     readFileSync("components/ReviewCenter.tsx", "utf8"),
     readFileSync("components/desktop/DesktopWorkspacePage.tsx", "utf8"),

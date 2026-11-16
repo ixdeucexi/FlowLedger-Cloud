@@ -36,7 +36,7 @@ test("a long bucket list stays hidden outside the Buckets filter", () => {
 });
 
 const reviewSource = () => readFileSync("components/ReviewCenter.tsx", "utf8");
-const activitySource = () => readFileSync("app/(tabs)/transactions.tsx", "utf8");
+const activitySource = () => readFileSync("components/ActivityScreen.tsx", "utf8");
 
 function execute(source: string, bindings: Record<string, unknown>) {
   const js = transpileModule(source, {
@@ -191,7 +191,7 @@ test("selection cannot leak across users, households or current transactions", (
 });
 
 test("Activity opening another transaction or closing clears its selected match type without saving", () => {
-  const source = readFileSync("app/(tabs)/transactions.tsx", "utf8");
+  const source = readFileSync("components/ActivityScreen.tsx", "utf8");
   const start = source.indexOf("  const setMatchTx = useCallback");
   const end = source.indexOf("  const matchTargetScope", start);
   assert.ok(start >= 0 && end > start);

@@ -13,6 +13,9 @@
   },
   "include": [
     "lib/householdNicknames.test.ts",
+    "lib/budgetMatching.test.ts",
+    "lib/budgetMatchingPanel.test.ts",
+    "lib/budgetMatchingPerformance.test.ts",
     "lib/householdNames.test.ts",
     "lib/accountBalancesCard.test.ts",
     "lib/plannedTransferContext.test.ts",

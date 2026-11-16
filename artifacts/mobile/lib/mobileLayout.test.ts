@@ -58,7 +58,7 @@ test("native tab layout uses safe-area metrics instead of a fixed height", () =>
 });
 
 test("native Activity and Flo overlays reserve Android system insets", () => {
-  const activity = readFileSync("app/(tabs)/transactions.tsx", "utf8");
+  const activity = readFileSync("components/ActivityScreen.tsx", "utf8");
   const flo = readFileSync("app/(tabs)/flo.tsx", "utf8");
 
   assert.match(activity, /Math\.max\(insets\.top, 28\)/);

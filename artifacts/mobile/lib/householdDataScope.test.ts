@@ -69,7 +69,7 @@ test("membership loading and every resume surface share the owner-only privacy r
   const households = readFileSync("lib/households.ts", "utf8");
   const rootLayout = readFileSync("app/_layout.tsx", "utf8");
   const budgetContext = readFileSync("context/BudgetContext.tsx", "utf8");
-  const activity = readFileSync("app/(tabs)/transactions.tsx", "utf8");
+  const activity = readFileSync("components/ActivityScreen.tsx", "utf8");
 
   assert.match(households, /const isPersonal = ownsLegacyPersonalRows\(/);
   assert.match(rootLayout, /ownsLegacyPersonalRows\(scope\)/);

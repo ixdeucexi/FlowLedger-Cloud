@@ -28,7 +28,7 @@ test("fictional store capture mode is limited to local development", () => {
 
 test("fictional capture screens avoid live account requests", () => {
   const flo = readFileSync("app/(tabs)/flo.tsx", "utf8");
-  const activity = readFileSync("app/(tabs)/transactions.tsx", "utf8");
+  const activity = readFileSync("components/ActivityScreen.tsx", "utf8");
   const dashboard = readFileSync("app/(tabs)/index.tsx", "utf8");
   const installPrompt = readFileSync("components/PwaInstallPrompt.tsx", "utf8");
 

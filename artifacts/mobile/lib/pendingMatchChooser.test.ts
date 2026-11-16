@@ -33,7 +33,7 @@ test("manual choices retain canonical same-month and eligibility exclusions", ()
   const manual = rankBillMatches({ date: "2026-10-22", amount: -100, description: "Food" }, candidates);
   assert.deepEqual(pendingMatchesForKind("manual", ranked, manual, []).map(item => [item.billId, item.targetType]), [["ok", "manual"]]);
 });
-const source = () => readFileSync("app/(tabs)/transactions.tsx", "utf8");
+const source = () => readFileSync("components/ActivityScreen.tsx", "utf8");
 function extract(start: string, end: string, bindings: Record<string, unknown>) {
   bindings = revealedPrivacyBindings({
     isInferredPendingBankHold, canEditHousehold: true,

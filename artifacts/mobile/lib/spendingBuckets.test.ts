@@ -419,7 +419,7 @@ test("all Snowball editors preserve routed bucket funding and its availability d
   assert.match(plannerSource, /minDate=\{paymentDateMinimum\}/);
 
   const activitySource = readFileSync(
-    resolve(process.cwd(), "app/(tabs)/transactions.tsx"),
+    resolve(process.cwd(), "components/ActivityScreen.tsx"),
     "utf8",
   );
   assert.match(
