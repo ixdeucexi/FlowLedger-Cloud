@@ -1263,7 +1263,7 @@ overview: (<View style={styles.referenceCommandHeroFlipShell}>
             style={[
               styles.referenceCommandHero,
               isCommandWide && styles.referenceCommandHeroWide,
-              !isCommandWide && styles.referenceHeroFaceCompact,
+              styles.referenceSavingsFace,
               styles.referenceCommandHeroFlipFace,
               !flipped && styles.referenceCommandHeroInactiveFace,
               {
@@ -2206,6 +2206,7 @@ const styles = StyleSheet.create({
   referenceCommandHeroFlipFace: { width: "100%", marginBottom: 0, backfaceVisibility: "hidden" },
   referenceCommandHeroInactiveFace: { ...StyleSheet.absoluteFillObject, marginBottom: 0 },
   referenceHeroFaceCompact: { minHeight: 272 },
+  referenceSavingsFace: { minHeight: 0 },
   referenceHeroFrontWide: { minHeight: 320, alignItems: "stretch" },
   referenceHeroMoneyPanel: { width: "100%" },
   referenceHeroMoneyPanelWide: { flex: 1, width: "auto" },
