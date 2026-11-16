@@ -16,6 +16,16 @@ export type AccountTipPreferenceState = {
   enabled: boolean;
 } | null;
 
+export function accountTipDestination(route: string) {
+  const destination = notificationRoute(route);
+  if (!destination) return null;
+  const [pathname, query] = destination.split("?");
+  return {
+    route: pathname === "/(tabs)" ? pathname : `/(tabs)${pathname}`,
+    ...(query ? { params: Object.fromEntries(new URLSearchParams(query)) } : {}),
+  };
+}
+
 /** Fail closed until preferences and the budget belong to the active account. */
 export function buildAccountTipNotification(tip: WeeklyAccountTip | null, scope: {
   userId: string | null;
@@ -28,12 +38,9 @@ export function buildAccountTipNotification(tip: WeeklyAccountTip | null, scope:
   if (!tip || demoMode || !ready || !userId || !householdId
     || preference?.userId !== userId || preference.householdId !== householdId
     || preference.enabled !== true) return null;
-  const destination = notificationRoute(tip.route);
+  const destination = accountTipDestination(tip.route);
   if (!destination) return null;
-  const [pathname, query] = destination.split("?");
-  const route = pathname === "/(tabs)" ? pathname : `/(tabs)${pathname}`;
-  const params = query ? Object.fromEntries(new URLSearchParams(query)) : undefined;
-  return { ...tip, route, ...(params ? { params } : {}), type: "tip", tone: "info" };
+  return { ...tip, ...destination, type: "tip", tone: "info" };
 }
 
 /** Saved opt-outs outrank older requests; disposed scopes can never publish. */

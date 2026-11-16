@@ -11,6 +11,9 @@ test("native notification routing accepts only privacy-safe app destinations", (
   assert.equal(notificationRoute("/more?section=help"), "/more?section=help");
   assert.equal(notificationRoute("/more?section=feedback"), "/more?section=help");
   assert.equal(notificationRoute("/(tabs)"), "/(tabs)");
+  assert.equal(notificationRoute("/monthly"), "/monthly");
+  assert.equal(notificationRoute("/accounts"), "/accounts");
+  assert.equal(notificationRoute("/more?section=goals"), "/more?section=goals");
   assert.equal(notificationRoute("https://attacker.invalid"), null);
   assert.equal(notificationRoute("/delete-account"), null);
 });
@@ -36,4 +39,17 @@ test("household notification payloads switch only to a current membership", () =
   assert.equal(notificationHouseholdAction(householdA, [householdA], householdA), "current");
   assert.equal(notificationHouseholdAction(householdB, [householdB], householdA), "reject");
   assert.equal(notificationDestination({ route: "/transactions", householdId: "not-a-household" }), null);
+});
+
+test("weekly tip taps accept a trusted past week and preserve household routing", () => {
+  const route = "/(tabs)?accountTip=2026-11-09";
+  const householdId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  assert.deepEqual(notificationDestination({ route, householdId }), { route, householdId });
+  for (const value of [
+    "/(tabs)?accountTip=2099-11-16",
+    "/(tabs)?accountTip=2026-11-17",
+    "/(tabs)?accountTip=2026-11-09&next=https://attacker.invalid",
+    "/(tabs)?accountTip=2026-11-09&accountTip=2026-11-16",
+    "https://attacker.invalid/(tabs)?accountTip=2026-11-09",
+  ]) assert.equal(notificationRoute(value), null);
 });

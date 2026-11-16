@@ -5,11 +5,16 @@ const test = require("node:test");
 const { transpileModule, ModuleKind } = require("typescript");
 const { allowlistedNativeRoute, sendExpoNotification } = require("./push");
 const { feedbackNotificationPayload, feedbackStatusNotificationPayload } = require("./feedback");
-const { NOTIFICATION_TEST_PAYLOADS } = require("./notificationTest");
+const { NOTIFICATION_TEST_PAYLOADS, notificationTestPayload } = require("./notificationTest");
+const catalog = require("../../artifacts/mobile/lib/accountTips");
+const { accountTipPayload } = require("./accountTipNotifications");
 
 const native = {};
 const source = fs.readFileSync(path.join(__dirname, "../../artifacts/mobile/lib/nativeNotificationRoute.ts"), "utf8");
-new Function("exports", transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText)(native);
+new Function("exports", "require", transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText)(native, specifier => {
+  assert.equal(specifier, "./accountTips");
+  return catalog;
+});
 const feedbackId = "123e4567-e89b-42d3-a456-426614174000";
 const householdId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
@@ -18,6 +23,9 @@ test("actual feedback and test payloads survive native delivery and tap routing"
     feedbackNotificationPayload(feedbackId, "bug", "Fixture tester"),
     ...["updated", "not_planned", "reply"].map(outcome => feedbackStatusNotificationPayload(feedbackId, outcome)),
     ...Object.values(NOTIFICATION_TEST_PAYLOADS),
+    notificationTestPayload("account_tips"),
+    accountTipPayload(catalog.getWeeklyAccountTip()),
+    accountTipPayload(catalog.getAccountTipForWeek("2026-11-09")),
   ];
   const originalFetch = global.fetch;
   const requests = [];
@@ -37,6 +45,14 @@ test("actual feedback and test payloads survive native delivery and tap routing"
       const delivered = requests.at(-1).data;
       assert.equal(delivered.route, payload.url);
       assert.deepEqual(native.notificationDestination(delivered), { route: payload.url, householdId });
+      const week = catalog.accountTipWeekFromRoute(delivered.route);
+      if (week) {
+        const tip = catalog.getAccountTipForWeek(week);
+        assert.equal(tip.week, week);
+        assert.ok(tip.explanation);
+        assert.ok(tip.actionLabel);
+        assert.notEqual(payload.url, tip.route, "tap opens explanation before the destination");
+      }
     }
   } finally { global.fetch = originalFetch; }
 });
@@ -47,6 +63,9 @@ test("server fallback remains tappable while arbitrary paths and query parameter
     "/more?section=help&feedback=invalid", `/more?section=help&feedback=${feedbackId}&redirect=/delete-account`,
     `/more?section=admin&feedback=${feedbackId}`, "/more?section=review&section=admin",
     "/more?section=help#admin", { toString: () => "/more?section=admin" }, null,
+    "/(tabs)?accountTip=2099-11-16", "/(tabs)?accountTip=2026-11-17",
+    "/(tabs)?accountTip=2026-11-09&next=/delete-account",
+    "/(tabs)?accountTip=2026-11-09&accountTip=2026-11-16",
   ]) {
     assert.equal(native.notificationRoute(route), null);
     assert.equal(allowlistedNativeRoute(route), "/(tabs)");

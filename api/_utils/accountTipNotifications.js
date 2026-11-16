@@ -1,11 +1,11 @@
-const { getWeeklyAccountTip } = require("../../artifacts/mobile/lib/accountTips");
+const { getWeeklyAccountTip, accountTipRoute } = require("../../artifacts/mobile/lib/accountTips");
 const { notificationPreferenceEnabled } = require("./notificationPreferences");
 
 function accountTipPayload(tip) {
   return {
     title: `Account tip: ${tip.title}`,
     body: tip.body,
-    url: tip.route,
+    url: accountTipRoute(tip.week, tip.timestamp),
     tag: `flowledger-tip-${tip.week}`,
     quiet: true,
   };

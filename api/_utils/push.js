@@ -2,7 +2,7 @@ const webpush = require("web-push");
 const { optional, pushEnvironment, required } = require("./env");
 const { notificationPreferenceEnabled } = require("./notificationPreferences");
 const { serviceSupabase, safeError } = require("./supabase");
-const { getWeeklyAccountTip } = require("../../artifacts/mobile/lib/accountTips");
+const { getWeeklyAccountTip, accountTipWeekFromRoute } = require("../../artifacts/mobile/lib/accountTips");
 const { accountTipPayload, currentTipForEvent, accountTipEligible } = require("./accountTipNotifications");
 
 function vapidDetails() {
@@ -23,10 +23,12 @@ function assertDbResult(result, fallback) {
 
 function allowlistedNativeRoute(value) {
   const route = typeof value === "string" ? value : "";
+  if (accountTipWeekFromRoute(route)) return route;
   if (route === "/(tabs)") return route;
   if (/^\/bills(?:\?attention=overdue)?$/.test(route)) return route;
   if (route === "/transactions") return route;
-  if (/^\/more\?section=(review|admin|help)$/.test(route)) return route;
+  if (route === "/monthly" || route === "/accounts") return route;
+  if (/^\/more\?section=(review|admin|help|goals)$/.test(route)) return route;
   if (route === "/more?section=feedback") return "/more?section=help";
   const feedbackPrefix = "/more?section=help&feedback=";
   if (route.startsWith(feedbackPrefix)

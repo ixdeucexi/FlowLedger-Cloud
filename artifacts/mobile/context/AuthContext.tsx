@@ -18,6 +18,7 @@ import { supabase } from "@/lib/supabase";
 import { completeSupabaseAuthUrl, nativeAuthRedirectUri, nativePasswordResetRedirectUri } from "@/lib/authLinks";
 import { deactivateBillingIdentity } from "@/lib/nativeBilling";
 import { apiFetch } from "@/lib/api";
+import { clearAccountTipReturnIntent } from "@/lib/accountTipReturnIntent";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -191,7 +192,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, s) => {
-      if (event === "SIGNED_OUT") void clearLearningTourForAccountChange();
+      if (event === "SIGNED_OUT") {
+        clearAccountTipReturnIntent();
+        void clearLearningTourForAccountChange();
+      }
       applySession(s);
       setLoading(false);
     });
@@ -411,6 +415,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    clearAccountTipReturnIntent();
     deactivateBillingIdentity();
     if (session?.access_token) {
       await detachPushNotifications(session.access_token).catch(error => {

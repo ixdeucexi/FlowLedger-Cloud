@@ -1,7 +1,7 @@
 import Feather from "@expo/vector-icons/Feather";
 import * as AppleAuthentication from "expo-apple-authentication";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useGlobalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator, Image, KeyboardAvoidingView, Platform,
@@ -14,6 +14,8 @@ import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
+import { accountTipRoute } from "@/lib/accountTips";
+import { clearAccountTipReturnIntent, saveAccountTipReturnIntent } from "@/lib/accountTipReturnIntent";
 
 function GoogleMark() {
   return (
@@ -31,6 +33,7 @@ function GoogleMark() {
 export default function LoginScreen() {
   const { signIn, signUp, signInWithGoogle, signInWithApple, requestPasswordReset } = useAuth();
   const router = useRouter();
+  const searchParams = useGlobalSearchParams<{ accountTip?: string | string[] }>();
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const appleAuthEnabled = process.env.EXPO_PUBLIC_APPLE_AUTH_ENABLED === "true";
@@ -51,6 +54,7 @@ export default function LoginScreen() {
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
     const oauthError = params.get("error_description") || params.get("error") || hashParams.get("error_description") || hashParams.get("error");
     if (!oauthError) return;
+    clearAccountTipReturnIntent();
     setError("Sign-in could not finish. Please try again.");
     window.history.replaceState({}, document.title, window.location.pathname);
   }, []);
@@ -85,7 +89,7 @@ export default function LoginScreen() {
           else window.localStorage.removeItem("flowledger_show_setup_after_login");
         } catch {}
       }
-      const destination = mode === "signup" ? "/setup" : "/(tabs)";
+      const destination = mode === "signup" ? "/setup" : accountTipRoute(searchParams.accountTip) ?? "/(tabs)";
       router.replace(destination as any);
     }
   };
@@ -94,9 +98,13 @@ export default function LoginScreen() {
     setError(null);
     setNotice(null);
     setLoading(true);
+    saveAccountTipReturnIntent(searchParams.accountTip);
     const err = await signInWithGoogle();
     setLoading(false);
-    if (err) setError(err);
+    if (err) {
+      clearAccountTipReturnIntent();
+      setError(err);
+    }
   };
 
   const handleApple = async () => {

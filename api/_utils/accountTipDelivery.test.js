@@ -150,7 +150,7 @@ test("queued tip sends the shared current tip and keeps normal transaction routi
   assert.equal(sends[1][2], "posted_transactions");
   assert.equal(sends[1][1].url, "/more?section=review");
   assert.equal(sends[1][1].quiet, undefined);
-  assert.equal(allowlistedNativeRoute(sends[0][1].url), tip.route);
+  assert.equal(allowlistedNativeRoute(sends[0][1].url), `/(tabs)?accountTip=${tip.week}`);
   assert.equal(currentTipForEvent(event({ event_key: "malformed" }), NOW), null);
 });
 
@@ -228,7 +228,7 @@ test("tip Expo payloads are quiet, scoped and carry no account values or badge o
   assert.equal(sent.sound, null);
   assert.equal(sent.priority, "normal");
   assert.equal(sent.channelId, "flowledger-tips");
-  assert.deepEqual(sent.data, { route: tip.route, householdId: "home-1" });
+  assert.deepEqual(sent.data, { route: `/(tabs)?accountTip=${tip.week}`, householdId: "home-1" });
   assert.equal(Object.hasOwn(sent, "badge"), false);
   assert.equal(sent.body, tip.body.slice(0, 180));
 });

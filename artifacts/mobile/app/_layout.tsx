@@ -57,6 +57,8 @@ import {
   resolveAppEntryRoute,
 } from "@/lib/navigationMemory";
 import { WEB_VIEWPORT_CONTENT } from "@/lib/webViewport";
+import { accountTipRoute, getAccountTipForWeek } from "@/lib/accountTips";
+import { consumeAccountTipReturnIntent, peekAccountTipReturnIntent } from "@/lib/accountTipReturnIntent";
 import {
   configureNativeNotificationPresentation,
   getInitialNotificationRoute,
@@ -145,6 +147,7 @@ function AuthObserver({
   const pathname = usePathname();
   const searchParams =
     useGlobalSearchParams<Record<string, string | string[]>>();
+  const accountTipWeek = getAccountTipForWeek(searchParams.accountTip)?.week ?? null;
   const restoreAttemptRef = useRef<string | null>(null);
   const notificationInitialRef = useRef<string | null>(null);
   const routeUserId = session?.user.id ?? null;
@@ -271,7 +274,7 @@ function AuthObserver({
       !isPublicDeletionRequest &&
       !isAuthCallback
     ) {
-      replaceRoute("/login");
+      replaceRoute(accountTipWeek ? `/login?accountTip=${accountTipWeek}` : "/login");
     } else if (
       session &&
       (inAuth || (isAuthCallback && !isPasswordReset) || atRoot)
@@ -285,6 +288,19 @@ function AuthObserver({
           if (requestedSetup)
             window.localStorage.removeItem("flowledger_show_setup_after_login");
         } catch {}
+      }
+      const returnedTipWeek = peekAccountTipReturnIntent();
+      if (settings.onboarding_completed && (accountTipWeek || returnedTipWeek)) {
+        if (!restorableRouteApplyReady || !routeScopeKey || !routeHouseholdId) return;
+        // Same-tab OAuth stores only a public week; consume it once, after exact scope readiness.
+        consumeAccountTipReturnIntent();
+        // A notification opens its trusted detail overlay before ordinary warm-route restoration.
+        const tipDestination = accountTipRoute(accountTipWeek ?? returnedTipWeek);
+        if (tipDestination) {
+          restoreAttemptRef.current = routeScopeKey;
+          replaceRoute(tipDestination);
+          return;
+        }
       }
       if (!requestedSetup && settings.onboarding_completed) {
         if (!restorableRouteApplyReady || !routeScopeKey || !routeHouseholdId) return;
@@ -321,6 +337,7 @@ function AuthObserver({
       void rememberAppRoute(session.user.id, householdId, currentRoute);
     }
   }, [
+    accountTipWeek,
     activeHousehold?.householdId,
     budgetLoading,
     currentRoute,

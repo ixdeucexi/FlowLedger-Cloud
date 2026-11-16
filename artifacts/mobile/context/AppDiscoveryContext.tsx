@@ -1,11 +1,18 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Platform } from "react-native";
-import { useRouter } from "expo-router";
+import { useGlobalSearchParams, useRouter } from "expo-router";
 
 import { useAuth } from "@/context/AuthContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useWeeklyAccountTipNotification } from "@/hooks/useWeeklyAccountTipNotification";
+import {
+  accountTipNotificationAction,
+  accountTipMarkerAction,
+  accountTipOverlayDestination,
+  visibleAccountTipOverlay,
+  type AccountTipOverlaySelection,
+} from "@/lib/accountTipOverlay";
 import { localDateInTimeZone } from "@/lib/dailyCheckingClose";
 import { buildForecastBillNotifications } from "@/lib/forecastBillNotifications";
 import { readInterfacePreferences, updateInterfacePreferences } from "@/lib/interfacePreferences";
@@ -40,6 +47,9 @@ const UniversalSearchModal = React.lazy(() =>
 );
 const NotificationCenterModal = React.lazy(() =>
   import("@/components/NotificationCenterModal").then(module => ({ default: module.NotificationCenterModal })),
+);
+const AccountTipModal = React.lazy(() =>
+  import("@/components/AccountTipModal").then(module => ({ default: module.AccountTipModal })),
 );
 
 type AppDiscoveryValue = {
@@ -90,6 +100,7 @@ async function saveNotificationCenterStateWithRetry(householdId: string, state: 
 
 export function AppDiscoveryProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const { accountTip: accountTipMarker } = useGlobalSearchParams<{ accountTip?: string | string[] }>();
   const { user, session, demoMode } = useAuth();
   const { isAdmin } = useMembership();
   const {
@@ -118,6 +129,8 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
   const [notificationsVisible, setNotificationsVisible] = useState(false);
   const [notificationState, setNotificationState] = useState<NotificationCenterState>(EMPTY_NOTIFICATION_STATE);
   const [notificationStateScope, setNotificationStateScope] = useState<string | null>(null);
+  const [selectedAccountTip, setSelectedAccountTip] = useState<AccountTipOverlaySelection | null>(null);
+  const consumedTipMarker = useRef<string | null>(null);
   const notificationStateRef = useRef(notificationState);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const remoteSearchCacheRef = useRef(new Map<string, UniversalSearchResult[]>());
@@ -125,6 +138,12 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
 
   const userId = user?.id ?? null;
   const householdId = activeHousehold?.householdId ?? null;
+  const accountTipScope = useMemo(() => ({
+    userId,
+    householdId,
+    ready: startupCoreReady && notificationStateScope === `${userId}:${householdId}`,
+    demoMode,
+  }), [demoMode, householdId, notificationStateScope, startupCoreReady, userId]);
   const accountTip = useWeeklyAccountTipNotification({
     userId,
     householdId,
@@ -210,6 +229,30 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
       });
     }
   }, [demoMode, householdId, userId]);
+
+  // An explicit push tap opens public catalog content after the active scope is
+  // verified. The notification preference still controls new bell/push tips.
+  useEffect(() => {
+    const action = accountTipMarkerAction(accountTipMarker, consumedTipMarker.current, accountTipScope);
+    if (action.kind === "reset") {
+      consumedTipMarker.current = null;
+      return;
+    }
+    if (action.kind !== "consume") return;
+    consumedTipMarker.current = action.key;
+    // Consume before opening so rerenders/resumes cannot reopen the same tap.
+    router.setParams({ accountTip: undefined });
+    const selection = action.selection;
+    if (!selection) return;
+    setNotificationsVisible(false);
+    setSelectedAccountTip(selection);
+    persistNotificationState(state => markNotificationRead(state, selection.tip.id));
+  }, [accountTipMarker, accountTipScope, householdId, persistNotificationState, router, userId]);
+
+  useEffect(() => {
+    setSelectedAccountTip(null);
+    setNotificationsVisible(false);
+  }, [householdId, userId]);
 
   const dismissAppNotification = useCallback((id: string) => {
     persistNotificationState(state => dismissNotification(state, id));
@@ -370,10 +413,26 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
   }, [navigateTo]);
 
   const openNotification = useCallback((notification: InAppNotification) => {
+    const action = accountTipNotificationAction(notification, accountTipScope);
+    if (action.kind === "ignore") return;
+    if (action.kind === "overlay") {
+      persistNotificationState(state => markNotificationRead(state, action.selection.tip.id));
+      setNotificationsVisible(false);
+      setSelectedAccountTip(action.selection);
+      return;
+    }
     persistNotificationState(state => markNotificationRead(state, notification.id));
     setNotificationsVisible(false);
     navigateTo(notification);
-  }, [navigateTo, persistNotificationState]);
+  }, [accountTipScope, navigateTo, persistNotificationState]);
+
+  const currentAccountTipOverlay = visibleAccountTipOverlay(selectedAccountTip, accountTipScope);
+  const closeAccountTip = useCallback(() => setSelectedAccountTip(null), []);
+  const openAccountTipDestination = useCallback(() => {
+    const destination = accountTipOverlayDestination(selectedAccountTip, accountTipScope);
+    setSelectedAccountTip(null);
+    if (destination) navigateTo(destination);
+  }, [accountTipScope, navigateTo, selectedAccountTip]);
 
   const value = useMemo<AppDiscoveryValue>(() => ({
     openSearch,
@@ -412,6 +471,15 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
             onDismiss={id => persistNotificationState(state => dismissNotification(state, id))}
             onMarkAllRead={() => persistNotificationState(state => markAllNotificationsRead(state, generatedNotifications))}
             onClose={() => setNotificationsVisible(false)}
+          />
+        </React.Suspense>
+      ) : null}
+      {currentAccountTipOverlay ? (
+        <React.Suspense fallback={null}>
+          <AccountTipModal
+            tip={currentAccountTipOverlay.tip}
+            onClose={closeAccountTip}
+            onOpenDestination={openAccountTipDestination}
           />
         </React.Suspense>
       ) : null}

@@ -1,3 +1,14 @@
+const { getWeeklyAccountTip } = require("../../artifacts/mobile/lib/accountTips");
+const { accountTipPayload } = require("./accountTipNotifications");
+
+function accountTipTestPayload(now = new Date()) {
+  const tip = getWeeklyAccountTip(now);
+  return {
+    ...accountTipPayload(tip),
+    title: `Test: ${tip.title}`,
+    tag: "flowledger-test-account-tip",
+  };
+}
 const NOTIFICATION_TEST_PAYLOADS = Object.freeze({
   pending_transactions: Object.freeze({
     title: "Test: Pending bank activity",
@@ -20,13 +31,7 @@ const NOTIFICATION_TEST_PAYLOADS = Object.freeze({
     tag: "flowledger-test-overdue",
     badgeCount: 1,
   }),
-  account_tips: Object.freeze({
-    title: "Test: Account tip",
-    body: "Check what is already planned for bills before spending from your checking balance.",
-    url: "/(tabs)",
-    tag: "flowledger-test-account-tip",
-    quiet: true,
-  }),
+  account_tips: Object.freeze(accountTipTestPayload()),
   feedback_updates: Object.freeze({
     title: "Test: Feedback update",
     body: "FlowLedger replied to feedback you sent.",
@@ -43,7 +48,9 @@ const NOTIFICATION_TEST_PAYLOADS = Object.freeze({
   }),
 });
 
-function notificationTestPayload(type) {
+function notificationTestPayload(type, now = new Date()) {
+  // A warm function may cross a UTC week boundary; resolve on every test tap.
+  if (type === "account_tips") return accountTipTestPayload(now);
   const payload = NOTIFICATION_TEST_PAYLOADS[type];
   if (!payload) {
     const error = new Error("Choose a valid notification to test.");

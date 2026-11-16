@@ -1165,12 +1165,15 @@ breathing_room: (<Pressable
 overview: (<View style={styles.referenceCommandHeroFlipShell}>
           <Animated.View
             pointerEvents={flipped ? "none" : "auto"}
+            accessibilityElementsHidden={flipped}
+            importantForAccessibility={flipped ? "no-hide-descendants" : "auto"}
+            aria-hidden={flipped}
+            {...(Platform.OS === "web" ? { inert: flipped } : {})}
             style={[
               styles.referenceCommandHero,
               isCommandWide && styles.referenceCommandHeroWide,
               isCommandWide ? styles.referenceHeroFrontWide : styles.referenceHeroFaceCompact,
               styles.referenceCommandHeroFlipFace,
-              flipped && styles.referenceCommandHeroInactiveFace,
               {
                 backgroundColor: heroSurface,
                 borderColor: dashboardTheme.heroBorder,
@@ -1260,12 +1263,15 @@ overview: (<View style={styles.referenceCommandHeroFlipShell}>
 
           <Animated.View
             pointerEvents={flipped ? "auto" : "none"}
+            accessibilityElementsHidden={!flipped}
+            importantForAccessibility={!flipped ? "no-hide-descendants" : "auto"}
+            aria-hidden={!flipped}
+            {...(Platform.OS === "web" ? { inert: !flipped } : {})}
             style={[
               styles.referenceCommandHero,
               isCommandWide && styles.referenceCommandHeroWide,
               styles.referenceSavingsFace,
               styles.referenceCommandHeroFlipFace,
-              !flipped && styles.referenceCommandHeroInactiveFace,
               {
                 backgroundColor: heroSurface,
                 borderColor: dashboardTheme.heroBorder,
@@ -1275,6 +1281,7 @@ overview: (<View style={styles.referenceCommandHeroFlipShell}>
               { transform: [{ perspective: 1000 }, { rotateY: backRotate }] },
             ]}
           >
+            <ScrollView style={styles.referenceSavingsScroll} nestedScrollEnabled>
             <View style={styles.referenceMoneyHeader}>
               <View style={styles.referenceSavingsHeaderCopy}>
                 <AppText tone="label" style={[styles.referenceHeroLabel, { color: dashboardTheme.mutedText }]}>Savings accounts</AppText>
@@ -1371,6 +1378,7 @@ overview: (<View style={styles.referenceCommandHeroFlipShell}>
               </Pressable>
             )}
             </> : null}
+            </ScrollView>
           </Animated.View>
       </View>),
 accounts: (<AccountBalancesCard
@@ -2204,9 +2212,9 @@ const styles = StyleSheet.create({
   referenceCommandHeroWide: { minHeight: 320, padding: 30 },
   referenceCommandHeroFlipShell: { width: "100%", position: "relative", marginBottom: 6 },
   referenceCommandHeroFlipFace: { width: "100%", marginBottom: 0, backfaceVisibility: "hidden" },
-  referenceCommandHeroInactiveFace: { ...StyleSheet.absoluteFillObject, marginBottom: 0 },
   referenceHeroFaceCompact: { minHeight: 272 },
-  referenceSavingsFace: { minHeight: 0 },
+  referenceSavingsFace: { ...StyleSheet.absoluteFillObject, minHeight: 0 },
+  referenceSavingsScroll: { flex: 1, minHeight: 0 },
   referenceHeroFrontWide: { minHeight: 320, alignItems: "stretch" },
   referenceHeroMoneyPanel: { width: "100%" },
   referenceHeroMoneyPanelWide: { flex: 1, width: "auto" },
